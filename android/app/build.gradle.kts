@@ -11,6 +11,7 @@ val releaseStoreFile = keystoreProperties.getProperty("storeFile")
 val releaseStorePassword = keystoreProperties.getProperty("storePassword")
 val releaseKeyAlias = keystoreProperties.getProperty("keyAlias")
 val releaseKeyPassword = keystoreProperties.getProperty("keyPassword")
+val hasReleaseKeystore = keystorePropertiesFile.exists()
 
 fun resolveKeystoreFile(path: String): File {
     val normalizedPath = if (path.startsWith("~/")) {
@@ -46,7 +47,7 @@ android {
 
     signingConfigs {
         create("release") {
-            if (keystorePropertiesFile.exists()) {
+            if (hasReleaseKeystore) {
                 require(!releaseStoreFile.isNullOrBlank()) {
                     "Missing 'storeFile' in ${keystorePropertiesFile.path}"
                 }
@@ -95,7 +96,11 @@ android {
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = if (hasReleaseKeystore) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
