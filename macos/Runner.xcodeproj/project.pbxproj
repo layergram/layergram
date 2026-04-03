@@ -240,6 +240,7 @@
 				33CC110E2044A8840003C045 /* Bundle Framework */,
 				3399D490228B24CF009A79C7 /* ShellScript */,
 				F6B1A806EB1EB2F2726D2366 /* [CP] Embed Pods Frameworks */,
+				9F3E0B4B2A1C4D5E6F708192 /* Embed Flutter dSYMs */,
 			);
 			buildRules = (
 			);
@@ -420,6 +421,25 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		9F3E0B4B2A1C4D5E6F708192 /* Embed Flutter dSYMs */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed Flutter dSYMs";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ \"$ACTION\" != \"install\" ]; then\n  exit 0\nfi\n\nif [ -z \"$DWARF_DSYM_FOLDER_PATH\" ]; then\n  exit 0\nfi\n\ncopy_dsym() {\n  local source=\"$1\"\n  if [ -d \"$source\" ]; then\n    mkdir -p \"$DWARF_DSYM_FOLDER_PATH\"\n    rsync --delete -av \"$source\" \"$DWARF_DSYM_FOLDER_PATH/\"\n  fi\n}\n\ncopy_dsym \"$BUILT_PRODUCTS_DIR/App.framework.dSYM\"\ncopy_dsym \"$BUILT_PRODUCTS_DIR/FlutterMacOS.framework.dSYM\"\n";
 			showEnvVarsInLog = 0;
 		};
 /* End PBXShellScriptBuildPhase section */
