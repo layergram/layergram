@@ -39,6 +39,7 @@ class _AboutViewState extends State<AboutView> {
   Widget build(BuildContext context) {
     final t = AppStrings.t;
     final version = _info != null ? _info!.version : '...';
+    final build = _info != null ? _info!.buildNumber : '...';
     
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -71,7 +72,7 @@ class _AboutViewState extends State<AboutView> {
           ),
           const SizedBox(height: 8),
           Text(
-            t(context, 'appVersion').replaceAll('{v}', version),
+            'v$version ($build)',
             style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
@@ -98,7 +99,7 @@ class _AboutViewState extends State<AboutView> {
               showLicensePage(
                 context: context,
                 applicationName: t(context, 'appName'),
-                applicationVersion: version,
+                applicationVersion: 'v$version ($build)',
                 applicationLegalese: t(context, 'coreLicense'),
                 applicationIcon: Padding(
                   padding: const EdgeInsets.all(16),
