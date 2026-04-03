@@ -87,6 +87,35 @@ void main() {
       expect(failed, isNull);
     });
 
+    test('encrypt and decrypt preserve accented and emoji secret text', () async {
+      final service = EncryptionService();
+      final x25519 = X25519();
+      final alice = await _keyMaterial(await x25519.newKeyPair());
+      final bob = await _keyMaterial(await x25519.newKeyPair());
+      const payload = PlaintextPayload(
+        senderId: 'alice',
+        recipientId: 'bob',
+        text: 'Caffè, mañana, déjà vu, 😄🔐🚀',
+        timestamp: 1700000001,
+        senderDisplayName: 'Àlice 😄',
+      );
+
+      final encrypted = await service.encrypt(
+        senderPrivateKeyBase64: alice.privateKeyBase64,
+        recipientPublicKeyBase64: bob.publicKeyBase64,
+        payload: payload,
+      );
+
+      final decrypted = await service.decrypt(
+        recipientPrivateKeyBase64: bob.privateKeyBase64,
+        senderPublicKeyBase64: alice.publicKeyBase64,
+        message: encrypted,
+      );
+
+      expect(decrypted.text, payload.text);
+      expect(decrypted.senderDisplayName, payload.senderDisplayName);
+    });
+
     test('encrypted message raw bytes roundtrip preserves nonce and ciphertext', () async {
       final service = EncryptionService();
       final x25519 = X25519();

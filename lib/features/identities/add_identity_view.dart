@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
@@ -32,9 +33,17 @@ class AddIdentityView extends ConsumerStatefulWidget {
 
 class _AddIdentityViewState extends ConsumerState<AddIdentityView> {
   final _controller = TextEditingController();
+  final _inputFocusNode = FocusNode();
   String? _error;
   bool _qrImported = false;
   RemoteIdentity? _pendingIdentity;
+
+  @override
+  void dispose() {
+    _inputFocusNode.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -43,6 +52,48 @@ class _AddIdentityViewState extends ConsumerState<AddIdentityView> {
     if (initial != null && initial.trim().isNotEmpty) {
       _controller.text = initial;
     }
+  }
+
+  Future<String> _readClipboardImportText() async {
+    final directText = await ref.read(clipboardServiceProvider).readText();
+    if (directText.trim().isNotEmpty) {
+      return directText;
+    }
+
+    const fallbackFormats = <String>[
+      'text/uri-list',
+      'public.url',
+      'public.utf8-plain-text',
+    ];
+
+    for (final format in fallbackFormats) {
+      try {
+        final data = await Clipboard.getData(format);
+        final text = data?.text;
+        if (text != null && text.trim().isNotEmpty) {
+          return text;
+        }
+      } on PlatformException {
+        continue;
+      }
+    }
+
+    return '';
+  }
+
+  Future<void> _pasteFromClipboard(BuildContext context) async {
+    final text = await _readClipboardImportText();
+    if (!mounted || text.isEmpty) return;
+
+    FocusScope.of(context).requestFocus(_inputFocusNode);
+    setState(() {
+      _controller.value = TextEditingValue(
+        text: text,
+        selection: TextSelection.collapsed(offset: text.length),
+      );
+      _error = null;
+      _pendingIdentity = null;
+    });
   }
 
   Future<void> _parseText(BuildContext context) async {
@@ -102,6 +153,7 @@ class _AddIdentityViewState extends ConsumerState<AddIdentityView> {
                           children: [
                             TextField(
                               controller: _controller,
+                              focusNode: _inputFocusNode,
                               minLines: 2,
                               maxLines: 4,
                               decoration: InputDecoration(
@@ -127,12 +179,7 @@ class _AddIdentityViewState extends ConsumerState<AddIdentityView> {
                               children: [
                                 Expanded(
                                   child: FilledButton.tonal(
-                                    onPressed: () async {
-                                      final text = await ref
-                                          .read(clipboardServiceProvider)
-                                          .readText();
-                                      setState(() => _controller.text = text);
-                                    },
+                                    onPressed: () => _pasteFromClipboard(context),
                                     child:
                                         Text(t(context, 'pasteFromClipboard')),
                                   ),

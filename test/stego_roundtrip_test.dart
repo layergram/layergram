@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:characters/characters.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:layergram/core/crypto/stego_decoder.dart';
@@ -19,6 +20,51 @@ void main() {
     0x2064,
     0xFEFF,
   };
+
+  bool isCarrierSafeGrapheme(String grapheme) {
+    if (grapheme.isEmpty) return false;
+    for (final rune in grapheme.runes) {
+      if (rune < 0x20 || rune > 0x7E) return false;
+    }
+    return true;
+  }
+
+  String stripHiddenRunes(String value) {
+    final buf = StringBuffer();
+    for (final rune in value.runes) {
+      if (!allInvis.contains(rune)) {
+        buf.write(String.fromCharCode(rune));
+      }
+    }
+    return buf.toString();
+  }
+
+  List<String> slotBlocks(String cover, String encoded) {
+    final visChars = StegoEncoder.normalizeCoverText(cover).characters.toList();
+    final blocks = <String>[];
+    var cursor = 0;
+
+    for (var i = 0; i < visChars.length; i++) {
+      final current = visChars[i];
+      expect(encoded.startsWith(current, cursor), isTrue);
+      cursor += current.length;
+      if (i == visChars.length - 1) {
+        break;
+      }
+      final next = visChars[i + 1];
+      var nextStart = cursor;
+      while (nextStart <= encoded.length &&
+          !encoded.startsWith(next, nextStart)) {
+        nextStart++;
+      }
+      expect(nextStart, lessThanOrEqualTo(encoded.length));
+      blocks.add(encoded.substring(cursor, nextStart));
+      cursor = nextStart;
+    }
+
+    expect(cursor, equals(encoded.length));
+    return blocks;
+  }
 
   int visibleCharsBeforeFirstHidden(String encoded) {
     var visibleCount = 0;
@@ -200,6 +246,30 @@ void main() {
       final candidates = StegoDecoder().decodeByteCandidates(encoded);
       expect(candidates, isNotEmpty);
       expect(candidates[0], equals(payload));
+    });
+
+    test('cover with decomposed accents and emoji only embeds in ASCII-safe slots', () {
+      final payload = Uint8List.fromList(List.generate(44, (i) => i));
+      const cover =
+          'This cover message keeps enough plain ASCII text after the preview while mentioning cafe\u0301, man\u0303ana, and a smile 😄 near the visible suffix for Unicode safety checks.';
+
+      final encoded = StegoEncoder().encodeBytes(cover, payload);
+      final candidates = StegoDecoder().decodeByteCandidates(encoded);
+      final visChars = StegoEncoder.normalizeCoverText(cover).characters.toList();
+      final blocks = slotBlocks(cover, encoded);
+
+      expect(stripHiddenRunes(encoded), equals(StegoEncoder.normalizeCoverText(cover)));
+      expect(blocks, hasLength(visChars.length - 1));
+      expect(candidates, isNotEmpty);
+      expect(candidates[0], equals(payload));
+
+      for (var i = 0; i < blocks.length; i++) {
+        final safe =
+            isCarrierSafeGrapheme(visChars[i]) && isCarrierSafeGrapheme(visChars[i + 1]);
+        if (!safe) {
+          expect(blocks[i], isEmpty);
+        }
+      }
     });
 
     test('plain text produces no binary candidates', () {
