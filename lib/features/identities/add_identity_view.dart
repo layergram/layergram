@@ -102,11 +102,12 @@ class _AddIdentityViewState extends ConsumerState<AddIdentityView> {
                           children: [
                             TextField(
                               controller: _controller,
-                              minLines: 2,
-                              maxLines: 4,
+                              maxLines: null,
+                              keyboardType: TextInputType.multiline,
                               decoration: InputDecoration(
                                 labelText: t(context, 'pasteLinkLabel'),
                                 hintText: 'layergram://...',
+                                border: OutlineInputBorder(),
                               ),
                             ),
                             const SizedBox(height: 6),

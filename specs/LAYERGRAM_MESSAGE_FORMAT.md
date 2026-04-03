@@ -37,6 +37,8 @@ LMF uses the following cryptographic primitives:
 
 Before encryption, the secret message is serialized as a JSON object:
 
+The JSON serialization is encoded as UTF-8 before encryption. Any valid Unicode content is permitted in `text` and `senderDisplayName`, including accented letters, combining-mark sequences, emoji, and mixed-script text.
+
 ```json
 {
   "v": 1,
@@ -130,13 +132,17 @@ This means that the earliest hidden block starts only **after** the clean prefix
 
 #### 3.3.3 Eligible Slots
 
-Only the inter-character slots in the **suffix after the clean prefix** are eligible for embedding.
+Only the inter-character slots in the **suffix after the clean prefix** are candidates for embedding.
 
-If the cover text has `N` visible characters and the chosen clean prefix has length `P`, then the number of eligible slots is:
+The public Layergram implementation further restricts embedding to **carrier-safe** slots: boundaries where both adjacent visible grapheme clusters are composed entirely of printable ASCII code points (`U+0020`-`U+007E`). Boundaries touching non-ASCII or otherwise complex grapheme clusters are left clean to avoid transport-layer rendering corruption around accented characters, combining sequences, emoji, or script-shaping controls.
+
+If the cover text has `N` visible characters and the chosen clean prefix has length `P`, then the candidate suffix-slot count is:
 
 ```
-eligibleSlots = N - P
+candidateSlots = N - P
 ```
+
+The actual number of eligible slots is the carrier-safe subset of those candidate suffix slots.
 
 No hidden runes are placed before the first visible character or after the final visible character.
 
@@ -174,6 +180,8 @@ minCoverLength = 64 + requiredCarrierSlots
 ```
 
 The actual clean prefix may be longer than 64 (up to 96) when cover length allows it. The formula above guarantees the minimum safe case.
+
+In addition to satisfying the minimum visible length, the cover text must contain at least `requiredCarrierSlots` carrier-safe eligible slots after filtering. Covers with many accented, emoji, or other non-ASCII grapheme clusters may therefore require additional visible text even when the simple length formula is met.
 
 Before this length is checked, the cover text is normalized with trailing-whitespace trimming. In other words, spaces, tabs, or line breaks after the user's last non-whitespace character do **not** count as usable cover capacity.
 

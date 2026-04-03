@@ -37,7 +37,10 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
   RemoteIdentity? _recipient;
   bool _deleteAfterRead = false;
   String _output = '';
-  int _minCoverLen = 0;
+
+  int get _estimatedPayloadBytes {
+    return StegoEncoder.estimatedEncryptedPayloadBytes(_secretCtrl.text);
+  }
 
   @override
   void initState() {
@@ -59,31 +62,23 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
   }
 
   void _onFieldChanged() {
-    final secretLen = _secretCtrl.text.trim().length;
-    final estimatedBytes = 12 + (((200 + secretLen) * 4 / 3) + 16).ceil();
-    final needed = StegoEncoder.minCoverLengthForBytes(estimatedBytes);
-    if (!mounted) {
-      _minCoverLen = needed;
-      return;
-    }
-    setState(() {
-      _minCoverLen = needed;
-    });
+    if (!mounted) return;
+    setState(() {});
   }
 
   bool get _coverTooShort {
     if (_secretCtrl.text.trim().isEmpty) return false;
-    final coverLen = StegoEncoder.visibleCharacterCount(_coverCtrl.text);
-    return coverLen < _minCoverLen;
+    return !StegoEncoder.canEmbedBytes(_coverCtrl.text, _estimatedPayloadBytes);
   }
 
   int get _coverMissingCount {
     if (_secretCtrl.text.trim().isEmpty) {
       return 0;
     }
-    final coverLen = StegoEncoder.visibleCharacterCount(_coverCtrl.text);
-    final missing = _minCoverLen - coverLen;
-    return missing > 0 ? missing : 0;
+    return StegoEncoder.missingCoverCapacityForBytes(
+      _coverCtrl.text,
+      _estimatedPayloadBytes,
+    );
   }
 
   bool get _canGenerate {

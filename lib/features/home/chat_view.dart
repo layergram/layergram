@@ -140,13 +140,16 @@ class ChatViewState extends ConsumerState<ChatView> {
   bool _deleteAfterRead = false;
   bool _linkMode = false;
   String _encryptedOutput = '';
-  int _minCoverLen = 0;
   bool _dirtySinceEncode = true;
   bool _sending = false;
   bool _handoffScheduled = false;
   bool _decryptionPrimed = false;
   Timer? _decryptionPrimeTimer;
   bool _backgroundHoldActive = false;
+
+  int get _estimatedPayloadBytes {
+    return StegoEncoder.estimatedEncryptedPayloadBytes(_secretCtrl.text);
+  }
 
   void _dismissMessageInputFocus(PointerDownEvent _) {
     FocusManager.instance.primaryFocus?.unfocus();
@@ -625,12 +628,7 @@ class ChatViewState extends ConsumerState<ChatView> {
   }
 
   void _onFieldChanged() {
-    final secretLen = _secretCtrl.text.trim().length;
-    // V2 binary payload: 12 (nonce) + ceil((jsonOverhead + secretLen) * 4/3) + 16 (MAC).
-    final estimatedBytes = 12 + (((200 + secretLen) * 4 / 3) + 16).ceil();
-    final needed = StegoEncoder.minCoverLengthForBytes(estimatedBytes);
     setState(() {
-      _minCoverLen = needed;
       _dirtySinceEncode = true;
     });
   }
@@ -959,17 +957,17 @@ class ChatViewState extends ConsumerState<ChatView> {
 
   bool get _coverTooShort {
     if (_linkMode || _secretCtrl.text.trim().isEmpty) return false;
-    final coverLen = StegoEncoder.visibleCharacterCount(_coverCtrl.text);
-    return coverLen < _minCoverLen;
+    return !StegoEncoder.canEmbedBytes(_coverCtrl.text, _estimatedPayloadBytes);
   }
 
   int get _coverMissingCount {
     if (_linkMode || _secretCtrl.text.trim().isEmpty) {
       return 0;
     }
-    final coverLen = StegoEncoder.visibleCharacterCount(_coverCtrl.text);
-    final missing = _minCoverLen - coverLen;
-    return missing > 0 ? missing : 0;
+    return StegoEncoder.missingCoverCapacityForBytes(
+      _coverCtrl.text,
+      _estimatedPayloadBytes,
+    );
   }
 
   String _stripZeroWidth(String value) {

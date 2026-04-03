@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -61,6 +62,15 @@ class StegoEncoder {
     return padded ~/ 2; // base-4: 2 bits per rune
   }
 
+  static int estimatedEncryptedPayloadBytes(
+    String secretText, {
+    int jsonEnvelopeBytes = 256,
+  }) {
+    final encodedSecret = jsonEncode(secretText);
+    final secretJsonBytes = max(0, utf8.encode(encodedSecret).length - 2);
+    return 12 + jsonEnvelopeBytes + secretJsonBytes + 16;
+  }
+
   static String normalizeCoverText(String coverText) {
     return coverText.trimRight();
   }
@@ -82,6 +92,30 @@ class StegoEncoder {
     if (runes == 0) return 0;
     final minSlots = _requiredCarrierSlots(runes);
     return previewSafePrefixMinChars + minSlots;
+  }
+
+  static int requiredCarrierSlotsForBytes(int byteCount) {
+    return _requiredCarrierSlots(hiddenRuneCount(byteCount));
+  }
+
+  static bool canEmbedBytes(String coverText, int byteCount) {
+    if (byteCount <= 0) return true;
+    final visChars = normalizeCoverText(coverText).characters.toList();
+    if (visChars.length < minCoverLengthForBytes(byteCount)) return false;
+    final requiredCarrierSlots = requiredCarrierSlotsForBytes(byteCount);
+    return _eligibleCarrierSlotIndexes(visChars).length >= requiredCarrierSlots;
+  }
+
+  static int missingCoverCapacityForBytes(String coverText, int byteCount) {
+    if (byteCount <= 0) return 0;
+    final visChars = normalizeCoverText(coverText).characters.toList();
+    final minCoverLength = minCoverLengthForBytes(byteCount);
+    final visibleDeficit = minCoverLength - visChars.length;
+    if (visibleDeficit > 0) return visibleDeficit;
+    final requiredCarrierSlots = requiredCarrierSlotsForBytes(byteCount);
+    final carrierDeficit =
+        requiredCarrierSlots - _eligibleCarrierSlotIndexes(visChars).length;
+    return carrierDeficit > 0 ? carrierDeficit : 0;
   }
 
   // ── V2 binary encoder ─────────────────────────────────────────────────────
@@ -112,6 +146,7 @@ class StegoEncoder {
 
     final visChars = normalizedCoverText.characters.toList();
     final minCoverLength = minCoverLengthForBytes(payload.length);
+    final requiredCarrierSlots = requiredCarrierSlotsForBytes(payload.length);
     if (visChars.length < minCoverLength) {
       throw ArgumentError.value(
         coverText,
@@ -120,18 +155,25 @@ class StegoEncoder {
       );
     }
 
+    final baseEligibleSlotIndexes = _eligibleCarrierSlotIndexes(visChars);
+    if (baseEligibleSlotIndexes.length < requiredCarrierSlots) {
+      throw ArgumentError.value(
+        coverText,
+        'coverText',
+        'Cover text cannot safely carry the payload. Add more plain visible text.',
+      );
+    }
+
     final slots = visChars.length - 1;
-    final requiredCarrierSlots = _requiredCarrierSlots(payloadSymbols.length);
     final cleanPrefixChars = _chooseCleanPrefixChars(
       visibleCharCount: visChars.length,
       requiredCarrierSlots: requiredCarrierSlots,
+      eligibleSlotIndexes: baseEligibleSlotIndexes,
     );
     final firstEligibleSlot = cleanPrefixChars - 1;
-    final eligibleSlotIndexes = List<int>.generate(
-      slots - firstEligibleSlot,
-      (i) => firstEligibleSlot + i,
-      growable: false,
-    );
+    final eligibleSlotIndexes = baseEligibleSlotIndexes
+        .where((slotIndex) => slotIndex >= firstEligibleSlot)
+        .toList(growable: false);
     final carrierSlotIndexes = _pickCarrierSlotIndexes(
       eligibleSlotIndexes,
       requiredCarrierSlots,
@@ -150,7 +192,8 @@ class StegoEncoder {
       carrierSlotIndexes: carrierSlotIndexes,
     ).toSet()
       ..addAll(
-        carrierSlotIndexes.contains(firstEligibleSlot)
+        carrierSlotIndexes.contains(firstEligibleSlot) ||
+                !eligibleSlotIndexes.contains(firstEligibleSlot)
             ? const <int>{}
             : <int>{firstEligibleSlot},
       );
@@ -207,10 +250,46 @@ class StegoEncoder {
   int _chooseCleanPrefixChars({
     required int visibleCharCount,
     required int requiredCarrierSlots,
+    required List<int> eligibleSlotIndexes,
   }) {
-    final latestAllowedPrefix = visibleCharCount - requiredCarrierSlots;
-    final maxPrefix = min(previewSafePrefixMaxChars, latestAllowedPrefix);
+    final latestAllowedPrefixByLength = visibleCharCount - requiredCarrierSlots;
+    final latestAllowedPrefixBySlots =
+        eligibleSlotIndexes[eligibleSlotIndexes.length - requiredCarrierSlots] +
+            1;
+    final maxPrefix = min(
+      previewSafePrefixMaxChars,
+      min(latestAllowedPrefixByLength, latestAllowedPrefixBySlots),
+    );
     return _randomBetween(previewSafePrefixMinChars, maxPrefix);
+  }
+
+  static List<int> _eligibleCarrierSlotIndexes(List<String> visChars) {
+    if (visChars.length <= previewSafePrefixMinChars) return const [];
+    final firstEligibleSlot = previewSafePrefixMinChars - 1;
+    return _carrierSafeSlotIndexes(visChars)
+        .where((slotIndex) => slotIndex >= firstEligibleSlot)
+        .toList(growable: false);
+  }
+
+  static List<int> _carrierSafeSlotIndexes(List<String> visChars) {
+    final slots = visChars.length - 1;
+    if (slots <= 0) return const [];
+    final safeSlots = <int>[];
+    for (var i = 0; i < slots; i++) {
+      if (_isCarrierSafeGrapheme(visChars[i]) &&
+          _isCarrierSafeGrapheme(visChars[i + 1])) {
+        safeSlots.add(i);
+      }
+    }
+    return safeSlots;
+  }
+
+  static bool _isCarrierSafeGrapheme(String grapheme) {
+    if (grapheme.isEmpty) return false;
+    for (final rune in grapheme.runes) {
+      if (rune < 0x20 || rune > 0x7E) return false;
+    }
+    return true;
   }
 
   List<int> _pickCarrierSlotIndexes(
