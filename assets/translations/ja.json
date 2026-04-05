@@ -189,5 +189,7 @@
   "termsOfService": "利用規約",
   "onboardingLegalConsent": "{terms}と{privacy}を読み、同意します。",
   "sessionDecryptionCache": "最近の復号キーをプリロード",
-  "sessionDecryptionCacheSubtitle": "アプリが開いていてロック解除されている間のみ、最近のチャット復号キーをRAMにプリロードします。プレーンテキストは保存されず、アプリが非表示、ロック、IDまたはパスフレーズが変更、またはアプリが閉じられたときにキャッシュがクリアされます。"
+  "sessionDecryptionCacheSubtitle": "アプリが開いていてロック解除されている間のみ、最近のチャット復号キーをRAMにプリロードします。プレーンテキストは保存されず、アプリが非表示、ロック、IDまたはパスフレーズが変更、またはアプリが閉じられたときにキャッシュがクリアされます。",
+  "coverLengthLimit": "カバーメッセージの長さ制限（隠し文字を含む）",
+  "noLimit": "制限なし"
 }

@@ -189,5 +189,7 @@
   "termsOfService": "Termenii serviciului",
   "onboardingLegalConsent": "Am citit și sunt de acord cu {terms} și {privacy}.",
   "sessionDecryptionCache": "Încărcați cheile de decriptare recente",
-  "sessionDecryptionCacheSubtitle": "Încarcă cheile de decriptare a chat-urilor recente doar în RAM în timp ce aplicația este deschisă și deblocată. Niciun text în clar nu este stocat și cache-ul este șters când aplicația este ascunsă, blocată, se schimbă identitatea sau fraza secretă sau aplicația este închisă."
+  "sessionDecryptionCacheSubtitle": "Încarcă cheile de decriptare a chat-urilor recente doar în RAM în timp ce aplicația este deschisă și deblocată. Niciun text în clar nu este stocat și cache-ul este șters când aplicația este ascunsă, blocată, se schimbă identitatea sau fraza secretă sau aplicația este închisă.",
+  "coverLengthLimit": "Limită de lungime pentru mesajul de acoperire (inclusiv caracterele ascunse)",
+  "noLimit": "Fără limită"
 }

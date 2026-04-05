@@ -189,5 +189,7 @@
   "termsOfService": "Användarvillkor",
   "onboardingLegalConsent": "Jag har läst och godkänner {terms} och {privacy}.",
   "sessionDecryptionCache": "Ladda senaste dekrypteringsnycklar",
-  "sessionDecryptionCacheSubtitle": "Laddar senaste chatt-dekrypteringsnycklar endast i RAM medan appen är öppen och upplåst. Ingen klartext lagras och cachen rensas när appen är dold, låst, identiteten eller lösenordsfrasen ändras, eller appen stängs."
+  "sessionDecryptionCacheSubtitle": "Laddar senaste chatt-dekrypteringsnycklar endast i RAM medan appen är öppen och upplåst. Ingen klartext lagras och cachen rensas när appen är dold, låst, identiteten eller lösenordsfrasen ändras, eller appen stängs.",
+  "coverLengthLimit": "Längdgräns för täckmeddelande (inklusive dolda tecken)",
+  "noLimit": "Ingen gräns"
 }

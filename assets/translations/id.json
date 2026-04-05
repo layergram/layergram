@@ -189,5 +189,7 @@
   "termsOfService": "Ketentuan Layanan",
   "onboardingLegalConsent": "Saya telah membaca dan menyetujui {terms} dan {privacy}.",
   "sessionDecryptionCache": "Muat kunci dekripsi terkini",
-  "sessionDecryptionCacheSubtitle": "Muat kunci dekripsi obrolan terkini hanya di RAM saat aplikasi terbuka dan tidak terkunci. Tidak ada teks biasa yang disimpan dan cache dihapus saat aplikasi disembunyikan, dikunci, identitas atau frasa sandi berubah, atau aplikasi ditutup."
+  "sessionDecryptionCacheSubtitle": "Muat kunci dekripsi obrolan terkini hanya di RAM saat aplikasi terbuka dan tidak terkunci. Tidak ada teks biasa yang disimpan dan cache dihapus saat aplikasi disembunyikan, dikunci, identitas atau frasa sandi berubah, atau aplikasi ditutup.",
+  "coverLengthLimit": "Batas panjang pesan samaran (termasuk karakter tersembunyi)",
+  "noLimit": "Tanpa batas"
 }

@@ -189,5 +189,7 @@
   "termsOfService": "Điều khoản dịch vụ",
   "onboardingLegalConsent": "Tôi đã đọc và đồng ý với {terms} và {privacy}.",
   "sessionDecryptionCache": "Tải trước các khóa giải mã gần đây",
-  "sessionDecryptionCacheSubtitle": "Tải trước các khóa giải mã trò chuyện gần đây chỉ trong RAM khi ứng dụng mở và đã mở khóa. Không có văn bản thuần được lưu trữ và bộ nhớ đệm sẽ bị xóa khi ứng dụng bị ẩn, khóa, thay đổi danh tính hoặc cụm mật khẩu hoặc ứng dụng đóng."
+  "sessionDecryptionCacheSubtitle": "Tải trước các khóa giải mã trò chuyện gần đây chỉ trong RAM khi ứng dụng mở và đã mở khóa. Không có văn bản thuần được lưu trữ và bộ nhớ đệm sẽ bị xóa khi ứng dụng bị ẩn, khóa, thay đổi danh tính hoặc cụm mật khẩu hoặc ứng dụng đóng.",
+  "coverLengthLimit": "Giới hạn độ dài tin nhắn ngụy trang (bao gồm ký tự ẩn)",
+  "noLimit": "Không giới hạn"
 }

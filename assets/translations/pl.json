@@ -189,5 +189,7 @@
   "termsOfService": "Warunki korzystania z usługi",
   "onboardingLegalConsent": "Przeczytałem(-am) {terms} i {privacy} oraz akceptuję ich treść.",
   "sessionDecryptionCache": "Wczytaj ostatnie klucze deszyfrujące",
-  "sessionDecryptionCacheSubtitle": "Wczytuje ostatnie klucze deszyfrujące czatu tylko w RAM, gdy aplikacja jest otwarta i odblokowana. Żaden tekst jawnie nie jest przechowywany, a pamięć podręczna jest czyszczona, gdy aplikacja jest ukryta, zablokowana, zmienia się tożsamość lub hasło lub aplikacja jest zamykana."
+  "sessionDecryptionCacheSubtitle": "Wczytuje ostatnie klucze deszyfrujące czatu tylko w RAM, gdy aplikacja jest otwarta i odblokowana. Żaden tekst jawnie nie jest przechowywany, a pamięć podręczna jest czyszczona, gdy aplikacja jest ukryta, zablokowana, zmienia się tożsamość lub hasło lub aplikacja jest zamykana.",
+  "coverLengthLimit": "Limit długości wiadomości osłonowej (w tym ukryte znaki)",
+  "noLimit": "Bez limitu"
 }

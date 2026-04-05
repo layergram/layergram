@@ -189,5 +189,7 @@
   "termsOfService": "Kushtet e shërbimit",
   "onboardingLegalConsent": "I kam lexuar dhe pajtohem me {terms} dhe {privacy}.",
   "sessionDecryptionCache": "Ngarkoni çelësat e dekriptimit të fundit",
-  "sessionDecryptionCacheSubtitle": "Ngarkon çelësat e dekriptimit të bisedave të fundit vetëm në RAM ndërsa aplikacioni është i hapur dhe i çkyçur. Nuk ruhet ndonjë tekst i thjeshtë dhe cache fshihet kur aplikacioni fshehet, bllokohet, ndryshon identiteti ose fraza sekrete ose aplikacioni mbyllet."
+  "sessionDecryptionCacheSubtitle": "Ngarkon çelësat e dekriptimit të bisedave të fundit vetëm në RAM ndërsa aplikacioni është i hapur dhe i çkyçur. Nuk ruhet ndonjë tekst i thjeshtë dhe cache fshihet kur aplikacioni fshehet, bllokohet, ndryshon identiteti ose fraza sekrete ose aplikacioni mbyllet.",
+  "coverLengthLimit": "Kufiri i gjatësisë së mesazhit mbulues (duke përfshirë karakteret e fshehura)",
+  "noLimit": "Pa kufi"
 }

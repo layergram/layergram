@@ -189,5 +189,7 @@
   "termsOfService": "Servicevoorwaarden",
   "onboardingLegalConsent": "Ik heb de {terms} en het {privacy} gelezen en ga ermee akkoord.",
   "sessionDecryptionCache": "Recente ontsleutelsleutels vooraf laden",
-  "sessionDecryptionCacheSubtitle": "Laadt recente chat-ontsleutelsleutels alleen in RAM terwijl de app open en ontgrendeld is. Er wordt geen platte tekst opgeslagen en de cache wordt gewist wanneer de app verborgen, vergrendeld, de identiteit of wachtwoordzin verandert, of de app wordt gesloten."
+  "sessionDecryptionCacheSubtitle": "Laadt recente chat-ontsleutelsleutels alleen in RAM terwijl de app open en ontgrendeld is. Er wordt geen platte tekst opgeslagen en de cache wordt gewist wanneer de app verborgen, vergrendeld, de identiteit of wachtwoordzin verandert, of de app wordt gesloten.",
+  "coverLengthLimit": "Lengtelimiet voor het dekmantelbericht (inclusief verborgen tekens)",
+  "noLimit": "Geen limiet"
 }

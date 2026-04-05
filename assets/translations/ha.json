@@ -189,5 +189,7 @@
   "termsOfService": "Sharuɗɗan Sabis",
   "onboardingLegalConsent": "Na karanta kuma na amince da {terms} da {privacy}.",
   "sessionDecryptionCache": "Loda maɓallan wanke bayanai na baya-bayan",
-  "sessionDecryptionCacheSubtitle": "Yana loda maɓallan wanke bayanai na hira na baya-bayan kawai a RAM yayin da aikace-aikacen yake buɗe kuma an buɗe. Babu rubutun fili ake adana kuma an cire cache lokacin da aikace-aikacen ya ɓoye, an kulle, canza suna ko kalmar sirri ko aikace-aikacen ya rufe."
+  "sessionDecryptionCacheSubtitle": "Yana loda maɓallan wanke bayanai na hira na baya-bayan kawai a RAM yayin da aikace-aikacen yake buɗe kuma an buɗe. Babu rubutun fili ake adana kuma an cire cache lokacin da aikace-aikacen ya ɓoye, an kulle, canza suna ko kalmar sirri ko aikace-aikacen ya rufe.",
+  "coverLengthLimit": "Iyakar tsawon saƙon ɓoye (ciki har da haruffan ɓoye)",
+  "noLimit": "Babu iyaka"
 }

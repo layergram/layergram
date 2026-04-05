@@ -189,5 +189,7 @@
   "termsOfService": "Palveluehdot",
   "onboardingLegalConsent": "Olen lukenut ja hyväksyn {terms} ja {privacy}.",
   "sessionDecryptionCache": "Lataa viimeiset purkuavaimet",
-  "sessionDecryptionCacheSubtitle": "Lataa viimeisimmät keskustelupurkuavaimet vain RAM-muistiin, kun sovellus on auki ja avattu. Yksinkertaista tekstiä ei tallenneta ja välimuisti tyhjennetään, kun sovellus on piilotettu, lukittu, identiteetti tai tunnuslause vaihdettu tai sovellus suljetaan."
+  "sessionDecryptionCacheSubtitle": "Lataa viimeisimmät keskustelupurkuavaimet vain RAM-muistiin, kun sovellus on auki ja avattu. Yksinkertaista tekstiä ei tallenneta ja välimuisti tyhjennetään, kun sovellus on piilotettu, lukittu, identiteetti tai tunnuslause vaihdettu tai sovellus suljetaan.",
+  "coverLengthLimit": "Peiteviestin pituusraja (piilotetut merkit mukaan lukien)",
+  "noLimit": "Ei rajaa"
 }

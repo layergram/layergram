@@ -189,5 +189,7 @@
   "termsOfService": "Terma Perkhidmatan",
   "onboardingLegalConsent": "Saya telah membaca dan bersetuju dengan {terms} dan {privacy}.",
   "sessionDecryptionCache": "Pramuat kunci penyahsulitan terkini",
-  "sessionDecryptionCacheSubtitle": "Pramuat kunci penyahsulitan sembang terkini hanya dalam RAM semasa aplikasi dibuka dan tidak dikunci. Tiada teks biasa disimpan dan cache akan dihapuskan apabila aplikasi disembunyikan, dikunci, identiti atau frasa laluan berubah, atau aplikasi ditutup."
+  "sessionDecryptionCacheSubtitle": "Pramuat kunci penyahsulitan sembang terkini hanya dalam RAM semasa aplikasi dibuka dan tidak dikunci. Tiada teks biasa disimpan dan cache akan dihapuskan apabila aplikasi disembunyikan, dikunci, identiti atau frasa laluan berubah, atau aplikasi ditutup.",
+  "coverLengthLimit": "Had panjang mesej perlindungan (termasuk aksara tersembunyi)",
+  "noLimit": "Tiada had"
 }

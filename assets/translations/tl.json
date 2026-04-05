@@ -189,5 +189,7 @@
   "termsOfService": "Mga Tuntunin ng Serbisyo",
   "onboardingLegalConsent": "Nabasa ko na at sumasang-ayon ako sa {terms} at {privacy}.",
   "sessionDecryptionCache": "I-load ang mga kamakailang decryption key",
-  "sessionDecryptionCacheSubtitle": "I-load ang mga kamakailang chat decryption key lang sa RAM habang bukas at unlocked ang app. Walang plaintext na naka-store at ang cache ay malilinis kapag nakatago, naka-lock, nagbago ang identity o passphrase, o isinara ang app."
+  "sessionDecryptionCacheSubtitle": "I-load ang mga kamakailang chat decryption key lang sa RAM habang bukas at unlocked ang app. Walang plaintext na naka-store at ang cache ay malilinis kapag nakatago, naka-lock, nagbago ang identity o passphrase, o isinara ang app.",
+  "coverLengthLimit": "Limitasyon sa haba ng cover message (kasama ang mga nakatagong character)",
+  "noLimit": "Walang limitasyon"
 }
