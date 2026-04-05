@@ -189,5 +189,12 @@
   "termsOfService": "شروط الخدمة",
   "onboardingLegalConsent": "لقد قرأت وأوافق على {terms} و{privacy}.",
   "sessionDecryptionCache": "تحميل مفاتيح فك التشفير الحديثة",
-  "sessionDecryptionCacheSubtitle": "قم بتحميل مفاتيح فك تشفير الدردشة الحديثة في الذاكرة العشوائية فقط عندما يكون التطبيق مفتوحًا وغير مقفل. لا يتم تخزين أي نص واضح، ويتم مسح ذاكرة التخزين المؤقت عند إخفاء التطبيق أو قفله أو تغيير الهوية أو عبور المرور أو إغلاق التطبيق."
+  "sessionDecryptionCacheSubtitle": "قم بتحميل مفاتيح فك تشفير الدردشة الحديثة في الذاكرة العشوائية فقط عندما يكون التطبيق مفتوحًا وغير مقفل. لا يتم تخزين أي نص واضح، ويتم مسح ذاكرة التخزين المؤقت عند إخفاء التطبيق أو قفله أو تغيير الهوية أو عبور المرور أو إغلاق التطبيق.",
+  "coverLengthLimit": "حد طول رسالة الغطاء (بما في ذلك الأحرف المخفية)",
+  "noLimit": "بدون حد",
+  "touchComposerMessageModeEnabled": "تم تفعيل وضع الرسالة",
+  "touchComposerLinkModeEnabled": "تم تفعيل وضع الرابط",
+  "touchComposerExpiryChanged": "انتهاء صلاحية الرسالة: {value}",
+  "touchComposerDeleteAfterReadOn": "تم تفعيل الحذف بعد القراءة",
+  "touchComposerDeleteAfterReadOff": "تم إيقاف الحذف بعد القراءة"
 }

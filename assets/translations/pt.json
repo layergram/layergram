@@ -189,5 +189,12 @@
   "termsOfService": "Termos de Serviço",
   "onboardingLegalConsent": "Li e concordo com os {terms} e a {privacy}.",
   "sessionDecryptionCache": "Carregar chaves de descriptografia recentes",
-  "sessionDecryptionCacheSubtitle": "Carrega as chaves de descriptografia de chat recentes apenas na RAM enquanto o aplicativo está aberto e desbloqueado. Nenhum texto em claro é armazenado e o cache é limpo quando o aplicativo está oculto, bloqueado, a identidade ou frase secreta muda ou o aplicativo é fechado."
+  "sessionDecryptionCacheSubtitle": "Carrega as chaves de descriptografia de chat recentes apenas na RAM enquanto o aplicativo está aberto e desbloqueado. Nenhum texto em claro é armazenado e o cache é limpo quando o aplicativo está oculto, bloqueado, a identidade ou frase secreta muda ou o aplicativo é fechado.",
+  "coverLengthLimit": "Limite de comprimento da mensagem de cobertura (incluindo os caracteres ocultos)",
+  "noLimit": "Sem limite",
+  "touchComposerMessageModeEnabled": "Modo mensagem ativado",
+  "touchComposerLinkModeEnabled": "Modo link ativado",
+  "touchComposerExpiryChanged": "Expiração da mensagem: {value}",
+  "touchComposerDeleteAfterReadOn": "Apagar após leitura ativado",
+  "touchComposerDeleteAfterReadOff": "Apagar após leitura desativado"
 }

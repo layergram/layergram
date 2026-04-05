@@ -189,5 +189,12 @@
   "termsOfService": "서비스 약관",
   "onboardingLegalConsent": "{terms} 및 {privacy}을(를) 읽었으며 이에 동의합니다.",
   "sessionDecryptionCache": "최근 암호 해독 키 미리 로드",
-  "sessionDecryptionCacheSubtitle": "앱이 열려 있고 잠금 해제되어 있을 때만 RAM에 최근 채팅 암호 해독 키를 미리 로드합니다. 일반 텍스트는 저장되지 않으며 앱이 숨겨지거나 잠기거나 ID 또는 암호 구문이 변경되거나 앱이 닫힐 때 캐시가 지워집니다."
+  "sessionDecryptionCacheSubtitle": "앱이 열려 있고 잠금 해제되어 있을 때만 RAM에 최근 채팅 암호 해독 키를 미리 로드합니다. 일반 텍스트는 저장되지 않으며 앱이 숨겨지거나 잠기거나 ID 또는 암호 구문이 변경되거나 앱이 닫힐 때 캐시가 지워집니다.",
+  "coverLengthLimit": "커버 메시지 길이 제한(숨겨진 문자 포함)",
+  "noLimit": "제한 없음",
+  "touchComposerMessageModeEnabled": "메시지 모드가 활성화되었습니다",
+  "touchComposerLinkModeEnabled": "링크 모드가 활성화되었습니다",
+  "touchComposerExpiryChanged": "메시지 만료: {value}",
+  "touchComposerDeleteAfterReadOn": "읽은 후 삭제가 활성화되었습니다",
+  "touchComposerDeleteAfterReadOff": "읽은 후 삭제가 비활성화되었습니다"
 }

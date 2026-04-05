@@ -120,6 +120,7 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
     _loadLockState();
     _loadScreenProtectionState();
     _loadTooltipState();
+    _loadCoverMessageLengthLimit();
     _loadPreviewState();
     _loadSessionDecryptionCacheState();
     _startDeepLinks();
@@ -140,6 +141,16 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
     final service = ref.read(previewServiceProvider);
     final hidden = await service.isHidden();
     ref.read(hideChatPreviewProvider.notifier).state = hidden;
+  }
+
+  Future<void> _loadCoverMessageLengthLimit() async {
+    final service = ref.read(coverMessageLengthLimitServiceProvider);
+    final limit = await service.getLimit();
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(coverMessageLengthLimitProvider.notifier).state = limit;
+    });
   }
 
   Future<void> _loadSessionDecryptionCacheState() async {

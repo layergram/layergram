@@ -13,6 +13,7 @@ import '../../core/providers.dart';
 import '../../core/storage/messages_repository.dart';
 import '../../l10n/app_strings.dart';
 import '../../ui/passphrase_button.dart';
+import '../../utils/app_platform.dart';
 import '../../utils/sharing.dart';
 import 'home_controller.dart';
 
@@ -149,6 +150,104 @@ class ChatViewState extends ConsumerState<ChatView> {
 
   int get _estimatedPayloadBytes {
     return StegoEncoder.estimatedEncryptedPayloadBytes(_secretCtrl.text);
+  }
+
+  int? get _coverLengthLimit {
+    return ref.read(coverMessageLengthLimitProvider);
+  }
+
+  int _estimatedPayloadBytesForSecret(String secretText) {
+    return StegoEncoder.estimatedEncryptedPayloadBytes(secretText);
+  }
+
+  int _minimumStegoCharacterCount({
+    String? coverText,
+    String? secretText,
+  }) {
+    final effectiveCover = coverText ?? _coverCtrl.text;
+    final effectiveSecret = secretText ?? _secretCtrl.text;
+    if (effectiveSecret.trim().isEmpty) {
+      return StegoEncoder.visibleCharacterCount(effectiveCover);
+    }
+    return StegoEncoder.minimumEncodedLengthForBytes(
+      effectiveCover,
+      _estimatedPayloadBytesForSecret(effectiveSecret),
+    );
+  }
+
+  bool _fitsWithinCoverLengthLimit({
+    String? coverText,
+    String? secretText,
+  }) {
+    if (_linkMode) return true;
+    final limit = _coverLengthLimit;
+    if (limit == null) return true;
+    return _minimumStegoCharacterCount(
+          coverText: coverText,
+          secretText: secretText,
+        ) <=
+        limit;
+  }
+
+  TextEditingValue _limitStegoFieldEdit(
+    TextEditingValue oldValue,
+    TextEditingValue newValue, {
+    required bool isCoverField,
+  }) {
+    if (_linkMode || _coverLengthLimit == null || newValue.text == oldValue.text) {
+      return newValue;
+    }
+
+    final currentCover = isCoverField ? oldValue.text : _coverCtrl.text;
+    final currentSecret = isCoverField ? _secretCtrl.text : oldValue.text;
+    final nextCover = isCoverField ? newValue.text : _coverCtrl.text;
+    final nextSecret = isCoverField ? _secretCtrl.text : newValue.text;
+
+    if (_fitsWithinCoverLengthLimit(
+      coverText: nextCover,
+      secretText: nextSecret,
+    )) {
+      return newValue;
+    }
+
+    final currentFits = _fitsWithinCoverLengthLimit(
+      coverText: currentCover,
+      secretText: currentSecret,
+    );
+    final currentLength = _minimumStegoCharacterCount(
+      coverText: currentCover,
+      secretText: currentSecret,
+    );
+    final nextLength = _minimumStegoCharacterCount(
+      coverText: nextCover,
+      secretText: nextSecret,
+    );
+
+    if (!currentFits && nextLength < currentLength) {
+      return newValue;
+    }
+
+    return oldValue;
+  }
+
+  List<TextInputFormatter> _coverLimitInputFormatters({
+    required bool isCoverField,
+  }) {
+    if (_linkMode || _coverLengthLimit == null) return const [];
+    return [
+      TextInputFormatter.withFunction(
+        (oldValue, newValue) => _limitStegoFieldEdit(
+          oldValue,
+          newValue,
+          isCoverField: isCoverField,
+        ),
+      ),
+    ];
+  }
+
+  String? _coverLimitCounterText(int? coverLengthLimit) {
+    if (_linkMode || coverLengthLimit == null) return null;
+    return '${_minimumStegoCharacterCount()}/$coverLengthLimit';
   }
 
   void _dismissMessageInputFocus(PointerDownEvent _) {
@@ -538,7 +637,12 @@ class ChatViewState extends ConsumerState<ChatView> {
     _messagesRepo = ref.read(messagesRepositoryProvider);
     _decryptionPrimed = widget.embedded;
     if (!widget.embedded) {
-      _acquireBackgroundHold();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || widget.embedded) {
+          return;
+        }
+        _acquireBackgroundHold();
+      });
     }
     _coverCtrl.addListener(_onFieldChanged);
     _secretCtrl.addListener(_onFieldChanged);
@@ -935,6 +1039,90 @@ class ChatViewState extends ConsumerState<ChatView> {
     }
   }
 
+  bool get _shouldShowTouchComposerSnackbars {
+    return !AppPlatform.supportsHoverTooltips;
+  }
+
+  _ExpiryOption _expiryOptionForMinutes(int? minutes) {
+    return _expiryOptions.firstWhere(
+      (opt) => opt.minutes == minutes,
+      orElse: () => const _ExpiryOption(minutes: null),
+    );
+  }
+
+  void _showTouchComposerSnackbar(String message) {
+    if (!_shouldShowTouchComposerSnackbars || !mounted) {
+      return;
+    }
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(milliseconds: 1400),
+      ),
+    );
+  }
+
+  void _setComposerMode(bool linkMode) {
+    if (_linkMode == linkMode) {
+      return;
+    }
+    setState(() {
+      _linkMode = linkMode;
+      _encryptedOutput = '';
+      _dirtySinceEncode = true;
+    });
+    _saveSettings();
+    final t = AppStrings.t;
+    _showTouchComposerSnackbar(
+      t(
+        context,
+        linkMode
+            ? 'touchComposerLinkModeEnabled'
+            : 'touchComposerMessageModeEnabled',
+      ),
+    );
+  }
+
+  void _setComposerExpiry(int? minutes) {
+    if (_selectedExpiryMinutes == minutes) {
+      return;
+    }
+    setState(() {
+      _selectedExpiryMinutes = minutes;
+      _encryptedOutput = '';
+      _dirtySinceEncode = true;
+    });
+    _saveSettings();
+    final t = AppStrings.t;
+    final expiryLabel = _expiryLabel(context, _expiryOptionForMinutes(minutes));
+    _showTouchComposerSnackbar(
+      t(context, 'touchComposerExpiryChanged')
+          .replaceAll('{value}', expiryLabel),
+    );
+  }
+
+  void _setDeleteAfterRead(bool value) {
+    if (_deleteAfterRead == value) {
+      return;
+    }
+    setState(() {
+      _deleteAfterRead = value;
+      _dirtySinceEncode = true;
+    });
+    _saveSettings();
+    final t = AppStrings.t;
+    _showTouchComposerSnackbar(
+      t(
+        context,
+        value
+            ? 'touchComposerDeleteAfterReadOn'
+            : 'touchComposerDeleteAfterReadOff',
+      ),
+    );
+  }
+
   void _scrollToBottom() {
     // With reverse: true, offset 0 is the bottom (latest message). Jump there after frame.
     WidgetsBinding.instance.endOfFrame.then((_) {
@@ -968,6 +1156,11 @@ class ChatViewState extends ConsumerState<ChatView> {
       _coverCtrl.text,
       _estimatedPayloadBytes,
     );
+  }
+
+  bool get _coverLengthLimitExceeded {
+    if (_linkMode) return false;
+    return !_fitsWithinCoverLengthLimit();
   }
 
   String _stripZeroWidth(String value) {
@@ -1007,6 +1200,7 @@ class ChatViewState extends ConsumerState<ChatView> {
       return _secretCtrl.text.trim().isNotEmpty;
     }
     return !_coverTooShort &&
+        !_coverLengthLimitExceeded &&
         _secretCtrl.text.trim().isNotEmpty &&
         _coverCtrl.text.trim().isNotEmpty;
   }
@@ -1039,7 +1233,11 @@ class ChatViewState extends ConsumerState<ChatView> {
           ? ref.read(homeControllerProvider).buildLinkPayload(encrypted)
           : ref
               .read(stegoEncoderProvider)
-              .encodeBytes(_coverCtrl.text, encrypted.toRawBytes());
+              .encodeBytes(
+                _coverCtrl.text,
+                encrypted.toRawBytes(),
+                maxTotalCharacters: _coverLengthLimit,
+              );
 
       final controller = ref.read(homeControllerProvider);
       final keyTag = await controller.currentKeyTag();
@@ -1073,7 +1271,11 @@ class ChatViewState extends ConsumerState<ChatView> {
     }
   }
 
-  Widget _buildCompactComposer(BuildContext context, String Function(BuildContext, String) t) {
+  Widget _buildCompactComposer(
+    BuildContext context,
+    String Function(BuildContext, String) t,
+    int? coverLengthLimit,
+  ) {
     return SafeArea(
       top: false,
       child: Padding(
@@ -1092,12 +1294,7 @@ class ChatViewState extends ConsumerState<ChatView> {
                       constraints: const BoxConstraints(minHeight: 32, minWidth: 32),
                       isSelected: [_linkMode == false, _linkMode == true],
                       onPressed: (index) {
-                        setState(() {
-                          _linkMode = index == 1;
-                          _encryptedOutput = '';
-                          _dirtySinceEncode = true;
-                        });
-                        _saveSettings();
+                        _setComposerMode(index == 1);
                       },
                       borderRadius: const BorderRadius.all(Radius.circular(12)),
                       children: const [
@@ -1135,12 +1332,7 @@ class ChatViewState extends ConsumerState<ChatView> {
                                 ),
                               ).toList(),
                               onChanged: (val) {
-                                setState(() {
-                                  _selectedExpiryMinutes = val;
-                                  _encryptedOutput = '';
-                                  _dirtySinceEncode = true;
-                                });
-                                _saveSettings();
+                                _setComposerExpiry(val);
                               },
                             ),
                           ),
@@ -1170,11 +1362,7 @@ class ChatViewState extends ConsumerState<ChatView> {
                     Switch.adaptive(
                       value: _deleteAfterRead,
                       onChanged: (v) {
-                        setState(() {
-                          _deleteAfterRead = v;
-                          _dirtySinceEncode = true;
-                        });
-                        _saveSettings();
+                        _setDeleteAfterRead(v);
                       },
                     ),
                     const Spacer(),
@@ -1218,6 +1406,9 @@ class ChatViewState extends ConsumerState<ChatView> {
                           maxLines: 1,
                           focusNode: _coverFocusNode,
                           onTapOutside: _dismissMessageInputFocus,
+                          inputFormatters: _coverLimitInputFormatters(
+                            isCoverField: true,
+                          ),
                           style: const TextStyle(fontSize: 13),
                           decoration: InputDecoration(
                             isDense: true,
@@ -1230,6 +1421,13 @@ class ChatViewState extends ConsumerState<ChatView> {
                             helperStyle: _coverTooShort
                                 ? TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 10)
                                 : null,
+                            counterText: _coverLimitCounterText(coverLengthLimit),
+                            counterStyle: _coverLengthLimitExceeded
+                                ? TextStyle(
+                                    color: Theme.of(context).colorScheme.error,
+                                    fontSize: 10,
+                                  )
+                                : const TextStyle(fontSize: 10),
                           ),
                         ),
                       ),
@@ -1241,12 +1439,22 @@ class ChatViewState extends ConsumerState<ChatView> {
                         maxLines: 1,
                         focusNode: _secretFocusNode,
                         onTapOutside: _dismissMessageInputFocus,
+                        inputFormatters: _coverLimitInputFormatters(
+                          isCoverField: false,
+                        ),
                         style: const TextStyle(fontSize: 13),
                         decoration: InputDecoration(
                           isDense: true,
                           contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                           labelText: t(context, 'secretText'),
                           labelStyle: const TextStyle(fontSize: 12),
+                          counterText: _coverLimitCounterText(coverLengthLimit),
+                          counterStyle: _coverLengthLimitExceeded
+                              ? TextStyle(
+                                  color: Theme.of(context).colorScheme.error,
+                                  fontSize: 10,
+                                )
+                              : const TextStyle(fontSize: 10),
                         ),
                       ),
                     ),
@@ -1263,6 +1471,7 @@ class ChatViewState extends ConsumerState<ChatView> {
   @override
   Widget build(BuildContext context) {
     final t = AppStrings.t;
+    final coverLengthLimit = ref.watch(coverMessageLengthLimitProvider);
 
     final isWide = MediaQuery.of(context).size.width >= 980;
     if (isWide && !_handoffScheduled && !widget.embedded) {
@@ -1286,6 +1495,11 @@ class ChatViewState extends ConsumerState<ChatView> {
     final mqData = MediaQuery.of(context);
     final tightLandscape = mqData.orientation == Orientation.landscape
         && mqData.size.height < 500;
+    final portraitComposerMaxHeight = mqData.size.height >= 780
+        ? 320.0
+        : mqData.size.height >= 640
+            ? 300.0
+            : 280.0;
     final showComposer = !_isSearching;
     final showMessageList = !tightLandscape || _isSearching;
 
@@ -1728,7 +1942,7 @@ class ChatViewState extends ConsumerState<ChatView> {
             ),
           if (showComposer)
             if (tightLandscape)
-              Expanded(child: _buildCompactComposer(context, t))
+              Expanded(child: _buildCompactComposer(context, t, coverLengthLimit))
             else
               SafeArea(
                 top: false,
@@ -1748,9 +1962,7 @@ class ChatViewState extends ConsumerState<ChatView> {
                           children: [
                         ConstrainedBox(
                           constraints: BoxConstraints(
-                              maxHeight: MediaQuery.of(context).size.height > 500
-                                  ? 220
-                                  : 120),
+                              maxHeight: portraitComposerMaxHeight),
                           child: SingleChildScrollView(
                             child: Column(
                               children: [
@@ -1787,12 +1999,7 @@ class ChatViewState extends ConsumerState<ChatView> {
                                           _linkMode == true
                                         ],
                                         onPressed: (index) {
-                                          setState(() {
-                                            _linkMode = index == 1;
-                                            _encryptedOutput = '';
-                                            _dirtySinceEncode = true;
-                                          });
-                                          _saveSettings();
+                                          _setComposerMode(index == 1);
                                         },
                                         borderRadius: const BorderRadius.all(
                                             Radius.circular(12)),
@@ -1847,12 +2054,7 @@ class ChatViewState extends ConsumerState<ChatView> {
                                                     )
                                                     .toList(),
                                                 onChanged: (val) {
-                                                  setState(() {
-                                                    _selectedExpiryMinutes = val;
-                                                    _encryptedOutput = '';
-                                                    _dirtySinceEncode = true;
-                                                  });
-                                                  _saveSettings();
+                                                  _setComposerExpiry(val);
                                                 },
                                               ),
                                             ),
@@ -1909,11 +2111,7 @@ class ChatViewState extends ConsumerState<ChatView> {
                                             materialTapTargetSize:
                                                 MaterialTapTargetSize.shrinkWrap,
                                             onChanged: (v) {
-                                              setState(() {
-                                                _deleteAfterRead = v;
-                                                _dirtySinceEncode = true;
-                                              });
-                                              _saveSettings();
+                                              _setDeleteAfterRead(v);
                                             },
                                           ),
                                         ],
@@ -1957,6 +2155,9 @@ class ChatViewState extends ConsumerState<ChatView> {
                                       maxLines: 2,
                                       focusNode: _coverFocusNode,
                                       onTapOutside: _dismissMessageInputFocus,
+                                      inputFormatters: _coverLimitInputFormatters(
+                                        isCoverField: true,
+                                      ),
                                       decoration: InputDecoration(
                                         labelText: t(context, 'coverText'),
                                         helperText: _coverTooShort
@@ -1964,6 +2165,16 @@ class ChatViewState extends ConsumerState<ChatView> {
                                                 .replaceAll('{n}', '$_coverMissingCount')
                                             : null,
                                         helperStyle: _coverTooShort
+                                            ? TextStyle(
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .error,
+                                              )
+                                            : null,
+                                        counterText: _coverLimitCounterText(
+                                          coverLengthLimit,
+                                        ),
+                                        counterStyle: _coverLengthLimitExceeded
                                             ? TextStyle(
                                                 color: Theme.of(context)
                                                     .colorScheme
@@ -1982,8 +2193,21 @@ class ChatViewState extends ConsumerState<ChatView> {
                                     maxLines: 2,
                                     focusNode: _secretFocusNode,
                                     onTapOutside: _dismissMessageInputFocus,
+                                    inputFormatters: _coverLimitInputFormatters(
+                                      isCoverField: false,
+                                    ),
                                     decoration: InputDecoration(
                                       labelText: t(context, 'secretText'),
+                                      counterText: _coverLimitCounterText(
+                                        coverLengthLimit,
+                                      ),
+                                      counterStyle: _coverLengthLimitExceeded
+                                          ? TextStyle(
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .error,
+                                            )
+                                          : null,
                                     ),
                                   ),
                                 ),

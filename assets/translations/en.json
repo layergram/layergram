@@ -189,5 +189,12 @@
   "onboardingLegalNotice": "Before continuing, review:",
   "privacyPolicy": "Privacy Policy",
   "termsOfService": "Terms of Service",
-  "onboardingLegalConsent": "I have read and agree to the {terms} and {privacy}."
+  "onboardingLegalConsent": "I have read and agree to the {terms} and {privacy}.",
+  "coverLengthLimit": "Cover message length limit (including hidden characters)",
+  "noLimit": "No limit",
+  "touchComposerMessageModeEnabled": "Message mode enabled",
+  "touchComposerLinkModeEnabled": "Link mode enabled",
+  "touchComposerExpiryChanged": "Message expiry: {value}",
+  "touchComposerDeleteAfterReadOn": "Delete after read enabled",
+  "touchComposerDeleteAfterReadOff": "Delete after read disabled"
 }

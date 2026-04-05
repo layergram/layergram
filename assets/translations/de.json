@@ -189,5 +189,12 @@
   "termsOfService": "Nutzungsbedingungen",
   "onboardingLegalConsent": "Ich habe die {terms} und die {privacy} gelesen und stimme ihnen zu.",
   "sessionDecryptionCache": "Aktuelle Entschlüsselungsschlüssel laden",
-  "sessionDecryptionCacheSubtitle": "Lädt aktuelle Chat-Entschlüsselungsschlüssel nur im RAM, während die App geöffnet und entsperrt ist. Es werden keine Klartexte gespeichert und der Cache wird gelöscht, wenn die App ausgeblendet, gesperrt, die Identität oder Passphrase geändert wird oder die App geschlossen wird."
+  "sessionDecryptionCacheSubtitle": "Lädt aktuelle Chat-Entschlüsselungsschlüssel nur im RAM, während die App geöffnet und entsperrt ist. Es werden keine Klartexte gespeichert und der Cache wird gelöscht, wenn die App ausgeblendet, gesperrt, die Identität oder Passphrase geändert wird oder die App geschlossen wird.",
+  "coverLengthLimit": "Längenlimit für die Cover-Nachricht (einschließlich versteckter Zeichen)",
+  "noLimit": "Kein Limit",
+  "touchComposerMessageModeEnabled": "Nachrichtenmodus aktiviert",
+  "touchComposerLinkModeEnabled": "Linkmodus aktiviert",
+  "touchComposerExpiryChanged": "Ablaufzeit der Nachricht: {value}",
+  "touchComposerDeleteAfterReadOn": "Löschen nach dem Lesen aktiviert",
+  "touchComposerDeleteAfterReadOff": "Löschen nach dem Lesen deaktiviert"
 }

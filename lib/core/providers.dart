@@ -27,6 +27,7 @@ import 'crypto/models.dart';
 import 'crypto/passphrase_service.dart';
 import 'crypto/seed_service.dart';
 import 'security/app_lock_service.dart';
+import 'security/cover_message_length_limit_service.dart';
 import 'security/screen_protection_service.dart';
 import 'security/tooltip_service.dart';
 import 'security/preview_service.dart';
@@ -241,12 +242,17 @@ final screenProtectionServiceProvider = Provider((ref) {
 final tooltipServiceProvider = Provider((ref) {
   return TooltipService(ref.watch(secureStorageProvider));
 });
+final coverMessageLengthLimitServiceProvider = Provider((ref) {
+  return CoverMessageLengthLimitService(ref.watch(secureStorageProvider));
+});
 final previewServiceProvider = Provider((ref) {
   return PreviewService(ref.watch(secureStorageProvider));
 });
 final sessionDecryptionCacheServiceProvider = Provider((ref) {
   return SessionDecryptionCacheService(ref.watch(secureStorageProvider));
 });
+final coverMessageLengthLimitProvider =
+    StateProvider<int?>((_) => CoverMessageLengthLimitService.defaultLimit);
 final hideChatPreviewProvider = StateProvider<bool>((_) => false);
 final sessionDecryptionCacheEnabledProvider = StateProvider<bool>((_) => false);
 final appLockEnabledProvider = StateProvider<bool>((_) => false);

@@ -189,5 +189,12 @@
   "termsOfService": "Masharti ya huduma",
   "onboardingLegalConsent": "Nimesoma na ninakubali {terms} na {privacy}.",
   "sessionDecryptionCache": "Pakia fungu za kutatua za hivi karibuni",
-  "sessionDecryptionCacheSubtitle": "Inapakia fungu za kutatua za mazungumzo ya hivi karibuni tu katika RAM wakati programu inafunguliwa na kufunguliwa. Hakuna maandishi rahisi yanahifadhiwa na cache inaondolewa wakati programu inafichwa, kufungwa, kitambulisho au neno la siri kinabadilika, au programu inafungwa."
+  "sessionDecryptionCacheSubtitle": "Inapakia fungu za kutatua za mazungumzo ya hivi karibuni tu katika RAM wakati programu inafunguliwa na kufunguliwa. Hakuna maandishi rahisi yanahifadhiwa na cache inaondolewa wakati programu inafichwa, kufungwa, kitambulisho au neno la siri kinabadilika, au programu inafungwa.",
+  "coverLengthLimit": "Kikomo cha urefu wa ujumbe wa kufunika (ikijumuisha herufi zilizofichwa)",
+  "noLimit": "Hakuna kikomo",
+  "touchComposerMessageModeEnabled": "Hali ya ujumbe imewashwa",
+  "touchComposerLinkModeEnabled": "Hali ya kiungo imewashwa",
+  "touchComposerExpiryChanged": "Kuisha kwa ujumbe: {value}",
+  "touchComposerDeleteAfterReadOn": "Futa baada ya kusoma imewashwa",
+  "touchComposerDeleteAfterReadOff": "Futa baada ya kusoma imezimwa"
 }

@@ -1,6 +1,6 @@
 # Layergram Message Format (LMF) Specification
 
-**Version:** 1.0  
+**Version:** 1.1  
 **Status:** Stable  
 
 This document defines the **Layergram Message Format (LMF)**, the protocol used by Layergram to embed end-to-end encrypted messages within standard, visually innocuous text messages.
@@ -113,11 +113,12 @@ The hidden runes are distributed **between the visible characters** of the cover
 Each slot receives a **block** of hidden runes with the following properties:
 
 - **Minimum block size:** 8 runes (or the number of payload symbols assigned to the slot plus the minimum mixed-slot noise requirement, whichever is larger).
-- **Maximum block size:** 48 runes.
-- **Actual block size:** chosen randomly between the minimum and 48 for each slot independently.
+- **Maximum mixed-slot block size:** 22 runes.
+- **Maximum noise-only decoy block size:** 12 runes.
+- **Actual mixed-slot block size:** chosen randomly between the minimum and `min(22, payloadSymbolsInSlot + 6)` for each slot independently.
 - **Content:** the payload symbols assigned to the slot are placed at **random positions** within the block (preserving their relative order), and all remaining positions are filled with random noise characters.
 
-The 48 rune limit applies to the **total** runes in the block (payload + noise combined).
+The 22 rune limit applies to the **total** runes in a mixed block (payload + noise combined). The public Layergram implementation additionally caps payload density so that a carrier slot never receives more than 16 payload symbols. This intentionally spreads the ciphertext across more visible boundaries instead of concentrating a very large hidden cluster between two letters.
 
 In addition to mixed payload+noise blocks, some eligible suffix slots may receive **noise-only decoy blocks**, while other eligible slots may remain completely clean. This avoids a rigid "hidden block after every letter" pattern.
 
@@ -164,7 +165,7 @@ Payload symbols are then assigned to carrier slots using **bounded random chunki
 carrierSlots = randomized subset of eligible suffix slots
 payloadPerSlot = randomized positive chunk sizes
 sum(payloadPerSlot) = payloadSymbols
-payloadPerSlot[i] <= maxPayloadPerCarrierSlot
+payloadPerSlot[i] <= 16
 ```
 
 This preserves global payload order while avoiding a rigid left-to-right even split that could become recognizable.
@@ -174,8 +175,8 @@ This preserves global payload order while avoiding a rigid left-to-right even sp
 To ensure all payload symbols fit while preserving the clean preview-safe prefix, the minimum cover text length is calculated conservatively using the **maximum payload capacity per carrier slot**:
 
 ```
-maxPayloadPerCarrierSlot = 48 - 2 = 46
-requiredCarrierSlots = ceil(payloadSymbols / 46)
+maxPayloadPerCarrierSlot = 16
+requiredCarrierSlots = ceil(payloadSymbols / 16)
 minCoverLength = 64 + requiredCarrierSlots
 ```
 
@@ -245,19 +246,19 @@ Direct message links sacrifice **visual deniability**: the link is clearly ident
 Given a sufficiently long cover text and 400 payload symbols:
 
 ```
-maxPayloadPerCarrierSlot = 46
-requiredCarrierSlots = ceil(400 / 46) = 9
-minCoverLength = 64 + 9 = 73
+maxPayloadPerCarrierSlot = 16
+requiredCarrierSlots = ceil(400 / 16) = 25
+minCoverLength = 64 + 25 = 89
 ```
 
 Suppose the chosen clean prefix for this message is 71 visible characters.
 
 Then embedding starts only after character 71, and only the suffix slots are eligible. A randomized subset of those suffix slots becomes carrier slots, while some additional eligible slots may become noise-only decoys.
 
-Each used slot's block is independently sized between 8 and 48 runes total:
+Each used mixed slot's block is independently sized between 8 and 22 runes total:
 
 ```
-[clean visible prefix...71 chars...] c [11 runes] o [0] m [23 runes] e [0]   [14 runes] s [9 runes] t [0] a [17 runes] i
+[clean visible prefix...71 chars...] c [11 runes] o [0] m [18 runes] e [0]   [12 runes] s [9 runes] t [0] a [16 runes] i
 ```
 
 Within each block, the payload symbols are scattered at random positions (in order) and the remaining positions are filled with noise. Noise-only decoy slots contain only noise characters from the deniability alphabet.
