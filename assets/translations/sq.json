@@ -196,5 +196,8 @@
   "touchComposerLinkModeEnabled": "Modaliteti i lidhjes u aktivizua",
   "touchComposerExpiryChanged": "Skadimi i mesazhit: {value}",
   "touchComposerDeleteAfterReadOn": "Fshirja pas leximit u aktivizua",
-  "touchComposerDeleteAfterReadOff": "Fshirja pas leximit u çaktivizua"
+  "touchComposerDeleteAfterReadOff": "Fshirja pas leximit u çaktivizua",
+  "wordMismatchRetry": "Fjal është gabim. Dëshironi të provoni përsëri?",
+  "retry": "Provo përsëri",
+  "cancel": "Anulo"
 }

@@ -196,5 +196,8 @@
   "touchComposerLinkModeEnabled": "لنک موڈ فعال ہو گیا",
   "touchComposerExpiryChanged": "پیغام کی میعاد: {value}",
   "touchComposerDeleteAfterReadOn": "پڑھنے کے بعد حذف کرنا فعال ہو گیا",
-  "touchComposerDeleteAfterReadOff": "پڑھنے کے بعد حذف کرنا غیر فعال ہو گیا"
+  "touchComposerDeleteAfterReadOff": "پڑھنے کے بعد حذف کرنا غیر فعال ہو گیا",
+  "wordMismatchRetry": "لفظ غلط ہے۔ کیا آپ دوبارہ کوشش کرنا چاہیں گے؟",
+  "retry": "دوبارہ کوشش کریں",
+  "cancel": "منسوخ کریں"
 }

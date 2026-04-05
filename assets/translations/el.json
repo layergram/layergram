@@ -196,5 +196,8 @@
   "touchComposerLinkModeEnabled": "Ενεργοποιήθηκε η λειτουργία συνδέσμου",
   "touchComposerExpiryChanged": "Λήξη μηνύματος: {value}",
   "touchComposerDeleteAfterReadOn": "Ενεργοποιήθηκε η διαγραφή μετά την ανάγνωση",
-  "touchComposerDeleteAfterReadOff": "Απενεργοποιήθηκε η διαγραφή μετά την ανάγνωση"
+  "touchComposerDeleteAfterReadOff": "Απενεργοποιήθηκε η διαγραφή μετά την ανάγνωση",
+  "wordMismatchRetry": "Λάθος λέξη. Θέλετε να ξαναπροσπαθήσετε;",
+  "retry": "Ξαναπροσπάθηση",
+  "cancel": "Ακύρωση"
 }

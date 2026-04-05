@@ -196,5 +196,8 @@
   "touchComposerLinkModeEnabled": "Bağlantı modu etkinleştirildi",
   "touchComposerExpiryChanged": "Mesajın sona ermesi: {value}",
   "touchComposerDeleteAfterReadOn": "Okunduktan sonra sil etkinleştirildi",
-  "touchComposerDeleteAfterReadOff": "Okunduktan sonra sil devre dışı bırakıldı"
+  "touchComposerDeleteAfterReadOff": "Okunduktan sonra sil devre dışı bırakıldı",
+  "wordMismatchRetry": "Kelime eşleşmiyor. Tekrar denemek ister misiniz?",
+  "retry": "Tekrar dene",
+  "cancel": "İptal"
 }

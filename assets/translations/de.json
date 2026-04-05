@@ -196,5 +196,8 @@
   "touchComposerLinkModeEnabled": "Linkmodus aktiviert",
   "touchComposerExpiryChanged": "Ablaufzeit der Nachricht: {value}",
   "touchComposerDeleteAfterReadOn": "Löschen nach dem Lesen aktiviert",
-  "touchComposerDeleteAfterReadOff": "Löschen nach dem Lesen deaktiviert"
+  "touchComposerDeleteAfterReadOff": "Löschen nach dem Lesen deaktiviert",
+  "wordMismatchRetry": "Wort stimmt nicht überein. Möchten Sie es erneut versuchen?",
+  "retry": "Erneut versuchen",
+  "cancel": "Abbrechen"
 }

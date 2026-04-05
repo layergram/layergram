@@ -196,5 +196,8 @@
   "touchComposerLinkModeEnabled": "Modo link ativado",
   "touchComposerExpiryChanged": "Expiração da mensagem: {value}",
   "touchComposerDeleteAfterReadOn": "Apagar após leitura ativado",
-  "touchComposerDeleteAfterReadOff": "Apagar após leitura desativado"
+  "touchComposerDeleteAfterReadOff": "Apagar após leitura desativado",
+  "wordMismatchRetry": "Palavra incorreta. Gostaria de tentar novamente?",
+  "retry": "Tentar novamente",
+  "cancel": "Cancelar"
 }

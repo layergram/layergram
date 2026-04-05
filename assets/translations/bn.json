@@ -196,5 +196,8 @@
   "touchComposerLinkModeEnabled": "লিংক মোড সক্রিয় হয়েছে",
   "touchComposerExpiryChanged": "বার্তার মেয়াদ: {value}",
   "touchComposerDeleteAfterReadOn": "পড়ার পর মুছে ফেলা সক্রিয় হয়েছে",
-  "touchComposerDeleteAfterReadOff": "পড়ার পর মুছে ফেলা নিষ্ক্রিয় হয়েছে"
+  "touchComposerDeleteAfterReadOff": "পড়ার পর মুছে ফেলা নিষ্ক্রিয় হয়েছে",
+  "wordMismatchRetry": "শব্দের অমিল। আবার চেষ্টা করবেন?",
+  "retry": "আবার চেষ্টা করুন",
+  "cancel": "বাতিল"
 }

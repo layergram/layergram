@@ -196,5 +196,8 @@
   "touchComposerLinkModeEnabled": "लिंक मोड सक्रिय",
   "touchComposerExpiryChanged": "संदेश की अवधि: {value}",
   "touchComposerDeleteAfterReadOn": "पढ़ने के बाद मिटाना सक्रिय",
-  "touchComposerDeleteAfterReadOff": "पढ़ने के बाद मिटाना निष्क्रिय"
+  "touchComposerDeleteAfterReadOff": "पढ़ने के बाद मिटाना निष्क्रिय",
+  "wordMismatchRetry": "शब्द मेल नहीं खाता। क्या आप फिर से कोशिश करना चाहेंगे?",
+  "retry": "फिर से कोशिश करें",
+  "cancel": "रद्द करें"
 }

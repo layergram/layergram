@@ -196,5 +196,8 @@
   "touchComposerLinkModeEnabled": "已啟用連結模式",
   "touchComposerExpiryChanged": "訊息到期時間：{value}",
   "touchComposerDeleteAfterReadOn": "已啟用讀取後刪除",
-  "touchComposerDeleteAfterReadOff": "已停用讀取後刪除"
+  "touchComposerDeleteAfterReadOff": "已停用讀取後刪除",
+  "wordMismatchRetry": "單詞不匹配。您想再試一次嗎？",
+  "retry": "重試",
+  "cancel": "取消"
 }

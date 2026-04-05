@@ -196,5 +196,8 @@
   "touchComposerLinkModeEnabled": "લિંક સ્થિતિ સક્રિય",
   "touchComposerExpiryChanged": "સંદેશ સમાપ્તિ: {value}",
   "touchComposerDeleteAfterReadOn": "વાંચ્યા પછી કાઢી નાખવું સક્રિય",
-  "touchComposerDeleteAfterReadOff": "વાંચ્યા પછી કાઢી નાખવું નિષ્ક્રિય"
+  "touchComposerDeleteAfterReadOff": "વાંચ્યા પછી કાઢી નાખવું નિષ્ક્રિય",
+  "wordMismatchRetry": "શબ્દ બંધબેસતો નથી. શું તમે ફરીથી પ્રયાસ કરવા માંગો છો?",
+  "retry": "ફરીથી પ્રયાસ કરો",
+  "cancel": "રદ કરો"
 }

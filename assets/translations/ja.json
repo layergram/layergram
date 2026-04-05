@@ -196,5 +196,8 @@
   "touchComposerLinkModeEnabled": "リンクモードを有効にしました",
   "touchComposerExpiryChanged": "メッセージの有効期限: {value}",
   "touchComposerDeleteAfterReadOn": "既読後削除を有効にしました",
-  "touchComposerDeleteAfterReadOff": "既読後削除を無効にしました"
+  "touchComposerDeleteAfterReadOff": "既読後削除を無効にしました",
+  "wordMismatchRetry": "単語が一致しません。もう一度試しますか？",
+  "retry": "再試行",
+  "cancel": "キャンセル"
 }

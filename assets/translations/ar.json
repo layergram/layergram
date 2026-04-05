@@ -196,5 +196,8 @@
   "touchComposerLinkModeEnabled": "تم تفعيل وضع الرابط",
   "touchComposerExpiryChanged": "انتهاء صلاحية الرسالة: {value}",
   "touchComposerDeleteAfterReadOn": "تم تفعيل الحذف بعد القراءة",
-  "touchComposerDeleteAfterReadOff": "تم إيقاف الحذف بعد القراءة"
+  "touchComposerDeleteAfterReadOff": "تم إيقاف الحذف بعد القراءة",
+  "wordMismatchRetry": "عدم تطابق الكلمة. هل تريد المحاولة مرة أخرى؟",
+  "retry": "إعادة المحاولة",
+  "cancel": "إلغاء"
 }

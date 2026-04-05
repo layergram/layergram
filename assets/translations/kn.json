@@ -196,5 +196,8 @@
   "touchComposerLinkModeEnabled": "ಲಿಂಕ್ ಮೋಡ್ ಸಕ್ರಿಯವಾಗಿದೆ",
   "touchComposerExpiryChanged": "ಸಂದೇಶದ ಅವಧಿ: {value}",
   "touchComposerDeleteAfterReadOn": "ಓದಿದ ನಂತರ ಅಳಿಸುವಿಕೆ ಸಕ್ರಿಯವಾಗಿದೆ",
-  "touchComposerDeleteAfterReadOff": "ಓದಿದ ನಂತರ ಅಳಿಸುವಿಕೆ ನಿಷ್ಕ್ರಿಯವಾಗಿದೆ"
+  "touchComposerDeleteAfterReadOff": "ಓದಿದ ನಂತರ ಅಳಿಸುವಿಕೆ ನಿಷ್ಕ್ರಿಯವಾಗಿದೆ",
+  "wordMismatchRetry": "ಪದ ಹೊಂದಿಕೆಯಾಗುತ್ತಿಲ್ಲ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಲು ಬಯಸುವಿರಾ?",
+  "retry": "ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ",
+  "cancel": "ರದ್ದುಮಾಡಿ"
 }

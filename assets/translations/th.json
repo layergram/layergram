@@ -196,5 +196,8 @@
   "touchComposerLinkModeEnabled": "เปิดโหมดลิงก์แล้ว",
   "touchComposerExpiryChanged": "การหมดอายุของข้อความ: {value}",
   "touchComposerDeleteAfterReadOn": "เปิดการลบหลังอ่านแล้ว",
-  "touchComposerDeleteAfterReadOff": "ปิดการลบหลังอ่านแล้ว"
+  "touchComposerDeleteAfterReadOff": "ปิดการลบหลังอ่านแล้ว",
+  "wordMismatchRetry": "คำไม่ตรงกัน คุณต้องการลองใหม่หรือไม่?",
+  "retry": "ลองใหม่",
+  "cancel": "ยกเลิก"
 }

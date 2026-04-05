@@ -196,5 +196,8 @@
   "touchComposerLinkModeEnabled": "Tryb linku włączony",
   "touchComposerExpiryChanged": "Wygaśnięcie wiadomości: {value}",
   "touchComposerDeleteAfterReadOn": "Usuwanie po odczycie włączone",
-  "touchComposerDeleteAfterReadOff": "Usuwanie po odczycie wyłączone"
+  "touchComposerDeleteAfterReadOff": "Usuwanie po odczycie wyłączone",
+  "wordMismatchRetry": "Nieprawidłowe słowo. Czy chcesz spróbować ponownie?",
+  "retry": "Ponów",
+  "cancel": "Anuluj"
 }

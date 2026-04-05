@@ -196,5 +196,8 @@
   "touchComposerLinkModeEnabled": "Mod link activat",
   "touchComposerExpiryChanged": "Expirarea mesajului: {value}",
   "touchComposerDeleteAfterReadOn": "Ștergere după citire activată",
-  "touchComposerDeleteAfterReadOff": "Ștergere după citire dezactivată"
+  "touchComposerDeleteAfterReadOff": "Ștergere după citire dezactivată",
+  "wordMismatchRetry": "Cuvânt nepotrivit. Doriți să încercați din nou?",
+  "retry": "Reîncercați",
+  "cancel": "Anulați"
 }

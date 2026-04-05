@@ -196,5 +196,8 @@
   "touchComposerLinkModeEnabled": "Naka-enable ang mode ng link",
   "touchComposerExpiryChanged": "Pag-expire ng mensahe: {value}",
   "touchComposerDeleteAfterReadOn": "Naka-enable ang burahin pagkatapos basahin",
-  "touchComposerDeleteAfterReadOff": "Naka-disable ang burahin pagkatapos basahin"
+  "touchComposerDeleteAfterReadOff": "Naka-disable ang burahin pagkatapos basahin",
+  "wordMismatchRetry": "Hindi tugma ang salita. Gusto mo bang subukan muli?",
+  "retry": "Subukan muli",
+  "cancel": "Kanselahin"
 }

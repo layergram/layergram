@@ -196,5 +196,8 @@
   "touchComposerLinkModeEnabled": "Linkmodus ingeschakeld",
   "touchComposerExpiryChanged": "Verlooptijd van bericht: {value}",
   "touchComposerDeleteAfterReadOn": "Verwijderen na lezen ingeschakeld",
-  "touchComposerDeleteAfterReadOff": "Verwijderen na lezen uitgeschakeld"
+  "touchComposerDeleteAfterReadOff": "Verwijderen na lezen uitgeschakeld",
+  "wordMismatchRetry": "Woord komt niet overeen. Wilt u het opnieuw proberen?",
+  "retry": "Opnieuw proberen",
+  "cancel": "Annuleren"
 }

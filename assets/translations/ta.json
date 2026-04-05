@@ -196,5 +196,8 @@
   "touchComposerLinkModeEnabled": "இணைப்பு நிலை இயக்கப்பட்டது",
   "touchComposerExpiryChanged": "செய்தி காலாவதி: {value}",
   "touchComposerDeleteAfterReadOn": "படித்த பின் நீக்கு இயக்கப்பட்டது",
-  "touchComposerDeleteAfterReadOff": "படித்த பின் நீக்கு முடக்கப்பட்டது"
+  "touchComposerDeleteAfterReadOff": "படித்த பின் நீக்கு முடக்கப்பட்டது",
+  "wordMismatchRetry": "சொல் பொருந்தவில்லை. மீண்டும் முயற்சி செய்ய விரும்புகிறீர்களா?",
+  "retry": "மீண்டும் முயற்சி செய்",
+  "cancel": "ரத்து செய்"
 }

@@ -196,5 +196,8 @@
   "touchComposerLinkModeEnabled": "Linkkitila käytössä",
   "touchComposerExpiryChanged": "Viestin vanheneminen: {value}",
   "touchComposerDeleteAfterReadOn": "Poista lukemisen jälkeen käytössä",
-  "touchComposerDeleteAfterReadOff": "Poista lukemisen jälkeen pois käytöstä"
+  "touchComposerDeleteAfterReadOff": "Poista lukemisen jälkeen pois käytöstä",
+  "wordMismatchRetry": "Sana ei täsmää. Haluatko yrittää uudelleen?",
+  "retry": "Yritä uudelleen",
+  "cancel": "Peruuta"
 }

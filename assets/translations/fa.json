@@ -196,5 +196,8 @@
   "touchComposerLinkModeEnabled": "حالت پیوند فعال شد",
   "touchComposerExpiryChanged": "انقضای پیام: {value}",
   "touchComposerDeleteAfterReadOn": "حذف پس از خواندن فعال شد",
-  "touchComposerDeleteAfterReadOff": "حذف پس از خواندن غیرفعال شد"
+  "touchComposerDeleteAfterReadOff": "حذف پس از خواندن غیرفعال شد",
+  "wordMismatchRetry": "کلمه اشتباه است. آیا می‌خواهید دوباره تلاش کنید؟",
+  "retry": "تلاش مجدد",
+  "cancel": "لغو"
 }
