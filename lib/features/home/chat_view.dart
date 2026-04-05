@@ -636,7 +636,12 @@ class ChatViewState extends ConsumerState<ChatView> {
     _messagesRepo = ref.read(messagesRepositoryProvider);
     _decryptionPrimed = widget.embedded;
     if (!widget.embedded) {
-      _acquireBackgroundHold();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || widget.embedded) {
+          return;
+        }
+        _acquireBackgroundHold();
+      });
     }
     _coverCtrl.addListener(_onFieldChanged);
     _secretCtrl.addListener(_onFieldChanged);
