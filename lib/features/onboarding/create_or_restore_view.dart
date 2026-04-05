@@ -156,56 +156,95 @@ class _CreateOrRestoreViewState extends ConsumerState<CreateOrRestoreView> {
       final targetIndex = words.length >= 7 ? 7 : words.length;
       final expected = words[targetIndex - 1];
 
-      _confirmWordCtrl.clear();
-      final confirm = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) {
-          final t = AppStrings.t;
-          return AlertDialog(
-            title: Text(t(context, 'confirmRecoveryPhrase')),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(t(context, 'recoveryPhraseWarning')),
-                const SizedBox(height: 8),
-                Text(
-                  t(context, 'recoveryPhraseSaveWarning'),
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 12),
-                SelectableText(created.mnemonic),
-                const SizedBox(height: 12),
-                Text(
-                  t(context, 'confirmWordPrompt')
-                      .replaceAll('{index}', '$targetIndex'),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _confirmWordCtrl,
-                  decoration: InputDecoration(
-                    border: const OutlineInputBorder(),
-                    hintText: t(context, 'mnemonic'),
+      while (true) {
+        _confirmWordCtrl.clear();
+        if (!mounted) return;
+        final confirm = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) {
+            final t = AppStrings.t;
+            return LayoutBuilder(
+              builder: (context, constraints) {
+                return AlertDialog(
+                  title: Text(t(dialogContext, 'confirmRecoveryPhrase')),
+                  content: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight: constraints.maxHeight * 0.7,
+                    ),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(t(dialogContext, 'recoveryPhraseWarning')),
+                          const SizedBox(height: 8),
+                          Text(
+                            t(dialogContext, 'recoveryPhraseSaveWarning'),
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 12),
+                          SelectableText(created.mnemonic),
+                          const SizedBox(height: 12),
+                          Text(
+                            t(dialogContext, 'confirmWordPrompt')
+                                .replaceAll('{index}', '$targetIndex'),
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: _confirmWordCtrl,
+                            autofocus: true,
+                            decoration: InputDecoration(
+                              border: const OutlineInputBorder(),
+                              hintText: t(dialogContext, 'mnemonic'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-              ],
-            ),
-            actions: [
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: Text(t(context, 'continueLabel')),
-              ),
-            ],
+                  actions: [
+                    FilledButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(true),
+                      child: Text(t(dialogContext, 'continueLabel')),
+                    ),
+                  ],
+                );
+              },
+            );
+          },
+        );
+        if (confirm == true &&
+            _confirmWordCtrl.text.trim().toLowerCase() == expected) {
+          widget.onCompleted();
+          return;
+        } else {
+          if (!mounted) return;
+          final retry = await showDialog<bool>(
+            context: context,
+            builder: (dialogContext) {
+              final t = AppStrings.t;
+              return AlertDialog(
+                title: Text(t(dialogContext, 'wordMismatch')),
+                content: Text(t(dialogContext, 'wordMismatchRetry')),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(false),
+                    child: Text(t(dialogContext, 'cancel')),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(true),
+                    child: Text(t(dialogContext, 'retry')),
+                  ),
+                ],
+              );
+            },
           );
-        },
-      );
-
-      if (confirm == true &&
-          _confirmWordCtrl.text.trim().toLowerCase() == expected) {
-        widget.onCompleted();
-      } else {
-        setState(() => _error = AppStrings.t(context, 'wordMismatch'));
+          if (retry != true) {
+            setState(() => _error = AppStrings.t(context, 'wordMismatch'));
+            return;
+          }
+        }
       }
     } catch (e) {
       setState(() => _error = e.toString());

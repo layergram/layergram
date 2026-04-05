@@ -196,5 +196,8 @@
   "touchComposerLinkModeEnabled": "Ìpo ìjápọ̀ ti ṣiṣẹ",
   "touchComposerExpiryChanged": "Ìparí ìfiránṣẹ́: {value}",
   "touchComposerDeleteAfterReadOn": "Paarẹ lẹ́yìn kíka ti ṣiṣẹ",
-  "touchComposerDeleteAfterReadOff": "Paarẹ lẹ́yìn kíka ti wa ni pipa"
+  "touchComposerDeleteAfterReadOff": "Paarẹ lẹ́yìn kíka ti wa ni pipa",
+  "wordMismatchRetry": "Ọrọ̀ kò tẹ́lẹ̀. Ní wọ́ọ̀ fẹ́ tun gbìyànjú pọ̀n?",
+  "retry": "Tun gbìyànjú pọ̀n",
+  "cancel": "Fagilẹ"
 }

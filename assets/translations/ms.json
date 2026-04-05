@@ -196,5 +196,8 @@
   "touchComposerLinkModeEnabled": "Mod pautan diaktifkan",
   "touchComposerExpiryChanged": "Tempoh luput mesej: {value}",
   "touchComposerDeleteAfterReadOn": "Padam selepas dibaca diaktifkan",
-  "touchComposerDeleteAfterReadOff": "Padam selepas dibaca dinyahaktifkan"
+  "touchComposerDeleteAfterReadOff": "Padam selepas dibaca dinyahaktifkan",
+  "wordMismatchRetry": "Kata tidak sepadan. Adakah anda mahu cuba lagi?",
+  "retry": "Cuba Lagi",
+  "cancel": "Batal"
 }

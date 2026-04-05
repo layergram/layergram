@@ -196,5 +196,8 @@
   "touchComposerLinkModeEnabled": "ਲਿੰਕ ਮੋਡ ਚਾਲੂ ਕੀਤਾ ਗਿਆ",
   "touchComposerExpiryChanged": "ਸੁਨੇਹੇ ਦੀ ਮਿਆਦ: {value}",
   "touchComposerDeleteAfterReadOn": "ਪੜ੍ਹਨ ਤੋਂ ਬਾਅਦ ਮਿਟਾਉਣਾ ਚਾਲੂ ਕੀਤਾ ਗਿਆ",
-  "touchComposerDeleteAfterReadOff": "ਪੜ੍ਹਨ ਤੋਂ ਬਾਅਦ ਮਿਟਾਉਣਾ ਬੰਦ ਕੀਤਾ ਗਿਆ"
+  "touchComposerDeleteAfterReadOff": "ਪੜ੍ਹਨ ਤੋਂ ਬਾਅਦ ਮਿਟਾਉਣਾ ਬੰਦ ਕੀਤਾ ਗਿਆ",
+  "wordMismatchRetry": "ਸ਼ਬਦ ਮੇਲ ਨਹੀਂ ਖਾਂਦਾ। ਕੀ ਤੁਸੀਂ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰਨਾ ਚਾਹੁੰਦੇ ਹੋ?",
+  "retry": "ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ",
+  "cancel": "ਰੱਦ ਕਰੋ"
 }

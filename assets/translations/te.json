@@ -196,5 +196,8 @@
   "touchComposerLinkModeEnabled": "లింక్ మోడ్ సక్రియమైంది",
   "touchComposerExpiryChanged": "సందేశ గడువు: {value}",
   "touchComposerDeleteAfterReadOn": "చదివిన తర్వాత తొలగింపు సక్రియమైంది",
-  "touchComposerDeleteAfterReadOff": "చదివిన తర్వాత తొలగింపు నిష్క్రియమైంది"
+  "touchComposerDeleteAfterReadOff": "చదివిన తర్వాత తొలగింపు నిష్క్రియమైంది",
+  "wordMismatchRetry": "పదం సరిపోలేదు. మళ్లీ ప్రయత్నించాలనా అనుకుంటున్నారా?",
+  "retry": "మళ్లీ ప్రయత్నించండి",
+  "cancel": "రద్దు చేయండి"
 }

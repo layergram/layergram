@@ -196,5 +196,8 @@
   "touchComposerLinkModeEnabled": "Lenkemodus aktivert",
   "touchComposerExpiryChanged": "Meldingsutløp: {value}",
   "touchComposerDeleteAfterReadOn": "Slett etter lesing aktivert",
-  "touchComposerDeleteAfterReadOff": "Slett etter lesing deaktivert"
+  "touchComposerDeleteAfterReadOff": "Slett etter lesing deaktivert",
+  "wordMismatchRetry": "Ord stemmer ikke. Vil du prøve igjen?",
+  "retry": "Prøv igjen",
+  "cancel": "Avbryt"
 }

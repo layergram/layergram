@@ -196,5 +196,8 @@
   "touchComposerLinkModeEnabled": "Đã bật chế độ liên kết",
   "touchComposerExpiryChanged": "Hết hạn tin nhắn: {value}",
   "touchComposerDeleteAfterReadOn": "Đã bật xóa sau khi đọc",
-  "touchComposerDeleteAfterReadOff": "Đã tắt xóa sau khi đọc"
+  "touchComposerDeleteAfterReadOff": "Đã tắt xóa sau khi đọc",
+  "wordMismatchRetry": "Sai từ. Bạn có muốn thử lại không?",
+  "retry": "Thử lại",
+  "cancel": "Hủy"
 }

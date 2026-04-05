@@ -196,5 +196,8 @@
   "touchComposerLinkModeEnabled": "Режим посилання увімкнено",
   "touchComposerExpiryChanged": "Термін дії повідомлення: {value}",
   "touchComposerDeleteAfterReadOn": "Видалення після прочитання увімкнено",
-  "touchComposerDeleteAfterReadOff": "Видалення після прочитання вимкнено"
+  "touchComposerDeleteAfterReadOff": "Видалення після прочитання вимкнено",
+  "wordMismatchRetry": "Слово не збігається. Хочете спробувати ще раз?",
+  "retry": "Спробувати ще раз",
+  "cancel": "Скасувати"
 }

@@ -196,5 +196,8 @@
   "touchComposerLinkModeEnabled": "Hali ya kiungo imewashwa",
   "touchComposerExpiryChanged": "Kuisha kwa ujumbe: {value}",
   "touchComposerDeleteAfterReadOn": "Futa baada ya kusoma imewashwa",
-  "touchComposerDeleteAfterReadOff": "Futa baada ya kusoma imezimwa"
+  "touchComposerDeleteAfterReadOff": "Futa baada ya kusoma imezimwa",
+  "wordMismatchRetry": "Neno halisi. Unataka kujaribu tena?",
+  "retry": "Jaribu tena",
+  "cancel": "Ghairi"
 }

@@ -196,5 +196,8 @@
   "touchComposerLinkModeEnabled": "An kunna yanayin mahaɗi",
   "touchComposerExpiryChanged": "Ƙarewar saƙo: {value}",
   "touchComposerDeleteAfterReadOn": "An kunna gogewa bayan karantawa",
-  "touchComposerDeleteAfterReadOff": "An kashe gogewa bayan karantawa"
+  "touchComposerDeleteAfterReadOff": "An kashe gogewa bayan karantawa",
+  "wordMismatchRetry": "Bambanci ba kalubale. Kuna son sake yunko?",
+  "retry": "Yunko",
+  "cancel": "Soke"
 }

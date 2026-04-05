@@ -196,5 +196,8 @@
   "touchComposerLinkModeEnabled": "Режим ссылки включён",
   "touchComposerExpiryChanged": "Срок действия сообщения: {value}",
   "touchComposerDeleteAfterReadOn": "Удаление после прочтения включено",
-  "touchComposerDeleteAfterReadOff": "Удаление после прочтения выключено"
+  "touchComposerDeleteAfterReadOff": "Удаление после прочтения выключено",
+  "wordMismatchRetry": "Слово не совпадает. Хотите попробовать еще раз?",
+  "retry": "Попробовать снова",
+  "cancel": "Отмена"
 }

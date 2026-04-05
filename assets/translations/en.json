@@ -196,5 +196,8 @@
   "touchComposerLinkModeEnabled": "Link mode enabled",
   "touchComposerExpiryChanged": "Message expiry: {value}",
   "touchComposerDeleteAfterReadOn": "Delete after read enabled",
-  "touchComposerDeleteAfterReadOff": "Delete after read disabled"
+  "touchComposerDeleteAfterReadOff": "Delete after read disabled",
+  "wordMismatchRetry": "Word mismatch. Would you like to try again?",
+  "retry": "Retry",
+  "cancel": "Cancel"
 }

@@ -196,5 +196,8 @@
   "touchComposerLinkModeEnabled": "Länkläge aktiverat",
   "touchComposerExpiryChanged": "Meddelandets utgångstid: {value}",
   "touchComposerDeleteAfterReadOn": "Radera efter läsning aktiverat",
-  "touchComposerDeleteAfterReadOff": "Radera efter läsning avaktiverat"
+  "touchComposerDeleteAfterReadOff": "Radera efter läsning avaktiverat",
+  "wordMismatchRetry": "Ord matchar inte. Vill du försöka igen?",
+  "retry": "Försök igen",
+  "cancel": "Avbryt"
 }

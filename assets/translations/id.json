@@ -196,5 +196,8 @@
   "touchComposerLinkModeEnabled": "Mode tautan aktif",
   "touchComposerExpiryChanged": "Masa berlaku pesan: {value}",
   "touchComposerDeleteAfterReadOn": "Hapus setelah dibaca aktif",
-  "touchComposerDeleteAfterReadOff": "Hapus setelah dibaca nonaktif"
+  "touchComposerDeleteAfterReadOff": "Hapus setelah dibaca nonaktif",
+  "wordMismatchRetry": "Kata tidak cocok. Ingin mencoba lagi?",
+  "retry": "Coba Lagi",
+  "cancel": "Batal"
 }

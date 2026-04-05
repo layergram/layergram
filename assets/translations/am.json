@@ -196,5 +196,8 @@
   "touchComposerLinkModeEnabled": "የአገናኝ ሁኔታ ነቅቷል",
   "touchComposerExpiryChanged": "የመልእክት ጊዜ ገደብ: {value}",
   "touchComposerDeleteAfterReadOn": "ከንባብ በኋላ ማጥፋት ነቅቷል",
-  "touchComposerDeleteAfterReadOff": "ከንባብ በኋላ ማጥፋት ተሰናክሏል"
+  "touchComposerDeleteAfterReadOff": "ከንባብ በኋላ ማጥፋት ተሰናክሏል",
+  "wordMismatchRetry": "የቃል ልዩነት። እንደገና ይሞክሉ?",
+  "retry": "እንደገና ሞክር",
+  "cancel": "ይቅር"
 }
