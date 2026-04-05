@@ -146,7 +146,11 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
   Future<void> _loadCoverMessageLengthLimit() async {
     final service = ref.read(coverMessageLengthLimitServiceProvider);
     final limit = await service.getLimit();
-    ref.read(coverMessageLengthLimitProvider.notifier).state = limit;
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(coverMessageLengthLimitProvider.notifier).state = limit;
+    });
   }
 
   Future<void> _loadSessionDecryptionCacheState() async {
