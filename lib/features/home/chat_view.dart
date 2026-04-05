@@ -1424,6 +1424,11 @@ class ChatViewState extends ConsumerState<ChatView> {
     final mqData = MediaQuery.of(context);
     final tightLandscape = mqData.orientation == Orientation.landscape
         && mqData.size.height < 500;
+    final portraitComposerMaxHeight = mqData.size.height >= 780
+        ? 320.0
+        : mqData.size.height >= 640
+            ? 300.0
+            : 280.0;
     final showComposer = !_isSearching;
     final showMessageList = !tightLandscape || _isSearching;
 
@@ -1886,9 +1891,7 @@ class ChatViewState extends ConsumerState<ChatView> {
                           children: [
                         ConstrainedBox(
                           constraints: BoxConstraints(
-                              maxHeight: MediaQuery.of(context).size.height > 500
-                                  ? 220
-                                  : 120),
+                              maxHeight: portraitComposerMaxHeight),
                           child: SingleChildScrollView(
                             child: Column(
                               children: [
