@@ -191,5 +191,10 @@
   "sessionDecryptionCache": "Loda maɓallan wanke bayanai na baya-bayan",
   "sessionDecryptionCacheSubtitle": "Yana loda maɓallan wanke bayanai na hira na baya-bayan kawai a RAM yayin da aikace-aikacen yake buɗe kuma an buɗe. Babu rubutun fili ake adana kuma an cire cache lokacin da aikace-aikacen ya ɓoye, an kulle, canza suna ko kalmar sirri ko aikace-aikacen ya rufe.",
   "coverLengthLimit": "Iyakar tsawon saƙon ɓoye (ciki har da haruffan ɓoye)",
-  "noLimit": "Babu iyaka"
+  "noLimit": "Babu iyaka",
+  "touchComposerMessageModeEnabled": "An kunna yanayin saƙo",
+  "touchComposerLinkModeEnabled": "An kunna yanayin mahaɗi",
+  "touchComposerExpiryChanged": "Ƙarewar saƙo: {value}",
+  "touchComposerDeleteAfterReadOn": "An kunna gogewa bayan karantawa",
+  "touchComposerDeleteAfterReadOff": "An kashe gogewa bayan karantawa"
 }

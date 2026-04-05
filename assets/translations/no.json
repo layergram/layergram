@@ -191,5 +191,10 @@
   "sessionDecryptionCache": "Forhåndsinnlast nylige dekrypteringsnøkler",
   "sessionDecryptionCacheSubtitle": "Forhåndsinnlast nylige chat-dekrypteringsnøkler bare i RAM mens appen er åpen og låst opp. Ingen ren tekst lagres og mellomlageret slettes når appen skjules, låses, identiteten eller passfrasen endres, eller appen lukkes.",
   "coverLengthLimit": "Lengdegrense for dekkmelding (inkludert skjulte tegn)",
-  "noLimit": "Ingen grense"
+  "noLimit": "Ingen grense",
+  "touchComposerMessageModeEnabled": "Meldingsmodus aktivert",
+  "touchComposerLinkModeEnabled": "Lenkemodus aktivert",
+  "touchComposerExpiryChanged": "Meldingsutløp: {value}",
+  "touchComposerDeleteAfterReadOn": "Slett etter lesing aktivert",
+  "touchComposerDeleteAfterReadOff": "Slett etter lesing deaktivert"
 }

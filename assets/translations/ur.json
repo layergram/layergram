@@ -191,5 +191,10 @@
   "sessionDecryptionCache": "حالیہ ڈکرپشن کلیدوں کو پری لوڈ کریں",
   "sessionDecryptionCacheSubtitle": "جب ایپ کھلی اور انلاک ہو تو صرف RAM میں حالیہ چیٹ ڈکرپشن کلیدوں کو پری لوڈ کریں۔ کوئی پلین ٹیکسٹ محفوظ نہیں ہوتا اور کیش ایپ چھپنے، لاک ہونے، شناخت یا پاس فریز تبدیل ہونے یا ایپ بند ہونے پر صاف ہوجاتا ہے۔",
   "coverLengthLimit": "کور پیغام کی لمبائی کی حد (چھپے ہوئے حروف سمیت)",
-  "noLimit": "کوئی حد نہیں"
+  "noLimit": "کوئی حد نہیں",
+  "touchComposerMessageModeEnabled": "پیغام موڈ فعال ہو گیا",
+  "touchComposerLinkModeEnabled": "لنک موڈ فعال ہو گیا",
+  "touchComposerExpiryChanged": "پیغام کی میعاد: {value}",
+  "touchComposerDeleteAfterReadOn": "پڑھنے کے بعد حذف کرنا فعال ہو گیا",
+  "touchComposerDeleteAfterReadOff": "پڑھنے کے بعد حذف کرنا غیر فعال ہو گیا"
 }

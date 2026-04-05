@@ -191,5 +191,10 @@
   "sessionDecryptionCache": "Wczytaj ostatnie klucze deszyfrujące",
   "sessionDecryptionCacheSubtitle": "Wczytuje ostatnie klucze deszyfrujące czatu tylko w RAM, gdy aplikacja jest otwarta i odblokowana. Żaden tekst jawnie nie jest przechowywany, a pamięć podręczna jest czyszczona, gdy aplikacja jest ukryta, zablokowana, zmienia się tożsamość lub hasło lub aplikacja jest zamykana.",
   "coverLengthLimit": "Limit długości wiadomości osłonowej (w tym ukryte znaki)",
-  "noLimit": "Bez limitu"
+  "noLimit": "Bez limitu",
+  "touchComposerMessageModeEnabled": "Tryb wiadomości włączony",
+  "touchComposerLinkModeEnabled": "Tryb linku włączony",
+  "touchComposerExpiryChanged": "Wygaśnięcie wiadomości: {value}",
+  "touchComposerDeleteAfterReadOn": "Usuwanie po odczycie włączone",
+  "touchComposerDeleteAfterReadOff": "Usuwanie po odczycie wyłączone"
 }

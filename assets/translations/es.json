@@ -191,5 +191,10 @@
   "sessionDecryptionCache": "Cargar claves de descifrado recientes",
   "sessionDecryptionCacheSubtitle": "Carga las claves de descifrado de chat recientes solo en RAM mientras la aplicación está abierta y desbloqueada. No se almacena ningún texto sin cifrar y la caché se borra cuando la aplicación está oculta, bloqueada, cambia la identidad o frase de paso o se cierra la aplicación.",
   "coverLengthLimit": "Límite de longitud del mensaje de cobertura (incluidos los caracteres ocultos)",
-  "noLimit": "Sin límite"
+  "noLimit": "Sin límite",
+  "touchComposerMessageModeEnabled": "Modo mensaje activado",
+  "touchComposerLinkModeEnabled": "Modo enlace activado",
+  "touchComposerExpiryChanged": "Caducidad del mensaje: {value}",
+  "touchComposerDeleteAfterReadOn": "Eliminar tras la lectura activado",
+  "touchComposerDeleteAfterReadOff": "Eliminar tras la lectura desactivado"
 }

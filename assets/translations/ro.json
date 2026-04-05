@@ -191,5 +191,10 @@
   "sessionDecryptionCache": "Încărcați cheile de decriptare recente",
   "sessionDecryptionCacheSubtitle": "Încarcă cheile de decriptare a chat-urilor recente doar în RAM în timp ce aplicația este deschisă și deblocată. Niciun text în clar nu este stocat și cache-ul este șters când aplicația este ascunsă, blocată, se schimbă identitatea sau fraza secretă sau aplicația este închisă.",
   "coverLengthLimit": "Limită de lungime pentru mesajul de acoperire (inclusiv caracterele ascunse)",
-  "noLimit": "Fără limită"
+  "noLimit": "Fără limită",
+  "touchComposerMessageModeEnabled": "Mod mesaj activat",
+  "touchComposerLinkModeEnabled": "Mod link activat",
+  "touchComposerExpiryChanged": "Expirarea mesajului: {value}",
+  "touchComposerDeleteAfterReadOn": "Ștergere după citire activată",
+  "touchComposerDeleteAfterReadOff": "Ștergere după citire dezactivată"
 }

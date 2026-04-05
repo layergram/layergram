@@ -191,5 +191,10 @@
   "sessionDecryptionCache": "Son şifre çözme anahtarlarını önceden yükle",
   "sessionDecryptionCacheSubtitle": "Uygulama açık ve kilidi açıldığında yalnızca RAM'e son sohbet şifre çözme anahtarlarını önceden yükler. Düz metin saklanmaz ve önbellek, uygulama gizlendiğinde, kilitlendiğinde, kimlik veya parola ifadesi değiştiğinde veya uygulama kapandığında temizlenir.",
   "coverLengthLimit": "Kapak mesajı uzunluk sınırı (gizli karakterler dahil)",
-  "noLimit": "Sınır yok"
+  "noLimit": "Sınır yok",
+  "touchComposerMessageModeEnabled": "Mesaj modu etkinleştirildi",
+  "touchComposerLinkModeEnabled": "Bağlantı modu etkinleştirildi",
+  "touchComposerExpiryChanged": "Mesajın sona ermesi: {value}",
+  "touchComposerDeleteAfterReadOn": "Okunduktan sonra sil etkinleştirildi",
+  "touchComposerDeleteAfterReadOff": "Okunduktan sonra sil devre dışı bırakıldı"
 }

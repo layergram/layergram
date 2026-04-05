@@ -191,5 +191,10 @@
   "sessionDecryptionCache": "Recente ontsleutelsleutels vooraf laden",
   "sessionDecryptionCacheSubtitle": "Laadt recente chat-ontsleutelsleutels alleen in RAM terwijl de app open en ontgrendeld is. Er wordt geen platte tekst opgeslagen en de cache wordt gewist wanneer de app verborgen, vergrendeld, de identiteit of wachtwoordzin verandert, of de app wordt gesloten.",
   "coverLengthLimit": "Lengtelimiet voor het dekmantelbericht (inclusief verborgen tekens)",
-  "noLimit": "Geen limiet"
+  "noLimit": "Geen limiet",
+  "touchComposerMessageModeEnabled": "Berichtmodus ingeschakeld",
+  "touchComposerLinkModeEnabled": "Linkmodus ingeschakeld",
+  "touchComposerExpiryChanged": "Verlooptijd van bericht: {value}",
+  "touchComposerDeleteAfterReadOn": "Verwijderen na lezen ingeschakeld",
+  "touchComposerDeleteAfterReadOff": "Verwijderen na lezen uitgeschakeld"
 }

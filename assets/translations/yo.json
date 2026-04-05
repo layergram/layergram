@@ -191,5 +191,10 @@
   "sessionDecryptionCache": "Mu awọn bọtini afọhinti titun kọkọ",
   "sessionDecryptionCacheSubtitle": "Mu awọn bọtini afọhinti ọrọ titun kọkọ nikan ni RAM lakoko ti app wa ṣiṣẹ ati ti ti ṣii. Kò sí ọrọ rọrun ti a fi pamọ ati pe a yọ cache nigbati app ba farapamọ, ti a ti fi pa, ti idamọ tabi ọrọ riru yipada, tabi ti app ti pa.",
   "coverLengthLimit": "Ààlà gígùn ìfiránṣẹ́ ìbòjú (pẹ̀lú àwọn àmì ìkọ̀kọ̀)",
-  "noLimit": "Kò sí ààlà"
+  "noLimit": "Kò sí ààlà",
+  "touchComposerMessageModeEnabled": "Ìpo ìfiránṣẹ́ ti ṣiṣẹ",
+  "touchComposerLinkModeEnabled": "Ìpo ìjápọ̀ ti ṣiṣẹ",
+  "touchComposerExpiryChanged": "Ìparí ìfiránṣẹ́: {value}",
+  "touchComposerDeleteAfterReadOn": "Paarẹ lẹ́yìn kíka ti ṣiṣẹ",
+  "touchComposerDeleteAfterReadOff": "Paarẹ lẹ́yìn kíka ti wa ni pipa"
 }

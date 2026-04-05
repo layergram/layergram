@@ -191,5 +191,10 @@
   "sessionDecryptionCache": "Pramuat kunci penyahsulitan terkini",
   "sessionDecryptionCacheSubtitle": "Pramuat kunci penyahsulitan sembang terkini hanya dalam RAM semasa aplikasi dibuka dan tidak dikunci. Tiada teks biasa disimpan dan cache akan dihapuskan apabila aplikasi disembunyikan, dikunci, identiti atau frasa laluan berubah, atau aplikasi ditutup.",
   "coverLengthLimit": "Had panjang mesej perlindungan (termasuk aksara tersembunyi)",
-  "noLimit": "Tiada had"
+  "noLimit": "Tiada had",
+  "touchComposerMessageModeEnabled": "Mod mesej diaktifkan",
+  "touchComposerLinkModeEnabled": "Mod pautan diaktifkan",
+  "touchComposerExpiryChanged": "Tempoh luput mesej: {value}",
+  "touchComposerDeleteAfterReadOn": "Padam selepas dibaca diaktifkan",
+  "touchComposerDeleteAfterReadOff": "Padam selepas dibaca dinyahaktifkan"
 }

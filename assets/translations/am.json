@@ -191,5 +191,10 @@
   "sessionDecryptionCache": "የቅርብ መፍታት ቁልፎችን ቅዳ",
   "sessionDecryptionCacheSubtitle": "የቅርብ ውይይት መፍታት ቁልፎችን በራም ሲነቃ እና እንደገና ክፈት ይታል፣ በመተግበሪያው ውስጥ ብቻ ይቆያል። ምንም ዓይነት ጽሑፍ በግልጽ አይቀመጥም እና ካሜላው መተግበሪያው ተደብቆ፣ ተቆለፍ፣ ማለፊያ ወይም ማለፊያ ክስተት ጊዜ ይደምሻል።",
   "coverLengthLimit": "የሽፋን መልእክት ርዝመት ገደብ (የተደበቁ ቁምፊዎችን ጨምሮ)",
-  "noLimit": "ምንም ገደብ የለም"
+  "noLimit": "ምንም ገደብ የለም",
+  "touchComposerMessageModeEnabled": "የመልእክት ሁኔታ ነቅቷል",
+  "touchComposerLinkModeEnabled": "የአገናኝ ሁኔታ ነቅቷል",
+  "touchComposerExpiryChanged": "የመልእክት ጊዜ ገደብ: {value}",
+  "touchComposerDeleteAfterReadOn": "ከንባብ በኋላ ማጥፋት ነቅቷል",
+  "touchComposerDeleteAfterReadOff": "ከንባብ በኋላ ማጥፋት ተሰናክሏል"
 }

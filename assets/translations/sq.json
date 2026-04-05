@@ -191,5 +191,10 @@
   "sessionDecryptionCache": "Ngarkoni çelësat e dekriptimit të fundit",
   "sessionDecryptionCacheSubtitle": "Ngarkon çelësat e dekriptimit të bisedave të fundit vetëm në RAM ndërsa aplikacioni është i hapur dhe i çkyçur. Nuk ruhet ndonjë tekst i thjeshtë dhe cache fshihet kur aplikacioni fshehet, bllokohet, ndryshon identiteti ose fraza sekrete ose aplikacioni mbyllet.",
   "coverLengthLimit": "Kufiri i gjatësisë së mesazhit mbulues (duke përfshirë karakteret e fshehura)",
-  "noLimit": "Pa kufi"
+  "noLimit": "Pa kufi",
+  "touchComposerMessageModeEnabled": "Modaliteti i mesazhit u aktivizua",
+  "touchComposerLinkModeEnabled": "Modaliteti i lidhjes u aktivizua",
+  "touchComposerExpiryChanged": "Skadimi i mesazhit: {value}",
+  "touchComposerDeleteAfterReadOn": "Fshirja pas leximit u aktivizua",
+  "touchComposerDeleteAfterReadOff": "Fshirja pas leximit u çaktivizua"
 }

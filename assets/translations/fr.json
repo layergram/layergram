@@ -191,5 +191,10 @@
   "sessionDecryptionCache": "Charger les clés de déchiffrement récentes",
   "sessionDecryptionCacheSubtitle": "Charge les clés de déchiffrement de chat récentes uniquement en RAM lorsque l'application est ouverte et déverrouillée. Aucun texte en clair n'est stocké et le cache est effacé lorsque l'application est masquée, verrouillée, change d'identité ou de phrase secrète ou est fermée.",
   "coverLengthLimit": "Limite de longueur du message de couverture (y compris les caractères cachés)",
-  "noLimit": "Aucune limite"
+  "noLimit": "Aucune limite",
+  "touchComposerMessageModeEnabled": "Mode message activé",
+  "touchComposerLinkModeEnabled": "Mode lien activé",
+  "touchComposerExpiryChanged": "Expiration du message : {value}",
+  "touchComposerDeleteAfterReadOn": "Suppression après lecture activée",
+  "touchComposerDeleteAfterReadOff": "Suppression après lecture désactivée"
 }

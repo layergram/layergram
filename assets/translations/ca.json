@@ -191,5 +191,10 @@
   "sessionDecryptionCache": "Carregar claus de desxifratge recents",
   "sessionDecryptionCacheSubtitle": "Carrega les claus de desxifratge de xat recents només a la RAM mentre l'aplicació està oberta i desbloquejada. No s'emmagatzema cap text en clar i la memòria cau s'esborra quan l'aplicació està oculta, bloquejada, canvia la identitat o la contrasenya o es tanca.",
   "coverLengthLimit": "Límit de longitud del missatge de cobertura (incloent-hi els caràcters ocults)",
-  "noLimit": "Sense límit"
+  "noLimit": "Sense límit",
+  "touchComposerMessageModeEnabled": "Mode missatge activat",
+  "touchComposerLinkModeEnabled": "Mode enllaç activat",
+  "touchComposerExpiryChanged": "Caducitat del missatge: {value}",
+  "touchComposerDeleteAfterReadOn": "Eliminació després de la lectura activada",
+  "touchComposerDeleteAfterReadOff": "Eliminació després de la lectura desactivada"
 }

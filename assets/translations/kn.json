@@ -191,5 +191,10 @@
   "sessionDecryptionCache": "ಇತ್ತೀಚಿನ ಡಿಕ್ರಿಪ್ಶನ್ ಕೀಗಳನ್ನು ಲೋಡ್ ಮಾಡಿ",
   "sessionDecryptionCacheSubtitle": "ಅಪ್ಲಿಕೇಶನ್ ತೆರೆದಿದ್ದು ಮತ್ತು ಅನ್‌ಲಾಕ್ ಆಗಿರುವಾಗ ಮಾತ್ರ RAM ನಲ್ಲಿ ಇತ್ತೀಚಿನ ಚಾಟ್ ಡಿಕ್ರಿಪ್ಶನ್ ಕೀಗಳನ್ನು ಪ್ರೀಲೋಡ್ ಮಾಡಿ. ಯಾವುದೇ ಸರಳ ಪಠ್ಯವನ್ನು ಸಂಗ್ರಹಿಸಲಾಗುವುದಿಲ್ಲ ಮತ್ತು ಅಪ್ಲಿಕೇಶನ್ ಮರೆಯಾದಾಗ, ಲಾಕ್ ಆದಾಗ, ಗುರುತು ಅಥವಾ ಪಾಸ್‌ಫ್ರೇಸ್ ಬದಲಾದಾಗ ಅಥವಾ ಅಪ್ಲಿಕೇಶನ್ ಮುಚ್ಚಿದಾಗ ಕ್ಯಾಶ್ ಅಳಿಸಲಾಗುತ್ತದೆ.",
   "coverLengthLimit": "ಕವರ್ ಸಂದೇಶದ ಉದ್ದ ಮಿತಿ (ಮರೆಮಾಡಿದ ಅಕ್ಷರಗಳನ್ನು ಒಳಗೊಂಡು)",
-  "noLimit": "ಮಿತಿ ಇಲ್ಲ"
+  "noLimit": "ಮಿತಿ ಇಲ್ಲ",
+  "touchComposerMessageModeEnabled": "ಸಂದೇಶ ಮೋಡ್ ಸಕ್ರಿಯವಾಗಿದೆ",
+  "touchComposerLinkModeEnabled": "ಲಿಂಕ್ ಮೋಡ್ ಸಕ್ರಿಯವಾಗಿದೆ",
+  "touchComposerExpiryChanged": "ಸಂದೇಶದ ಅವಧಿ: {value}",
+  "touchComposerDeleteAfterReadOn": "ಓದಿದ ನಂತರ ಅಳಿಸುವಿಕೆ ಸಕ್ರಿಯವಾಗಿದೆ",
+  "touchComposerDeleteAfterReadOff": "ಓದಿದ ನಂತರ ಅಳಿಸುವಿಕೆ ನಿಷ್ಕ್ರಿಯವಾಗಿದೆ"
 }

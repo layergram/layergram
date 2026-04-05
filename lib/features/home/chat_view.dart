@@ -13,6 +13,7 @@ import '../../core/providers.dart';
 import '../../core/storage/messages_repository.dart';
 import '../../l10n/app_strings.dart';
 import '../../ui/passphrase_button.dart';
+import '../../utils/app_platform.dart';
 import '../../utils/sharing.dart';
 import 'home_controller.dart';
 
@@ -1038,6 +1039,90 @@ class ChatViewState extends ConsumerState<ChatView> {
     }
   }
 
+  bool get _shouldShowTouchComposerSnackbars {
+    return !AppPlatform.supportsHoverTooltips;
+  }
+
+  _ExpiryOption _expiryOptionForMinutes(int? minutes) {
+    return _expiryOptions.firstWhere(
+      (opt) => opt.minutes == minutes,
+      orElse: () => const _ExpiryOption(minutes: null),
+    );
+  }
+
+  void _showTouchComposerSnackbar(String message) {
+    if (!_shouldShowTouchComposerSnackbars || !mounted) {
+      return;
+    }
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(milliseconds: 1400),
+      ),
+    );
+  }
+
+  void _setComposerMode(bool linkMode) {
+    if (_linkMode == linkMode) {
+      return;
+    }
+    setState(() {
+      _linkMode = linkMode;
+      _encryptedOutput = '';
+      _dirtySinceEncode = true;
+    });
+    _saveSettings();
+    final t = AppStrings.t;
+    _showTouchComposerSnackbar(
+      t(
+        context,
+        linkMode
+            ? 'touchComposerLinkModeEnabled'
+            : 'touchComposerMessageModeEnabled',
+      ),
+    );
+  }
+
+  void _setComposerExpiry(int? minutes) {
+    if (_selectedExpiryMinutes == minutes) {
+      return;
+    }
+    setState(() {
+      _selectedExpiryMinutes = minutes;
+      _encryptedOutput = '';
+      _dirtySinceEncode = true;
+    });
+    _saveSettings();
+    final t = AppStrings.t;
+    final expiryLabel = _expiryLabel(context, _expiryOptionForMinutes(minutes));
+    _showTouchComposerSnackbar(
+      t(context, 'touchComposerExpiryChanged')
+          .replaceAll('{value}', expiryLabel),
+    );
+  }
+
+  void _setDeleteAfterRead(bool value) {
+    if (_deleteAfterRead == value) {
+      return;
+    }
+    setState(() {
+      _deleteAfterRead = value;
+      _dirtySinceEncode = true;
+    });
+    _saveSettings();
+    final t = AppStrings.t;
+    _showTouchComposerSnackbar(
+      t(
+        context,
+        value
+            ? 'touchComposerDeleteAfterReadOn'
+            : 'touchComposerDeleteAfterReadOff',
+      ),
+    );
+  }
+
   void _scrollToBottom() {
     // With reverse: true, offset 0 is the bottom (latest message). Jump there after frame.
     WidgetsBinding.instance.endOfFrame.then((_) {
@@ -1209,12 +1294,7 @@ class ChatViewState extends ConsumerState<ChatView> {
                       constraints: const BoxConstraints(minHeight: 32, minWidth: 32),
                       isSelected: [_linkMode == false, _linkMode == true],
                       onPressed: (index) {
-                        setState(() {
-                          _linkMode = index == 1;
-                          _encryptedOutput = '';
-                          _dirtySinceEncode = true;
-                        });
-                        _saveSettings();
+                        _setComposerMode(index == 1);
                       },
                       borderRadius: const BorderRadius.all(Radius.circular(12)),
                       children: const [
@@ -1252,12 +1332,7 @@ class ChatViewState extends ConsumerState<ChatView> {
                                 ),
                               ).toList(),
                               onChanged: (val) {
-                                setState(() {
-                                  _selectedExpiryMinutes = val;
-                                  _encryptedOutput = '';
-                                  _dirtySinceEncode = true;
-                                });
-                                _saveSettings();
+                                _setComposerExpiry(val);
                               },
                             ),
                           ),
@@ -1287,11 +1362,7 @@ class ChatViewState extends ConsumerState<ChatView> {
                     Switch.adaptive(
                       value: _deleteAfterRead,
                       onChanged: (v) {
-                        setState(() {
-                          _deleteAfterRead = v;
-                          _dirtySinceEncode = true;
-                        });
-                        _saveSettings();
+                        _setDeleteAfterRead(v);
                       },
                     ),
                     const Spacer(),
@@ -1928,12 +1999,7 @@ class ChatViewState extends ConsumerState<ChatView> {
                                           _linkMode == true
                                         ],
                                         onPressed: (index) {
-                                          setState(() {
-                                            _linkMode = index == 1;
-                                            _encryptedOutput = '';
-                                            _dirtySinceEncode = true;
-                                          });
-                                          _saveSettings();
+                                          _setComposerMode(index == 1);
                                         },
                                         borderRadius: const BorderRadius.all(
                                             Radius.circular(12)),
@@ -1988,12 +2054,7 @@ class ChatViewState extends ConsumerState<ChatView> {
                                                     )
                                                     .toList(),
                                                 onChanged: (val) {
-                                                  setState(() {
-                                                    _selectedExpiryMinutes = val;
-                                                    _encryptedOutput = '';
-                                                    _dirtySinceEncode = true;
-                                                  });
-                                                  _saveSettings();
+                                                  _setComposerExpiry(val);
                                                 },
                                               ),
                                             ),
@@ -2050,11 +2111,7 @@ class ChatViewState extends ConsumerState<ChatView> {
                                             materialTapTargetSize:
                                                 MaterialTapTargetSize.shrinkWrap,
                                             onChanged: (v) {
-                                              setState(() {
-                                                _deleteAfterRead = v;
-                                                _dirtySinceEncode = true;
-                                              });
-                                              _saveSettings();
+                                              _setDeleteAfterRead(v);
                                             },
                                           ),
                                         ],

@@ -191,5 +191,10 @@
   "sessionDecryptionCache": "โหลดคีย์ถอดรหัสล่าสุด",
   "sessionDecryptionCacheSubtitle": "โหลดคีย์ถอดรหัสแชทล่าสุดไว้ใน RAM เฉพาะเมื่อแอปเปิดและปลดล็อกแล้วเท่านั้น ไม่มีข้อความธรรมดาถูกจัดเก็บและแคชจะถูกล้างเมื่อแอปถูกซ่อน ล็อก เปลี่ยนตัวตนหรือวลีรหัสผ่าน หรือแอปปิด",
   "coverLengthLimit": "ขีดจำกัดความยาวข้อความปกปิด (รวมอักขระที่ซ่อนอยู่)",
-  "noLimit": "ไม่จำกัด"
+  "noLimit": "ไม่จำกัด",
+  "touchComposerMessageModeEnabled": "เปิดโหมดข้อความแล้ว",
+  "touchComposerLinkModeEnabled": "เปิดโหมดลิงก์แล้ว",
+  "touchComposerExpiryChanged": "การหมดอายุของข้อความ: {value}",
+  "touchComposerDeleteAfterReadOn": "เปิดการลบหลังอ่านแล้ว",
+  "touchComposerDeleteAfterReadOff": "ปิดการลบหลังอ่านแล้ว"
 }

@@ -191,5 +191,10 @@
   "sessionDecryptionCache": "Lataa viimeiset purkuavaimet",
   "sessionDecryptionCacheSubtitle": "Lataa viimeisimmät keskustelupurkuavaimet vain RAM-muistiin, kun sovellus on auki ja avattu. Yksinkertaista tekstiä ei tallenneta ja välimuisti tyhjennetään, kun sovellus on piilotettu, lukittu, identiteetti tai tunnuslause vaihdettu tai sovellus suljetaan.",
   "coverLengthLimit": "Peiteviestin pituusraja (piilotetut merkit mukaan lukien)",
-  "noLimit": "Ei rajaa"
+  "noLimit": "Ei rajaa",
+  "touchComposerMessageModeEnabled": "Viestitila käytössä",
+  "touchComposerLinkModeEnabled": "Linkkitila käytössä",
+  "touchComposerExpiryChanged": "Viestin vanheneminen: {value}",
+  "touchComposerDeleteAfterReadOn": "Poista lukemisen jälkeen käytössä",
+  "touchComposerDeleteAfterReadOff": "Poista lukemisen jälkeen pois käytöstä"
 }

@@ -191,5 +191,10 @@
   "sessionDecryptionCache": "हाल के डिक्रिप्शन की लोड करें",
   "sessionDecryptionCacheSubtitle": "जब ऐप खुला और अनलॉक हो तब केवल RAM में हाल की चैट डिक्रिप्शन की प्रीलोड करें। कोई प्लेनटेक्स्ट स्टोर नहीं किया जाता है और कैश ऐप छिपे, लॉक हो, पहचान या पासफ़्रेज़ बदलने या ऐप बंद होने पर साफ़ हो जाता है।",
   "coverLengthLimit": "कवर संदेश की लंबाई सीमा (छिपे हुए अक्षरों सहित)",
-  "noLimit": "कोई सीमा नहीं"
+  "noLimit": "कोई सीमा नहीं",
+  "touchComposerMessageModeEnabled": "संदेश मोड सक्रिय",
+  "touchComposerLinkModeEnabled": "लिंक मोड सक्रिय",
+  "touchComposerExpiryChanged": "संदेश की अवधि: {value}",
+  "touchComposerDeleteAfterReadOn": "पढ़ने के बाद मिटाना सक्रिय",
+  "touchComposerDeleteAfterReadOff": "पढ़ने के बाद मिटाना निष्क्रिय"
 }

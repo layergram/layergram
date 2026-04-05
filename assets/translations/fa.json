@@ -191,5 +191,10 @@
   "sessionDecryptionCache": "بارگذاری کلیدهای رمزگشایی اخیر",
   "sessionDecryptionCacheSubtitle": "کلیدهای رمزگشایی چت اخیر را فقط در حافظه بارگذاری می‌کند در حالی که برنامه باز و باز شده است. هیچ متن واضحی ذخیره نمی‌شود و کش زمانی پاک می‌شود که برنامه مخفی، قفل شده، تغییر هویت یا عبارت عبور یا بسته شدن برنامه.",
   "coverLengthLimit": "محدودیت طول پیام پوششی (شامل نویسه‌های پنهان)",
-  "noLimit": "بدون محدودیت"
+  "noLimit": "بدون محدودیت",
+  "touchComposerMessageModeEnabled": "حالت پیام فعال شد",
+  "touchComposerLinkModeEnabled": "حالت پیوند فعال شد",
+  "touchComposerExpiryChanged": "انقضای پیام: {value}",
+  "touchComposerDeleteAfterReadOn": "حذف پس از خواندن فعال شد",
+  "touchComposerDeleteAfterReadOff": "حذف پس از خواندن غیرفعال شد"
 }
