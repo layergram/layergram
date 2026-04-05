@@ -19,8 +19,12 @@ import 'dart:typed_data';
 import 'package:characters/characters.dart';
 
 class StegoEncoder {
-  // Max total runes (payload + noise) per visible-char slot.
-  static const int maxRunesPerSlot = 48;
+  // Max payload runes assigned to a mixed carrier slot.
+  static const int maxPayloadRunesPerCarrierSlot = 16;
+
+  // Max total runes (payload + noise) per mixed visible-char slot.
+  static const int maxRunesPerSlot = 22;
+  static const int maxRunesPerNoiseOnlySlot = 12;
 
   // Min total runes per slot. Also used for conservative cover-length
   // calculation: we assume each slot holds at most minRunesPerSlot payload
@@ -30,6 +34,7 @@ class StegoEncoder {
   static const int previewSafePrefixMinChars = 64;
   static const int previewSafePrefixMaxChars = 96;
   static const int minNoiseRunesPerMixedSlot = 2;
+  static const int maxNoiseRunesPerMixedSlot = 6;
 
   // Base-4 (2 bits per rune). Alphabet restricted to runes che WA preserva:
   // 200B, 200C, 200D, 2061 (2060/2062 vengono rimossi).
@@ -98,12 +103,36 @@ class StegoEncoder {
     return _requiredCarrierSlots(hiddenRuneCount(byteCount));
   }
 
+  static int minimumHiddenLengthForBytes(int byteCount) {
+    return _minimumHiddenRuneCountForPayloadSymbols(hiddenRuneCount(byteCount));
+  }
+
+  static int minimumEncodedLengthForBytes(String coverText, int byteCount) {
+    return visibleCharacterCount(coverText) + minimumHiddenLengthForBytes(byteCount);
+  }
+
+  static bool canEncodeBytesWithinCharacterLimit(
+    String coverText,
+    int byteCount,
+    int maxTotalCharacters,
+  ) {
+    if (maxTotalCharacters < 0) return false;
+    final visibleChars = visibleCharacterCount(coverText);
+    if (visibleChars > maxTotalCharacters) return false;
+    if (byteCount <= 0) return true;
+    if (!canEmbedBytes(coverText, byteCount)) return false;
+    return minimumEncodedLengthForBytes(coverText, byteCount) <=
+        maxTotalCharacters;
+  }
+
   static bool canEmbedBytes(String coverText, int byteCount) {
     if (byteCount <= 0) return true;
     final visChars = normalizeCoverText(coverText).characters.toList();
     if (visChars.length < minCoverLengthForBytes(byteCount)) return false;
     final requiredCarrierSlots = requiredCarrierSlotsForBytes(byteCount);
-    return _eligibleCarrierSlotIndexes(visChars).length >= requiredCarrierSlots;
+    final baseEligibleSlotIndexes = _eligibleCarrierSlotIndexes(visChars);
+    if (baseEligibleSlotIndexes.length < requiredCarrierSlots) return false;
+    return true;
   }
 
   static int missingCoverCapacityForBytes(String coverText, int byteCount) {
@@ -128,9 +157,30 @@ class StegoEncoder {
   /// containing payload symbols interleaved with noise at random positions.
   /// No hidden runes are placed before the first or after the last visible
   /// character.
-  String encodeBytes(String coverText, Uint8List payload) {
+  String encodeBytes(
+    String coverText,
+    Uint8List payload, {
+    int? maxTotalCharacters,
+  }) {
     final normalizedCoverText = normalizeCoverText(coverText);
     final payloadSymbols = _bytesToSymbols(payload);
+    final visChars = normalizedCoverText.characters.toList();
+
+    if (maxTotalCharacters != null && maxTotalCharacters < 0) {
+      throw ArgumentError.value(
+        maxTotalCharacters,
+        'maxTotalCharacters',
+        'Maximum total characters must be zero or greater',
+      );
+    }
+
+    if (maxTotalCharacters != null && visChars.length > maxTotalCharacters) {
+      throw ArgumentError.value(
+        coverText,
+        'coverText',
+        'Cover text exceeds the configured total character limit.',
+      );
+    }
 
     if (payloadSymbols.isEmpty) {
       return normalizedCoverText;
@@ -144,7 +194,6 @@ class StegoEncoder {
       );
     }
 
-    final visChars = normalizedCoverText.characters.toList();
     final minCoverLength = minCoverLengthForBytes(payload.length);
     final requiredCarrierSlots = requiredCarrierSlotsForBytes(payload.length);
     if (visChars.length < minCoverLength) {
@@ -174,29 +223,131 @@ class StegoEncoder {
     final eligibleSlotIndexes = baseEligibleSlotIndexes
         .where((slotIndex) => slotIndex >= firstEligibleSlot)
         .toList(growable: false);
+    final enforceTotalCharacterLimit = maxTotalCharacters != null;
+    final totalCharacterLimit = maxTotalCharacters;
     final carrierSlotIndexes = _pickCarrierSlotIndexes(
       eligibleSlotIndexes,
       requiredCarrierSlots,
       payloadSymbols.length,
+      exactRequiredCount: enforceTotalCharacterLimit,
     );
-    final payloadCounts = _allocatePayloadCounts(
-      payloadSymbols.length,
-      carrierSlotIndexes.length,
-    );
+    final payloadCounts = enforceTotalCharacterLimit
+        ? _allocateBalancedPayloadCounts(
+            payloadSymbols.length,
+            carrierSlotIndexes.length,
+          )
+        : _allocatePayloadCounts(
+            payloadSymbols.length,
+            carrierSlotIndexes.length,
+          );
     final payloadCountsBySlot = <int, int>{
       for (var i = 0; i < carrierSlotIndexes.length; i++)
         carrierSlotIndexes[i]: payloadCounts[i],
     };
-    final noiseOnlySlotIndexes = _pickNoiseOnlySlotIndexes(
-      eligibleSlotIndexes: eligibleSlotIndexes,
-      carrierSlotIndexes: carrierSlotIndexes,
-    ).toSet()
-      ..addAll(
-        carrierSlotIndexes.contains(firstEligibleSlot) ||
-                !eligibleSlotIndexes.contains(firstEligibleSlot)
-            ? const <int>{}
-            : <int>{firstEligibleSlot},
+    final blockSizesBySlot = <int, int>{};
+    final noiseOnlySizesBySlot = <int, int>{};
+
+    if (enforceTotalCharacterLimit) {
+      final hiddenBudget = totalCharacterLimit! - visChars.length;
+      final extraMixedCapacityBySlot = <int, int>{};
+      var minHiddenTotal = 0;
+
+      for (var i = 0; i < carrierSlotIndexes.length; i++) {
+        final slotIndex = carrierSlotIndexes[i];
+        final payloadCount = payloadCounts[i];
+        final minSize = max(
+          minRunesPerSlot,
+          payloadCount + minNoiseRunesPerMixedSlot,
+        );
+        final maxSize = max(
+          minSize,
+          min(
+            maxRunesPerSlot,
+            payloadCount + maxNoiseRunesPerMixedSlot,
+          ),
+        );
+        blockSizesBySlot[slotIndex] = minSize;
+        extraMixedCapacityBySlot[slotIndex] = maxSize - minSize;
+        minHiddenTotal += minSize;
+      }
+
+      if (minHiddenTotal > hiddenBudget) {
+        throw ArgumentError.value(
+          coverText,
+          'coverText',
+          'Cover text and hidden payload exceed the configured total character limit.',
+        );
+      }
+
+      var remainingHiddenBudget = hiddenBudget - minHiddenTotal;
+      final mixedSlotsForExtra = carrierSlotIndexes.toList()..shuffle(_rng);
+      for (final slotIndex in mixedSlotsForExtra) {
+        if (remainingHiddenBudget <= 0) break;
+        final room = extraMixedCapacityBySlot[slotIndex] ?? 0;
+        if (room <= 0) continue;
+        final extra = _randomBetween(0, min(room, remainingHiddenBudget));
+        blockSizesBySlot[slotIndex] = blockSizesBySlot[slotIndex]! + extra;
+        remainingHiddenBudget -= extra;
+      }
+
+      final decoyCandidates = eligibleSlotIndexes
+          .where((slotIndex) => !payloadCountsBySlot.containsKey(slotIndex))
+          .toList()
+        ..shuffle(_rng);
+      final maxDecoys = min(
+        decoyCandidates.length,
+        max(1, carrierSlotIndexes.length ~/ 3),
       );
+      for (final slotIndex in decoyCandidates) {
+        if (noiseOnlySizesBySlot.length >= maxDecoys ||
+            remainingHiddenBudget < minRunesPerSlot) {
+          break;
+        }
+        final maxSize = min(
+          maxRunesPerNoiseOnlySlot,
+          remainingHiddenBudget,
+        );
+        if (maxSize < minRunesPerSlot) break;
+        final blockSize = _randomBetween(minRunesPerSlot, maxSize);
+        noiseOnlySizesBySlot[slotIndex] = blockSize;
+        remainingHiddenBudget -= blockSize;
+      }
+    } else {
+      final noiseOnlySlotIndexes = _pickNoiseOnlySlotIndexes(
+        eligibleSlotIndexes: eligibleSlotIndexes,
+        carrierSlotIndexes: carrierSlotIndexes,
+      ).toSet()
+        ..addAll(
+          carrierSlotIndexes.contains(firstEligibleSlot) ||
+                  !eligibleSlotIndexes.contains(firstEligibleSlot)
+              ? const <int>{}
+              : <int>{firstEligibleSlot},
+        );
+
+      for (var i = 0; i < carrierSlotIndexes.length; i++) {
+        final slotIndex = carrierSlotIndexes[i];
+        final payloadCount = payloadCounts[i];
+        final minSize = max(
+          minRunesPerSlot,
+          payloadCount + minNoiseRunesPerMixedSlot,
+        );
+        final maxSize = max(
+          minSize,
+          min(
+            maxRunesPerSlot,
+            payloadCount + maxNoiseRunesPerMixedSlot,
+          ),
+        );
+        blockSizesBySlot[slotIndex] = _randomBetween(minSize, maxSize);
+      }
+
+      for (final slotIndex in noiseOnlySlotIndexes) {
+        noiseOnlySizesBySlot[slotIndex] = _randomBetween(
+          minRunesPerSlot,
+          maxRunesPerNoiseOnlySlot,
+        );
+      }
+    }
 
     final buf = StringBuffer();
     var payloadIdx = 0;
@@ -211,14 +362,10 @@ class StegoEncoder {
             payloadIdx + payloadCount,
           );
           payloadIdx += payloadCount;
-          final minSize = max(
-            minRunesPerSlot,
-            payloadCount + minNoiseRunesPerMixedSlot,
-          );
-          final blockSize = _randomBetween(minSize, maxRunesPerSlot);
+          final blockSize = blockSizesBySlot[i]!;
           buf.writeAll(_buildBlock(slotPayload, blockSize));
-        } else if (noiseOnlySlotIndexes.contains(i)) {
-          final blockSize = _randomBetween(minRunesPerSlot, maxRunesPerSlot);
+        } else if (noiseOnlySizesBySlot.containsKey(i)) {
+          final blockSize = noiseOnlySizesBySlot[i]!;
           buf.writeAll(_buildBlock(const [], blockSize));
         }
       }
@@ -243,8 +390,24 @@ class StegoEncoder {
 
   static int _requiredCarrierSlots(int payloadSymbolCount) {
     if (payloadSymbolCount <= 0) return 0;
-    final maxPayloadPerSlot = maxRunesPerSlot - minNoiseRunesPerMixedSlot;
+    final maxPayloadPerSlot = maxPayloadRunesPerCarrierSlot;
     return (payloadSymbolCount / maxPayloadPerSlot).ceil();
+  }
+
+  static int _minimumHiddenRuneCountForPayloadSymbols(int payloadSymbolCount) {
+    if (payloadSymbolCount <= 0) return 0;
+    final carrierSlots = _requiredCarrierSlots(payloadSymbolCount);
+    final baseCount = payloadSymbolCount ~/ carrierSlots;
+    final extraCount = payloadSymbolCount % carrierSlots;
+    var total = 0;
+    for (var i = 0; i < carrierSlots; i++) {
+      final payloadCount = baseCount + (i < extraCount ? 1 : 0);
+      total += max(
+        minRunesPerSlot,
+        payloadCount + minNoiseRunesPerMixedSlot,
+      );
+    }
+    return total;
   }
 
   int _chooseCleanPrefixChars({
@@ -296,6 +459,7 @@ class StegoEncoder {
     List<int> eligibleSlotIndexes,
     int requiredCarrierSlots,
     int payloadSymbolCount,
+    {bool exactRequiredCount = false}
   ) {
     if (requiredCarrierSlots <= 0) return const [];
     final maxCarrierSlots = min(eligibleSlotIndexes.length, payloadSymbolCount);
@@ -304,8 +468,10 @@ class StegoEncoder {
       remainingFlex,
       max(1, requiredCarrierSlots ~/ 2),
     );
-    final carrierCount = requiredCarrierSlots +
-        (maxExtraSlots > 0 ? _rng.nextInt(maxExtraSlots + 1) : 0);
+    final carrierCount = exactRequiredCount
+        ? requiredCarrierSlots
+        : requiredCarrierSlots +
+            (maxExtraSlots > 0 ? _rng.nextInt(maxExtraSlots + 1) : 0);
     final picked = eligibleSlotIndexes.toList()..shuffle(_rng);
     return (picked.take(carrierCount).toList()..sort());
   }
@@ -333,7 +499,7 @@ class StegoEncoder {
   List<int> _allocatePayloadCounts(int payloadSymbolCount, int carrierCount) {
     if (payloadSymbolCount <= 0 || carrierCount <= 0) return const [];
     final counts = <int>[];
-    final maxPayloadPerSlot = maxRunesPerSlot - minNoiseRunesPerMixedSlot;
+    final maxPayloadPerSlot = maxPayloadRunesPerCarrierSlot;
     var remainingSymbols = payloadSymbolCount;
     for (var i = 0; i < carrierCount; i++) {
       final remainingSlots = carrierCount - i;
@@ -349,11 +515,26 @@ class StegoEncoder {
         maxPayloadPerSlot,
         remainingSymbols - (remainingSlots - 1),
       );
-      final chosen = _randomBetween(minForThis, maxForThis);
+      final targetForThis = (remainingSymbols / remainingSlots).ceil();
+      final jitter = min(3, maxForThis - minForThis);
+      final lower = max(minForThis, targetForThis - jitter);
+      final upper = min(maxForThis, targetForThis + jitter);
+      final chosen = _randomBetween(lower, upper);
       counts.add(chosen);
       remainingSymbols -= chosen;
     }
     return counts;
+  }
+
+  List<int> _allocateBalancedPayloadCounts(int payloadSymbolCount, int carrierCount) {
+    if (payloadSymbolCount <= 0 || carrierCount <= 0) return const [];
+    final baseCount = payloadSymbolCount ~/ carrierCount;
+    final extraCount = payloadSymbolCount % carrierCount;
+    return List<int>.generate(
+      carrierCount,
+      (index) => baseCount + (index < extraCount ? 1 : 0),
+      growable: false,
+    );
   }
 
   int _randomBetween(int minInclusive, int maxInclusive) {

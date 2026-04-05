@@ -22,6 +22,7 @@ import 'core/storage/local_identity_vault.dart';
 import 'core/storage/local_storage_security_service.dart';
 import 'core/storage/secure_storage.dart';
 import 'l10n/app_strings.dart';
+import 'l10n/cover_length_limit_bundle.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,6 +36,7 @@ void main() async {
     localIdentityVault: localIdentityVault,
   );
   await localStorageSecurity.ensureCurrentLayout();
+  AppStrings.registerStrings(coverLengthLimitStrings);
   runApp(
     EasyLocalization(
       supportedLocales: AppStrings.supportedLocales,

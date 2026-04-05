@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/crypto/models.dart';
@@ -40,6 +41,103 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
 
   int get _estimatedPayloadBytes {
     return StegoEncoder.estimatedEncryptedPayloadBytes(_secretCtrl.text);
+  }
+
+  int? get _coverLengthLimit {
+    return ref.read(coverMessageLengthLimitProvider);
+  }
+
+  int _estimatedPayloadBytesForSecret(String secretText) {
+    return StegoEncoder.estimatedEncryptedPayloadBytes(secretText);
+  }
+
+  int _minimumStegoCharacterCount({
+    String? coverText,
+    String? secretText,
+  }) {
+    final effectiveCover = coverText ?? _coverCtrl.text;
+    final effectiveSecret = secretText ?? _secretCtrl.text;
+    if (effectiveSecret.trim().isEmpty) {
+      return StegoEncoder.visibleCharacterCount(effectiveCover);
+    }
+    return StegoEncoder.minimumEncodedLengthForBytes(
+      effectiveCover,
+      _estimatedPayloadBytesForSecret(effectiveSecret),
+    );
+  }
+
+  bool _fitsWithinCoverLengthLimit({
+    String? coverText,
+    String? secretText,
+  }) {
+    final limit = _coverLengthLimit;
+    if (limit == null) return true;
+    return _minimumStegoCharacterCount(
+          coverText: coverText,
+          secretText: secretText,
+        ) <=
+        limit;
+  }
+
+  TextEditingValue _limitStegoFieldEdit(
+    TextEditingValue oldValue,
+    TextEditingValue newValue, {
+    required bool isCoverField,
+  }) {
+    if (_coverLengthLimit == null || newValue.text == oldValue.text) {
+      return newValue;
+    }
+
+    final currentCover = isCoverField ? oldValue.text : _coverCtrl.text;
+    final currentSecret = isCoverField ? _secretCtrl.text : oldValue.text;
+    final nextCover = isCoverField ? newValue.text : _coverCtrl.text;
+    final nextSecret = isCoverField ? _secretCtrl.text : newValue.text;
+
+    if (_fitsWithinCoverLengthLimit(
+      coverText: nextCover,
+      secretText: nextSecret,
+    )) {
+      return newValue;
+    }
+
+    final currentFits = _fitsWithinCoverLengthLimit(
+      coverText: currentCover,
+      secretText: currentSecret,
+    );
+    final currentLength = _minimumStegoCharacterCount(
+      coverText: currentCover,
+      secretText: currentSecret,
+    );
+    final nextLength = _minimumStegoCharacterCount(
+      coverText: nextCover,
+      secretText: nextSecret,
+    );
+
+    if (!currentFits && nextLength < currentLength) {
+      return newValue;
+    }
+
+    return oldValue;
+  }
+
+  List<TextInputFormatter> _coverLimitInputFormatters({
+    required bool isCoverField,
+  }) {
+    if (_coverLengthLimit == null) return const [];
+    return [
+      TextInputFormatter.withFunction(
+        (oldValue, newValue) => _limitStegoFieldEdit(
+          oldValue,
+          newValue,
+          isCoverField: isCoverField,
+        ),
+      ),
+    ];
+  }
+
+  String? _coverLimitCounterText(int? coverLengthLimit) {
+    if (coverLengthLimit == null) return null;
+    return '${_minimumStegoCharacterCount()}/$coverLengthLimit';
   }
 
   @override
@@ -81,10 +179,15 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
     );
   }
 
+  bool get _coverLengthLimitExceeded {
+    return !_fitsWithinCoverLengthLimit();
+  }
+
   bool get _canGenerate {
     return _recipient != null &&
         _coverCtrl.text.trim().isNotEmpty &&
-        !_coverTooShort;
+        !_coverTooShort &&
+        !_coverLengthLimitExceeded;
   }
 
   Future<List<RemoteIdentity>> _loadRecipients() async {
@@ -111,6 +214,7 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.t;
+    final coverLengthLimit = ref.watch(coverMessageLengthLimitProvider);
     final presetRecipient = ref.watch(encodeRecipientProvider);
     _recipient ??= presetRecipient;
 
@@ -213,6 +317,9 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
                 TextField(
                   controller: _coverCtrl,
                   maxLines: 3,
+                  inputFormatters: _coverLimitInputFormatters(
+                    isCoverField: true,
+                  ),
                   decoration: InputDecoration(
                     labelText: strings(context, 'coverText'),
                     helperText: _coverTooShort
@@ -222,14 +329,26 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
                     helperStyle: _coverTooShort
                         ? TextStyle(color: Theme.of(context).colorScheme.error)
                         : null,
+                    counterText: _coverLimitCounterText(coverLengthLimit),
+                    counterStyle: _coverLengthLimitExceeded
+                        ? TextStyle(color: Theme.of(context).colorScheme.error)
+                        : null,
                   ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: _secretCtrl,
                   maxLines: 3,
+                  inputFormatters: _coverLimitInputFormatters(
+                    isCoverField: false,
+                  ),
                   decoration: InputDecoration(
-                      labelText: strings(context, 'secretText')),
+                    labelText: strings(context, 'secretText'),
+                    counterText: _coverLimitCounterText(coverLengthLimit),
+                    counterStyle: _coverLengthLimitExceeded
+                        ? TextStyle(color: Theme.of(context).colorScheme.error)
+                        : null,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Row(
@@ -280,7 +399,9 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
                                 deleteAfterRead: _deleteAfterRead,
                               );
                           final output = ref.read(stegoEncoderProvider).encodeBytes(
-                              _coverCtrl.text, encrypted.toRawBytes());
+                              _coverCtrl.text,
+                              encrypted.toRawBytes(),
+                              maxTotalCharacters: _coverLengthLimit);
                           
                           // Only save to chat if deleteAfterRead is false
                           if (!_deleteAfterRead) {

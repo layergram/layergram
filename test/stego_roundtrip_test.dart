@@ -159,18 +159,84 @@ void main() {
 
     test('minCoverLengthForBytes reserves preview-safe prefix', () {
       // 44 bytes → 176 runes (base-4: 4 runes per byte)
-      // max payload per carrier slot = 48 - 2 = 46
-      // required carrier slots = ceil(176 / 46) = 4
-      // coverLen = 64 + 4 = 68
-      expect(StegoEncoder.minCoverLengthForBytes(44), equals(68));
+      // max payload per carrier slot = 16
+      // required carrier slots = ceil(176 / 16) = 11
+      // coverLen = 64 + 11 = 75
+      expect(StegoEncoder.minCoverLengthForBytes(44), equals(75));
 
       // 200 bytes → 800 runes
-      // required carrier slots = ceil(800 / 46) = 18
-      // coverLen = 64 + 18 = 82
-      expect(StegoEncoder.minCoverLengthForBytes(200), equals(82));
+      // required carrier slots = ceil(800 / 16) = 50
+      // coverLen = 64 + 50 = 114
+      expect(StegoEncoder.minCoverLengthForBytes(200), equals(114));
 
       // 0 bytes → 0
       expect(StegoEncoder.minCoverLengthForBytes(0), equals(0));
+    });
+
+    test('minimumEncodedLengthForBytes includes the hidden-rune floor', () {
+      expect(StegoEncoder.minimumHiddenLengthForBytes(0), equals(0));
+      expect(StegoEncoder.minimumHiddenLengthForBytes(1), equals(8));
+
+      // 44 bytes -> 176 payload symbols distributed across 11 required slots.
+      // With the balanced minimum allocation, each slot carries 16 payload
+      // symbols, so each mixed block needs at least 18 runes.
+      expect(StegoEncoder.minimumHiddenLengthForBytes(44), equals(198));
+      expect(
+        StegoEncoder.minimumEncodedLengthForBytes('A' * 140, 44),
+        equals(338),
+      );
+    });
+
+    test('character limit helper matches the minimum encoded-length floor', () {
+      final cover = 'A' * 140;
+      final minTotal = StegoEncoder.minimumEncodedLengthForBytes(cover, 44);
+
+      expect(
+        StegoEncoder.canEncodeBytesWithinCharacterLimit(
+          cover,
+          44,
+          minTotal - 1,
+        ),
+        isFalse,
+      );
+      expect(
+        StegoEncoder.canEncodeBytesWithinCharacterLimit(cover, 44, minTotal),
+        isTrue,
+      );
+    });
+
+    test('encodeBytes respects maxTotalCharacters when provided', () {
+      final payload = Uint8List.fromList(List.generate(44, (i) => i));
+      final cover = 'A' * 140;
+      final maxTotalCharacters =
+          StegoEncoder.minimumEncodedLengthForBytes(cover, payload.length);
+
+      final encoded = StegoEncoder().encodeBytes(
+        cover,
+        payload,
+        maxTotalCharacters: maxTotalCharacters,
+      );
+      final candidates = StegoDecoder().decodeByteCandidates(encoded);
+
+      expect(encoded.characters.length, lessThanOrEqualTo(maxTotalCharacters));
+      expect(candidates, isNotEmpty);
+      expect(candidates[0], equals(payload));
+    });
+
+    test('encodeBytes throws when maxTotalCharacters is too small', () {
+      final payload = Uint8List.fromList(List.generate(44, (i) => i));
+      final cover = 'A' * 140;
+      final maxTotalCharacters =
+          StegoEncoder.minimumEncodedLengthForBytes(cover, payload.length) - 1;
+
+      expect(
+        () => StegoEncoder().encodeBytes(
+          cover,
+          payload,
+          maxTotalCharacters: maxTotalCharacters,
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
     });
 
     test('first hidden rune starts only after the preview-safe prefix', () {
@@ -240,8 +306,8 @@ void main() {
       }
       if (currentRun > maxRun) maxRun = currentRun;
 
-      // Each block (payload + noise) is between 8 and 48 runes total.
-      expect(maxRun, lessThan(49));
+      // Each mixed block is capped to 22 runes total.
+      expect(maxRun, lessThanOrEqualTo(StegoEncoder.maxRunesPerSlot));
 
       final candidates = StegoDecoder().decodeByteCandidates(encoded);
       expect(candidates, isNotEmpty);

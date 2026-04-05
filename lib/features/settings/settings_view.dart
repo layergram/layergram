@@ -25,6 +25,7 @@ import '../premium/cover_generator_view.dart';
 import '../premium/multi_identity_view.dart';
 import 'about_view.dart';
 import 'widgets/app_lock_settings.dart';
+import 'widgets/cover_length_limit_selector.dart';
 import 'widgets/data_reset_section.dart';
 import 'widgets/language_selector.dart';
 import 'widgets/premium_tile.dart';
@@ -120,6 +121,8 @@ class SettingsView extends ConsumerWidget {
           ),
           const SizedBox(height: 8),
           ThemeSelector(),
+          const SizedBox(height: 8),
+          CoverLengthLimitSelector(),
           const SizedBox(height: 8),
           LanguageSelector(),
           const SizedBox(height: 8),
