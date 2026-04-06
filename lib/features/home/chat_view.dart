@@ -160,6 +160,19 @@ class ChatViewState extends ConsumerState<ChatView> {
     return StegoEncoder.estimatedEncryptedPayloadBytes(secretText);
   }
 
+  int _estimatedLinkLengthForSecret(String secretText) {
+    if (secretText.trim().isEmpty) return 0;
+    // Estimate based on typical encrypted message size
+    // V2 link format: layergram://m/[base64url_encoded_data]
+    final estimatedPayloadBytes = _estimatedPayloadBytesForSecret(secretText);
+    // Raw bytes = nonce (12) + ciphertext (~payloadBytes + 16 for GCM tag)
+    final rawBytesLength = 12 + estimatedPayloadBytes + 16;
+    // Base64url encoding increases size by ~4/3, minus padding removal
+    final encodedLength = (rawBytesLength * 4 + 2) ~/ 3; // ceil division
+    // Total link length = prefix + encoded data
+    return 'layergram://m/'.length + encodedLength;
+  }
+
   int _minimumStegoCharacterCount({
     String? coverText,
     String? secretText,
@@ -179,9 +192,12 @@ class ChatViewState extends ConsumerState<ChatView> {
     String? coverText,
     String? secretText,
   }) {
-    if (_linkMode) return true;
     final limit = _coverLengthLimit;
     if (limit == null) return true;
+    if (_linkMode) {
+      final effectiveSecret = secretText ?? _secretCtrl.text;
+      return _estimatedLinkLengthForSecret(effectiveSecret) <= limit;
+    }
     return _minimumStegoCharacterCount(
           coverText: coverText,
           secretText: secretText,
@@ -194,12 +210,12 @@ class ChatViewState extends ConsumerState<ChatView> {
     TextEditingValue newValue, {
     required bool isCoverField,
   }) {
-    if (_linkMode || _coverLengthLimit == null || newValue.text == oldValue.text) {
+    if (_coverLengthLimit == null || newValue.text == oldValue.text) {
       return newValue;
     }
 
-    final currentCover = isCoverField ? oldValue.text : _coverCtrl.text;
-    final currentSecret = isCoverField ? _secretCtrl.text : oldValue.text;
+    final currentCover = _coverCtrl.text;
+    final currentSecret = _secretCtrl.text;
     final nextCover = isCoverField ? newValue.text : _coverCtrl.text;
     final nextSecret = isCoverField ? _secretCtrl.text : newValue.text;
 
@@ -214,26 +230,51 @@ class ChatViewState extends ConsumerState<ChatView> {
       coverText: currentCover,
       secretText: currentSecret,
     );
-    final currentLength = _minimumStegoCharacterCount(
-      coverText: currentCover,
-      secretText: currentSecret,
-    );
-    final nextLength = _minimumStegoCharacterCount(
-      coverText: nextCover,
-      secretText: nextSecret,
-    );
+    final currentLength = _linkMode 
+        ? _estimatedLinkLengthForSecret(currentSecret)
+        : _minimumStegoCharacterCount(
+            coverText: currentCover,
+            secretText: currentSecret,
+          );
+    final nextLength = _linkMode
+        ? _estimatedLinkLengthForSecret(nextSecret)
+        : _minimumStegoCharacterCount(
+            coverText: nextCover,
+            secretText: nextSecret,
+          );
 
-    if (!currentFits && nextLength < currentLength) {
-      return newValue;
+    if (currentFits && nextLength > currentLength) {
+      return oldValue;
     }
 
-    return oldValue;
+    final limit = _coverLengthLimit!;
+    final allowedLength = currentLength + (limit - currentLength);
+    if (isCoverField) {
+      return newValue.copyWith(
+        text: newValue.text.substring(0, allowedLength),
+        selection: TextSelection.collapsed(offset: allowedLength),
+      );
+    } else {
+      final maxSecretChars = allowedLength - currentCover.length;
+      return newValue.copyWith(
+        text: newValue.text.substring(0, maxSecretChars),
+        selection: TextSelection.collapsed(offset: maxSecretChars),
+      );
+    }
+  }
+
+  String? _coverLimitCounterText(int? coverLengthLimit) {
+    if (coverLengthLimit == null) return null;
+    if (_linkMode) {
+      return '${_estimatedLinkLengthForSecret(_secretCtrl.text)}/$coverLengthLimit';
+    }
+    return '${_minimumStegoCharacterCount()}/$coverLengthLimit';
   }
 
   List<TextInputFormatter> _coverLimitInputFormatters({
     required bool isCoverField,
   }) {
-    if (_linkMode || _coverLengthLimit == null) return const [];
+    if (_coverLengthLimit == null) return const [];
     return [
       TextInputFormatter.withFunction(
         (oldValue, newValue) => _limitStegoFieldEdit(
@@ -243,11 +284,6 @@ class ChatViewState extends ConsumerState<ChatView> {
         ),
       ),
     ];
-  }
-
-  String? _coverLimitCounterText(int? coverLengthLimit) {
-    if (_linkMode || coverLengthLimit == null) return null;
-    return '${_minimumStegoCharacterCount()}/$coverLengthLimit';
   }
 
   void _dismissMessageInputFocus(PointerDownEvent _) {
@@ -1421,13 +1457,6 @@ class ChatViewState extends ConsumerState<ChatView> {
                             helperStyle: _coverTooShort
                                 ? TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 10)
                                 : null,
-                            counterText: _coverLimitCounterText(coverLengthLimit),
-                            counterStyle: _coverLengthLimitExceeded
-                                ? TextStyle(
-                                    color: Theme.of(context).colorScheme.error,
-                                    fontSize: 10,
-                                  )
-                                : const TextStyle(fontSize: 10),
                           ),
                         ),
                       ),
@@ -2165,16 +2194,6 @@ class ChatViewState extends ConsumerState<ChatView> {
                                                 .replaceAll('{n}', '$_coverMissingCount')
                                             : null,
                                         helperStyle: _coverTooShort
-                                            ? TextStyle(
-                                                color: Theme.of(context)
-                                                    .colorScheme
-                                                    .error,
-                                              )
-                                            : null,
-                                        counterText: _coverLimitCounterText(
-                                          coverLengthLimit,
-                                        ),
-                                        counterStyle: _coverLengthLimitExceeded
                                             ? TextStyle(
                                                 color: Theme.of(context)
                                                     .colorScheme
