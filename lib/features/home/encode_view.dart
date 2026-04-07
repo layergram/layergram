@@ -20,6 +20,7 @@ import '../../core/crypto/models.dart';
 import '../../core/crypto/stego_encoder.dart';
 import '../../core/providers.dart';
 import '../../l10n/app_strings.dart';
+import '../../utils/app_platform.dart';
 import '../../utils/sharing.dart';
 import 'home_controller.dart';
 
@@ -480,16 +481,18 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
                               label: Text(strings(context, 'copy')),
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: FilledButton.icon(
-                              onPressed: () async {
-                                await shareTextExternally(context, _output);
-                              },
-                              icon: const Icon(Icons.share_outlined),
-                              label: Text(strings(context, 'share')),
+                          if (!AppPlatform.isAndroid) ...[
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: FilledButton.icon(
+                                onPressed: () async {
+                                  await shareTextExternally(context, _output);
+                                },
+                                icon: const Icon(Icons.share_outlined),
+                                label: Text(strings(context, 'share')),
+                              ),
                             ),
-                          ),
+                          ],
                         ],
                       ),
                     ],
