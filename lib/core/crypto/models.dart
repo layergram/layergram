@@ -16,6 +16,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import '../domain/identity_id.dart';
+import 'seed_service.dart';
 
 class IdentityBase {
   const IdentityBase({
@@ -38,9 +39,13 @@ class LocalIdentity extends IdentityBase {
     required super.fingerprint,
     required super.displayName,
     required this.mnemonic,
+    this.derivationVersion = IdentityDerivationVersion.v1,
+    this.derivationAlgorithm = 'sha256-seed',
   });
 
   final String mnemonic;
+  final IdentityDerivationVersion derivationVersion;
+  final String derivationAlgorithm;
 
   Map<String, dynamic> toMap() {
     return {
@@ -49,16 +54,24 @@ class LocalIdentity extends IdentityBase {
       'fingerprint': fingerprint,
       'displayName': displayName,
       'mnemonic': mnemonic,
+      'derivationVersion': derivationVersion.storageValue,
+      'derivationAlgorithm': derivationAlgorithm,
     };
   }
 
   factory LocalIdentity.fromMap(Map<dynamic, dynamic> map) {
+    final derivationVersion = IdentityDerivationVersion.fromStorageValue(
+      map['derivationVersion'] as String?,
+    );
     return LocalIdentity(
       identityId: map['identityId'] as String,
       publicKeyBase64: map['publicKeyBase64'] as String,
       fingerprint: map['fingerprint'] as String,
       displayName: map['displayName'] as String,
       mnemonic: map['mnemonic'] as String,
+      derivationVersion: derivationVersion,
+      derivationAlgorithm:
+          (map['derivationAlgorithm'] as String?) ?? derivationVersion.algorithm,
     );
   }
 }

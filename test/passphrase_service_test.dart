@@ -20,6 +20,8 @@ void main() {
       expect(notifier.state.privateKeyBase64, isNull);
       expect(notifier.state.publicKeyBase64, isNull);
       expect(notifier.state.keyTag, isNull);
+      expect(notifier.state.derivationVersion, isNull);
+      expect(notifier.state.derivationAlgorithm, isNull);
     });
 
     test('activate derives deterministic keys from passphrase', () async {
@@ -30,12 +32,15 @@ void main() {
       expect(state1.privateKeyBase64, isNotNull);
       expect(state1.publicKeyBase64, isNotNull);
       expect(state1.keyTag, isNotNull);
+      expect(state1.derivationVersion, IdentityDerivationVersion.v2);
+      expect(state1.derivationAlgorithm, IdentityDerivationVersion.v2.algorithm);
       
-      // Activating again with same inputs yields same outputs
       await notifier.activate(validMnemonic, 'test-passphrase');
       final state2 = notifier.state;
       expect(state2.privateKeyBase64, equals(state1.privateKeyBase64));
       expect(state2.publicKeyBase64, equals(state1.publicKeyBase64));
+      expect(state2.derivationVersion, equals(state1.derivationVersion));
+      expect(state2.derivationAlgorithm, equals(state1.derivationAlgorithm));
     });
 
     test('activate derives different keys for different passphrases', () async {
@@ -49,6 +54,36 @@ void main() {
       expect(stateA.publicKeyBase64, isNot(equals(stateB.publicKeyBase64)));
     });
 
+    test('activate is deterministic for the same explicit derivation version and differs across versions', () async {
+      await notifier.activate(
+        validMnemonic,
+        'test-passphrase',
+        derivationVersion: IdentityDerivationVersion.v1,
+      );
+      final stateV1 = notifier.state;
+
+      await notifier.activate(
+        validMnemonic,
+        'test-passphrase',
+        derivationVersion: IdentityDerivationVersion.v1,
+      );
+      final stateV1Again = notifier.state;
+
+      await notifier.activate(
+        validMnemonic,
+        'test-passphrase',
+        derivationVersion: IdentityDerivationVersion.v2,
+      );
+      final stateV2 = notifier.state;
+
+      expect(stateV1.privateKeyBase64, equals(stateV1Again.privateKeyBase64));
+      expect(stateV1.publicKeyBase64, equals(stateV1Again.publicKeyBase64));
+      expect(stateV1.derivationVersion, IdentityDerivationVersion.v1);
+      expect(stateV2.derivationVersion, IdentityDerivationVersion.v2);
+      expect(stateV2.privateKeyBase64, isNot(equals(stateV1.privateKeyBase64)));
+      expect(stateV2.publicKeyBase64, isNot(equals(stateV1.publicKeyBase64)));
+    });
+
     test('deactivate clears all keys', () async {
       await notifier.activate(validMnemonic, 'test-passphrase');
       expect(notifier.state.isActive, isTrue);
@@ -59,6 +94,8 @@ void main() {
       expect(notifier.state.privateKeyBase64, isNull);
       expect(notifier.state.publicKeyBase64, isNull);
       expect(notifier.state.keyTag, isNull);
+      expect(notifier.state.derivationVersion, isNull);
+      expect(notifier.state.derivationAlgorithm, isNull);
     });
 
     test('computeKeyTag produces consistent length 8 strings without padding', () {
@@ -68,7 +105,6 @@ void main() {
       expect(tag.length, equals(8)); // 6 bytes base64url encoded
       expect(tag.contains('='), isFalse);
       
-      // Test the base64 helper
       final base64Key = base64Encode(pubKeyBytes);
       final tagFromHelper = PassphraseNotifier.computeKeyTagFromBase64(base64Key);
       
