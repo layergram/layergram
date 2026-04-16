@@ -49,7 +49,10 @@ class MyIdentityController {
         publicKeyBase64: pp.publicKeyBase64!,
         fingerprint: fingerprint,
         displayName: local.displayName,
-        mnemonic: local.mnemonic, // keep the same mnemonic as a fallback info
+        mnemonic: local.mnemonic,
+        derivationVersion: pp.derivationVersion ?? local.derivationVersion,
+        derivationAlgorithm:
+            pp.derivationAlgorithm ?? local.derivationAlgorithm,
       );
     }
     return local;

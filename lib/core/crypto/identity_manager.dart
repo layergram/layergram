@@ -34,19 +34,33 @@ class IdentityManager {
   final LocalIdentityVault _localIdentityVault;
   final _x25519 = X25519();
 
-  Future<LocalIdentity> createNewIdentity({String? displayName}) async {
+  Future<LocalIdentity> createNewIdentity({
+    String? displayName,
+    IdentityDerivationVersion derivationVersion =
+        SeedService.preferredIdentityDerivationVersion,
+  }) async {
     final mnemonic = _seedService.generateMnemonic();
-    return _persistFromMnemonic(mnemonic, displayName: displayName);
+    return _persistFromMnemonic(
+      mnemonic,
+      displayName: displayName,
+      derivationVersion: derivationVersion,
+    );
   }
 
   Future<LocalIdentity> restoreIdentityFromMnemonic(
     String mnemonic, {
     String? displayName,
+    IdentityDerivationVersion derivationVersion =
+        SeedService.legacyIdentityDerivationVersion,
   }) async {
     if (!_seedService.validateMnemonic(mnemonic)) {
       throw ArgumentError('Invalid mnemonic');
     }
-    return _persistFromMnemonic(mnemonic, displayName: displayName);
+    return _persistFromMnemonic(
+      mnemonic,
+      displayName: displayName,
+      derivationVersion: derivationVersion,
+    );
   }
 
   Future<LocalIdentity?> getLocalIdentity() {
@@ -62,6 +76,8 @@ class IdentityManager {
       fingerprint: current.fingerprint,
       displayName: displayName,
       mnemonic: current.mnemonic,
+      derivationVersion: current.derivationVersion,
+      derivationAlgorithm: current.derivationAlgorithm,
     );
     await _localIdentityVault.save(updated);
   }
@@ -83,16 +99,23 @@ class IdentityManager {
     final local = await _localIdentityVault.read();
     if (local == null) return null;
     final seed = _seedService.mnemonicToSeed(local.mnemonic);
-    final privateKey = _seedService.derivePrivateKey(seed);
+    final privateKey = await _seedService.deriveIdentityPrivateKey(
+      seed,
+      version: local.derivationVersion,
+    );
     return base64Encode(privateKey);
   }
 
   Future<LocalIdentity> _persistFromMnemonic(
     String mnemonic, {
     String? displayName,
+    required IdentityDerivationVersion derivationVersion,
   }) async {
     final seed = _seedService.mnemonicToSeed(mnemonic);
-    final privateKey = _seedService.derivePrivateKey(seed);
+    final privateKey = await _seedService.deriveIdentityPrivateKey(
+      seed,
+      version: derivationVersion,
+    );
     final publicKey = await _publicFromPrivate(privateKey);
     final hash = sha256.convert(publicKey).bytes;
     final identityId =
@@ -109,6 +132,8 @@ class IdentityManager {
       fingerprint: fingerprint,
       displayName: displayName ?? 'Me',
       mnemonic: mnemonic,
+      derivationVersion: derivationVersion,
+      derivationAlgorithm: derivationVersion.algorithm,
     );
 
     await _localIdentityVault.save(identity);

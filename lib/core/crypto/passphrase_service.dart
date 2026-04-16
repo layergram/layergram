@@ -33,13 +33,17 @@ class PassphraseState {
     this.privateKeyBase64,
     this.publicKeyBase64,
     this.keyTag,
+    this.derivationVersion,
+    this.derivationAlgorithm,
   });
 
   const PassphraseState.inactive()
       : isActive = false,
         privateKeyBase64 = null,
         publicKeyBase64 = null,
-        keyTag = null;
+        keyTag = null,
+        derivationVersion = null,
+        derivationAlgorithm = null;
 
   final bool isActive;
   final String? privateKeyBase64;
@@ -49,6 +53,9 @@ class PassphraseState {
   /// Used to efficiently filter messages without attempting decryption.
   /// `null` when passphrase is inactive.
   final String? keyTag;
+
+  final IdentityDerivationVersion? derivationVersion;
+  final String? derivationAlgorithm;
 }
 
 class PassphraseNotifier extends StateNotifier<PassphraseState> {
@@ -59,12 +66,19 @@ class PassphraseNotifier extends StateNotifier<PassphraseState> {
   final SeedService _seedService;
   static final _x25519 = X25519();
 
-  /// Derive a keypair from [mnemonic] + [passphrase] and activate it.
-  Future<void> activate(String mnemonic, String passphrase) async {
+  Future<void> activate(
+    String mnemonic,
+    String passphrase, {
+    IdentityDerivationVersion derivationVersion =
+        SeedService.preferredIdentityDerivationVersion,
+  }) async {
     final seedHex =
         bip39.mnemonicToSeedHex(mnemonic.trim(), passphrase: passphrase);
     final seed = Uint8List.fromList(_hexToBytes(seedHex));
-    final privateKey = _seedService.derivePrivateKey(seed);
+    final privateKey = await _seedService.derivePassphraseIdentityPrivateKey(
+      seed,
+      version: derivationVersion,
+    );
     final pair = await _x25519.newKeyPairFromSeed(privateKey);
     final publicKey = await pair.extractPublicKey();
     final pubBytes = Uint8List.fromList(publicKey.bytes);
@@ -74,6 +88,8 @@ class PassphraseNotifier extends StateNotifier<PassphraseState> {
       privateKeyBase64: base64Encode(privateKey),
       publicKeyBase64: base64Encode(pubBytes),
       keyTag: computeKeyTag(pubBytes),
+      derivationVersion: derivationVersion,
+      derivationAlgorithm: derivationVersion.algorithm,
     );
   }
 
