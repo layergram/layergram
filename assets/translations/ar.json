@@ -199,5 +199,22 @@
   "touchComposerDeleteAfterReadOff": "تم إيقاف الحذف بعد القراءة",
   "wordMismatchRetry": "عدم تطابق الكلمة. هل تريد المحاولة مرة أخرى؟",
   "retry": "إعادة المحاولة",
-  "cancel": "إلغاء"
+  "verifyContactTitle": "التحقق من جهة الاتصال",
+  "verifyContactCtaVerifyNow": "تحقق الآن",
+  "verifyContactCtaRevokeVerification": "إلغاء التحقق",
+  "verifyContactCeremonyIntro": "قارن هذه الرموز مع {name} عبر مكالمة صوتية أو شخصيًا. إذا رأيتما كلاكما نفس القيم، فجهة الاتصال أصلية.",
+  "verifyContactDigitsLabel": "أرقام",
+  "verifyContactEmojiLabel": "إيموجي",
+  "verifyContactMatch": "متطابقة",
+  "verifyContactDoNotMatch": "غير متطابقة",
+  "verifyContactVerifiedSnackbar": "تم تعيين {name} كموثّق",
+  "verifyContactMismatchTitle": "الرموز غير متطابقة",
+  "verifyContactMismatchBody": "إذا لم تتطابق الرموز، فقد يكون المفتاح الذي استوردته قد تم العبث به أثناء التبادل. لا تتحقق من جهة الاتصال هذه وفكّر في حذفها وإعادة استيرادها عبر قناة موثوقة.",
+  "verifyContactMismatchAcknowledge": "فهمت",
+  "verifyContactRevokedSnackbar": "لم يعد {name} موثّقًا",
+  "chatUnverifiedBannerTitle": "جهة اتصال غير موثّقة",
+  "chatUnverifiedBannerBody": "لم يتم التحقق من جهة الاتصال هذه بعد. يمكنك تبادل الرسائل، لكن لم يتم تأكيد صحة مفتاحها.",
+  "chatUnverifiedBannerCta": "تحقق الآن",
+  "contactStatusVerified": "موثّق",
+  "contactStatusUnverified": "غير موثّق"
 }

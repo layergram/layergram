@@ -15,6 +15,7 @@ import '../../l10n/app_strings.dart';
 import '../../ui/passphrase_button.dart';
 import '../../utils/app_platform.dart';
 import '../../utils/sharing.dart';
+import '../contact_verification/contact_verification_view.dart';
 import 'home_controller.dart';
 
 class ChatView extends ConsumerStatefulWidget {
@@ -147,6 +148,65 @@ class ChatViewState extends ConsumerState<ChatView> {
   bool _decryptionPrimed = false;
   Timer? _decryptionPrimeTimer;
   bool _backgroundHoldActive = false;
+  bool _verifiedThisSession = false;
+
+  bool get _isContactVerifiedNow =>
+      widget.contact.verified || _verifiedThisSession;
+
+  Future<void> _startContactVerification() async {
+    final result =
+        await showContactVerificationCeremony(context, ref, widget.contact);
+    if (!mounted) return;
+    if (result == true) {
+      setState(() => _verifiedThisSession = true);
+    }
+  }
+
+  Widget _buildUnverifiedBanner(BuildContext context) {
+    final t = AppStrings.t;
+    final theme = Theme.of(context);
+    final tileColor =
+        theme.colorScheme.tertiaryContainer.withValues(alpha: 0.45);
+    final subtitleColor =
+        theme.colorScheme.onSurface.withValues(alpha: 0.85);
+    return Material(
+      color: tileColor,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, color: Colors.orange, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    t(context, 'chatUnverifiedBannerTitle'),
+                    style: theme.textTheme.labelLarge
+                        ?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    t(context, 'chatUnverifiedBannerBody'),
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: subtitleColor),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            TextButton(
+              onPressed: _startContactVerification,
+              child: Text(t(context, 'chatUnverifiedBannerCta')),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   int get _estimatedPayloadBytes {
     return StegoEncoder.estimatedEncryptedPayloadBytes(_secretCtrl.text);
@@ -1722,6 +1782,7 @@ class ChatViewState extends ConsumerState<ChatView> {
                 ),
               ),
             ),
+          if (!_isContactVerifiedNow) _buildUnverifiedBanner(context),
           if (showMessageList)
             Expanded(
               child: StreamBuilder<List<MessageRecord>>(

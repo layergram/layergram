@@ -199,5 +199,22 @@
   "touchComposerDeleteAfterReadOff": "Radera efter läsning avaktiverat",
   "wordMismatchRetry": "Ord matchar inte. Vill du försöka igen?",
   "retry": "Försök igen",
-  "cancel": "Avbryt"
+  "verifyContactTitle": "Verifiera kontakt",
+  "verifyContactCtaVerifyNow": "Verifiera nu",
+  "verifyContactCtaRevokeVerification": "Återkalla verifiering",
+  "verifyContactCeremonyIntro": "Jämför dessa koder med {name} via röstsamtal eller personligen. Om ni båda ser samma värden är kontakten äkta.",
+  "verifyContactDigitsLabel": "Siffror",
+  "verifyContactEmojiLabel": "Emoji",
+  "verifyContactMatch": "Stämmer överens",
+  "verifyContactDoNotMatch": "Stämmer inte överens",
+  "verifyContactVerifiedSnackbar": "{name} är nu markerad som verifierad",
+  "verifyContactMismatchTitle": "Koderna stämmer inte överens",
+  "verifyContactMismatchBody": "Om koderna inte stämmer kan nyckeln du importerade ha manipulerats under utbytet. Verifiera inte den här kontakten och överväg att ta bort och importera den igen via en betrodd kanal.",
+  "verifyContactMismatchAcknowledge": "Förstått",
+  "verifyContactRevokedSnackbar": "{name} är inte längre markerad som verifierad",
+  "chatUnverifiedBannerTitle": "Kontakten är inte verifierad",
+  "chatUnverifiedBannerBody": "Denna kontakt har inte verifierats än. Du kan fortfarande utbyta meddelanden, men äktheten hos nyckeln har inte bekräftats.",
+  "chatUnverifiedBannerCta": "Verifiera nu",
+  "contactStatusVerified": "Verifierad",
+  "contactStatusUnverified": "Ej verifierad"
 }

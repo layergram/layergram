@@ -199,5 +199,22 @@
   "touchComposerDeleteAfterReadOff": "Delete after read disabled",
   "wordMismatchRetry": "Word mismatch. Would you like to try again?",
   "retry": "Retry",
-  "cancel": "Cancel"
+  "verifyContactTitle": "Verify contact",
+  "verifyContactCtaVerifyNow": "Verify now",
+  "verifyContactCtaRevokeVerification": "Revoke verification",
+  "verifyContactCeremonyIntro": "Compare these codes with {name} on a voice call or in person. If both of you see the same values, the contact is authentic.",
+  "verifyContactDigitsLabel": "Digits",
+  "verifyContactEmojiLabel": "Emoji",
+  "verifyContactMatch": "They match",
+  "verifyContactDoNotMatch": "They do not match",
+  "verifyContactVerifiedSnackbar": "{name} is now marked as verified",
+  "verifyContactMismatchTitle": "Codes do not match",
+  "verifyContactMismatchBody": "If the codes do not match, the key you imported may have been tampered with during the exchange. Do not verify this contact and consider deleting and re-importing it through a trusted channel.",
+  "verifyContactMismatchAcknowledge": "Understood",
+  "verifyContactRevokedSnackbar": "{name} is no longer marked as verified",
+  "chatUnverifiedBannerTitle": "Contact not verified",
+  "chatUnverifiedBannerBody": "This contact has not been verified yet. You can still exchange messages, but the authenticity of their key has not been confirmed.",
+  "chatUnverifiedBannerCta": "Verify now",
+  "contactStatusVerified": "Verified",
+  "contactStatusUnverified": "Unverified"
 }

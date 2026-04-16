@@ -199,5 +199,22 @@
   "touchComposerDeleteAfterReadOff": "읽은 후 삭제가 비활성화되었습니다",
   "wordMismatchRetry": "단어가 일치하지 않습니다. 다시 시도하시겠습니까?",
   "retry": "다시 시도",
-  "cancel": "취소"
+  "verifyContactTitle": "연락처 확인",
+  "verifyContactCtaVerifyNow": "지금 확인",
+  "verifyContactCtaRevokeVerification": "확인 취소",
+  "verifyContactCeremonyIntro": "{name} 와(과) 음성 통화나 직접 만나 이 코드를 비교하세요. 양쪽이 같은 값을 본다면 연락처가 진짜입니다.",
+  "verifyContactDigitsLabel": "숫자",
+  "verifyContactEmojiLabel": "이모지",
+  "verifyContactMatch": "일치",
+  "verifyContactDoNotMatch": "일치하지 않음",
+  "verifyContactVerifiedSnackbar": "{name} 이(가) 확인됨으로 표시되었습니다",
+  "verifyContactMismatchTitle": "코드가 일치하지 않습니다",
+  "verifyContactMismatchBody": "코드가 일치하지 않는 경우, 가져온 키가 교환 중에 변조되었을 수 있습니다. 이 연락처를 확인하지 말고, 삭제한 뒤 신뢰할 수 있는 경로로 다시 가져오는 것을 고려하세요.",
+  "verifyContactMismatchAcknowledge": "이해했습니다",
+  "verifyContactRevokedSnackbar": "{name} 은(는) 더 이상 확인됨으로 표시되지 않습니다",
+  "chatUnverifiedBannerTitle": "확인되지 않은 연락처",
+  "chatUnverifiedBannerBody": "이 연락처는 아직 확인되지 않았습니다. 메시지를 주고받을 수 있지만, 키의 진위는 확인되지 않았습니다.",
+  "chatUnverifiedBannerCta": "지금 확인",
+  "contactStatusVerified": "확인됨",
+  "contactStatusUnverified": "미확인"
 }

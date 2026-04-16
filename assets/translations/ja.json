@@ -199,5 +199,22 @@
   "touchComposerDeleteAfterReadOff": "既読後削除を無効にしました",
   "wordMismatchRetry": "単語が一致しません。もう一度試しますか？",
   "retry": "再試行",
-  "cancel": "キャンセル"
+  "verifyContactTitle": "連絡先を確認",
+  "verifyContactCtaVerifyNow": "今すぐ確認",
+  "verifyContactCtaRevokeVerification": "確認を取り消す",
+  "verifyContactCeremonyIntro": "音声通話または対面で {name} と次のコードを見比べてください。両方が同じ値を見ていれば、連絡先は本物です。",
+  "verifyContactDigitsLabel": "数字",
+  "verifyContactEmojiLabel": "絵文字",
+  "verifyContactMatch": "一致する",
+  "verifyContactDoNotMatch": "一致しない",
+  "verifyContactVerifiedSnackbar": "{name} を確認済みとしてマークしました",
+  "verifyContactMismatchTitle": "コードが一致しません",
+  "verifyContactMismatchBody": "コードが一致しない場合、インポートした鍵が交換中に改ざんされた可能性があります。この連絡先を確認済みにせず、信頼できる経路で削除して再インポートすることを検討してください。",
+  "verifyContactMismatchAcknowledge": "理解しました",
+  "verifyContactRevokedSnackbar": "{name} の確認済みマークを解除しました",
+  "chatUnverifiedBannerTitle": "連絡先は未確認です",
+  "chatUnverifiedBannerBody": "この連絡先はまだ確認されていません。メッセージのやり取りは可能ですが、鍵の真正性は確認されていません。",
+  "chatUnverifiedBannerCta": "今すぐ確認",
+  "contactStatusVerified": "確認済み",
+  "contactStatusUnverified": "未確認"
 }

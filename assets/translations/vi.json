@@ -199,5 +199,22 @@
   "touchComposerDeleteAfterReadOff": "Đã tắt xóa sau khi đọc",
   "wordMismatchRetry": "Sai từ. Bạn có muốn thử lại không?",
   "retry": "Thử lại",
-  "cancel": "Hủy"
+  "verifyContactTitle": "Xác minh liên hệ",
+  "verifyContactCtaVerifyNow": "Xác minh ngay",
+  "verifyContactCtaRevokeVerification": "Hủy xác minh",
+  "verifyContactCeremonyIntro": "So sánh các mã này với {name} qua cuộc gọi thoại hoặc trực tiếp. Nếu cả hai đều thấy cùng giá trị, liên hệ là xác thực.",
+  "verifyContactDigitsLabel": "Chữ số",
+  "verifyContactEmojiLabel": "Emoji",
+  "verifyContactMatch": "Khớp nhau",
+  "verifyContactDoNotMatch": "Không khớp",
+  "verifyContactVerifiedSnackbar": "{name} hiện được đánh dấu đã xác minh",
+  "verifyContactMismatchTitle": "Mã không khớp",
+  "verifyContactMismatchBody": "Nếu mã không khớp, khóa bạn đã nhập có thể bị thay đổi trong quá trình trao đổi. Không xác minh liên hệ này và cân nhắc xóa rồi nhập lại qua kênh đáng tin.",
+  "verifyContactMismatchAcknowledge": "Đã hiểu",
+  "verifyContactRevokedSnackbar": "{name} không còn được đánh dấu đã xác minh",
+  "chatUnverifiedBannerTitle": "Liên hệ chưa xác minh",
+  "chatUnverifiedBannerBody": "Liên hệ này chưa được xác minh. Bạn vẫn có thể trao đổi tin nhắn, nhưng tính xác thực của khóa chưa được xác nhận.",
+  "chatUnverifiedBannerCta": "Xác minh ngay",
+  "contactStatusVerified": "Đã xác minh",
+  "contactStatusUnverified": "Chưa xác minh"
 }

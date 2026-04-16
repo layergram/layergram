@@ -199,5 +199,22 @@
   "touchComposerDeleteAfterReadOff": "پڑھنے کے بعد حذف کرنا غیر فعال ہو گیا",
   "wordMismatchRetry": "لفظ غلط ہے۔ کیا آپ دوبارہ کوشش کرنا چاہیں گے؟",
   "retry": "دوبارہ کوشش کریں",
-  "cancel": "منسوخ کریں"
+  "verifyContactTitle": "رابطہ کی تصدیق",
+  "verifyContactCtaVerifyNow": "ابھی تصدیق کریں",
+  "verifyContactCtaRevokeVerification": "تصدیق منسوخ کریں",
+  "verifyContactCeremonyIntro": "وائس کال پر یا ذاتی طور پر {name} کے ساتھ ان کوڈز کا موازنہ کریں۔ اگر آپ دونوں کو ایک جیسی قدریں نظر آئیں تو رابطہ اصلی ہے۔",
+  "verifyContactDigitsLabel": "ہندسے",
+  "verifyContactEmojiLabel": "ایموجی",
+  "verifyContactMatch": "مماثل ہیں",
+  "verifyContactDoNotMatch": "مماثل نہیں ہیں",
+  "verifyContactVerifiedSnackbar": "{name} اب تصدیق شدہ کے طور پر نشان زد ہے",
+  "verifyContactMismatchTitle": "کوڈز مماثل نہیں ہیں",
+  "verifyContactMismatchBody": "اگر کوڈز مماثل نہ ہوں تو درآمد کی گئی کلید تبادلے کے دوران تبدیل کی گئی ہو سکتی ہے۔ اس رابطے کی تصدیق نہ کریں اور اسے حذف کرکے کسی قابلِ اعتماد ذریعے سے دوبارہ درآمد کرنے پر غور کریں۔",
+  "verifyContactMismatchAcknowledge": "سمجھ گیا",
+  "verifyContactRevokedSnackbar": "{name} اب تصدیق شدہ کے طور پر نشان زد نہیں ہے",
+  "chatUnverifiedBannerTitle": "رابطہ تصدیق نہیں شدہ",
+  "chatUnverifiedBannerBody": "اس رابطے کی ابھی تصدیق نہیں ہوئی۔ آپ پیغامات کا تبادلہ جاری رکھ سکتے ہیں، لیکن اس کی کلید کی اصلی حیثیت کی تصدیق نہیں ہوئی۔",
+  "chatUnverifiedBannerCta": "ابھی تصدیق کریں",
+  "contactStatusVerified": "تصدیق شدہ",
+  "contactStatusUnverified": "غیر تصدیق شدہ"
 }

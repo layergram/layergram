@@ -199,5 +199,22 @@
   "touchComposerDeleteAfterReadOff": "Okunduktan sonra sil devre dışı bırakıldı",
   "wordMismatchRetry": "Kelime eşleşmiyor. Tekrar denemek ister misiniz?",
   "retry": "Tekrar dene",
-  "cancel": "İptal"
+  "verifyContactTitle": "Kişiyi doğrula",
+  "verifyContactCtaVerifyNow": "Şimdi doğrula",
+  "verifyContactCtaRevokeVerification": "Doğrulamayı kaldır",
+  "verifyContactCeremonyIntro": "Bu kodları {name} ile sesli aramada veya yüz yüze karşılaştırın. İkiniz de aynı değerleri görüyorsanız kişi gerçektir.",
+  "verifyContactDigitsLabel": "Rakamlar",
+  "verifyContactEmojiLabel": "Emoji",
+  "verifyContactMatch": "Eşleşiyor",
+  "verifyContactDoNotMatch": "Eşleşmiyor",
+  "verifyContactVerifiedSnackbar": "{name} artık doğrulanmış olarak işaretlendi",
+  "verifyContactMismatchTitle": "Kodlar eşleşmiyor",
+  "verifyContactMismatchBody": "Kodlar eşleşmiyorsa, içe aktardığınız anahtar değişim sırasında değiştirilmiş olabilir. Bu kişiyi doğrulamayın ve güvenilir bir kanaldan silip yeniden içe aktarmayı değerlendirin.",
+  "verifyContactMismatchAcknowledge": "Anladım",
+  "verifyContactRevokedSnackbar": "{name} artık doğrulanmış olarak işaretli değil",
+  "chatUnverifiedBannerTitle": "Kişi doğrulanmadı",
+  "chatUnverifiedBannerBody": "Bu kişi henüz doğrulanmadı. Mesaj alışverişine devam edebilirsiniz, ancak anahtarının gerçekliği onaylanmadı.",
+  "chatUnverifiedBannerCta": "Şimdi doğrula",
+  "contactStatusVerified": "Doğrulandı",
+  "contactStatusUnverified": "Doğrulanmadı"
 }

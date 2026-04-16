@@ -199,5 +199,22 @@
   "touchComposerDeleteAfterReadOff": "Naka-disable ang burahin pagkatapos basahin",
   "wordMismatchRetry": "Hindi tugma ang salita. Gusto mo bang subukan muli?",
   "retry": "Subukan muli",
-  "cancel": "Kanselahin"
+  "verifyContactTitle": "I-verify ang contact",
+  "verifyContactCtaVerifyNow": "I-verify ngayon",
+  "verifyContactCtaRevokeVerification": "Bawiin ang beripikasyon",
+  "verifyContactCeremonyIntro": "Ikumpara ang mga code na ito kay {name} sa voice call o nang personal. Kung pareho kayong nakakakita ng parehong mga halaga, totoo ang contact.",
+  "verifyContactDigitsLabel": "Mga numero",
+  "verifyContactEmojiLabel": "Emoji",
+  "verifyContactMatch": "Magkatugma",
+  "verifyContactDoNotMatch": "Hindi magkatugma",
+  "verifyContactVerifiedSnackbar": "Namarkahan na bilang na-verify si {name}",
+  "verifyContactMismatchTitle": "Hindi magkatugma ang mga code",
+  "verifyContactMismatchBody": "Kung hindi magkatugma ang mga code, maaaring nabago ang na-import na susi habang ipinagpapalit. Huwag i-verify ang contact na ito at isaalang-alang na tanggalin at i-import muli ito sa pamamagitan ng pinagkakatiwalaang channel.",
+  "verifyContactMismatchAcknowledge": "Naintindihan",
+  "verifyContactRevokedSnackbar": "Hindi na namarkahang na-verify si {name}",
+  "chatUnverifiedBannerTitle": "Hindi pa na-verify ang contact",
+  "chatUnverifiedBannerBody": "Hindi pa na-verify ang contact na ito. Maaari pa ring magpalitan ng mga mensahe, ngunit hindi pa nakumpirma ang pagiging tunay ng susi.",
+  "chatUnverifiedBannerCta": "I-verify ngayon",
+  "contactStatusVerified": "Na-verify",
+  "contactStatusUnverified": "Hindi na-verify"
 }

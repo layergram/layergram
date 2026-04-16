@@ -199,5 +199,22 @@
   "touchComposerDeleteAfterReadOff": "Απενεργοποιήθηκε η διαγραφή μετά την ανάγνωση",
   "wordMismatchRetry": "Λάθος λέξη. Θέλετε να ξαναπροσπαθήσετε;",
   "retry": "Ξαναπροσπάθηση",
-  "cancel": "Ακύρωση"
+  "verifyContactTitle": "Επαλήθευση επαφής",
+  "verifyContactCtaVerifyNow": "Επαλήθευση τώρα",
+  "verifyContactCtaRevokeVerification": "Ανάκληση επαλήθευσης",
+  "verifyContactCeremonyIntro": "Συγκρίνετε αυτούς τους κωδικούς με {name} σε φωνητική κλήση ή αυτοπροσώπως. Αν και οι δύο βλέπετε τις ίδιες τιμές, η επαφή είναι αυθεντική.",
+  "verifyContactDigitsLabel": "Ψηφία",
+  "verifyContactEmojiLabel": "Emoji",
+  "verifyContactMatch": "Συμπίπτουν",
+  "verifyContactDoNotMatch": "Δεν συμπίπτουν",
+  "verifyContactVerifiedSnackbar": "Η επαφή {name} επισημάνθηκε ως επαληθευμένη",
+  "verifyContactMismatchTitle": "Οι κωδικοί δεν συμπίπτουν",
+  "verifyContactMismatchBody": "Αν οι κωδικοί δεν συμπίπτουν, το κλειδί που εισαγάγατε ενδέχεται να έχει αλλοιωθεί κατά την ανταλλαγή. Μην επαληθεύετε αυτή την επαφή και εξετάστε τη διαγραφή και επανεισαγωγή μέσω αξιόπιστου καναλιού.",
+  "verifyContactMismatchAcknowledge": "Κατάλαβα",
+  "verifyContactRevokedSnackbar": "Η επαφή {name} δεν είναι πλέον επαληθευμένη",
+  "chatUnverifiedBannerTitle": "Η επαφή δεν έχει επαληθευτεί",
+  "chatUnverifiedBannerBody": "Η επαφή αυτή δεν έχει ακόμη επαληθευτεί. Μπορείτε να ανταλλάσσετε μηνύματα, αλλά η γνησιότητα του κλειδιού της δεν έχει επιβεβαιωθεί.",
+  "chatUnverifiedBannerCta": "Επαλήθευση τώρα",
+  "contactStatusVerified": "Επαληθευμένη",
+  "contactStatusUnverified": "Μη επαληθευμένη"
 }

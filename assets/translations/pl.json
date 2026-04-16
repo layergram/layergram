@@ -199,5 +199,22 @@
   "touchComposerDeleteAfterReadOff": "Usuwanie po odczycie wyłączone",
   "wordMismatchRetry": "Nieprawidłowe słowo. Czy chcesz spróbować ponownie?",
   "retry": "Ponów",
-  "cancel": "Anuluj"
+  "verifyContactTitle": "Zweryfikuj kontakt",
+  "verifyContactCtaVerifyNow": "Zweryfikuj teraz",
+  "verifyContactCtaRevokeVerification": "Cofnij weryfikację",
+  "verifyContactCeremonyIntro": "Porównaj te kody z {name} podczas rozmowy głosowej lub osobiście. Jeśli oboje widzicie te same wartości, kontakt jest autentyczny.",
+  "verifyContactDigitsLabel": "Cyfry",
+  "verifyContactEmojiLabel": "Emoji",
+  "verifyContactMatch": "Zgadzają się",
+  "verifyContactDoNotMatch": "Nie zgadzają się",
+  "verifyContactVerifiedSnackbar": "{name} jest teraz oznaczony jako zweryfikowany",
+  "verifyContactMismatchTitle": "Kody nie zgadzają się",
+  "verifyContactMismatchBody": "Jeśli kody się nie zgadzają, zaimportowany klucz mógł zostać zmieniony podczas wymiany. Nie weryfikuj tego kontaktu i rozważ jego usunięcie oraz ponowny import przez zaufany kanał.",
+  "verifyContactMismatchAcknowledge": "Rozumiem",
+  "verifyContactRevokedSnackbar": "{name} nie jest już oznaczony jako zweryfikowany",
+  "chatUnverifiedBannerTitle": "Kontakt niezweryfikowany",
+  "chatUnverifiedBannerBody": "Ten kontakt nie został jeszcze zweryfikowany. Możesz nadal wymieniać wiadomości, ale autentyczność klucza nie została potwierdzona.",
+  "chatUnverifiedBannerCta": "Zweryfikuj teraz",
+  "contactStatusVerified": "Zweryfikowany",
+  "contactStatusUnverified": "Niezweryfikowany"
 }

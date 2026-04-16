@@ -18,6 +18,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/crypto/models.dart';
 import '../../core/providers.dart';
 import '../../l10n/app_strings.dart';
+import '../contact_verification/contact_verification_view.dart';
 import 'identities_controller.dart';
 
 class IdentityDetailView extends ConsumerStatefulWidget {
@@ -72,6 +73,38 @@ class _IdentityDetailViewState extends ConsumerState<IdentityDetailView> {
     Navigator.of(context).pop();
   }
 
+  Future<void> _handleVerifyAction() async {
+    if (_identity.verified) {
+      final messenger = ScaffoldMessenger.of(context);
+      final snackText = AppStrings.t(
+        context,
+        'verifyContactRevokedSnackbar',
+        namedArgs: {'name': _identity.displayName},
+      );
+      await ref
+          .read(identitiesControllerProvider)
+          .revokeContactVerification(_identity);
+      if (!mounted) return;
+      setState(() {
+        _identity = _identity.copyWith(verified: false);
+      });
+      messenger.showSnackBar(SnackBar(content: Text(snackText)));
+      return;
+    }
+
+    final result = await showContactVerificationCeremony(
+      context,
+      ref,
+      _identity,
+    );
+    if (!mounted) return;
+    if (result == true) {
+      setState(() {
+        _identity = _identity.copyWith(verified: true);
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = AppStrings.t;
@@ -122,36 +155,11 @@ class _IdentityDetailViewState extends ConsumerState<IdentityDetailView> {
                       children: [
                         if (!isMe)
                           FilledButton.tonal(
-                            onPressed: _saving
-                                ? null
-                                : () async {
-                                    final toggled = !_identity.verified;
-                                    setState(() {
-                                      _identity = _identity.copyWith(verified: toggled);
-                                    });
-
-                                    final msg = t(
-                                      context,
-                                      toggled
-                                          ? 'contactMarkedVerified'
-                                          : 'contactMarkedUnverified',
-                                    );
-                                    final sm = ScaffoldMessenger.of(context);
-
-                                    await ref
-                                        .read(identitiesControllerProvider)
-                                        .setVerified(_identity, toggled);
-
-                                    if (!mounted) return;
-
-                                    sm.showSnackBar(
-                                      SnackBar(content: Text(msg)),
-                                    );
-                                  },
+                            onPressed: _saving ? null : _handleVerifyAction,
                             child: Text(
                               _identity.verified
-                                  ? t(context, 'markUnverified')
-                                  : t(context, 'markVerified'),
+                                  ? t(context, 'verifyContactCtaRevokeVerification')
+                                  : t(context, 'verifyContactCtaVerifyNow'),
                             ),
                           ),
                         if (!isMe)

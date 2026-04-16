@@ -199,5 +199,22 @@
   "touchComposerDeleteAfterReadOff": "वाचल्यानंतर हटवणे निष्क्रिय झाले",
   "wordMismatchRetry": "शब्द जुळत नाही. तुम्ही पुन्हा प्रयत्न करू इच्छिता?",
   "retry": "पुन्हा प्रयत्न करा",
-  "cancel": "रद्द करा"
+  "verifyContactTitle": "संपर्क सत्यापित करा",
+  "verifyContactCtaVerifyNow": "आत्ता सत्यापित करा",
+  "verifyContactCtaRevokeVerification": "सत्यापन रद्द करा",
+  "verifyContactCeremonyIntro": "{name} यांच्याशी हे कोड व्हॉइस कॉलवर किंवा समोरासमोर तुलना करा. दोघांना समान मूल्ये दिसल्यास संपर्क खरा आहे.",
+  "verifyContactDigitsLabel": "अंक",
+  "verifyContactEmojiLabel": "इमोजी",
+  "verifyContactMatch": "जुळतात",
+  "verifyContactDoNotMatch": "जुळत नाहीत",
+  "verifyContactVerifiedSnackbar": "{name} आता सत्यापित म्हणून चिन्हांकित",
+  "verifyContactMismatchTitle": "कोड जुळत नाहीत",
+  "verifyContactMismatchBody": "कोड जुळत नसल्यास, आयात केलेली किल्ली देवाणघेवाण दरम्यान बदलली गेली असू शकते. हा संपर्क सत्यापित करू नका आणि विश्वासार्ह चॅनेलवरून हटवून पुन्हा आयात करण्याचा विचार करा.",
+  "verifyContactMismatchAcknowledge": "समजले",
+  "verifyContactRevokedSnackbar": "{name} यापुढे सत्यापित नाही",
+  "chatUnverifiedBannerTitle": "संपर्क सत्यापित नाही",
+  "chatUnverifiedBannerBody": "हा संपर्क अद्याप सत्यापित झालेला नाही. आपण संदेशांची देवाणघेवाण करू शकता, परंतु त्याच्या किल्लीची सत्यता पुष्टी केलेली नाही.",
+  "chatUnverifiedBannerCta": "आत्ता सत्यापित करा",
+  "contactStatusVerified": "सत्यापित",
+  "contactStatusUnverified": "असत्यापित"
 }

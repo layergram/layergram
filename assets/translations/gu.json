@@ -199,5 +199,22 @@
   "touchComposerDeleteAfterReadOff": "વાંચ્યા પછી કાઢી નાખવું નિષ્ક્રિય",
   "wordMismatchRetry": "શબ્દ બંધબેસતો નથી. શું તમે ફરીથી પ્રયાસ કરવા માંગો છો?",
   "retry": "ફરીથી પ્રયાસ કરો",
-  "cancel": "રદ કરો"
+  "verifyContactTitle": "સંપર્ક ચકાસો",
+  "verifyContactCtaVerifyNow": "હમણાં ચકાસો",
+  "verifyContactCtaRevokeVerification": "ચકાસણી રદ કરો",
+  "verifyContactCeremonyIntro": "વૉઇસ કૉલ પર અથવા રૂબરૂ {name} સાથે આ કોડ્સની તુલના કરો. જો તમે બંને સમાન મૂલ્યો જુઓ, તો સંપર્ક અસલી છે.",
+  "verifyContactDigitsLabel": "અંકો",
+  "verifyContactEmojiLabel": "ઈમોજી",
+  "verifyContactMatch": "મેળ ખાય છે",
+  "verifyContactDoNotMatch": "મેળ ખાતું નથી",
+  "verifyContactVerifiedSnackbar": "{name} હવે ચકાસાયેલ તરીકે ચિહ્નિત",
+  "verifyContactMismatchTitle": "કોડ મેળ ખાતા નથી",
+  "verifyContactMismatchBody": "જો કોડ મેળ ન ખાય, તો તમે આયાત કરેલી કી વિનિમય દરમિયાન બદલાઈ ગઈ હોઈ શકે. આ સંપર્કને ચકાસશો નહીં અને તેને કાઢીને વિશ્વસનીય માધ્યમ દ્વારા ફરી આયાત કરવા વિશે વિચારો.",
+  "verifyContactMismatchAcknowledge": "સમજાયું",
+  "verifyContactRevokedSnackbar": "{name} હવે ચકાસાયેલ તરીકે ચિહ્નિત નથી",
+  "chatUnverifiedBannerTitle": "સંપર્ક ચકાસાયેલ નથી",
+  "chatUnverifiedBannerBody": "આ સંપર્ક હજી ચકાસાયેલ નથી. તમે સંદેશાઓની આપ-લે કરી શકો છો, પણ તેની કીની અસલિયત ની પુષ્ટિ થયેલી નથી.",
+  "chatUnverifiedBannerCta": "હમણાં ચકાસો",
+  "contactStatusVerified": "ચકાસાયેલ",
+  "contactStatusUnverified": "ચકાસાયેલ નથી"
 }
