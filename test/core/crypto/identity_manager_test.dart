@@ -12,6 +12,7 @@ import 'package:layergram/core/storage/local_database.dart';
 import 'package:layergram/core/storage/local_identity_vault.dart';
 import 'package:layergram/core/storage/local_storage_security_service.dart';
 import 'package:layergram/core/storage/secure_storage.dart';
+import 'package:layergram/features/identity_migration_notice/identity_migration_notice_service.dart';
 
 class InMemorySecureStorageService extends SecureStorageService {
   final Map<String, String> _values = <String, String>{};
@@ -44,6 +45,7 @@ void main() {
   late SeedService seedService;
   late IdentityManager manager;
   late LocalStorageSecurityService storageSecurity;
+  late IdentityMigrationNoticeService noticeService;
 
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
@@ -74,6 +76,7 @@ void main() {
       secureStorage: secureStorage,
       localIdentityVault: vault,
     );
+    noticeService = IdentityMigrationNoticeService(secureStorage);
   });
 
   group('IdentityManager', () {
@@ -117,6 +120,31 @@ void main() {
 
       expect(await manager.getLocalIdentity(), isNull);
       expect(await secureStorage.read(LocalIdentityVault.storageKey), isNull);
+    });
+
+    test('creating a new v2 identity marks the migration notice acknowledged when synchronized', () async {
+      final created = await manager.createNewIdentity(displayName: 'Alice');
+
+      await noticeService.synchronizeIdentityState(created);
+
+      expect(created.derivationVersion, IdentityDerivationVersion.v2);
+      expect(await noticeService.isAcknowledged(), isTrue);
+    });
+
+    test('restoring a v2 identity marks the migration notice acknowledged when synchronized', () async {
+      const mnemonic =
+          'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+
+      final restored = await manager.restoreIdentityFromMnemonic(
+        mnemonic,
+        displayName: 'Recovered V2',
+        derivationVersion: IdentityDerivationVersion.v2,
+      );
+
+      await noticeService.synchronizeIdentityState(restored);
+
+      expect(restored.derivationVersion, IdentityDerivationVersion.v2);
+      expect(await noticeService.isAcknowledged(), isTrue);
     });
 
     test('restores the same mnemonic deterministically for the selected derivation version', () async {

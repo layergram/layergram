@@ -58,6 +58,7 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
   ProviderSubscription<int>? _appLockTimeoutSub;
   ProviderSubscription<bool>? _appNeedsUnlockSub;
   bool _checkingPendingShare = false;
+  bool _identityMigrationNoticeCheckQueued = false;
   final ListQueue<bool> _recentSlowFrames = ListQueue<bool>();
   final Set<String> _sharedTextsInFlight = <String>{};
   final Map<String, DateTime> _recentSharedTexts = <String, DateTime>{};
@@ -432,11 +433,34 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
     );
   }
 
+  void _queueIdentityMigrationNoticeCheck() {
+    if (_identityMigrationNoticeCheckQueued) {
+      return;
+    }
+    _identityMigrationNoticeCheckQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      _identityMigrationNoticeCheckQueued = false;
+      if (!mounted || ref.read(appNeedsUnlockProvider)) {
+        return;
+      }
+      final context = _navKey.currentContext;
+      if (context == null || !context.mounted) {
+        return;
+      }
+      await ref
+          .read(identityMigrationNoticeControllerProvider)
+          .checkAndShowIfNeeded(context);
+    });
+  }
+
   void _reloadIdentity() {
     _identityFuture = ref
         .read(identityManagerProvider)
         .getLocalIdentity()
-        .then((identity) {
+        .then((identity) async {
+      await ref
+          .read(identityMigrationNoticeServiceProvider)
+          .synchronizeIdentityState(identity);
       final nextId = identity?.identityId;
       final currentId = ref.read(activeIdentityIdProvider);
       if (currentId != nextId) {
@@ -594,6 +618,7 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
               },
             );
           }
+          _queueIdentityMigrationNoticeCheck();
           return const AppShell();
         },
       ),

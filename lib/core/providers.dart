@@ -42,6 +42,8 @@ import 'storage/messages_repository.dart';
 import 'storage/secure_storage.dart';
 import 'utils/clipboard_service.dart';
 import 'crypto/message_record_cipher.dart';
+import '../features/identity_migration_notice/identity_migration_notice_controller.dart';
+import '../features/identity_migration_notice/identity_migration_notice_service.dart';
 
 final seedServiceProvider = Provider((_) => SeedService());
 final stegoEncoderProvider = Provider((_) => StegoEncoder());
@@ -250,6 +252,15 @@ final previewServiceProvider = Provider((ref) {
 });
 final sessionDecryptionCacheServiceProvider = Provider((ref) {
   return SessionDecryptionCacheService(ref.watch(secureStorageProvider));
+});
+final identityMigrationNoticeServiceProvider = Provider((ref) {
+  return IdentityMigrationNoticeService(ref.watch(secureStorageProvider));
+});
+final identityMigrationNoticeControllerProvider = Provider((ref) {
+  return IdentityMigrationNoticeController(
+    service: ref.watch(identityMigrationNoticeServiceProvider),
+    loadIdentity: () => ref.read(identityManagerProvider).getLocalIdentity(),
+  );
 });
 final coverMessageLengthLimitProvider =
     StateProvider<int?>((_) => CoverMessageLengthLimitService.defaultLimit);
