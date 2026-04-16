@@ -216,5 +216,8 @@
   "chatUnverifiedBannerBody": "આ સંપર્ક હજી ચકાસાયેલ નથી. તમે સંદેશાઓની આપ-લે કરી શકો છો, પણ તેની કીની અસલિયત ની પુષ્ટિ થયેલી નથી.",
   "chatUnverifiedBannerCta": "હમણાં ચકાસો",
   "contactStatusVerified": "ચકાસાયેલ",
-  "contactStatusUnverified": "ચકાસાયેલ નથી"
+  "contactStatusUnverified": "ચકાસાયેલ નથી",
+  "onboardingModeCreate": "Create identity",
+  "onboardingModeRestore": "Restore identity",
+  "confirmSeventhWordHint": "Confirm seventh word"
 }

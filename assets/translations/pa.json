@@ -216,5 +216,8 @@
   "chatUnverifiedBannerBody": "ਇਸ ਸੰਪਰਕ ਦੀ ਹਾਲੇ ਪੁਸ਼ਟੀ ਨਹੀਂ ਹੋਈ। ਤੁਸੀਂ ਸੁਨੇਹਿਆਂ ਦਾ ਆਦਾਨ-ਪ੍ਰਦਾਨ ਕਰ ਸਕਦੇ ਹੋ, ਪਰ ਕੁੰਜੀ ਦੀ ਅਸਲੀਅਤ ਪੱਕੀ ਨਹੀਂ ਹੋਈ।",
   "chatUnverifiedBannerCta": "ਹੁਣੇ ਪੁਸ਼ਟੀ ਕਰੋ",
   "contactStatusVerified": "ਪੁਸ਼ਟੀ-ਸ਼ੁਦਾ",
-  "contactStatusUnverified": "ਅ-ਪੁਸ਼ਟੀ"
+  "contactStatusUnverified": "ਅ-ਪੁਸ਼ਟੀ",
+  "onboardingModeCreate": "Create identity",
+  "onboardingModeRestore": "Restore identity",
+  "confirmSeventhWordHint": "Confirm seventh word"
 }

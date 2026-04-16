@@ -216,5 +216,8 @@
   "chatUnverifiedBannerBody": "Η επαφή αυτή δεν έχει ακόμη επαληθευτεί. Μπορείτε να ανταλλάσσετε μηνύματα, αλλά η γνησιότητα του κλειδιού της δεν έχει επιβεβαιωθεί.",
   "chatUnverifiedBannerCta": "Επαλήθευση τώρα",
   "contactStatusVerified": "Επαληθευμένη",
-  "contactStatusUnverified": "Μη επαληθευμένη"
+  "contactStatusUnverified": "Μη επαληθευμένη",
+  "onboardingModeCreate": "Create identity",
+  "onboardingModeRestore": "Restore identity",
+  "confirmSeventhWordHint": "Confirm seventh word"
 }

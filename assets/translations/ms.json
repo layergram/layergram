@@ -216,5 +216,8 @@
   "chatUnverifiedBannerBody": "Kenalan ini belum disahkan. Anda masih boleh bertukar mesej, tetapi ketulenan kuncinya belum disahkan.",
   "chatUnverifiedBannerCta": "Sahkan sekarang",
   "contactStatusVerified": "Disahkan",
-  "contactStatusUnverified": "Belum disahkan"
+  "contactStatusUnverified": "Belum disahkan",
+  "onboardingModeCreate": "Cipta identiti",
+  "onboardingModeRestore": "Pulihkan identiti",
+  "confirmSeventhWordHint": "Sahkan perkataan ketujuh"
 }

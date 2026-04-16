@@ -216,5 +216,8 @@
   "chatUnverifiedBannerBody": "हा संपर्क अद्याप सत्यापित झालेला नाही. आपण संदेशांची देवाणघेवाण करू शकता, परंतु त्याच्या किल्लीची सत्यता पुष्टी केलेली नाही.",
   "chatUnverifiedBannerCta": "आत्ता सत्यापित करा",
   "contactStatusVerified": "सत्यापित",
-  "contactStatusUnverified": "असत्यापित"
+  "contactStatusUnverified": "असत्यापित",
+  "onboardingModeCreate": "Create identity",
+  "onboardingModeRestore": "Restore identity",
+  "confirmSeventhWordHint": "Confirm seventh word"
 }

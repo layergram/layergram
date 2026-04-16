@@ -216,5 +216,8 @@
   "chatUnverifiedBannerBody": "Acest contact nu a fost încă verificat. Poți să schimbi mesaje, dar autenticitatea cheii sale nu a fost confirmată.",
   "chatUnverifiedBannerCta": "Verifică acum",
   "contactStatusVerified": "Verificat",
-  "contactStatusUnverified": "Neverificat"
+  "contactStatusUnverified": "Neverificat",
+  "onboardingModeCreate": "Create identity",
+  "onboardingModeRestore": "Restore identity",
+  "confirmSeventhWordHint": "Confirm seventh word"
 }

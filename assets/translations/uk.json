@@ -215,6 +215,9 @@
   "chatUnverifiedBannerTitle": "Контакт не перевірено",
   "chatUnverifiedBannerBody": "Цей контакт ще не перевірено. Ви можете обмінюватися повідомленнями, але справжність його ключа не підтверджено.",
   "chatUnverifiedBannerCta": "Перевірити зараз",
-  "contactStatusVerified": "Перевірено",
-  "contactStatusUnverified": "Не перевірено"
+  "contactStatusVerified": "Підтверджений",
+  "contactStatusUnverified": "Непідтверджений",
+  "onboardingModeCreate": "Створити особистість",
+  "onboardingModeRestore": "Відновити особистість",
+  "confirmSeventhWordHint": "Підтвердити сьоме слово"
 }

@@ -216,5 +216,8 @@
   "chatUnverifiedBannerBody": "Kontak ini belum diverifikasi. Anda masih dapat bertukar pesan, tetapi keaslian kuncinya belum dikonfirmasi.",
   "chatUnverifiedBannerCta": "Verifikasi sekarang",
   "contactStatusVerified": "Terverifikasi",
-  "contactStatusUnverified": "Belum diverifikasi"
+  "contactStatusUnverified": "Belum diverifikasi",
+  "onboardingModeCreate": "Create identity",
+  "onboardingModeRestore": "Restore identity",
+  "confirmSeventhWordHint": "Confirm seventh word"
 }

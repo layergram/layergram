@@ -216,5 +216,8 @@
   "chatUnverifiedBannerBody": "Dieser Kontakt wurde noch nicht verifiziert. Sie können weiterhin Nachrichten austauschen, aber die Echtheit seines Schlüssels ist nicht bestätigt.",
   "chatUnverifiedBannerCta": "Jetzt verifizieren",
   "contactStatusVerified": "Verifiziert",
-  "contactStatusUnverified": "Nicht verifiziert"
+  "contactStatusUnverified": "Nicht verifiziert",
+  "onboardingModeCreate": "Create identity",
+  "onboardingModeRestore": "Restore identity",
+  "confirmSeventhWordHint": "Confirm seventh word"
 }

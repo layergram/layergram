@@ -216,5 +216,8 @@
   "chatUnverifiedBannerBody": "اس رابطے کی ابھی تصدیق نہیں ہوئی۔ آپ پیغامات کا تبادلہ جاری رکھ سکتے ہیں، لیکن اس کی کلید کی اصلی حیثیت کی تصدیق نہیں ہوئی۔",
   "chatUnverifiedBannerCta": "ابھی تصدیق کریں",
   "contactStatusVerified": "تصدیق شدہ",
-  "contactStatusUnverified": "غیر تصدیق شدہ"
+  "contactStatusUnverified": "غیر تصدیق شدہ",
+  "onboardingModeCreate": "Create identity",
+  "onboardingModeRestore": "Restore identity",
+  "confirmSeventhWordHint": "Confirm seventh word"
 }

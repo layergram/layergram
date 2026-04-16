@@ -216,5 +216,8 @@
   "chatUnverifiedBannerBody": "Bu kişi henüz doğrulanmadı. Mesaj alışverişine devam edebilirsiniz, ancak anahtarının gerçekliği onaylanmadı.",
   "chatUnverifiedBannerCta": "Şimdi doğrula",
   "contactStatusVerified": "Doğrulandı",
-  "contactStatusUnverified": "Doğrulanmadı"
+  "contactStatusUnverified": "Doğrulanmadı",
+  "onboardingModeCreate": "Create identity",
+  "onboardingModeRestore": "Restore identity",
+  "confirmSeventhWordHint": "Confirm seventh word"
 }

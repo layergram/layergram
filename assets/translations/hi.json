@@ -216,5 +216,8 @@
   "chatUnverifiedBannerBody": "यह संपर्क अभी तक सत्यापित नहीं हुआ है। आप संदेशों का आदान-प्रदान कर सकते हैं, लेकिन इसकी कुंजी की प्रामाणिकता की पुष्टि नहीं हुई है।",
   "chatUnverifiedBannerCta": "अभी सत्यापित करें",
   "contactStatusVerified": "सत्यापित",
-  "contactStatusUnverified": "असत्यापित"
+  "contactStatusUnverified": "असत्यापित",
+  "onboardingModeCreate": "Create identity",
+  "onboardingModeRestore": "Restore identity",
+  "confirmSeventhWordHint": "Confirm seventh word"
 }

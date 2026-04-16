@@ -216,5 +216,8 @@
   "chatUnverifiedBannerBody": "Hindi pa na-verify ang contact na ito. Maaari pa ring magpalitan ng mga mensahe, ngunit hindi pa nakumpirma ang pagiging tunay ng susi.",
   "chatUnverifiedBannerCta": "I-verify ngayon",
   "contactStatusVerified": "Na-verify",
-  "contactStatusUnverified": "Hindi na-verify"
+  "contactStatusUnverified": "Hindi na-verify",
+  "onboardingModeCreate": "Create identity",
+  "onboardingModeRestore": "Restore identity",
+  "confirmSeventhWordHint": "Confirm seventh word"
 }

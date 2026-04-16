@@ -216,5 +216,8 @@
   "chatUnverifiedBannerBody": "Tätä yhteystietoa ei ole vielä vahvistettu. Voit silti vaihtaa viestejä, mutta avaimen aitoutta ei ole varmistettu.",
   "chatUnverifiedBannerCta": "Vahvista nyt",
   "contactStatusVerified": "Vahvistettu",
-  "contactStatusUnverified": "Vahvistamaton"
+  "contactStatusUnverified": "Vahvistamaton",
+  "onboardingModeCreate": "Create identity",
+  "onboardingModeRestore": "Restore identity",
+  "confirmSeventhWordHint": "Confirm seventh word"
 }

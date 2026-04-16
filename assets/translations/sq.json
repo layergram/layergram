@@ -216,5 +216,8 @@
   "chatUnverifiedBannerBody": "Ky kontakt ende nuk është verifikuar. Mund të shkëmbesh mesazhe, por origjinaliteti i çelësit nuk është konfirmuar.",
   "chatUnverifiedBannerCta": "Verifiko tani",
   "contactStatusVerified": "I verifikuar",
-  "contactStatusUnverified": "I paverifikuar"
+  "contactStatusUnverified": "I paverifikuar",
+  "onboardingModeCreate": "Create identity",
+  "onboardingModeRestore": "Restore identity",
+  "confirmSeventhWordHint": "Confirm seventh word"
 }

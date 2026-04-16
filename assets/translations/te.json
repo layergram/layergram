@@ -216,5 +216,8 @@
   "chatUnverifiedBannerBody": "ఈ కాంటాక్ట్ ఇంకా ధృవీకరించబడలేదు. మీరు సందేశాలను మార్పిడి చేయగలరు, కానీ దాని కీ యొక్క నిజతత్వం ధృవీకరించబడలేదు.",
   "chatUnverifiedBannerCta": "ఇప్పుడే ధృవీకరించండి",
   "contactStatusVerified": "ధృవీకరించబడింది",
-  "contactStatusUnverified": "ధృవీకరించబడలేదు"
+  "contactStatusUnverified": "ధృవీకరించబడలేదు",
+  "onboardingModeCreate": "Create identity",
+  "onboardingModeRestore": "Restore identity",
+  "confirmSeventhWordHint": "Confirm seventh word"
 }

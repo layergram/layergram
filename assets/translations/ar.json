@@ -216,5 +216,8 @@
   "chatUnverifiedBannerBody": "لم يتم التحقق من جهة الاتصال هذه بعد. يمكنك تبادل الرسائل، لكن لم يتم تأكيد صحة مفتاحها.",
   "chatUnverifiedBannerCta": "تحقق الآن",
   "contactStatusVerified": "موثّق",
-  "contactStatusUnverified": "غير موثّق"
+  "contactStatusUnverified": "غير موثّق",
+  "onboardingModeCreate": "Create identity",
+  "onboardingModeRestore": "Restore identity",
+  "confirmSeventhWordHint": "Confirm seventh word"
 }

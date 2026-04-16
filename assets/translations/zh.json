@@ -216,5 +216,8 @@
   "chatUnverifiedBannerBody": "该联系人尚未被验证。你仍然可以交换消息，但其密钥的真实性尚未确认。",
   "chatUnverifiedBannerCta": "立即验证",
   "contactStatusVerified": "已验证",
-  "contactStatusUnverified": "未验证"
+  "contactStatusUnverified": "未验证",
+  "onboardingModeCreate": "Create identity",
+  "onboardingModeRestore": "Restore identity",
+  "confirmSeventhWordHint": "Confirm seventh word"
 }

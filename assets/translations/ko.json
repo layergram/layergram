@@ -216,5 +216,8 @@
   "chatUnverifiedBannerBody": "이 연락처는 아직 확인되지 않았습니다. 메시지를 주고받을 수 있지만, 키의 진위는 확인되지 않았습니다.",
   "chatUnverifiedBannerCta": "지금 확인",
   "contactStatusVerified": "확인됨",
-  "contactStatusUnverified": "미확인"
+  "contactStatusUnverified": "미확인",
+  "onboardingModeCreate": "Create identity",
+  "onboardingModeRestore": "Restore identity",
+  "confirmSeventhWordHint": "Confirm seventh word"
 }
