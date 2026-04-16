@@ -199,5 +199,22 @@
   "touchComposerDeleteAfterReadOff": "Fshirja pas leximit u çaktivizua",
   "wordMismatchRetry": "Fjal është gabim. Dëshironi të provoni përsëri?",
   "retry": "Provo përsëri",
-  "cancel": "Anulo"
+  "verifyContactTitle": "Verifiko kontaktin",
+  "verifyContactCtaVerifyNow": "Verifiko tani",
+  "verifyContactCtaRevokeVerification": "Anulo verifikimin",
+  "verifyContactCeremonyIntro": "Krahaso këto kode me {name} në një telefonatë me zë ose personalisht. Nëse të dy shihni të njëjtat vlera, kontakti është autentik.",
+  "verifyContactDigitsLabel": "Shifra",
+  "verifyContactEmojiLabel": "Emoji",
+  "verifyContactMatch": "Përputhen",
+  "verifyContactDoNotMatch": "Nuk përputhen",
+  "verifyContactVerifiedSnackbar": "{name} tani është shënuar si i verifikuar",
+  "verifyContactMismatchTitle": "Kodet nuk përputhen",
+  "verifyContactMismatchBody": "Nëse kodet nuk përputhen, çelësi që importuat mund të jetë ndryshuar gjatë shkëmbimit. Mos e verifiko këtë kontakt dhe konsidero ta fshish e ta riimportosh përmes një kanali të besueshëm.",
+  "verifyContactMismatchAcknowledge": "E kuptoj",
+  "verifyContactRevokedSnackbar": "{name} nuk është më i shënuar si i verifikuar",
+  "chatUnverifiedBannerTitle": "Kontakt i paverifikuar",
+  "chatUnverifiedBannerBody": "Ky kontakt ende nuk është verifikuar. Mund të shkëmbesh mesazhe, por origjinaliteti i çelësit nuk është konfirmuar.",
+  "chatUnverifiedBannerCta": "Verifiko tani",
+  "contactStatusVerified": "I verifikuar",
+  "contactStatusUnverified": "I paverifikuar"
 }

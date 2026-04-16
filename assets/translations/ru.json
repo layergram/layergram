@@ -199,5 +199,22 @@
   "touchComposerDeleteAfterReadOff": "Удаление после прочтения выключено",
   "wordMismatchRetry": "Слово не совпадает. Хотите попробовать еще раз?",
   "retry": "Попробовать снова",
-  "cancel": "Отмена"
+  "verifyContactTitle": "Проверка контакта",
+  "verifyContactCtaVerifyNow": "Проверить сейчас",
+  "verifyContactCtaRevokeVerification": "Отменить проверку",
+  "verifyContactCeremonyIntro": "Сравните эти коды с {name} по голосовому вызову или при личной встрече. Если вы оба видите одинаковые значения, контакт подлинный.",
+  "verifyContactDigitsLabel": "Цифры",
+  "verifyContactEmojiLabel": "Эмодзи",
+  "verifyContactMatch": "Совпадают",
+  "verifyContactDoNotMatch": "Не совпадают",
+  "verifyContactVerifiedSnackbar": "{name} теперь отмечен как проверенный",
+  "verifyContactMismatchTitle": "Коды не совпадают",
+  "verifyContactMismatchBody": "Если коды не совпадают, импортированный ключ мог быть подменён во время обмена. Не отмечайте этот контакт как проверенный и рассмотрите возможность удалить и заново импортировать его через доверенный канал.",
+  "verifyContactMismatchAcknowledge": "Понятно",
+  "verifyContactRevokedSnackbar": "{name} больше не отмечен как проверенный",
+  "chatUnverifiedBannerTitle": "Контакт не проверен",
+  "chatUnverifiedBannerBody": "Этот контакт ещё не проверен. Вы можете обмениваться сообщениями, но подлинность его ключа не подтверждена.",
+  "chatUnverifiedBannerCta": "Проверить сейчас",
+  "contactStatusVerified": "Проверен",
+  "contactStatusUnverified": "Не проверен"
 }

@@ -42,6 +42,7 @@ import 'storage/messages_repository.dart';
 import 'storage/secure_storage.dart';
 import 'utils/clipboard_service.dart';
 import 'crypto/message_record_cipher.dart';
+import '../features/contact_verification/contact_sas_service.dart';
 import '../features/identity_migration_notice/identity_migration_notice_controller.dart';
 import '../features/identity_migration_notice/identity_migration_notice_service.dart';
 
@@ -49,6 +50,7 @@ final seedServiceProvider = Provider((_) => SeedService());
 final stegoEncoderProvider = Provider((_) => StegoEncoder());
 final stegoDecoderProvider = Provider((_) => StegoDecoder());
 final encryptionServiceProvider = Provider((_) => EncryptionService());
+final contactSasServiceProvider = Provider((_) => const ContactSasService());
 final secureStorageProvider = Provider((_) => SecureStorageService());
 final localIdentityVaultProvider = Provider((ref) {
   return LocalIdentityVault(secureStorage: ref.watch(secureStorageProvider));

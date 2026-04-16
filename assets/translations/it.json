@@ -199,5 +199,22 @@
   "touchComposerDeleteAfterReadOff": "Cancellazione dopo la lettura disattivata",
   "wordMismatchRetry": "Parola errata. Vuoi riprovare?",
   "retry": "Riprova",
-  "cancel": "Annulla"
+  "verifyContactTitle": "Verifica contatto",
+  "verifyContactCtaVerifyNow": "Verifica ora",
+  "verifyContactCtaRevokeVerification": "Revoca verifica",
+  "verifyContactCeremonyIntro": "Confronta questi codici con {name} in una chiamata vocale o di persona. Se entrambi vedete gli stessi valori, il contatto è autentico.",
+  "verifyContactDigitsLabel": "Cifre",
+  "verifyContactEmojiLabel": "Emoji",
+  "verifyContactMatch": "Corrispondono",
+  "verifyContactDoNotMatch": "Non corrispondono",
+  "verifyContactVerifiedSnackbar": "{name} è ora contrassegnato come verificato",
+  "verifyContactMismatchTitle": "I codici non corrispondono",
+  "verifyContactMismatchBody": "Se i codici non corrispondono, la chiave che hai importato potrebbe essere stata manomessa durante lo scambio. Non verificare questo contatto e valuta di eliminarlo e reimportarlo tramite un canale fidato.",
+  "verifyContactMismatchAcknowledge": "Ho capito",
+  "verifyContactRevokedSnackbar": "{name} non è più contrassegnato come verificato",
+  "chatUnverifiedBannerTitle": "Contatto non verificato",
+  "chatUnverifiedBannerBody": "Questo contatto non è ancora stato verificato. Puoi comunque scambiare messaggi, ma l'autenticità della sua chiave non è stata confermata.",
+  "chatUnverifiedBannerCta": "Verifica ora",
+  "contactStatusVerified": "Verificato",
+  "contactStatusUnverified": "Non verificato"
 }

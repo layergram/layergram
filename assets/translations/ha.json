@@ -199,5 +199,22 @@
   "touchComposerDeleteAfterReadOff": "An kashe gogewa bayan karantawa",
   "wordMismatchRetry": "Bambanci ba kalubale. Kuna son sake yunko?",
   "retry": "Yunko",
-  "cancel": "Soke"
+  "verifyContactTitle": "Tabbatar da lamba",
+  "verifyContactCtaVerifyNow": "Tabbatar yanzu",
+  "verifyContactCtaRevokeVerification": "Soke tabbatarwa",
+  "verifyContactCeremonyIntro": "Kwatanta waɗannan lambobin tare da {name} ta hanyar kiran murya ko fuska da fuska. Idan dukkanku kuna ganin ƙimar ɗaya, lambar ta gaskiya ce.",
+  "verifyContactDigitsLabel": "Lambobi",
+  "verifyContactEmojiLabel": "Emoji",
+  "verifyContactMatch": "Sun yi daidai",
+  "verifyContactDoNotMatch": "Ba su yi daidai ba",
+  "verifyContactVerifiedSnackbar": "{name} yanzu an yi masa alama a matsayin tabbatacce",
+  "verifyContactMismatchTitle": "Lambobin ba su yi daidai ba",
+  "verifyContactMismatchBody": "Idan lambobin ba su yi daidai ba, mabuɗin da ka shigo da shi watakila an gyara shi yayin musayar. Kada ka tabbatar da wannan lambar kuma ka yi la'akari da goge ta da shigowa da ita ta hanyar amintaccen tashar.",
+  "verifyContactMismatchAcknowledge": "Na fahimta",
+  "verifyContactRevokedSnackbar": "{name} ba a sake yi masa alama a matsayin tabbatacce ba",
+  "chatUnverifiedBannerTitle": "Lambar ba a tabbatar ba",
+  "chatUnverifiedBannerBody": "Wannan lambar har yanzu ba a tabbatar da ita ba. Har yanzu kana iya musayar saƙonni, amma ba a tabbatar da sahihancin mabuɗin ba.",
+  "chatUnverifiedBannerCta": "Tabbatar yanzu",
+  "contactStatusVerified": "An tabbatar",
+  "contactStatusUnverified": "Ba a tabbatar ba"
 }

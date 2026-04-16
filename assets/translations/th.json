@@ -199,5 +199,22 @@
   "touchComposerDeleteAfterReadOff": "ปิดการลบหลังอ่านแล้ว",
   "wordMismatchRetry": "คำไม่ตรงกัน คุณต้องการลองใหม่หรือไม่?",
   "retry": "ลองใหม่",
-  "cancel": "ยกเลิก"
+  "verifyContactTitle": "ยืนยันผู้ติดต่อ",
+  "verifyContactCtaVerifyNow": "ยืนยันตอนนี้",
+  "verifyContactCtaRevokeVerification": "ยกเลิกการยืนยัน",
+  "verifyContactCeremonyIntro": "เปรียบเทียบรหัสเหล่านี้กับ {name} ทางสายสนทนาหรือด้วยตนเอง หากทั้งสองฝ่ายเห็นค่าตรงกัน แสดงว่าผู้ติดต่อเป็นของจริง",
+  "verifyContactDigitsLabel": "ตัวเลข",
+  "verifyContactEmojiLabel": "อีโมจิ",
+  "verifyContactMatch": "ตรงกัน",
+  "verifyContactDoNotMatch": "ไม่ตรงกัน",
+  "verifyContactVerifiedSnackbar": "{name} ถูกทำเครื่องหมายเป็นยืนยันแล้ว",
+  "verifyContactMismatchTitle": "รหัสไม่ตรงกัน",
+  "verifyContactMismatchBody": "หากรหัสไม่ตรงกัน คีย์ที่คุณนำเข้าอาจถูกแก้ไขระหว่างการแลกเปลี่ยน อย่ายืนยันผู้ติดต่อนี้ และพิจารณาลบแล้วนำเข้าใหม่ผ่านช่องทางที่ไว้ใจได้",
+  "verifyContactMismatchAcknowledge": "เข้าใจแล้ว",
+  "verifyContactRevokedSnackbar": "{name} ไม่ได้ถูกทำเครื่องหมายว่ายืนยันแล้ว",
+  "chatUnverifiedBannerTitle": "ผู้ติดต่อยังไม่ยืนยัน",
+  "chatUnverifiedBannerBody": "ผู้ติดต่อนี้ยังไม่ได้รับการยืนยัน คุณยังสามารถส่งข้อความได้ แต่ยังไม่มีการยืนยันความแท้ของคีย์",
+  "chatUnverifiedBannerCta": "ยืนยันตอนนี้",
+  "contactStatusVerified": "ยืนยันแล้ว",
+  "contactStatusUnverified": "ยังไม่ยืนยัน"
 }

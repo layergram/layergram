@@ -199,5 +199,22 @@
   "touchComposerDeleteAfterReadOff": "Padam selepas dibaca dinyahaktifkan",
   "wordMismatchRetry": "Kata tidak sepadan. Adakah anda mahu cuba lagi?",
   "retry": "Cuba Lagi",
-  "cancel": "Batal"
+  "verifyContactTitle": "Sahkan kenalan",
+  "verifyContactCtaVerifyNow": "Sahkan sekarang",
+  "verifyContactCtaRevokeVerification": "Batal pengesahan",
+  "verifyContactCeremonyIntro": "Bandingkan kod ini dengan {name} melalui panggilan suara atau secara bersemuka. Jika anda berdua melihat nilai yang sama, kenalan itu adalah sah.",
+  "verifyContactDigitsLabel": "Digit",
+  "verifyContactEmojiLabel": "Emoji",
+  "verifyContactMatch": "Sepadan",
+  "verifyContactDoNotMatch": "Tidak sepadan",
+  "verifyContactVerifiedSnackbar": "{name} kini ditandai sebagai disahkan",
+  "verifyContactMismatchTitle": "Kod tidak sepadan",
+  "verifyContactMismatchBody": "Jika kod tidak sepadan, kunci yang anda import mungkin telah diubah semasa pertukaran. Jangan sahkan kenalan ini dan pertimbangkan untuk memadamnya serta mengimport semula melalui saluran yang dipercayai.",
+  "verifyContactMismatchAcknowledge": "Faham",
+  "verifyContactRevokedSnackbar": "{name} tidak lagi ditandai sebagai disahkan",
+  "chatUnverifiedBannerTitle": "Kenalan belum disahkan",
+  "chatUnverifiedBannerBody": "Kenalan ini belum disahkan. Anda masih boleh bertukar mesej, tetapi ketulenan kuncinya belum disahkan.",
+  "chatUnverifiedBannerCta": "Sahkan sekarang",
+  "contactStatusVerified": "Disahkan",
+  "contactStatusUnverified": "Belum disahkan"
 }

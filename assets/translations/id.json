@@ -199,5 +199,22 @@
   "touchComposerDeleteAfterReadOff": "Hapus setelah dibaca nonaktif",
   "wordMismatchRetry": "Kata tidak cocok. Ingin mencoba lagi?",
   "retry": "Coba Lagi",
-  "cancel": "Batal"
+  "verifyContactTitle": "Verifikasi kontak",
+  "verifyContactCtaVerifyNow": "Verifikasi sekarang",
+  "verifyContactCtaRevokeVerification": "Cabut verifikasi",
+  "verifyContactCeremonyIntro": "Bandingkan kode ini dengan {name} melalui panggilan suara atau secara langsung. Jika kalian berdua melihat nilai yang sama, kontak ini asli.",
+  "verifyContactDigitsLabel": "Angka",
+  "verifyContactEmojiLabel": "Emoji",
+  "verifyContactMatch": "Cocok",
+  "verifyContactDoNotMatch": "Tidak cocok",
+  "verifyContactVerifiedSnackbar": "{name} sekarang ditandai terverifikasi",
+  "verifyContactMismatchTitle": "Kode tidak cocok",
+  "verifyContactMismatchBody": "Jika kode tidak cocok, kunci yang Anda impor mungkin telah diubah saat pertukaran. Jangan verifikasi kontak ini dan pertimbangkan untuk menghapusnya lalu mengimpornya kembali melalui saluran tepercaya.",
+  "verifyContactMismatchAcknowledge": "Mengerti",
+  "verifyContactRevokedSnackbar": "{name} tidak lagi ditandai terverifikasi",
+  "chatUnverifiedBannerTitle": "Kontak belum diverifikasi",
+  "chatUnverifiedBannerBody": "Kontak ini belum diverifikasi. Anda masih dapat bertukar pesan, tetapi keaslian kuncinya belum dikonfirmasi.",
+  "chatUnverifiedBannerCta": "Verifikasi sekarang",
+  "contactStatusVerified": "Terverifikasi",
+  "contactStatusUnverified": "Belum diverifikasi"
 }

@@ -199,5 +199,22 @@
   "touchComposerDeleteAfterReadOff": "ਪੜ੍ਹਨ ਤੋਂ ਬਾਅਦ ਮਿਟਾਉਣਾ ਬੰਦ ਕੀਤਾ ਗਿਆ",
   "wordMismatchRetry": "ਸ਼ਬਦ ਮੇਲ ਨਹੀਂ ਖਾਂਦਾ। ਕੀ ਤੁਸੀਂ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰਨਾ ਚਾਹੁੰਦੇ ਹੋ?",
   "retry": "ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ",
-  "cancel": "ਰੱਦ ਕਰੋ"
+  "verifyContactTitle": "ਸੰਪਰਕ ਦੀ ਪੁਸ਼ਟੀ ਕਰੋ",
+  "verifyContactCtaVerifyNow": "ਹੁਣੇ ਪੁਸ਼ਟੀ ਕਰੋ",
+  "verifyContactCtaRevokeVerification": "ਪੁਸ਼ਟੀ ਰੱਦ ਕਰੋ",
+  "verifyContactCeremonyIntro": "ਵੌਇਸ ਕਾਲ 'ਤੇ ਜਾਂ ਰੂ-ਬ-ਰੂ {name} ਨਾਲ ਇਹ ਕੋਡਾਂ ਦੀ ਤੁਲਨਾ ਕਰੋ। ਜੇ ਤੁਸੀਂ ਦੋਵੇਂ ਇੱਕੋ ਮੁੱਲ ਦੇਖਦੇ ਹੋ ਤਾਂ ਸੰਪਰਕ ਅਸਲੀ ਹੈ।",
+  "verifyContactDigitsLabel": "ਅੰਕ",
+  "verifyContactEmojiLabel": "ਇਮੋਜੀ",
+  "verifyContactMatch": "ਮੇਲ ਖਾਂਦੇ ਹਨ",
+  "verifyContactDoNotMatch": "ਮੇਲ ਨਹੀਂ ਖਾਂਦੇ",
+  "verifyContactVerifiedSnackbar": "{name} ਹੁਣ ਪੁਸ਼ਟੀ-ਸ਼ੁਦਾ ਵਜੋਂ ਮਾਰਕ ਹੈ",
+  "verifyContactMismatchTitle": "ਕੋਡ ਮੇਲ ਨਹੀਂ ਖਾਂਦੇ",
+  "verifyContactMismatchBody": "ਜੇ ਕੋਡ ਮੇਲ ਨਾ ਖਾਣ ਤਾਂ ਤੁਹਾਡੀ ਦਰਾਮਦ ਕੀਤੀ ਕੁੰਜੀ ਨੂੰ ਬਦਲੀ ਬਦਲੀ ਦੌਰਾਨ ਬਦਲ ਦਿੱਤਾ ਗਿਆ ਹੋ ਸਕਦਾ ਹੈ। ਇਸ ਸੰਪਰਕ ਦੀ ਪੁਸ਼ਟੀ ਨਾ ਕਰੋ ਅਤੇ ਇਸਨੂੰ ਹਟਾ ਕੇ ਭਰੋਸੇਯੋਗ ਚੈਨਲ ਰਾਹੀਂ ਦੁਬਾਰਾ ਦਰਾਮਦ ਕਰਨ ਬਾਰੇ ਸੋਚੋ।",
+  "verifyContactMismatchAcknowledge": "ਸਮਝ ਗਿਆ",
+  "verifyContactRevokedSnackbar": "{name} ਹੁਣ ਪੁਸ਼ਟੀ-ਸ਼ੁਦਾ ਵਜੋਂ ਮਾਰਕ ਨਹੀਂ ਹੈ",
+  "chatUnverifiedBannerTitle": "ਸੰਪਰਕ ਦੀ ਪੁਸ਼ਟੀ ਨਹੀਂ ਹੈ",
+  "chatUnverifiedBannerBody": "ਇਸ ਸੰਪਰਕ ਦੀ ਹਾਲੇ ਪੁਸ਼ਟੀ ਨਹੀਂ ਹੋਈ। ਤੁਸੀਂ ਸੁਨੇਹਿਆਂ ਦਾ ਆਦਾਨ-ਪ੍ਰਦਾਨ ਕਰ ਸਕਦੇ ਹੋ, ਪਰ ਕੁੰਜੀ ਦੀ ਅਸਲੀਅਤ ਪੱਕੀ ਨਹੀਂ ਹੋਈ।",
+  "chatUnverifiedBannerCta": "ਹੁਣੇ ਪੁਸ਼ਟੀ ਕਰੋ",
+  "contactStatusVerified": "ਪੁਸ਼ਟੀ-ਸ਼ੁਦਾ",
+  "contactStatusUnverified": "ਅ-ਪੁਸ਼ਟੀ"
 }

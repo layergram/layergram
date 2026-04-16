@@ -199,5 +199,22 @@
   "touchComposerDeleteAfterReadOff": "Verwijderen na lezen uitgeschakeld",
   "wordMismatchRetry": "Woord komt niet overeen. Wilt u het opnieuw proberen?",
   "retry": "Opnieuw proberen",
-  "cancel": "Annuleren"
+  "verifyContactTitle": "Contact verifiëren",
+  "verifyContactCtaVerifyNow": "Nu verifiëren",
+  "verifyContactCtaRevokeVerification": "Verificatie intrekken",
+  "verifyContactCeremonyIntro": "Vergelijk deze codes met {name} via een spraakoproep of in persoon. Als jullie beiden dezelfde waarden zien, is het contact authentiek.",
+  "verifyContactDigitsLabel": "Cijfers",
+  "verifyContactEmojiLabel": "Emoji",
+  "verifyContactMatch": "Ze komen overeen",
+  "verifyContactDoNotMatch": "Ze komen niet overeen",
+  "verifyContactVerifiedSnackbar": "{name} is nu gemarkeerd als geverifieerd",
+  "verifyContactMismatchTitle": "Codes komen niet overeen",
+  "verifyContactMismatchBody": "Als de codes niet overeenkomen, is de geïmporteerde sleutel mogelijk gemanipuleerd tijdens de uitwisseling. Verifieer dit contact niet en overweeg om het te verwijderen en opnieuw te importeren via een vertrouwd kanaal.",
+  "verifyContactMismatchAcknowledge": "Begrepen",
+  "verifyContactRevokedSnackbar": "{name} is niet langer gemarkeerd als geverifieerd",
+  "chatUnverifiedBannerTitle": "Contact niet geverifieerd",
+  "chatUnverifiedBannerBody": "Dit contact is nog niet geverifieerd. Je kunt nog steeds berichten uitwisselen, maar de authenticiteit van de sleutel is niet bevestigd.",
+  "chatUnverifiedBannerCta": "Nu verifiëren",
+  "contactStatusVerified": "Geverifieerd",
+  "contactStatusUnverified": "Niet geverifieerd"
 }

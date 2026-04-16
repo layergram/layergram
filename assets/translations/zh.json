@@ -199,5 +199,22 @@
   "touchComposerDeleteAfterReadOff": "已停用讀取後刪除",
   "wordMismatchRetry": "單詞不匹配。您想再試一次嗎？",
   "retry": "重試",
-  "cancel": "取消"
+  "verifyContactTitle": "验证联系人",
+  "verifyContactCtaVerifyNow": "立即验证",
+  "verifyContactCtaRevokeVerification": "撤销验证",
+  "verifyContactCeremonyIntro": "通过语音通话或当面与 {name} 核对这些代码。如果双方看到的值一致，该联系人就是真实的。",
+  "verifyContactDigitsLabel": "数字",
+  "verifyContactEmojiLabel": "表情",
+  "verifyContactMatch": "一致",
+  "verifyContactDoNotMatch": "不一致",
+  "verifyContactVerifiedSnackbar": "{name} 已标记为已验证",
+  "verifyContactMismatchTitle": "代码不一致",
+  "verifyContactMismatchBody": "如果代码不一致，你导入的密钥可能在交换过程中被篡改。请不要验证该联系人，并考虑通过可信渠道删除并重新导入。",
+  "verifyContactMismatchAcknowledge": "明白了",
+  "verifyContactRevokedSnackbar": "{name} 已取消已验证标记",
+  "chatUnverifiedBannerTitle": "联系人未验证",
+  "chatUnverifiedBannerBody": "该联系人尚未被验证。你仍然可以交换消息，但其密钥的真实性尚未确认。",
+  "chatUnverifiedBannerCta": "立即验证",
+  "contactStatusVerified": "已验证",
+  "contactStatusUnverified": "未验证"
 }

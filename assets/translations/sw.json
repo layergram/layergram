@@ -199,5 +199,22 @@
   "touchComposerDeleteAfterReadOff": "Futa baada ya kusoma imezimwa",
   "wordMismatchRetry": "Neno halisi. Unataka kujaribu tena?",
   "retry": "Jaribu tena",
-  "cancel": "Ghairi"
+  "verifyContactTitle": "Thibitisha mawasiliano",
+  "verifyContactCtaVerifyNow": "Thibitisha sasa",
+  "verifyContactCtaRevokeVerification": "Ondoa uthibitisho",
+  "verifyContactCeremonyIntro": "Linganisha misimbo hii na {name} kwa simu ya sauti au ana kwa ana. Ikiwa nyote wawili mnaona maadili sawa, mawasiliano ni halisi.",
+  "verifyContactDigitsLabel": "Nambari",
+  "verifyContactEmojiLabel": "Emoji",
+  "verifyContactMatch": "Zinalingana",
+  "verifyContactDoNotMatch": "Hazilingani",
+  "verifyContactVerifiedSnackbar": "{name} sasa ameteuliwa kama aliyethibitishwa",
+  "verifyContactMismatchTitle": "Misimbo haililingani",
+  "verifyContactMismatchBody": "Ikiwa misimbo hailingani, ufunguo uliouleta huenda ulibadilishwa wakati wa kubadilishana. Usithibitishe mawasiliano haya na fikiria kuiondoa na kuileta tena kupitia njia ya kuaminika.",
+  "verifyContactMismatchAcknowledge": "Nimeelewa",
+  "verifyContactRevokedSnackbar": "{name} hajateuliwa tena kama aliyethibitishwa",
+  "chatUnverifiedBannerTitle": "Mawasiliano hayajathibitishwa",
+  "chatUnverifiedBannerBody": "Mawasiliano haya bado hayajathibitishwa. Bado unaweza kubadilishana ujumbe, lakini uhalisia wa ufunguo haujathibitishwa.",
+  "chatUnverifiedBannerCta": "Thibitisha sasa",
+  "contactStatusVerified": "Imethibitishwa",
+  "contactStatusUnverified": "Haijathibitishwa"
 }

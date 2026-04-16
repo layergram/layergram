@@ -199,5 +199,22 @@
   "touchComposerDeleteAfterReadOff": "Poista lukemisen jälkeen pois käytöstä",
   "wordMismatchRetry": "Sana ei täsmää. Haluatko yrittää uudelleen?",
   "retry": "Yritä uudelleen",
-  "cancel": "Peruuta"
+  "verifyContactTitle": "Vahvista yhteystieto",
+  "verifyContactCtaVerifyNow": "Vahvista nyt",
+  "verifyContactCtaRevokeVerification": "Peruuta vahvistus",
+  "verifyContactCeremonyIntro": "Vertaa näitä koodeja henkilön {name} kanssa puhelussa tai kasvotusten. Jos molemmat näette samat arvot, yhteystieto on aito.",
+  "verifyContactDigitsLabel": "Numerot",
+  "verifyContactEmojiLabel": "Emoji",
+  "verifyContactMatch": "Täsmäävät",
+  "verifyContactDoNotMatch": "Eivät täsmää",
+  "verifyContactVerifiedSnackbar": "{name} on nyt merkitty vahvistetuksi",
+  "verifyContactMismatchTitle": "Koodit eivät täsmää",
+  "verifyContactMismatchBody": "Jos koodit eivät täsmää, tuotua avainta on saatettu muuttaa vaihdon aikana. Älä vahvista tätä yhteystietoa ja harkitse sen poistamista ja tuomista uudelleen luotettua kanavaa pitkin.",
+  "verifyContactMismatchAcknowledge": "Selvä",
+  "verifyContactRevokedSnackbar": "{name} ei ole enää merkitty vahvistetuksi",
+  "chatUnverifiedBannerTitle": "Yhteystietoa ei ole vahvistettu",
+  "chatUnverifiedBannerBody": "Tätä yhteystietoa ei ole vielä vahvistettu. Voit silti vaihtaa viestejä, mutta avaimen aitoutta ei ole varmistettu.",
+  "chatUnverifiedBannerCta": "Vahvista nyt",
+  "contactStatusVerified": "Vahvistettu",
+  "contactStatusUnverified": "Vahvistamaton"
 }

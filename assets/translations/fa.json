@@ -199,5 +199,22 @@
   "touchComposerDeleteAfterReadOff": "حذف پس از خواندن غیرفعال شد",
   "wordMismatchRetry": "کلمه اشتباه است. آیا می‌خواهید دوباره تلاش کنید؟",
   "retry": "تلاش مجدد",
-  "cancel": "لغو"
+  "verifyContactTitle": "تأیید مخاطب",
+  "verifyContactCtaVerifyNow": "اکنون تأیید کنید",
+  "verifyContactCtaRevokeVerification": "لغو تأیید",
+  "verifyContactCeremonyIntro": "این کدها را با {name} در یک تماس صوتی یا حضوری مقایسه کنید. اگر هر دو مقادیر یکسانی می‌بینید، مخاطب اصل است.",
+  "verifyContactDigitsLabel": "اعداد",
+  "verifyContactEmojiLabel": "ایموجی",
+  "verifyContactMatch": "مطابقت دارند",
+  "verifyContactDoNotMatch": "مطابقت ندارند",
+  "verifyContactVerifiedSnackbar": "{name} اکنون به عنوان تأیید‌شده علامت‌گذاری شد",
+  "verifyContactMismatchTitle": "کدها مطابقت ندارند",
+  "verifyContactMismatchBody": "اگر کدها مطابقت ندارند، ممکن است کلید واردشده در حین تبادل دستکاری شده باشد. این مخاطب را تأیید نکنید و در نظر بگیرید که آن را حذف کرده و از طریق یک کانال معتبر دوباره وارد کنید.",
+  "verifyContactMismatchAcknowledge": "متوجه شدم",
+  "verifyContactRevokedSnackbar": "{name} دیگر به عنوان تأیید‌شده علامت‌گذاری نشده",
+  "chatUnverifiedBannerTitle": "مخاطب تأیید نشده",
+  "chatUnverifiedBannerBody": "این مخاطب هنوز تأیید نشده است. می‌توانید پیام رد و بدل کنید، اما اصالت کلید آن تأیید نشده.",
+  "chatUnverifiedBannerCta": "اکنون تأیید کنید",
+  "contactStatusVerified": "تأیید‌شده",
+  "contactStatusUnverified": "تأیید‌نشده"
 }

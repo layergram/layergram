@@ -85,7 +85,24 @@ class IdentitiesController {
     await ref.read(identitiesRepositoryProvider).upsertRemoteIdentity(identity);
   }
 
-  Future<void> setVerified(RemoteIdentity identity, bool verified) {
+  /// Mark a contact as verified.
+  ///
+  /// This API is intentionally named after the user-visible ceremony and
+  /// must only be called after a successful SAS comparison. The repository
+  /// path is kept private so the UI cannot flip `verified = true` without
+  /// going through the verification flow.
+  Future<void> markContactVerified(RemoteIdentity identity) {
+    return _writeVerified(identity, true);
+  }
+
+  /// Revoke an existing verification so the contact goes back to the
+  /// default unverified state. Used by the "Revoke verification" action
+  /// when the user no longer trusts a previously verified key.
+  Future<void> revokeContactVerification(RemoteIdentity identity) {
+    return _writeVerified(identity, false);
+  }
+
+  Future<void> _writeVerified(RemoteIdentity identity, bool verified) {
     return ref
         .read(identitiesRepositoryProvider)
         .upsertRemoteIdentity(identity.copyWith(verified: verified));

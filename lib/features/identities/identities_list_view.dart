@@ -19,6 +19,7 @@ import '../../core/crypto/models.dart';
 import '../../core/providers.dart';
 import '../../l10n/app_strings.dart';
 import '../../ui/passphrase_button.dart';
+import '../contact_verification/contact_verification_view.dart';
 import 'add_identity_view.dart';
 import 'identities_controller.dart';
 import 'identity_detail_view.dart';
@@ -81,6 +82,38 @@ class _IdentitiesListViewState extends ConsumerState<IdentitiesListView> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(AppStrings.t(context, 'contactNameSaved'))),
     );
+  }
+
+  Future<void> _handleVerifyAction(RemoteIdentity target) async {
+    if (target.verified) {
+      final messenger = ScaffoldMessenger.of(context);
+      final snackText = AppStrings.t(
+        context,
+        'verifyContactRevokedSnackbar',
+        namedArgs: {'name': target.displayName},
+      );
+      await ref
+          .read(identitiesControllerProvider)
+          .revokeContactVerification(target);
+      if (!mounted) return;
+      setState(() {
+        if (_selected?.identityId == target.identityId) {
+          _selected = _selected?.copyWith(verified: false);
+        }
+      });
+      messenger.showSnackBar(SnackBar(content: Text(snackText)));
+      return;
+    }
+
+    final result = await showContactVerificationCeremony(context, ref, target);
+    if (!mounted) return;
+    if (result == true) {
+      setState(() {
+        if (_selected?.identityId == target.identityId) {
+          _selected = _selected?.copyWith(verified: true);
+        }
+      });
+    }
   }
 
   @override
@@ -248,33 +281,11 @@ class _IdentitiesListViewState extends ConsumerState<IdentitiesListView> {
                                   FilledButton.tonal(
                                     onPressed: _saving
                                         ? null
-                                        : () async {
-                                            final toggled = !selected.verified;
-                                            setState(() {
-                                              _selected = selected.copyWith(verified: toggled);
-                                            });
-                                            await ref
-                                                .read(identitiesControllerProvider)
-                                                .setVerified(selected, toggled);
-                                            if (!context.mounted) return;
-                                            final messenger = ScaffoldMessenger.of(context);
-                                            messenger.showSnackBar(
-                                              SnackBar(
-                                                content: Text(
-                                                  t(
-                                                    context,
-                                                    toggled
-                                                        ? 'contactMarkedVerified'
-                                                        : 'contactMarkedUnverified',
-                                                  ),
-                                                ),
-                                              ),
-                                            );
-                                        },
+                                        : () => _handleVerifyAction(selected),
                                     child: Text(
                                       selected.verified
-                                          ? t(context, 'markUnverified')
-                                          : t(context, 'markVerified'),
+                                          ? t(context, 'verifyContactCtaRevokeVerification')
+                                          : t(context, 'verifyContactCtaVerifyNow'),
                                     ),
                                   ),
                                 if (_myIdentityId == null ||

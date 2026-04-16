@@ -2,6 +2,8 @@
 
 Layergram is a privacy-focused application with security-sensitive code in cryptography, local storage, app lock flows, identity exchange, and steganographic message handling.
 
+For a complete description of what Layergram protects against, what is explicitly out of scope, and the assumptions the model relies on, see [`THREAT_MODEL.md`](THREAT_MODEL.md). Security reports are evaluated against that document.
+
 ## Supported Versions
 
 | Version | Supported |
