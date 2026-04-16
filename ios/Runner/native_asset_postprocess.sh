@@ -60,7 +60,7 @@ if command -v xcrun >/dev/null 2>&1; then
     build_info="$(xcrun vtool -show-build -arch "$primary_arch" "$binary_path" 2>/dev/null || true)"
   fi
   binary_minos="$(printf '%s\n' "$build_info" | awk '/minos / {print $2; exit}')"
-  expected_platform_marker="platform ${expected_platform^^}"
+  expected_platform_marker="platform IOS"
   if [[ "$expected_platform" == "iossim" ]]; then
     expected_platform_marker="platform IOSSIMULATOR"
   fi
