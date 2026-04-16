@@ -16,16 +16,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../l10n/app_strings.dart';
 
-class ChangePinDialog {
-  const ChangePinDialog({required this.currentPin});
+typedef PinValidator = Future<bool> Function(String pin);
 
-  final String currentPin;
+class ChangePinDialog {
+  const ChangePinDialog({required this.validateCurrentPin});
+
+  final PinValidator validateCurrentPin;
 
   Future<String?> show(BuildContext context) async {
-    return _changePinDialog(context, currentPin);
+    return _changePinDialog(context, validateCurrentPin);
   }
 
-  Future<String?> _changePinDialog(BuildContext context, String currentPin) async {
+  Future<String?> _changePinDialog(
+    BuildContext context,
+    PinValidator validateCurrentPin,
+  ) async {
     final t = AppStrings.t;
     // Step 1: Verify current PIN
     final currentPinController = TextEditingController();
@@ -34,14 +39,18 @@ class ChangePinDialog {
       context: context,
       barrierDismissible: false,
       builder: (context) {
-        void submitStep1() {
-          if (currentPinController.text == currentPin) {
-            Navigator.of(context).pop(true);
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(t(context, 'pinMismatch'))),
-            );
+        Future<void> submitStep1() async {
+          final isValid = await validateCurrentPin(currentPinController.text);
+          if (!context.mounted) {
+            return;
           }
+          if (isValid) {
+            Navigator.of(context).pop(true);
+            return;
+          }
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(t(context, 'pinMismatch'))),
+          );
         }
 
         return CallbackShortcuts(

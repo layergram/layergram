@@ -38,8 +38,8 @@ class AppLockSettings extends ConsumerWidget {
     }
 
     Future<bool> ensurePinConfigured() async {
-      final existingPin = await lockService.getPin();
-      if (existingPin != null && existingPin.isNotEmpty) {
+      final hasPin = await lockService.hasPin();
+      if (hasPin) {
         return true;
       }
       final pin = await promptForPin();
@@ -197,11 +197,13 @@ class AppLockSettings extends ConsumerWidget {
             leading: const Icon(Icons.password_outlined),
             title: Text(t(context, 'changePin')),
             onTap: () async {
-              final currentPin = await lockService.getPin();
-              if (currentPin == null || currentPin.isEmpty) return;
+              final hasPin = await lockService.hasPin();
+              if (!hasPin) return;
               
               if (!context.mounted) return;
-              final newPin = await ChangePinDialog(currentPin: currentPin).show(context);
+              final newPin = await ChangePinDialog(
+                validateCurrentPin: lockService.validatePin,
+              ).show(context);
               if (newPin != null && newPin.isNotEmpty) {
                 await lockService.setPin(newPin);
                 if (context.mounted) {
