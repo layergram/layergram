@@ -1,7 +1,21 @@
 #!/bin/bash
 set -euo pipefail
 
-if [[ "${PLATFORM_NAME:-}" != "iphoneos" ]]; then
+platform_name="${PLATFORM_NAME:-}"
+expected_platform=""
+
+case "$platform_name" in
+  iphoneos)
+    expected_platform="ios"
+    ;;
+  iphonesimulator)
+    expected_platform="iossim"
+    ;;
+  *)
+    ;;
+esac
+
+if [[ -z "$expected_platform" ]]; then
   exit 0
 fi
 
@@ -15,10 +29,23 @@ fi
 
 needs_resign=false
 binary_minos=""
+primary_arch="${ARCHS%% *}"
+
+if [[ -z "$primary_arch" ]]; then
+  if [[ "$platform_name" == "iphonesimulator" ]]; then
+    primary_arch="arm64"
+  else
+    primary_arch="arm64"
+  fi
+fi
 
 if command -v lipo >/dev/null 2>&1; then
   arch_info="$(lipo -info "$binary_path" 2>/dev/null || true)"
-  for arch in i386 x86_64 arm64e; do
+  removable_arches=(i386 arm64e)
+  if [[ "$platform_name" == "iphoneos" ]]; then
+    removable_arches+=(x86_64)
+  fi
+  for arch in "${removable_arches[@]}"; do
     if [[ "$arch_info" == *"$arch"* ]]; then
       lipo -remove "$arch" "$binary_path" -output "$binary_path"
       needs_resign=true
@@ -27,9 +54,17 @@ if command -v lipo >/dev/null 2>&1; then
 fi
 
 if command -v xcrun >/dev/null 2>&1; then
-  build_info="$(xcrun vtool -show-build -arch arm64 "$binary_path" 2>/dev/null || true)"
+  build_info="$(xcrun vtool -show-build -arch "$primary_arch" "$binary_path" 2>/dev/null || true)"
+  if [[ -z "$build_info" && "$primary_arch" != "arm64" ]]; then
+    primary_arch="arm64"
+    build_info="$(xcrun vtool -show-build -arch "$primary_arch" "$binary_path" 2>/dev/null || true)"
+  fi
   binary_minos="$(printf '%s\n' "$build_info" | awk '/minos / {print $2; exit}')"
-  if [[ "$build_info" == *"platform IOSSIMULATOR"* ]]; then
+  expected_platform_marker="platform ${expected_platform^^}"
+  if [[ "$expected_platform" == "iossim" ]]; then
+    expected_platform_marker="platform IOSSIMULATOR"
+  fi
+  if [[ "$build_info" != *"$expected_platform_marker"* ]]; then
     minos="$(printf '%s\n' "$build_info" | awk '/minos / {print $2; exit}')"
     sdk="$(printf '%s\n' "$build_info" | awk '/sdk / {print $2; exit}')"
     ld_version="$(printf '%s\n' "$build_info" | awk '$1 == "version" {print $2; exit}')"
@@ -41,16 +76,16 @@ if command -v xcrun >/dev/null 2>&1; then
 
     if [[ -n "$ld_version" ]]; then
       xcrun vtool \
-        -arch arm64 \
-        -set-build-version ios "$minos" "$sdk" \
+        -arch "$primary_arch" \
+        -set-build-version "$expected_platform" "$minos" "$sdk" \
         -tool ld "$ld_version" \
         -replace \
         -output "$patched_binary_path" \
         "$binary_path"
     else
       xcrun vtool \
-        -arch arm64 \
-        -set-build-version ios "$minos" "$sdk" \
+        -arch "$primary_arch" \
+        -set-build-version "$expected_platform" "$minos" "$sdk" \
         -replace \
         -output "$patched_binary_path" \
         "$binary_path"
@@ -60,9 +95,9 @@ if command -v xcrun >/dev/null 2>&1; then
     chmod +x "$binary_path"
     needs_resign=true
 
-    updated_build_info="$(xcrun vtool -show-build -arch arm64 "$binary_path" 2>/dev/null || true)"
+    updated_build_info="$(xcrun vtool -show-build -arch "$primary_arch" "$binary_path" 2>/dev/null || true)"
     binary_minos="$(printf '%s\n' "$updated_build_info" | awk '/minos / {print $2; exit}')"
-    if [[ "$updated_build_info" == *"platform IOSSIMULATOR"* ]]; then
+    if [[ "$updated_build_info" != *"$expected_platform_marker"* ]]; then
       exit 1
     fi
   fi
