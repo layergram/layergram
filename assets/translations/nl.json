@@ -216,5 +216,8 @@
   "chatUnverifiedBannerBody": "Dit contact is nog niet geverifieerd. Je kunt nog steeds berichten uitwisselen, maar de authenticiteit van de sleutel is niet bevestigd.",
   "chatUnverifiedBannerCta": "Nu verifiëren",
   "contactStatusVerified": "Geverifieerd",
-  "contactStatusUnverified": "Niet geverifieerd"
+  "contactStatusUnverified": "Niet geverifieerd",
+  "onboardingModeCreate": "Create identity",
+  "onboardingModeRestore": "Restore identity",
+  "confirmSeventhWordHint": "Confirm seventh word"
 }

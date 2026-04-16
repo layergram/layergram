@@ -216,5 +216,8 @@
   "chatUnverifiedBannerBody": "ಈ ಸಂಪರ್ಕವನ್ನು ಇನ್ನೂ ಪರಿಶೀಲಿಸಲಾಗಿಲ್ಲ. ನೀವು ಸಂದೇಶಗಳನ್ನು ವಿನಿಮಯ ಮಾಡಬಹುದು, ಆದರೆ ಅದರ ಕೀಯ ಸತ್ಯಾಸತ್ಯತೆ ದೃಢೀಕರಿಸಲಾಗಿಲ್ಲ.",
   "chatUnverifiedBannerCta": "ಈಗ ಪರಿಶೀಲಿಸಿ",
   "contactStatusVerified": "ಪರಿಶೀಲಿತ",
-  "contactStatusUnverified": "ಪರಿಶೀಲಿಸದ"
+  "contactStatusUnverified": "ಪರಿಶೀಲಿಸದ",
+  "onboardingModeCreate": "Create identity",
+  "onboardingModeRestore": "Restore identity",
+  "confirmSeventhWordHint": "Confirm seventh word"
 }

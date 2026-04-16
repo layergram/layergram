@@ -216,5 +216,8 @@
   "chatUnverifiedBannerBody": "ይህ እውቂያ እስካሁን አልተረጋገጠም። አሁንም መልእክቶችን ማለዋወጥ ይችላሉ፣ ነገር ግን የቁልፉ እውነተኛነት አልተረጋገጠም።",
   "chatUnverifiedBannerCta": "አሁን ያረጋግጡ",
   "contactStatusVerified": "የተረጋገጠ",
-  "contactStatusUnverified": "ያልተረጋገጠ"
+  "contactStatusUnverified": "ያልተረጋገጠ",
+  "onboardingModeCreate": "Create identity",
+  "onboardingModeRestore": "Restore identity",
+  "confirmSeventhWordHint": "Confirm seventh word"
 }

@@ -215,6 +215,9 @@
   "chatUnverifiedBannerTitle": "Lambar ba a tabbatar ba",
   "chatUnverifiedBannerBody": "Wannan lambar har yanzu ba a tabbatar da ita ba. Har yanzu kana iya musayar saƙonni, amma ba a tabbatar da sahihancin mabuɗin ba.",
   "chatUnverifiedBannerCta": "Tabbatar yanzu",
-  "contactStatusVerified": "An tabbatar",
-  "contactStatusUnverified": "Ba a tabbatar ba"
+  "contactStatusVerified": "Tabbatacce",
+  "contactStatusUnverified": "Babu tabbaci",
+  "onboardingModeCreate": "Ƙirƙiri asali",
+  "onboardingModeRestore": "Dawo da asali",
+  "confirmSeventhWordHint": "Tabbatar da kalma ta bakwai"
 }

@@ -216,5 +216,8 @@
   "chatUnverifiedBannerBody": "この連絡先はまだ確認されていません。メッセージのやり取りは可能ですが、鍵の真正性は確認されていません。",
   "chatUnverifiedBannerCta": "今すぐ確認",
   "contactStatusVerified": "確認済み",
-  "contactStatusUnverified": "未確認"
+  "contactStatusUnverified": "未確認",
+  "onboardingModeCreate": "Create identity",
+  "onboardingModeRestore": "Restore identity",
+  "confirmSeventhWordHint": "Confirm seventh word"
 }

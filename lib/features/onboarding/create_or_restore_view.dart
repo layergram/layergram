@@ -39,6 +39,8 @@ class _CreateOrRestoreViewState extends ConsumerState<CreateOrRestoreView> {
   String? _error;
   bool _busy = false;
   bool _acceptedLegalConsent = false;
+  bool _isRestoreMode = false;
+  String? _savedMnemonic;
 
   @override
   void initState() {
@@ -177,14 +179,30 @@ class _CreateOrRestoreViewState extends ConsumerState<CreateOrRestoreView> {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(t(dialogContext, 'recoveryPhraseWarning')),
-                          const SizedBox(height: 8),
                           Text(
                             t(dialogContext, 'recoveryPhraseSaveWarning'),
                             style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
-                          const SizedBox(height: 12),
-                          SelectableText(created.mnemonic),
+                          const SizedBox(height: 16),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Theme.of(context).colorScheme.outlineVariant,
+                              ),
+                            ),
+                            child: SelectableText(
+                              created.mnemonic,
+                              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                fontFamily: 'monospace',
+                                fontWeight: FontWeight.w500,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
                           const SizedBox(height: 12),
                           Text(
                             t(dialogContext, 'confirmWordPrompt')
@@ -196,7 +214,8 @@ class _CreateOrRestoreViewState extends ConsumerState<CreateOrRestoreView> {
                             autofocus: true,
                             decoration: InputDecoration(
                               border: const OutlineInputBorder(),
-                              hintText: t(dialogContext, 'mnemonic'),
+                              hintText: t(dialogContext, 'confirmSeventhWordHint'),
+                              labelText: t(dialogContext, 'confirmSeventhWordHint'),
                             ),
                           ),
                         ],
@@ -279,7 +298,6 @@ class _CreateOrRestoreViewState extends ConsumerState<CreateOrRestoreView> {
   @override
   Widget build(BuildContext context) {
     final t = AppStrings.t;
-    final isRestoreMode = _mnemonicCtrl.text.trim().isNotEmpty;
     return Scaffold(
       appBar: AppBar(title: Text(t(context, 'onboardingTitle'))),
       body: GestureDetector(
@@ -297,7 +315,38 @@ class _CreateOrRestoreViewState extends ConsumerState<CreateOrRestoreView> {
                     t(context, 'onboardingSubtitle'),
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 16),
+                  SegmentedButton<bool>(
+                    segments: [
+                      ButtonSegment<bool>(
+                        value: false,
+                        label: Text(t(context, 'onboardingModeCreate')),
+                        icon: const Icon(Icons.person_add),
+                      ),
+                      ButtonSegment<bool>(
+                        value: true,
+                        label: Text(t(context, 'onboardingModeRestore')),
+                        icon: const Icon(Icons.restore),
+                      ),
+                    ],
+                    selected: {_isRestoreMode},
+                    onSelectionChanged: _busy
+                        ? null
+                        : (Set<bool> newSelection) {
+                            setState(() {
+                              final newMode = newSelection.first;
+                              if (_isRestoreMode && !newMode) {
+                                _savedMnemonic = _mnemonicCtrl.text.trim();
+                                _mnemonicCtrl.clear();
+                              } else if (!_isRestoreMode && newMode && _savedMnemonic != null) {
+                                _mnemonicCtrl.text = _savedMnemonic!;
+                                _savedMnemonic = null;
+                              }
+                              _isRestoreMode = newMode;
+                            });
+                          },
+                  ),
+                  const SizedBox(height: 16),
                   TextField(
                     controller: _displayNameCtrl,
                     enabled: !_busy,
@@ -307,20 +356,24 @@ class _CreateOrRestoreViewState extends ConsumerState<CreateOrRestoreView> {
                       border: const OutlineInputBorder(),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  Text(
-                    t(context, 'restoreFromMnemonic'),
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _mnemonicCtrl,
-                    minLines: 2,
-                    maxLines: 4,
-                    onChanged: (_) => setState(() {}),
-                    decoration: InputDecoration(
-                        hintText: t(context, 'recoveryPhraseHint')),
-                  ),
+                  if (_isRestoreMode) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      t(context, 'restoreFromMnemonic'),
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _mnemonicCtrl,
+                      minLines: 2,
+                      maxLines: 4,
+                      enabled: !_busy,
+                      decoration: InputDecoration(
+                        hintText: t(context, 'recoveryPhraseHint'),
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -350,8 +403,8 @@ class _CreateOrRestoreViewState extends ConsumerState<CreateOrRestoreView> {
                   FilledButton(
                     onPressed: _busy || !_acceptedLegalConsent
                         ? null
-                        : (isRestoreMode ? _restore : _create),
-                    child: Text(t(context, isRestoreMode ? 'restoreNow' : 'createNow')),
+                        : (_isRestoreMode ? _restore : _create),
+                    child: Text(t(context, _isRestoreMode ? 'restoreNow' : 'createNow')),
                   ),
                   if (_error != null) ...[
                     const SizedBox(height: 12),

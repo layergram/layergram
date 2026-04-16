@@ -216,5 +216,8 @@
   "chatUnverifiedBannerBody": "Aquest contacte encara no s'ha verificat. Pots intercanviar missatges, però no s'ha confirmat l'autenticitat de la seva clau.",
   "chatUnverifiedBannerCta": "Verifica ara",
   "contactStatusVerified": "Verificat",
-  "contactStatusUnverified": "No verificat"
+  "contactStatusUnverified": "No verificat",
+  "onboardingModeCreate": "Create identity",
+  "onboardingModeRestore": "Restore identity",
+  "confirmSeventhWordHint": "Confirm seventh word"
 }

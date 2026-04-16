@@ -216,5 +216,8 @@
   "chatUnverifiedBannerBody": "Denne kontakten er ennå ikke verifisert. Du kan fortsatt utveksle meldinger, men ektheten til nøkkelen er ikke bekreftet.",
   "chatUnverifiedBannerCta": "Verifiser nå",
   "contactStatusVerified": "Verifisert",
-  "contactStatusUnverified": "Ikke verifisert"
+  "contactStatusUnverified": "Ikke verifisert",
+  "onboardingModeCreate": "Create identity",
+  "onboardingModeRestore": "Restore identity",
+  "confirmSeventhWordHint": "Confirm seventh word"
 }

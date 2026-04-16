@@ -216,5 +216,8 @@
   "chatUnverifiedBannerBody": "Mawasiliano haya bado hayajathibitishwa. Bado unaweza kubadilishana ujumbe, lakini uhalisia wa ufunguo haujathibitishwa.",
   "chatUnverifiedBannerCta": "Thibitisha sasa",
   "contactStatusVerified": "Imethibitishwa",
-  "contactStatusUnverified": "Haijathibitishwa"
+  "contactStatusUnverified": "Haijathibitishwa",
+  "onboardingModeCreate": "Create identity",
+  "onboardingModeRestore": "Restore identity",
+  "confirmSeventhWordHint": "Confirm seventh word"
 }

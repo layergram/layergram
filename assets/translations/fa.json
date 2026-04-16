@@ -216,5 +216,8 @@
   "chatUnverifiedBannerBody": "این مخاطب هنوز تأیید نشده است. می‌توانید پیام رد و بدل کنید، اما اصالت کلید آن تأیید نشده.",
   "chatUnverifiedBannerCta": "اکنون تأیید کنید",
   "contactStatusVerified": "تأیید‌شده",
-  "contactStatusUnverified": "تأیید‌نشده"
+  "contactStatusUnverified": "تأیید‌نشده",
+  "onboardingModeCreate": "Create identity",
+  "onboardingModeRestore": "Restore identity",
+  "confirmSeventhWordHint": "Confirm seventh word"
 }

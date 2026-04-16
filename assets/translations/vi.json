@@ -216,5 +216,8 @@
   "chatUnverifiedBannerBody": "Liên hệ này chưa được xác minh. Bạn vẫn có thể trao đổi tin nhắn, nhưng tính xác thực của khóa chưa được xác nhận.",
   "chatUnverifiedBannerCta": "Xác minh ngay",
   "contactStatusVerified": "Đã xác minh",
-  "contactStatusUnverified": "Chưa xác minh"
+  "contactStatusUnverified": "Chưa xác minh",
+  "onboardingModeCreate": "Create identity",
+  "onboardingModeRestore": "Restore identity",
+  "confirmSeventhWordHint": "Confirm seventh word"
 }

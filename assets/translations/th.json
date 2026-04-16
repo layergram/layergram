@@ -216,5 +216,8 @@
   "chatUnverifiedBannerBody": "ผู้ติดต่อนี้ยังไม่ได้รับการยืนยัน คุณยังสามารถส่งข้อความได้ แต่ยังไม่มีการยืนยันความแท้ของคีย์",
   "chatUnverifiedBannerCta": "ยืนยันตอนนี้",
   "contactStatusVerified": "ยืนยันแล้ว",
-  "contactStatusUnverified": "ยังไม่ยืนยัน"
+  "contactStatusUnverified": "ยังไม่ยืนยัน",
+  "onboardingModeCreate": "Create identity",
+  "onboardingModeRestore": "Restore identity",
+  "confirmSeventhWordHint": "Confirm seventh word"
 }

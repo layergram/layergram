@@ -216,5 +216,8 @@
   "chatUnverifiedBannerBody": "Denna kontakt har inte verifierats än. Du kan fortfarande utbyta meddelanden, men äktheten hos nyckeln har inte bekräftats.",
   "chatUnverifiedBannerCta": "Verifiera nu",
   "contactStatusVerified": "Verifierad",
-  "contactStatusUnverified": "Ej verifierad"
+  "contactStatusUnverified": "Ej verifierad",
+  "onboardingModeCreate": "Create identity",
+  "onboardingModeRestore": "Restore identity",
+  "confirmSeventhWordHint": "Confirm seventh word"
 }

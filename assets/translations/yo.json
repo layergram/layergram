@@ -215,6 +215,9 @@
   "chatUnverifiedBannerTitle": "A kò tíì jẹ́rìí olùbásọ̀rọ̀",
   "chatUnverifiedBannerBody": "A kò tíì jẹ́rìí olùbásọ̀rọ̀ yìí. O lè máa paarọ̀ ìsọ̀rọ̀, ṣùgbọ́n òtítọ́ kọ́kọ́rọ́ rẹ̀ kò tíì fẹsẹ̀ múlẹ̀.",
   "chatUnverifiedBannerCta": "Jẹ́rìí nísinsìnyí",
-  "contactStatusVerified": "A ti jẹ́rìí",
-  "contactStatusUnverified": "A kò tíì jẹ́rìí"
+  "contactStatusVerified": "Tí ìdánimọ̀",
+  "contactStatusUnverified": "Kò ní ìdánimọ̀",
+  "onboardingModeCreate": "Ṣẹda Idanimọ",
+  "onboardingModeRestore": "Mu Idanimọ pada",
+  "confirmSeventhWordHint": "Tẹ ọrọ keje sii lati tẹsiwaju"
 }

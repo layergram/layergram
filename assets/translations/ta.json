@@ -216,5 +216,8 @@
   "chatUnverifiedBannerBody": "இந்தத் தொடர்பு இன்னும் சரிபார்க்கப்படவில்லை. நீங்கள் செய்திகளைப் பரிமாறிக்கொள்ளலாம், ஆனால் அதன் விசையின் அசல் தன்மை உறுதிப்படுத்தப்படவில்லை.",
   "chatUnverifiedBannerCta": "இப்போது சரிபார்",
   "contactStatusVerified": "சரிபார்க்கப்பட்டது",
-  "contactStatusUnverified": "சரிபார்க்கப்படவில்லை"
+  "contactStatusUnverified": "சரிபார்க்கப்படவில்லை",
+  "onboardingModeCreate": "Create identity",
+  "onboardingModeRestore": "Restore identity",
+  "confirmSeventhWordHint": "Confirm seventh word"
 }
