@@ -36,8 +36,7 @@ class _UnlockViewState extends ConsumerState<UnlockView> {
     final forcePin = ref.read(appLockForcePinProvider);
     final biometricSupported = await service.isBiometricSupported();
     final usePinOnly = forcePin || !biometricSupported;
-    final stored = await service.getPin();
-    final hasPin = stored != null && stored.isNotEmpty;
+    final hasPin = await service.hasPin();
 
     if (!mounted) return;
     final prompt = AppStrings.t(context, 'unlockWithBiometricsPrompt');
@@ -67,7 +66,7 @@ class _UnlockViewState extends ConsumerState<UnlockView> {
     final pin = await _askPin(context);
     if (pin == null) return;
 
-    final ok = stored == pin;
+    final ok = await service.validatePin(pin);
     if (!ok) {
       setState(() => _error = t(context, 'invalidPin'));
       return;

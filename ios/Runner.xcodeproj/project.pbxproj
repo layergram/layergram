@@ -405,8 +405,8 @@
 			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "/bin/sh \"${PROJECT_DIR}/Runner/native_asset_postprocess.sh\"";
+			shellPath = /bin/bash;
+			shellScript = "/bin/bash \"${PROJECT_DIR}/Runner/native_asset_postprocess.sh\"";
 		};
 		A9383872C05078D803F921BD /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;

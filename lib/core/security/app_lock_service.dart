@@ -12,9 +12,40 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import 'dart:convert';
+import 'dart:math';
+import 'dart:typed_data';
+
+import 'package:cryptography/cryptography.dart';
 import 'package:local_auth/local_auth.dart';
 
 import '../storage/secure_storage.dart';
+
+class _PinKdfDescriptor {
+  const _PinKdfDescriptor({
+    required this.version,
+    required this.algorithm,
+    required this.params,
+    this.needsRehash = false,
+  });
+
+  final String version;
+  final String algorithm;
+  final Map<String, Object> params;
+  final bool needsRehash;
+}
+
+class _StoredDerivedPin {
+  const _StoredDerivedPin({
+    required this.descriptor,
+    required this.salt,
+    required this.hash,
+  });
+
+  final _PinKdfDescriptor descriptor;
+  final Uint8List salt;
+  final Uint8List hash;
+}
 
 /// Service for managing app lock functionality including PIN and biometric authentication.
 /// 
@@ -27,16 +58,60 @@ class AppLockService {
   /// 
   /// [storage] - The secure storage service for persisting app lock data
   /// [localAuth] - Optional local authentication instance, defaults to LocalAuthentication()
-  AppLockService(this._storage, {LocalAuthentication? localAuth})
-       : _localAuth = localAuth ?? LocalAuthentication();
+  AppLockService(
+    this._storage, {
+    LocalAuthentication? localAuth,
+    Random? random,
+    DateTime Function()? nowProvider,
+  })  : _localAuth = localAuth ?? LocalAuthentication(),
+        _random = random ?? Random.secure(),
+        _now = nowProvider ?? DateTime.now;
 
   static const _enabledKey = 'app_lock_enabled';
   static const _timeoutSecondsKey = 'app_lock_timeout_sec';
   static const _pinKey = 'app_lock_pin';
+  static const _pinKdfVersionKey = 'pin_kdf_version';
+  static const _pinKdfParamsKey = 'pin_kdf_params';
+  static const _pinSaltKey = 'pin_salt';
+  static const _pinHashKey = 'pin_hash';
+  static const _pinFailedAttemptsKey = 'pin_failed_attempts';
+  static const _pinLockedUntilMsKey = 'pin_locked_until_ms';
   static const _forcePinKey = 'app_lock_force_pin';
+  static const _pbkdf2Sha256Algorithm = 'pbkdf2-hmac-sha256';
+  static const _legacyPinKdfVersion = 'pbkdf2_hmac_sha256_210000_v1';
+  static const _preferredPinKdfVersion = 'pbkdf2_hmac_sha256_v2';
+  static const _pinHashBits = 256;
+  static const _pinSaltLength = 16;
+  static const _pinIterations = 210000;
+  static const _pinBackoffThreshold = 5;
+  static const _initialBackoffSeconds = 5;
+  static const _maxBackoffSeconds = 300;
+
+  static const _preferredPinKdfDescriptor = _PinKdfDescriptor(
+    version: _preferredPinKdfVersion,
+    algorithm: _pbkdf2Sha256Algorithm,
+    params: {
+      'iterations': _pinIterations,
+      'hash_bits': _pinHashBits,
+      'salt_length': _pinSaltLength,
+    },
+  );
+
+  static const _legacyPinKdfDescriptor = _PinKdfDescriptor(
+    version: _legacyPinKdfVersion,
+    algorithm: _pbkdf2Sha256Algorithm,
+    params: {
+      'iterations': _pinIterations,
+      'hash_bits': _pinHashBits,
+      'salt_length': _pinSaltLength,
+    },
+    needsRehash: true,
+  );
 
   final SecureStorageService _storage;
   final LocalAuthentication _localAuth;
+  final Random _random;
+  final DateTime Function() _now;
 
   /// Checks if app lock is currently enabled.
   /// 
@@ -70,20 +145,61 @@ class AppLockService {
   /// Sets the PIN for app lock.
   /// 
   /// [pin] - The PIN to set (4-8 digits recommended)
-  Future<void> setPin(String pin) {
-    return _storage.write(_pinKey, pin);
+  Future<void> setPin(String pin) async {
+    await _storeDerivedPin(pin, _preferredPinKdfDescriptor);
+    await _clearPinRateLimit();
   }
 
   /// Gets the currently stored PIN.
   /// 
   /// Returns the PIN string if set, `null` otherwise.
-  Future<String?> getPin() {
+  Future<String?> getPin() async {
     return _storage.read(_pinKey);
   }
 
+  Future<bool> hasPin() async {
+    final version = await _storage.read(_pinKdfVersionKey);
+    final salt = await _storage.read(_pinSaltKey);
+    final hash = await _storage.read(_pinHashKey);
+    if (version != null && salt != null && hash != null) {
+      return true;
+    }
+    final legacyPin = await _storage.read(_pinKey);
+    return legacyPin != null && legacyPin.isNotEmpty;
+  }
+
   /// Clears the stored PIN.
-  Future<void> clearPin() {
-    return _storage.delete(_pinKey);
+  Future<void> clearPin() async {
+    await _storage.delete(_pinKey);
+    await _storage.delete(_pinKdfVersionKey);
+    await _storage.delete(_pinKdfParamsKey);
+    await _storage.delete(_pinSaltKey);
+    await _storage.delete(_pinHashKey);
+    await _clearPinRateLimit();
+  }
+
+  Future<int> getConsecutiveFailedPinAttempts() async {
+    final raw = await _storage.read(_pinFailedAttemptsKey);
+    return int.tryParse(raw ?? '') ?? 0;
+  }
+
+  Future<Duration> getPinLockoutRemaining() async {
+    final raw = await _storage.read(_pinLockedUntilMsKey);
+    final lockedUntilMs = int.tryParse(raw ?? '');
+    if (lockedUntilMs == null) {
+      return Duration.zero;
+    }
+    final remaining =
+        DateTime.fromMillisecondsSinceEpoch(lockedUntilMs).difference(_now());
+    if (remaining <= Duration.zero) {
+      await _storage.delete(_pinLockedUntilMsKey);
+      return Duration.zero;
+    }
+    return remaining;
+  }
+
+  Future<bool> isPinLockedOut() async {
+    return (await getPinLockoutRemaining()) > Duration.zero;
   }
 
   /// Checks if the device supports biometric authentication.
@@ -154,7 +270,262 @@ class AppLockService {
   /// Returns `true` if the PIN matches, `false` otherwise.
   /// Returns `false` if no PIN is set.
   Future<bool> validatePin(String pin) async {
-    final storedPin = await getPin();
-    return storedPin != null && storedPin == pin;
+    if (await isPinLockedOut()) {
+      return false;
+    }
+
+    final storedDerivedPin = await _readStoredDerivedPin();
+    if (storedDerivedPin != null) {
+      final derivedHash = await _derivePinHash(
+        pin,
+        storedDerivedPin.salt,
+        storedDerivedPin.descriptor,
+      );
+      if (derivedHash == null) {
+        await _recordFailedPinAttempt();
+        return false;
+      }
+      if (_constantTimeEquals(storedDerivedPin.hash, derivedHash)) {
+        await _clearPinRateLimit();
+        if (storedDerivedPin.descriptor.needsRehash) {
+          await _storeDerivedPin(pin, _preferredPinKdfDescriptor);
+        }
+        return true;
+      }
+      await _recordFailedPinAttempt();
+      return false;
+    }
+
+    final storedPin = await _storage.read(_pinKey);
+    if (storedPin == null || storedPin.isEmpty) {
+      return false;
+    }
+    if (storedPin != pin) {
+      await _recordFailedPinAttempt();
+      return false;
+    }
+
+    await _clearPinRateLimit();
+    await _storeDerivedPin(pin, _preferredPinKdfDescriptor);
+    return true;
+  }
+
+  Future<void> _storeDerivedPin(
+    String pin,
+    _PinKdfDescriptor descriptor,
+  ) async {
+    final salt = _randomBytes(_saltLengthFor(descriptor));
+    final hash = await _derivePinHash(pin, salt, descriptor);
+    if (hash == null) {
+      throw UnsupportedError('Unsupported PIN KDF algorithm: ${descriptor.algorithm}');
+    }
+    await _storage.write(_pinKdfVersionKey, descriptor.version);
+    await _storage.write(_pinKdfParamsKey, jsonEncode(_encodeKdfParams(descriptor)));
+    await _storage.write(_pinSaltKey, base64Encode(salt));
+    await _storage.write(_pinHashKey, base64Encode(hash));
+    await _storage.delete(_pinKey);
+  }
+
+  Future<_StoredDerivedPin?> _readStoredDerivedPin() async {
+    final version = await _storage.read(_pinKdfVersionKey);
+    final saltValue = await _storage.read(_pinSaltKey);
+    final hashValue = await _storage.read(_pinHashKey);
+    if (version == null || saltValue == null || hashValue == null) {
+      return null;
+    }
+    final descriptor = await _readStoredDescriptor(version);
+    final salt = _decodeBase64(saltValue);
+    final hash = _decodeBase64(hashValue);
+    if (descriptor == null || salt == null || hash == null) {
+      return null;
+    }
+    return _StoredDerivedPin(descriptor: descriptor, salt: salt, hash: hash);
+  }
+
+  Future<_PinKdfDescriptor?> _readStoredDescriptor(String version) async {
+    final paramsValue = await _storage.read(_pinKdfParamsKey);
+    return _descriptorFromStored(version, paramsValue);
+  }
+
+  _PinKdfDescriptor? _descriptorFromStored(String version, String? paramsValue) {
+    final params = _decodeKdfParams(paramsValue);
+    if (params != null) {
+      final algorithm = params['algorithm'];
+      if (algorithm is! String) {
+        return null;
+      }
+      final normalizedParams = <String, Object>{};
+      for (final entry in params.entries) {
+        if (entry.key == 'algorithm') {
+          continue;
+        }
+        final value = entry.value;
+        if (value is String) {
+          normalizedParams[entry.key] = value;
+          continue;
+        }
+        if (value is bool) {
+          normalizedParams[entry.key] = value;
+          continue;
+        }
+        if (value is num) {
+          normalizedParams[entry.key] = value.toInt();
+        }
+      }
+      return _PinKdfDescriptor(
+        version: version,
+        algorithm: algorithm,
+        params: normalizedParams,
+        needsRehash: !_sameDescriptor(
+          version,
+          algorithm,
+          normalizedParams,
+          _preferredPinKdfDescriptor,
+        ),
+      );
+    }
+    switch (version) {
+      case _legacyPinKdfVersion:
+        return _legacyPinKdfDescriptor;
+      case _preferredPinKdfVersion:
+        return const _PinKdfDescriptor(
+          version: _preferredPinKdfVersion,
+          algorithm: _pbkdf2Sha256Algorithm,
+          params: {
+            'iterations': _pinIterations,
+            'hash_bits': _pinHashBits,
+            'salt_length': _pinSaltLength,
+          },
+          needsRehash: true,
+        );
+      default:
+        return null;
+    }
+  }
+
+  Map<String, Object> _encodeKdfParams(_PinKdfDescriptor descriptor) {
+    return <String, Object>{
+      'algorithm': descriptor.algorithm,
+      ...descriptor.params,
+    };
+  }
+
+  Map<String, Object?>? _decodeKdfParams(String? value) {
+    if (value == null || value.isEmpty) {
+      return null;
+    }
+    try {
+      final decoded = jsonDecode(value);
+      if (decoded is! Map) {
+        return null;
+      }
+      return decoded.map(
+        (key, value) => MapEntry(key.toString(), value),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  bool _sameDescriptor(
+    String version,
+    String algorithm,
+    Map<String, Object> params,
+    _PinKdfDescriptor other,
+  ) {
+    if (version != other.version || algorithm != other.algorithm) {
+      return false;
+    }
+    if (params.length != other.params.length) {
+      return false;
+    }
+    for (final entry in params.entries) {
+      if (other.params[entry.key] != entry.value) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Future<void> _recordFailedPinAttempt() async {
+    final attempts = await getConsecutiveFailedPinAttempts() + 1;
+    await _storage.write(_pinFailedAttemptsKey, attempts.toString());
+    final backoff = _lockoutDurationForAttempts(attempts);
+    if (backoff > Duration.zero) {
+      final lockedUntil = _now().add(backoff).millisecondsSinceEpoch;
+      await _storage.write(_pinLockedUntilMsKey, lockedUntil.toString());
+    }
+  }
+
+  Future<void> _clearPinRateLimit() async {
+    await _storage.delete(_pinFailedAttemptsKey);
+    await _storage.delete(_pinLockedUntilMsKey);
+  }
+
+  Duration _lockoutDurationForAttempts(int attempts) {
+    if (attempts < _pinBackoffThreshold) {
+      return Duration.zero;
+    }
+    final exponent = attempts - _pinBackoffThreshold;
+    final seconds = min(
+      _maxBackoffSeconds,
+      _initialBackoffSeconds * (1 << exponent.clamp(0, 16)),
+    );
+    return Duration(seconds: seconds);
+  }
+
+  Uint8List _randomBytes(int length) {
+    return Uint8List.fromList(
+      List<int>.generate(length, (_) => _random.nextInt(256)),
+    );
+  }
+
+  int _saltLengthFor(_PinKdfDescriptor descriptor) {
+    final value = descriptor.params['salt_length'];
+    return value is int ? value : _pinSaltLength;
+  }
+
+  Future<Uint8List?> _derivePinHash(
+    String pin,
+    List<int> salt,
+    _PinKdfDescriptor descriptor,
+  ) async {
+    if (descriptor.algorithm != _pbkdf2Sha256Algorithm) {
+      return null;
+    }
+    final iterationsValue = descriptor.params['iterations'];
+    final hashBitsValue = descriptor.params['hash_bits'];
+    if (iterationsValue is! int || hashBitsValue is! int) {
+      return null;
+    }
+    final algorithm = Pbkdf2(
+      macAlgorithm: Hmac.sha256(),
+      iterations: iterationsValue,
+      bits: hashBitsValue,
+    );
+    final secretKey = await algorithm.deriveKey(
+      secretKey: SecretKey(utf8.encode(pin)),
+      nonce: salt,
+    );
+    return Uint8List.fromList(await secretKey.extractBytes());
+  }
+
+  Uint8List? _decodeBase64(String value) {
+    try {
+      return Uint8List.fromList(base64Decode(value));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  bool _constantTimeEquals(List<int> a, List<int> b) {
+    if (a.length != b.length) {
+      return false;
+    }
+    var diff = 0;
+    for (var i = 0; i < a.length; i++) {
+      diff |= a[i] ^ b[i];
+    }
+    return diff == 0;
   }
 }
