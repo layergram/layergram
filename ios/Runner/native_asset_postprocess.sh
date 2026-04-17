@@ -11,6 +11,10 @@ case "$platform_name" in
   iphonesimulator)
     expected_platform="iossim"
     ;;
+  xros|xrsimulator)
+    # visionOS (Apple Vision Pro) - skip processing as it may not need these modifications
+    exit 0
+    ;;
   *)
     ;;
 esac

@@ -45,7 +45,10 @@ post_install do |installer|
 
     target.build_configurations.each do |config|
       # Align all pods to iOS 15.5 to avoid low-target warnings on simulator.
-      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.5'
+      # Skip for visionOS (xros) as it has its own deployment target.
+      unless config.build_settings['SDKROOT']&.include?('xros')
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.5'
+      end
       config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = ''
     end
 
