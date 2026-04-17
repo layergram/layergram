@@ -149,9 +149,13 @@ class ChatViewState extends ConsumerState<ChatView> {
   Timer? _decryptionPrimeTimer;
   bool _backgroundHoldActive = false;
   bool _verifiedThisSession = false;
+  bool _bannerDismissed = false;
 
   bool get _isContactVerifiedNow =>
       widget.contact.verified || _verifiedThisSession;
+
+  bool get _showUnverifiedBanner =>
+      !_isContactVerifiedNow && !_bannerDismissed;
 
   Future<void> _startContactVerification() async {
     final result =
@@ -172,7 +176,7 @@ class ChatViewState extends ConsumerState<ChatView> {
     return Material(
       color: tileColor,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+        padding: const EdgeInsets.fromLTRB(12, 8, 0, 8),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -197,10 +201,14 @@ class ChatViewState extends ConsumerState<ChatView> {
                 ],
               ),
             ),
-            const SizedBox(width: 8),
             TextButton(
               onPressed: _startContactVerification,
               child: Text(t(context, 'chatUnverifiedBannerCta')),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close, size: 18),
+              onPressed: () => setState(() => _bannerDismissed = true),
+              visualDensity: VisualDensity.compact,
             ),
           ],
         ),
@@ -1782,7 +1790,7 @@ class ChatViewState extends ConsumerState<ChatView> {
                 ),
               ),
             ),
-          if (!_isContactVerifiedNow) _buildUnverifiedBanner(context),
+          if (_showUnverifiedBanner) _buildUnverifiedBanner(context),
           if (showMessageList)
             Expanded(
               child: StreamBuilder<List<MessageRecord>>(
