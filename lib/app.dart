@@ -20,6 +20,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/capabilities/chat_folders_capability.dart';
 import 'core/providers.dart';
 import 'core/security/app_lock_idle_controller.dart';
 import 'features/identities/add_identity_view.dart';
@@ -605,8 +606,21 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
           }
           if (snapshot.data == null) {
             return CreateOrRestoreView(
-              onCompleted: () {
+              onCompleted: (bool isRestore) {
                 _reloadIdentity();
+                if (isRestore) {
+                  // After restore, go to messages (default index 0)
+                  ref.read(appShellInitialIndexProvider.notifier).state = null;
+                } else {
+                  // After create, go to my identity page
+                  // Calculate index: 1 (home) + extraFolders + 1 (identities) = myIdentity index
+                  final caps = ref.read(layergramCapabilitiesProvider);
+                  final extraFolders = caps.chatFolders.isAvailable
+                      ? (ref.read(chatFoldersProvider).valueOrNull ?? const [])
+                      : const <ChatFolder>[];
+                  final myIdentityIndex = 1 + extraFolders.length + 1;
+                  ref.read(appShellInitialIndexProvider.notifier).state = myIdentityIndex;
+                }
                 setState(() {});
               },
             );

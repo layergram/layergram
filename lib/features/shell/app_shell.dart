@@ -34,6 +34,20 @@ class _AppShellState extends ConsumerState<AppShell> {
   int _index = 0;
   final GlobalKey _switcherKey = GlobalKey(debugLabel: 'app_shell_switcher');
 
+  @override
+  void initState() {
+    super.initState();
+    // Check if there's an initial index set from onboarding
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final initialIndex = ref.read(appShellInitialIndexProvider);
+      if (initialIndex != null) {
+        setState(() => _index = initialIndex);
+        // Clear the provider after using it
+        ref.read(appShellInitialIndexProvider.notifier).state = null;
+      }
+    });
+  }
+
   void _selectIndex(int index, List<_ShellItem> items) {
     final target = items[index];
     if (target.chatFolderId != null) {
