@@ -274,6 +274,11 @@ final appLockTimeoutProvider = StateProvider<int>((_) => 60);
 final appLockForcePinProvider = StateProvider<bool>((_) => false);
 final identityReloadTokenProvider = StateProvider<int>((_) => 0);
 
+/// Initial index for AppShell navigation after onboarding.
+/// null means use default (0 for messages).
+/// Set to navigate to specific page after identity creation/restore.
+final appShellInitialIndexProvider = StateProvider<int?>((_) => null);
+
 final identityManagerProvider = Provider((ref) {
   return IdentityManager(
     seedService: ref.watch(seedServiceProvider),

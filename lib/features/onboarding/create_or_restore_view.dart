@@ -23,7 +23,7 @@ import '../../l10n/app_strings.dart';
 class CreateOrRestoreView extends ConsumerStatefulWidget {
   const CreateOrRestoreView({super.key, required this.onCompleted});
 
-  final VoidCallback onCompleted;
+  final Function(bool isRestore) onCompleted;
 
   @override
   ConsumerState<CreateOrRestoreView> createState() =>
@@ -234,7 +234,7 @@ class _CreateOrRestoreViewState extends ConsumerState<CreateOrRestoreView> {
         );
         if (confirm == true &&
             _confirmWordCtrl.text.trim().toLowerCase() == expected) {
-          widget.onCompleted();
+          widget.onCompleted(false);
           return;
         } else {
           if (!mounted) return;
@@ -286,7 +286,7 @@ class _CreateOrRestoreViewState extends ConsumerState<CreateOrRestoreView> {
             _mnemonicCtrl.text.trim().toLowerCase(),
             displayName: name,
           );
-      widget.onCompleted();
+      widget.onCompleted(true);
     } catch (_) {
       setState(() => _error = AppStrings.t(context, 'recoveryPhraseHint'));
     } finally {
