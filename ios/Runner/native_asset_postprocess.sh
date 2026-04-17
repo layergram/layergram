@@ -64,11 +64,15 @@ if command -v xcrun >/dev/null 2>&1; then
     build_info="$(xcrun vtool -show-build -arch "$primary_arch" "$binary_path" 2>/dev/null || true)"
   fi
   binary_minos="$(printf '%s\n' "$build_info" | awk '/minos / {print $2; exit}')"
-  expected_platform_marker="platform IOS"
+  # Determine the exact platform keyword expected by vtool output.
+  # Use awk to match the exact word to avoid 'IOS' matching 'IOSSIMULATOR'.
   if [[ "$expected_platform" == "iossim" ]]; then
-    expected_platform_marker="platform IOSSIMULATOR"
+    expected_platform_keyword="IOSSIMULATOR"
+  else
+    expected_platform_keyword="IOS"
   fi
-  if [[ "$build_info" != *"$expected_platform_marker"* ]]; then
+  actual_platform_keyword="$(printf '%s\n' "$build_info" | awk '/platform / {print $2; exit}')"
+  if [[ "$actual_platform_keyword" != "$expected_platform_keyword" ]]; then
     minos="$(printf '%s\n' "$build_info" | awk '/minos / {print $2; exit}')"
     sdk="$(printf '%s\n' "$build_info" | awk '/sdk / {print $2; exit}')"
     ld_version="$(printf '%s\n' "$build_info" | awk '$1 == "version" {print $2; exit}')"
@@ -101,7 +105,8 @@ if command -v xcrun >/dev/null 2>&1; then
 
     updated_build_info="$(xcrun vtool -show-build -arch "$primary_arch" "$binary_path" 2>/dev/null || true)"
     binary_minos="$(printf '%s\n' "$updated_build_info" | awk '/minos / {print $2; exit}')"
-    if [[ "$updated_build_info" != *"$expected_platform_marker"* ]]; then
+    updated_platform_keyword="$(printf '%s\n' "$updated_build_info" | awk '/platform / {print $2; exit}')"
+    if [[ "$updated_platform_keyword" != "$expected_platform_keyword" ]]; then
       exit 1
     fi
   fi
