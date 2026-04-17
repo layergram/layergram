@@ -283,7 +283,7 @@ class _CreateOrRestoreViewState extends ConsumerState<CreateOrRestoreView> {
     });
     try {
       await ref.read(identityManagerProvider).restoreIdentityFromMnemonic(
-            _mnemonicCtrl.text.trim(),
+            _mnemonicCtrl.text.trim().toLowerCase(),
             displayName: name,
           );
       widget.onCompleted();
