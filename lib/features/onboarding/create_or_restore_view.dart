@@ -211,7 +211,6 @@ class _CreateOrRestoreViewState extends ConsumerState<CreateOrRestoreView> {
                           const SizedBox(height: 8),
                           TextField(
                             controller: _confirmWordCtrl,
-                            autofocus: true,
                             decoration: InputDecoration(
                               border: const OutlineInputBorder(),
                               hintText: t(dialogContext, 'confirmSeventhWordHint'),
