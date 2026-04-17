@@ -97,6 +97,7 @@ class _AddIdentityViewState extends ConsumerState<AddIdentityView> {
   }
 
   Future<void> _parseText(BuildContext context) async {
+    FocusScope.of(context).unfocus();
     final input = _controller.text;
     try {
       final parsed = input.trim().startsWith('layergram://')
