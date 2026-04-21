@@ -3,9 +3,11 @@
 **Privacy-first encrypted messaging — transport agnostic, fully local, zero servers.**
 
 Layergram is the official open-source Layergram app built with Flutter.
-It lets users encrypt sensitive content locally and share it through **any** existing text-based communication channel — WhatsApp, Telegram, Signal, iMessage, email, social networks, SMS, or any other platform that preserves Unicode text.
+It lets users encrypt sensitive content locally and share it through **any** existing text-based communication channel — WhatsApp, Telegram, Signal, iMessage, email, social networks, or any other platform that preserves Unicode text.
 
 Messages are hidden inside ordinary-looking text using zero-width Unicode steganography, making them visually indistinguishable from a normal conversation while keeping the cryptographic workflow fully local to the device.
+
+For transport channels that do not support invisible Unicode characters (or when steganography fails), Layergram also supports sending messages as **direct deep links** (`layergram://m/<payload>`). Note that deep links make the presence of a Layergram message visibly obvious to anyone seeing the link, unlike steganographic embedding which requires instrumental analysis to detect.
 
 ## Official Project Links
 
@@ -36,7 +38,7 @@ Messages are hidden inside ordinary-looking text using zero-width Unicode stegan
 
 ### Security
 - **End-to-end encryption** — X25519 key agreement + AES-GCM-256
-- **Steganographic encoding** — encrypted payloads hidden inside zero-width Unicode characters
+- **Steganographic encoding** — encrypted payloads hidden inside zero-width Unicode characters (with deep link fallback for transports that don't support invisible characters)
 - **App lock** — biometric unlock with PIN fallback support
 - **Secure local storage** — sensitive state protected at rest
 - **Screen protection** — optional privacy shielding where supported

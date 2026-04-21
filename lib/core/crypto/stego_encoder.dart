@@ -18,6 +18,14 @@ import 'dart:typed_data';
 
 import 'package:characters/characters.dart';
 
+import 'stego_alphabet_v2.dart';
+
+/// LMF v2 steganographic encoder.
+///
+/// Uses the v2 payload alphabet (U+200B, U+200C, U+200D, U+2061)
+/// and v2 noise alphabet (U+2063, U+2064, U+FEFF).
+///
+/// Forbidden characters (U+200E, U+200F) are never emitted.
 class StegoEncoder {
   // Max payload runes assigned to a mixed carrier slot.
   static const int maxPayloadRunesPerCarrierSlot = 16;
@@ -36,25 +44,19 @@ class StegoEncoder {
   static const int minNoiseRunesPerMixedSlot = 2;
   static const int maxNoiseRunesPerMixedSlot = 6;
 
-  // Base-4 (2 bits per rune). Alphabet restricted to runes che WA preserva:
-  // 200B, 200C, 200D, 2061 (2060/2062 vengono rimossi).
+  /// Payload symbols - LMF v2 alphabet (2 bits per rune).
   static const List<String> _syms = [
-    '\u200B', // 00
-    '\u200C', // 01
-    '\u200D', // 10
-    '\u2061', // 11
+    '\u200B', // 00 - ZERO WIDTH SPACE
+    '\u200C', // 01 - ZERO WIDTH NON-JOINER
+    '\u200D', // 10 - ZERO WIDTH JOINER
+    '\u2061', // 11 - FUNCTION APPLICATION
   ];
 
-  // Noise zero-width characters (NOT in the encoding alphabet).
-  // These are inserted randomly to increase deniability and are discarded
-  // by the decoder (which only recognises _syms).
-  static const List<String> _noise = [
-    '\u200E', // LEFT-TO-RIGHT MARK
-    '\u200F', // RIGHT-TO-LEFT MARK
-    '\u2063', // INVISIBLE SEPARATOR
-    '\u2064', // INVISIBLE PLUS
-    '\uFEFF', // ZERO WIDTH NO-BREAK SPACE (BOM)
-  ];
+  /// LMF v2 noise symbols (discarded by decoder).
+  /// U+200E and U+200F are FORBIDDEN and never used.
+  static final List<String> _noise = StegoAlphabetV2.noiseRunes
+      .map((r) => String.fromCharCode(r))
+      .toList();
 
   static final _rng = Random.secure();
 
@@ -73,7 +75,13 @@ class StegoEncoder {
   }) {
     final encodedSecret = jsonEncode(secretText);
     final secretJsonBytes = max(0, utf8.encode(encodedSecret).length - 2);
-    return 12 + jsonEnvelopeBytes + secretJsonBytes + 16;
+    // LMF v2 overhead:
+    // - 12 bytes: AES-GCM nonce
+    // - 4 bytes: LMFv2Inner header (formatVersion, flags, reserved)
+    // - jsonEnvelopeBytes: estimated JSON envelope size
+    // - secretJsonBytes: actual secret text JSON size
+    // - 16 bytes: AES-GCM MAC
+    return 12 + 4 + jsonEnvelopeBytes + secretJsonBytes + 16;
   }
 
   static String normalizeCoverText(String coverText) {
