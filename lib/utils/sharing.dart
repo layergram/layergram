@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../l10n/app_strings.dart';
 import 'app_platform.dart';
 
 export 'sharing_io.dart' if (dart.library.html) 'sharing_stub.dart';
@@ -47,6 +48,8 @@ Future<ShareResult> shareTextExternally(
   if (AppPlatform.isIOS &&
       result.status == ShareResultStatus.success &&
       isWhatsAppShareActivityType(result.raw)) {
+    // On iOS, WhatsApp pre-fills the compose field correctly but we still
+    // deep-link to bring the app to foreground after the share sheet closes.
     final whatsappUri = Uri.parse('whatsapp://');
     if (await canLaunchUrl(whatsappUri)) {
       await Future<void>.delayed(const Duration(milliseconds: 250));
@@ -55,6 +58,21 @@ Future<ShareResult> shareTextExternally(
         mode: LaunchMode.externalApplication,
       );
     }
+  }
+
+  if (AppPlatform.isAndroid &&
+      result.status == ShareResultStatus.success &&
+      isWhatsAppShareActivityType(result.raw) &&
+      context.mounted) {
+    // WhatsApp on Android silently truncates text passed via ACTION_SEND
+    // Intent pre-fill to ~1600–2000 characters (known WhatsApp bug, not an
+    // Android OS limit). Inform the user to paste manually if needed.
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(AppStrings.t(context, 'shareAndroidWhatsAppWarning')),
+        duration: const Duration(seconds: 6),
+      ),
+    );
   }
 
   return result;

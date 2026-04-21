@@ -219,5 +219,6 @@
   "contactStatusUnverified": "ያልተረጋገጠ",
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
-  "confirmSeventhWordHint": "Confirm seventh word"
+  "confirmSeventhWordHint": "Confirm seventh word",
+  "shareAndroidWhatsAppWarning": "WhatsApp ላይ መልእክቱ ቆርጦ ቢቀርብ፣ \"ቅዳ\" ተጠቅሞ ጨብጦ ያሰምርበት።"
 }

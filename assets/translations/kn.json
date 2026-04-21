@@ -219,5 +219,6 @@
   "contactStatusUnverified": "ಪರಿಶೀಲಿಸದ",
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
-  "confirmSeventhWordHint": "Confirm seventh word"
+  "confirmSeventhWordHint": "Confirm seventh word",
+  "shareAndroidWhatsAppWarning": "WhatsApp ನಲ್ಲಿ ಸಂದೇಶ ಕಡಿದಂತೆ ಕಾಣಿಸಿದರೆ, \"ನಕಲು ಮಾಡಿ\" ಬಳಸಿ ಕೈಯಾರೆ ಅಂಟಿಸಿ."
 }

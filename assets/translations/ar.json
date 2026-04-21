@@ -219,5 +219,6 @@
   "contactStatusUnverified": "غير موثّق",
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
-  "confirmSeventhWordHint": "Confirm seventh word"
+  "confirmSeventhWordHint": "Confirm seventh word",
+  "shareAndroidWhatsAppWarning": "إذا بدا النص مقطوعاً في WhatsApp، استخدم \"نسخ\" وألصقه يدوياً."
 }

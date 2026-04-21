@@ -219,5 +219,6 @@
   "contactStatusUnverified": "Неподтверждённый",
   "onboardingModeCreate": "Создать идентичность",
   "onboardingModeRestore": "Восстановить идентичность",
-  "confirmSeventhWordHint": "Подтвердите седьмое слово"
+  "confirmSeventhWordHint": "Подтвердите седьмое слово",
+  "shareAndroidWhatsAppWarning": "Если сообщение отображается обрезанным в WhatsApp, используйте «Копировать» и вставьте вручную."
 }

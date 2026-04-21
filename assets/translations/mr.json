@@ -219,5 +219,6 @@
   "contactStatusUnverified": "असत्यापित",
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
-  "confirmSeventhWordHint": "Confirm seventh word"
+  "confirmSeventhWordHint": "Confirm seventh word",
+  "shareAndroidWhatsAppWarning": "WhatsApp मध्ये संदेश कापलेला दिसल्यास, \"कॉपी\" वापरा आणि हाताने पेस्ट करा."
 }

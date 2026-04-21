@@ -219,5 +219,6 @@
   "contactStatusUnverified": "未確認",
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
-  "confirmSeventhWordHint": "Confirm seventh word"
+  "confirmSeventhWordHint": "Confirm seventh word",
+  "shareAndroidWhatsAppWarning": "WhatsAppでメッセージが途切れて表示された場合は、「コピー」を使って手動で貼り付けてください。"
 }

@@ -219,5 +219,6 @@
   "contactStatusUnverified": "No verificat",
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
-  "confirmSeventhWordHint": "Confirm seventh word"
+  "confirmSeventhWordHint": "Confirm seventh word",
+  "shareAndroidWhatsAppWarning": "Si el missatge apareix retallat a WhatsApp, fes servir \"Copia\" i enganxa'l manualment."
 }

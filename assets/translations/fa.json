@@ -219,5 +219,6 @@
   "contactStatusUnverified": "تأیید‌نشده",
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
-  "confirmSeventhWordHint": "Confirm seventh word"
+  "confirmSeventhWordHint": "Confirm seventh word",
+  "shareAndroidWhatsAppWarning": "اگر پیام در واتساپ ناقص نشان داده شد، از «کپی» استفاده کنید و به صورت دستی بچسبانید."
 }

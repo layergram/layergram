@@ -219,5 +219,6 @@
   "contactStatusUnverified": "Neverificat",
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
-  "confirmSeventhWordHint": "Confirm seventh word"
+  "confirmSeventhWordHint": "Confirm seventh word",
+  "shareAndroidWhatsAppWarning": "Dacă mesajul apare trunchiat în WhatsApp, folosește „Copiază\" și lipește-l manual."
 }

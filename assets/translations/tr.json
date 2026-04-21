@@ -219,5 +219,6 @@
   "contactStatusUnverified": "Doğrulanmadı",
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
-  "confirmSeventhWordHint": "Confirm seventh word"
+  "confirmSeventhWordHint": "Confirm seventh word",
+  "shareAndroidWhatsAppWarning": "WhatsApp'ta mesaj kesilmiş görünüyorsa, \"Kopyala\"yı kullan ve manuel olarak yapıştır."
 }

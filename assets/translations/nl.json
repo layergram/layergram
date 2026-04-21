@@ -219,5 +219,6 @@
   "contactStatusUnverified": "Niet geverifieerd",
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
-  "confirmSeventhWordHint": "Confirm seventh word"
+  "confirmSeventhWordHint": "Confirm seventh word",
+  "shareAndroidWhatsAppWarning": "Als het bericht afgekapt lijkt in WhatsApp, gebruik dan \"Kopiëren\" en plak het handmatig."
 }

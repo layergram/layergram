@@ -219,5 +219,6 @@
   "contactStatusUnverified": "I paverifikuar",
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
-  "confirmSeventhWordHint": "Confirm seventh word"
+  "confirmSeventhWordHint": "Confirm seventh word",
+  "shareAndroidWhatsAppWarning": "Nëse mesazhi duket i prerë në WhatsApp, përdor \"Kopjo\" dhe ngjite manualisht."
 }

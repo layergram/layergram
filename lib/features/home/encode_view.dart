@@ -481,18 +481,16 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
                               label: Text(strings(context, 'copy')),
                             ),
                           ),
-                          if (!AppPlatform.isAndroid) ...[
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: FilledButton.icon(
-                                onPressed: () async {
-                                  await shareTextExternally(context, _output);
-                                },
-                                icon: const Icon(Icons.share_outlined),
-                                label: Text(strings(context, 'share')),
-                              ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: FilledButton.icon(
+                              onPressed: () async {
+                                await shareTextExternally(context, _output);
+                              },
+                              icon: const Icon(Icons.share_outlined),
+                              label: Text(strings(context, 'share')),
                             ),
-                          ],
+                          ),
                         ],
                       ),
                     ],

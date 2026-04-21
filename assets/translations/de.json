@@ -219,5 +219,6 @@
   "contactStatusUnverified": "Nicht verifiziert",
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
-  "confirmSeventhWordHint": "Confirm seventh word"
+  "confirmSeventhWordHint": "Confirm seventh word",
+  "shareAndroidWhatsAppWarning": "Falls der Text in WhatsApp abgeschnitten erscheint, verwende „Kopieren\" und füge ihn manuell ein."
 }

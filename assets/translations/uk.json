@@ -219,5 +219,6 @@
   "contactStatusUnverified": "Непідтверджений",
   "onboardingModeCreate": "Створити особистість",
   "onboardingModeRestore": "Відновити особистість",
-  "confirmSeventhWordHint": "Підтвердити сьоме слово"
+  "confirmSeventhWordHint": "Підтвердити сьоме слово",
+  "shareAndroidWhatsAppWarning": "Якщо повідомлення виглядає обрізаним у WhatsApp, скористайтеся «Копіювати» та вставте вручну."
 }

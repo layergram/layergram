@@ -219,5 +219,6 @@
   "contactStatusUnverified": "Hindi na-verify",
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
-  "confirmSeventhWordHint": "Confirm seventh word"
+  "confirmSeventhWordHint": "Confirm seventh word",
+  "shareAndroidWhatsAppWarning": "Kung mukhang naputol ang mensahe sa WhatsApp, gamitin ang \"Kopyahin\" at i-paste nang manu-mano."
 }

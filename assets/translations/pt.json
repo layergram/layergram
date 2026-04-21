@@ -219,5 +219,6 @@
   "contactStatusUnverified": "Não verificado",
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
-  "confirmSeventhWordHint": "Confirm seventh word"
+  "confirmSeventhWordHint": "Confirm seventh word",
+  "shareAndroidWhatsAppWarning": "Se a mensagem aparecer truncada no WhatsApp, use \"Copiar\" e cole manualmente."
 }

@@ -219,5 +219,6 @@
   "contactStatusUnverified": "Chưa xác minh",
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
-  "confirmSeventhWordHint": "Confirm seventh word"
+  "confirmSeventhWordHint": "Confirm seventh word",
+  "shareAndroidWhatsAppWarning": "Nếu tin nhắn bị cắt ngắn trong WhatsApp, hãy dùng \"Sao chép\" và dán thủ công."
 }

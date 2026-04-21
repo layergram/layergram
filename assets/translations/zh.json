@@ -219,5 +219,6 @@
   "contactStatusUnverified": "未验证",
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
-  "confirmSeventhWordHint": "Confirm seventh word"
+  "confirmSeventhWordHint": "Confirm seventh word",
+  "shareAndroidWhatsAppWarning": "如果訊息在 WhatsApp 中看起來被截斷，請使用「複製」並手動貼上。"
 }

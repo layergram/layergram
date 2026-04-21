@@ -219,5 +219,6 @@
   "contactStatusUnverified": "Ej verifierad",
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
-  "confirmSeventhWordHint": "Confirm seventh word"
+  "confirmSeventhWordHint": "Confirm seventh word",
+  "shareAndroidWhatsAppWarning": "Om meddelandet verkar avklippt i WhatsApp, använd \"Kopiera\" och klistra in det manuellt."
 }

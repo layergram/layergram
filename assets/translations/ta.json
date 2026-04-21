@@ -219,5 +219,6 @@
   "contactStatusUnverified": "சரிபார்க்கப்படவில்லை",
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
-  "confirmSeventhWordHint": "Confirm seventh word"
+  "confirmSeventhWordHint": "Confirm seventh word",
+  "shareAndroidWhatsAppWarning": "WhatsApp-ல் செய்தி வெட்டப்பட்டதாக தோன்றினால், \"நகல்\" பயன்படுத்தி கைமுறையாக ஒட்டவும்."
 }

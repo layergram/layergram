@@ -219,5 +219,6 @@
   "contactStatusUnverified": "ยังไม่ยืนยัน",
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
-  "confirmSeventhWordHint": "Confirm seventh word"
+  "confirmSeventhWordHint": "Confirm seventh word",
+  "shareAndroidWhatsAppWarning": "หากข้อความดูเหมือนถูกตัดใน WhatsApp ให้ใช้ \"คัดลอก\" และวางด้วยตนเอง"
 }

@@ -219,5 +219,6 @@
   "contactStatusUnverified": "যাচাই হয়নি",
   "onboardingModeCreate": "পরিচয় তৈরি করুন",
   "onboardingModeRestore": "পরিচয় পুনরুদ্ধার করুন",
-  "confirmSeventhWordHint": "সপ্তম শব্দ নিশ্চিত করুন"
+  "confirmSeventhWordHint": "সপ্তম শব্দ নিশ্চিত করুন",
+  "shareAndroidWhatsAppWarning": "WhatsApp-এ বার্তা কাটা মনে হলে \"কপি\" ব্যবহার করে ম্যানুয়ালি পেস্ট করুন।"
 }

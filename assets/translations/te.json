@@ -219,5 +219,6 @@
   "contactStatusUnverified": "ధృవీకరించబడలేదు",
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
-  "confirmSeventhWordHint": "Confirm seventh word"
+  "confirmSeventhWordHint": "Confirm seventh word",
+  "shareAndroidWhatsAppWarning": "WhatsApp లో సందేశం కత్తిరించినట్లు కనిపిస్తే, \"కాపీ\" ఉపయోగించి మాన్యువల్‌గా అతికించండి."
 }

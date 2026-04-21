@@ -219,5 +219,6 @@
   "contactStatusUnverified": "Belum diverifikasi",
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
-  "confirmSeventhWordHint": "Confirm seventh word"
+  "confirmSeventhWordHint": "Confirm seventh word",
+  "shareAndroidWhatsAppWarning": "Jika pesan tampak terpotong di WhatsApp, gunakan \"Salin\" dan tempel secara manual."
 }

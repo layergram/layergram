@@ -219,5 +219,6 @@
   "contactStatusUnverified": "Μη επαληθευμένη",
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
-  "confirmSeventhWordHint": "Confirm seventh word"
+  "confirmSeventhWordHint": "Confirm seventh word",
+  "shareAndroidWhatsAppWarning": "Αν το κείμενο εμφανίζεται κομμένο στο WhatsApp, χρησιμοποίησε «Αντιγραφή» και επικόλλησέ το χειροκίνητα."
 }
