@@ -220,5 +220,12 @@
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
   "confirmSeventhWordHint": "Confirm seventh word",
-  "shareAndroidWhatsAppWarning": "ਜੇ WhatsApp ਵਿੱਚ ਸੁਨੇਹਾ ਕੱਟਿਆ ਹੋਇਆ ਦਿਖੇ, \"ਕਾਪੀ\" ਵਰਤੋ ਅਤੇ ਹੱਥੀਂ ਪੇਸਟ ਕਰੋ।"
+  "shareAndroidWhatsAppWarning": "ਜੇ WhatsApp ਵਿੱਚ ਸੁਨੇਹਾ ਕੱਟਿਆ ਹੋਇਆ ਦਿਖੇ, \"ਕਾਪੀ\" ਵਰਤੋ ਅਤੇ ਹੱਥੀਂ ਪੇਸਟ ਕਰੋ।",
+  "shareAndroidWhatsAppDialogTitle": "ਸੁਨੇਹਾ ਕਲਿਪਬੋਰਡ ਤੇ ਕਾਪੀ ਕੀਤਾ ਗਿਆ",
+  "shareAndroidWhatsAppDialogContent": "WhatsApp ਸਾਂਝਾ ਕੀਤਾ ਟੈਕਸਟ ਕੱਟ ਦਿੰਦਾ ਹੈ। ਪੂਰਾ ਭੇਜਣ ਲਈ WhatsApp ਖੋਲ੍ਹੋ ਅਤੇ ਸੁਨੇਹਾ ਹੱਥੀਂ ਪੇਸਟ ਕਰੋ।",
+  "shareAndroidWhatsAppDialogOpen": "WhatsApp ਖੋਲ੍ਹੋ",
+  "shareAndroidWhatsAppDialogCancel": "ਰੱਦ ਕਰੋ",
+  "shareAndroidTelegramDialogTitle": "Telegram ਅਨੁਕੂਲ ਨਹੀਂ ਹੈ",
+  "shareAndroidTelegramDialogContent": "Telegram ਜੀਰੋ-ਚੌੜਾਈ ਅੱਖਰਾਂ ਨੂੰ ਫਿਲਟਰ ਕਰਦਾ ਹੈ, Layergram ਦੇ ਲੁਕੇ ਸੁਨੇਹਿਆਂ ਨੂੰ ਹਟਾ ਦਿੰਦਾ ਹੈ। ਇਸ ਐਪ ਰਾਹੀਂ ਸਾਂਝਾ ਕਰਨ ਦੀ ਸਿਫਾਰਸ਼ ਨਹੀਂ ਕੀਤੀ ਜਾਂਦੀ।",
+  "understood": "ਸਮਝ ਗਿਆ"
 }

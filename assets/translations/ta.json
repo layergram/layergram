@@ -220,5 +220,12 @@
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
   "confirmSeventhWordHint": "Confirm seventh word",
-  "shareAndroidWhatsAppWarning": "WhatsApp-ல் செய்தி வெட்டப்பட்டதாக தோன்றினால், \"நகல்\" பயன்படுத்தி கைமுறையாக ஒட்டவும்."
+  "shareAndroidWhatsAppWarning": "WhatsApp-ல் செய்தி வெட்டப்பட்டதாக தோன்றினால், \"நகல்\" பயன்படுத்தி கைமுறையாக ஒட்டவும்.",
+  "shareAndroidWhatsAppDialogTitle": "செய்தி இடைநிலைப்பலகைக்கு நகலெடுக்கப்பட்டது",
+  "shareAndroidWhatsAppDialogContent": "WhatsApp பகிரப்பட்ட உரையை வெட்டுகிறது. முழுமையாக அனுப்ப WhatsApp-ஐத் திறந்து செய்தியை கைமுறையாக ஒட்டவும்.",
+  "shareAndroidWhatsAppDialogOpen": "WhatsApp-ஐத் திற",
+  "shareAndroidWhatsAppDialogCancel": "ரத்துசெய்",
+  "shareAndroidTelegramDialogTitle": "Telegram பொருந்தாது",
+  "shareAndroidTelegramDialogContent": "Telegram பூஜியம்-அகலம் கொண்ட எழுத்துக்களை வடிக்கிறது, Layergram மறைக்கப்பட்ட செய்திகளை நீக்குகிறது. இந்த பயன்பாட்டின் மூலம் பகிர்வது பரிந்துரைக்கப்படவில்லை.",
+  "understood": "புரிந்தது"
 }

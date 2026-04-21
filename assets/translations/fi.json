@@ -220,5 +220,12 @@
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
   "confirmSeventhWordHint": "Confirm seventh word",
-  "shareAndroidWhatsAppWarning": "Jos viesti näyttää katkaistuulta WhatsAppissa, käytä \"Kopioi\" ja liitä se manuaalisesti."
+  "shareAndroidWhatsAppWarning": "Jos viesti näyttää katkaistuulta WhatsAppissa, käytä \"Kopioi\" ja liitä se manuaalisesti.",
+  "shareAndroidWhatsAppDialogTitle": "Viesti kopioitu leikepöydälle",
+  "shareAndroidWhatsAppDialogContent": "WhatsApp katkaisee jaetun tekstin. Avaa WhatsApp ja liitä viesti manuaalisesti lähettääksesi sen kokonaan.",
+  "shareAndroidWhatsAppDialogOpen": "Avaa WhatsApp",
+  "shareAndroidWhatsAppDialogCancel": "Peruuta",
+  "shareAndroidTelegramDialogTitle": "Telegram ei ole yhteensopiva",
+  "shareAndroidTelegramDialogContent": "Telegram suodattaa nollaleveyiset merkit, poistaen Layergramin piilotetut viestit. Jakaminen tämän sovelluksen kautta ei ole suositeltavaa.",
+  "understood": "Ymmärretty"
 }

@@ -220,5 +220,12 @@
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
   "confirmSeventhWordHint": "Confirm seventh word",
-  "shareAndroidWhatsAppWarning": "If the message appears truncated in WhatsApp, use \"Copy\" and paste it manually."
+  "shareAndroidWhatsAppWarning": "If the message appears truncated in WhatsApp, use \"Copy\" and paste it manually.",
+  "shareAndroidWhatsAppDialogTitle": "Message copied to clipboard",
+  "shareAndroidWhatsAppDialogContent": "WhatsApp truncates shared text. Open WhatsApp and paste the message manually to send it completely.",
+  "shareAndroidWhatsAppDialogOpen": "Open WhatsApp",
+  "shareAndroidWhatsAppDialogCancel": "Cancel",
+  "shareAndroidTelegramDialogTitle": "Telegram not compatible",
+  "shareAndroidTelegramDialogContent": "Telegram filters out zero-width characters, removing Layergram hidden messages. Sharing via this app is not recommended.",
+  "understood": "Understood"
 }

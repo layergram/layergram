@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -43,6 +44,13 @@ Future<ShareResult> shareTextExternally(
   final container = ProviderScope.containerOf(context);
   container.read(isSharingProvider.notifier).state = true;
 
+  // On Android, when sharing to WhatsApp, we copy the full message to
+  // clipboard first because WhatsApp truncates text via ACTION_SEND Intent.
+  // The user will be prompted to open WhatsApp and paste manually.
+  if (AppPlatform.isAndroid) {
+    await Clipboard.setData(ClipboardData(text: text));
+  }
+
   final result = await SharePlus.instance.share(
     ShareParams(
       text: text,
@@ -71,16 +79,44 @@ Future<ShareResult> shareTextExternally(
       result.status == ShareResultStatus.success &&
       isWhatsAppShareActivityType(result.raw) &&
       context.mounted) {
-    // WhatsApp on Android silently truncates text passed via ACTION_SEND
-    // Intent pre-fill to ~1600–2000 characters (known WhatsApp bug, not an
-    // Android OS limit). Inform the user to paste manually if needed.
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(AppStrings.t(context, 'shareAndroidWhatsAppWarning')),
-        duration: const Duration(seconds: 6),
-      ),
-    );
+    // WhatsApp on Android truncates text via ACTION_SEND Intent to ~1600-2000 chars.
+    // Show a dialog prompting the user to open WhatsApp and paste the full message
+    // that is already in clipboard.
+    await _showWhatsAppAndroidDialog(context);
   }
 
   return result;
+}
+
+Future<void> _showWhatsAppAndroidDialog(BuildContext context) async {
+  if (!context.mounted) return;
+  
+  final openWhatsApp = await showDialog<bool>(
+    context: context,
+    barrierDismissible: false,
+    builder: (dialogContext) => AlertDialog(
+      title: Text(AppStrings.t(dialogContext, 'shareAndroidWhatsAppDialogTitle')),
+      content: Text(AppStrings.t(dialogContext, 'shareAndroidWhatsAppDialogContent')),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: Text(AppStrings.t(dialogContext, 'shareAndroidWhatsAppDialogCancel')),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: Text(AppStrings.t(dialogContext, 'shareAndroidWhatsAppDialogOpen')),
+        ),
+      ],
+    ),
+  );
+
+  if (openWhatsApp == true) {
+    final whatsappUri = Uri.parse('whatsapp://send');
+    if (await canLaunchUrl(whatsappUri)) {
+      await launchUrl(
+        whatsappUri,
+        mode: LaunchMode.externalApplication,
+      );
+    }
+  }
 }

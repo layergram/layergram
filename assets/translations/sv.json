@@ -220,5 +220,12 @@
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
   "confirmSeventhWordHint": "Confirm seventh word",
-  "shareAndroidWhatsAppWarning": "Om meddelandet verkar avklippt i WhatsApp, använd \"Kopiera\" och klistra in det manuellt."
+  "shareAndroidWhatsAppWarning": "Om meddelandet verkar avklippt i WhatsApp, använd \"Kopiera\" och klistra in det manuellt.",
+  "shareAndroidWhatsAppDialogTitle": "Meddelande kopierat till urklipp",
+  "shareAndroidWhatsAppDialogContent": "WhatsApp kortar delad text. Öppna WhatsApp och klistra in meddelandet manuellt för att skicka det komplett.",
+  "shareAndroidWhatsAppDialogOpen": "Öppna WhatsApp",
+  "shareAndroidWhatsAppDialogCancel": "Avbryt",
+  "shareAndroidTelegramDialogTitle": "Telegram ej kompatibel",
+  "shareAndroidTelegramDialogContent": "Telegram filtrerar tecken med nollbredd, vilket tar bort dolda Layergram-meddelanden. Delning via denna app rekommenderas inte.",
+  "understood": "Förstått"
 }

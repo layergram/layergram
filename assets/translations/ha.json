@@ -220,5 +220,12 @@
   "onboardingModeCreate": "Ƙirƙiri asali",
   "onboardingModeRestore": "Dawo da asali",
   "confirmSeventhWordHint": "Tabbatar da kalma ta bakwai",
-  "shareAndroidWhatsAppWarning": "Idan saƙon ya bayyana an yanke shi a WhatsApp, yi amfani da \"Kwafi\" kuma manna shi da hannu."
+  "shareAndroidWhatsAppWarning": "Idan saƙon ya bayyana an yanke shi a WhatsApp, yi amfani da \"Kwafi\" kuma manna shi da hannu.",
+  "shareAndroidWhatsAppDialogTitle": "Saƙo ya an kwafin clipboard",
+  "shareAndroidWhatsAppDialogContent": "WhatsApp yana cire rubutun da aka raba. Buɗe WhatsApp ka manna saƙon da hannu don aika shi cikakken.",
+  "shareAndroidWhatsAppDialogOpen": "Buɗe WhatsApp",
+  "shareAndroidWhatsAppDialogCancel": "Soke",
+  "shareAndroidTelegramDialogTitle": "Telegram bai dace ba",
+  "shareAndroidTelegramDialogContent": "Telegram yana cire haruffan faɗin zero, wanda yana cire saƙon Layergram na ɓoye. Ana ba da shawarar raba ta wannan app.",
+  "understood": "Na fahimta"
 }

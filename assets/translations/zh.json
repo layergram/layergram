@@ -220,5 +220,12 @@
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
   "confirmSeventhWordHint": "Confirm seventh word",
-  "shareAndroidWhatsAppWarning": "如果訊息在 WhatsApp 中看起來被截斷，請使用「複製」並手動貼上。"
+  "shareAndroidWhatsAppWarning": "如果訊息在 WhatsApp 中看起來被截斷，請使用「複製」並手動貼上。",
+  "shareAndroidWhatsAppDialogTitle": "消息已复制到剪贴板",
+  "shareAndroidWhatsAppDialogContent": "WhatsApp 会截断分享的文本。打开 WhatsApp 并手动粘贴消息以完整发送。",
+  "shareAndroidWhatsAppDialogOpen": "打开 WhatsApp",
+  "shareAndroidWhatsAppDialogCancel": "取消",
+  "shareAndroidTelegramDialogTitle": "Telegram 不兼容",
+  "shareAndroidTelegramDialogContent": "Telegram 会过滤零宽字符，删除 Layergram 隐藏消息。不建议通过此应用分享。",
+  "understood": "明白了"
 }

@@ -220,5 +220,12 @@
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
   "confirmSeventhWordHint": "Confirm seventh word",
-  "shareAndroidWhatsAppWarning": "Falls der Text in WhatsApp abgeschnitten erscheint, verwende „Kopieren\" und füge ihn manuell ein."
+  "shareAndroidWhatsAppWarning": "Falls der Text in WhatsApp abgeschnitten erscheint, verwende „Kopieren\" und füge ihn manuell ein.",
+  "shareAndroidWhatsAppDialogTitle": "Nachricht in Zwischenablage kopiert",
+  "shareAndroidWhatsAppDialogContent": "WhatsApp kürzt geteilten Text. Öffne WhatsApp und füge die Nachricht manuell ein, um sie vollständig zu senden.",
+  "shareAndroidWhatsAppDialogOpen": "WhatsApp öffnen",
+  "shareAndroidWhatsAppDialogCancel": "Abbrechen",
+  "shareAndroidTelegramDialogTitle": "Telegram nicht kompatibel",
+  "shareAndroidTelegramDialogContent": "Telegram filtert breitenlose Zeichen, wodurch versteckte Layergram-Nachrichten entfernt werden. Das Teilen über diese App wird nicht empfohlen.",
+  "understood": "Verstanden"
 }

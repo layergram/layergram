@@ -220,5 +220,12 @@
   "onboardingModeCreate": "Cipta identiti",
   "onboardingModeRestore": "Pulihkan identiti",
   "confirmSeventhWordHint": "Sahkan perkataan ketujuh",
-  "shareAndroidWhatsAppWarning": "Jika mesej kelihatan terpotong di WhatsApp, gunakan \"Salin\" dan tampalkan secara manual."
+  "shareAndroidWhatsAppWarning": "Jika mesej kelihatan terpotong di WhatsApp, gunakan \"Salin\" dan tampalkan secara manual.",
+  "shareAndroidWhatsAppDialogTitle": "Mesej disalin ke papan keratan",
+  "shareAndroidWhatsAppDialogContent": "WhatsApp memotong teks yang dikongsi. Buka WhatsApp dan tampal mesej secara manual untuk menghantarnya lengkap.",
+  "shareAndroidWhatsAppDialogOpen": "Buka WhatsApp",
+  "shareAndroidWhatsAppDialogCancel": "Batal",
+  "shareAndroidTelegramDialogTitle": "Telegram tidak serasi",
+  "shareAndroidTelegramDialogContent": "Telegram menapis aksara lebar sifar, memadamkan mesej tersembunyi Layergram. Perkongsian melalui aplikasi ini tidak disyorkan.",
+  "understood": "Difahami"
 }

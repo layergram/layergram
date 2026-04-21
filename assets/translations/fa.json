@@ -220,5 +220,12 @@
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
   "confirmSeventhWordHint": "Confirm seventh word",
-  "shareAndroidWhatsAppWarning": "اگر پیام در واتساپ ناقص نشان داده شد، از «کپی» استفاده کنید و به صورت دستی بچسبانید."
+  "shareAndroidWhatsAppWarning": "اگر پیام در واتساپ ناقص نشان داده شد، از «کپی» استفاده کنید و به صورت دستی بچسبانید.",
+  "shareAndroidWhatsAppDialogTitle": "پیام در کلیپ‌بورد کپی شد",
+  "shareAndroidWhatsAppDialogContent": "واتس‌اپ متن اشتراک‌گذاری‌شده را کوتاه می‌کند. واتس‌اپ را باز کنید و پیام را به صورت دستی جایگذاری کنید تا کامل ارسال شود.",
+  "shareAndroidWhatsAppDialogOpen": "باز کردن واتس‌اپ",
+  "shareAndroidWhatsAppDialogCancel": "لغو",
+  "shareAndroidTelegramDialogTitle": "تلگرام سازگار نیست",
+  "shareAndroidTelegramDialogContent": "تلگرام کاراکترهای عرض صفر را فیلتر می‌کند و پیام‌های پنهان Layergram را حذف می‌کند. اشتراک‌گذاری از طریق این برنامه توصیه نمی‌شود.",
+  "understood": "متوجه شدم"
 }

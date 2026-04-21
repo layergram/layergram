@@ -220,5 +220,12 @@
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
   "confirmSeventhWordHint": "Confirm seventh word",
-  "shareAndroidWhatsAppWarning": "Si el missatge apareix retallat a WhatsApp, fes servir \"Copia\" i enganxa'l manualment."
+  "shareAndroidWhatsAppWarning": "Si el missatge apareix retallat a WhatsApp, fes servir \"Copia\" i enganxa'l manualment.",
+  "shareAndroidWhatsAppDialogTitle": "Missatge copiat al porta-retalls",
+  "shareAndroidWhatsAppDialogContent": "WhatsApp trunca el text compartit. Obre WhatsApp i enganxa el missatge manualment per enviar-lo complet.",
+  "shareAndroidWhatsAppDialogOpen": "Obrir WhatsApp",
+  "shareAndroidWhatsAppDialogCancel": "Cancel·lar",
+  "shareAndroidTelegramDialogTitle": "Telegram no és compatible",
+  "shareAndroidTelegramDialogContent": "Telegram filtra els caràcters d'amplada zero, eliminant els missatges ocults de Layergram. No es recomana compartir amb aquesta aplicació.",
+  "understood": "Entesos"
 }

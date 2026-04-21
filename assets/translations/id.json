@@ -220,5 +220,12 @@
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
   "confirmSeventhWordHint": "Confirm seventh word",
-  "shareAndroidWhatsAppWarning": "Jika pesan tampak terpotong di WhatsApp, gunakan \"Salin\" dan tempel secara manual."
+  "shareAndroidWhatsAppWarning": "Jika pesan tampak terpotong di WhatsApp, gunakan \"Salin\" dan tempel secara manual.",
+  "shareAndroidWhatsAppDialogTitle": "Pesan disalin ke papan klip",
+  "shareAndroidWhatsAppDialogContent": "WhatsApp memotong teks yang dibagikan. Buka WhatsApp dan tempel pesan secara manual untuk mengirimnya lengkap.",
+  "shareAndroidWhatsAppDialogOpen": "Buka WhatsApp",
+  "shareAndroidWhatsAppDialogCancel": "Batal",
+  "shareAndroidTelegramDialogTitle": "Telegram tidak kompatibel",
+  "shareAndroidTelegramDialogContent": "Telegram menyaring karakter lebar nol, menghapus pesan tersembunyi Layergram. Berbagi melalui aplikasi ini tidak disarankan.",
+  "understood": "Dipahami"
 }

@@ -220,5 +220,12 @@
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
   "confirmSeventhWordHint": "Confirm seventh word",
-  "shareAndroidWhatsAppWarning": "यदि WhatsApp में संदेश कटा हुआ दिखे, तो \"कॉपी\" का उपयोग करें और इसे मैन्युअल रूप से पेस्ट करें।"
+  "shareAndroidWhatsAppWarning": "यदि WhatsApp में संदेश कटा हुआ दिखे, तो \"कॉपी\" का उपयोग करें और इसे मैन्युअल रूप से पेस्ट करें।",
+  "shareAndroidWhatsAppDialogTitle": "संदेश क्लिपबोर्ड पर कॉपी किया गया",
+  "shareAndroidWhatsAppDialogContent": "WhatsApp साझा किए गए टेक्सट को छोटा कर देता है। संपूर्ण भेजने के लिए WhatsApp खोलें और संदेश को मैन्युअल रूप से पेस्ट करें।",
+  "shareAndroidWhatsAppDialogOpen": "WhatsApp खोलें",
+  "shareAndroidWhatsAppDialogCancel": "रद्द करें",
+  "shareAndroidTelegramDialogTitle": "Telegram असंगत है",
+  "shareAndroidTelegramDialogContent": "Telegram शून्य-चौड़ाई वाले अक्षरों को फ़िल्टर कर देता है, जिससे Layergram छिपे संदेश हट जाते हैं। इस ऐप के माध्यम से साझा करने की अनुशंसा नहीं की जाती है।",
+  "understood": "समझ गया"
 }

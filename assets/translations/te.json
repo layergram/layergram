@@ -220,5 +220,12 @@
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
   "confirmSeventhWordHint": "Confirm seventh word",
-  "shareAndroidWhatsAppWarning": "WhatsApp లో సందేశం కత్తిరించినట్లు కనిపిస్తే, \"కాపీ\" ఉపయోగించి మాన్యువల్‌గా అతికించండి."
+  "shareAndroidWhatsAppWarning": "WhatsApp లో సందేశం కత్తిరించినట్లు కనిపిస్తే, \"కాపీ\" ఉపయోగించి మాన్యువల్‌గా అతికించండి.",
+  "shareAndroidWhatsAppDialogTitle": "సందేశం క్లిప్‌బోర్డ్‌కు కాపీ చేయబడింది",
+  "shareAndroidWhatsAppDialogContent": "WhatsApp భాగస్వామ్య టెక్స్ట్‌ను కత్తిరించుకుంటుంది. పూర్తిగా పంపడానికి WhatsApp తెరిచి సందేశాన్ని మాన్యువల్‌గా అతికించండి.",
+  "shareAndroidWhatsAppDialogOpen": "WhatsApp తెరువు",
+  "shareAndroidWhatsAppDialogCancel": "రద్దు",
+  "shareAndroidTelegramDialogTitle": "Telegram సరిపోదు",
+  "shareAndroidTelegramDialogContent": "Telegram సున్నా-వెడల్పు అక్షరాలను ఫిల్టర్ చేస్తుంది, Layergram దాచిన సందేశాలను తొలగిస్తుంది. ఈ యాప్ ద్వారా భాగస్వామ్యం చేయడం సూచించబడలేదు.",
+  "understood": "అర్థమైంది"
 }

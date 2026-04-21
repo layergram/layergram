@@ -220,5 +220,12 @@
   "onboardingModeCreate": "পরিচয় তৈরি করুন",
   "onboardingModeRestore": "পরিচয় পুনরুদ্ধার করুন",
   "confirmSeventhWordHint": "সপ্তম শব্দ নিশ্চিত করুন",
-  "shareAndroidWhatsAppWarning": "WhatsApp-এ বার্তা কাটা মনে হলে \"কপি\" ব্যবহার করে ম্যানুয়ালি পেস্ট করুন।"
+  "shareAndroidWhatsAppWarning": "WhatsApp-এ বার্তা কাটা মনে হলে \"কপি\" ব্যবহার করে ম্যানুয়ালি পেস্ট করুন।",
+  "shareAndroidWhatsAppDialogTitle": "বার্তা ক্লিপবোর্ডে কপি করা হয়েছে",
+  "shareAndroidWhatsAppDialogContent": "WhatsApp শেয়ার করা টেক্সট কাটছাঁট করে। সম্পূর্ণ বার্তা পাঠাতে WhatsApp খুলুন এবং ম্যানুয়ালি পেস্ট করুন।",
+  "shareAndroidWhatsAppDialogOpen": "WhatsApp খুলুন",
+  "shareAndroidWhatsAppDialogCancel": "বাতিল",
+  "shareAndroidTelegramDialogTitle": "Telegram সামঞ্জস্যপূর্ণ নয়",
+  "shareAndroidTelegramDialogContent": "Telegram শূন্য-প্রস্থ অক্ষরগুলি ফিল্টার করে, যা Layergram লুকানো বার্তাগুলি সরিয়ে দেয়। এই অ্যাপে শেয়ার করার পরামর্শ দেওয়া হয় না।",
+  "understood": "বোঝা গেছে"
 }

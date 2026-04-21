@@ -220,5 +220,12 @@
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
   "confirmSeventhWordHint": "Confirm seventh word",
-  "shareAndroidWhatsAppWarning": "WhatsApp'ta mesaj kesilmiş görünüyorsa, \"Kopyala\"yı kullan ve manuel olarak yapıştır."
+  "shareAndroidWhatsAppWarning": "WhatsApp'ta mesaj kesilmiş görünüyorsa, \"Kopyala\"yı kullan ve manuel olarak yapıştır.",
+  "shareAndroidWhatsAppDialogTitle": "Mesaj panoya kopyalandı",
+  "shareAndroidWhatsAppDialogContent": "WhatsApp paylaşılan metni keser. Tam olarak göndermek için WhatsAppı açın ve mesajı manuel olarak yapıştırın.",
+  "shareAndroidWhatsAppDialogOpen": "WhatsAppı Aç",
+  "shareAndroidWhatsAppDialogCancel": "İptal",
+  "shareAndroidTelegramDialogTitle": "Telegram uyumsuz",
+  "shareAndroidTelegramDialogContent": "Telegram sıfır genişlikli karakterleri filtreleyerek Layergram gizli mesajlarını kaldırır. Bu uygulama üzerinden paylaşım önerilmez.",
+  "understood": "Anlaşıldı"
 }

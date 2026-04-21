@@ -220,5 +220,12 @@
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
   "confirmSeventhWordHint": "Confirm seventh word",
-  "shareAndroidWhatsAppWarning": "Nếu tin nhắn bị cắt ngắn trong WhatsApp, hãy dùng \"Sao chép\" và dán thủ công."
+  "shareAndroidWhatsAppWarning": "Nếu tin nhắn bị cắt ngắn trong WhatsApp, hãy dùng \"Sao chép\" và dán thủ công.",
+  "shareAndroidWhatsAppDialogTitle": "Đã sao chép tin nhắn vào bảng tạm",
+  "shareAndroidWhatsAppDialogContent": "WhatsApp cắt ngắn văn bản được chia sẻ. Mở WhatsApp và dán tin nhắn thủ công để gửi đầy đủ.",
+  "shareAndroidWhatsAppDialogOpen": "Mở WhatsApp",
+  "shareAndroidWhatsAppDialogCancel": "Hủy",
+  "shareAndroidTelegramDialogTitle": "Telegram không tương thích",
+  "shareAndroidTelegramDialogContent": "Telegram lọc bỏ ký tự độ rộng bằng không, xóa thông điệp ẩn của Layergram. Không khuyến nghị chia sẻ qua ứng dụng này.",
+  "understood": "Đã hiểu"
 }
