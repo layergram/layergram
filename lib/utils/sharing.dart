@@ -13,9 +13,11 @@
 // limitations under the License.
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../core/providers.dart';
 import '../l10n/app_strings.dart';
 import 'app_platform.dart';
 
@@ -38,12 +40,17 @@ Future<ShareResult> shareTextExternally(
   BuildContext context,
   String text,
 ) async {
+  final container = ProviderScope.containerOf(context);
+  container.read(isSharingProvider.notifier).state = true;
+
   final result = await SharePlus.instance.share(
     ShareParams(
       text: text,
       sharePositionOrigin: sharePositionOriginForContext(context),
     ),
   );
+
+  container.read(isSharingProvider.notifier).state = false;
 
   if (AppPlatform.isIOS &&
       result.status == ShareResultStatus.success &&

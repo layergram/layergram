@@ -237,6 +237,7 @@ final pendingSharedTextProvider = StateProvider<String?>((_) => null);
 final tooltipsEnabledProvider = StateProvider<bool>((_) => false);
 final screenProtectionEnabledProvider = StateProvider<bool>((_) => true);
 final privacyShieldVisibleProvider = StateProvider<bool>((_) => false);
+final isSharingProvider = StateProvider<bool>((_) => false);
 final appLockServiceProvider = Provider((ref) {
   return AppLockService(ref.watch(secureStorageProvider));
 });

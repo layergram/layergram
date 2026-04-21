@@ -477,7 +477,8 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final screenProtectionEnabled = ref.read(screenProtectionEnabledProvider);
-    if (screenProtectionEnabled) {
+    final isSharing = ref.read(isSharingProvider);
+    if (screenProtectionEnabled && !isSharing) {
       ref.read(privacyShieldVisibleProvider.notifier).state =
           state != AppLifecycleState.resumed;
     } else {
