@@ -116,6 +116,69 @@ void main() {
         isFalse,
       );
     });
+
+    test('shouldShowLegacyIdentityNotice returns true only for v1 unacknowledged with feature on', () {
+      expect(
+        service.shouldShowLegacyIdentityNotice(
+          _identityV1(),
+          false,
+          featureEnabled: true,
+        ),
+        isTrue,
+      );
+    });
+
+    test('shouldShowLegacyIdentityNotice returns false for null identity', () {
+      expect(
+        service.shouldShowLegacyIdentityNotice(
+          null,
+          false,
+          featureEnabled: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('shouldShowLegacyIdentityNotice returns false for v2 identity regardless of acknowledged', () {
+      expect(
+        service.shouldShowLegacyIdentityNotice(
+          _identityV2(),
+          true,
+          featureEnabled: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('feature disabled short-circuits before synchronizeIdentityState (no auto-ack)', () async {
+      // With feature disabled, shouldShowForIdentity returns false immediately
+      // WITHOUT calling synchronizeIdentityState, so a v2 identity does NOT
+      // auto-acknowledge and does NOT pollute storage.
+      service = IdentityMigrationNoticeService(
+        storage,
+        isFeatureEnabled: () => false,
+      );
+
+      await service.shouldShowForIdentity(_identityV2());
+
+      expect(await service.isAcknowledged(), isFalse,
+          reason: 'feature-disabled path must not write to storage');
+    });
+
+    test('synchronizeIdentityState marks acknowledged for null identity', () async {
+      await service.synchronizeIdentityState(null);
+      expect(await service.isAcknowledged(), isTrue);
+    });
+
+    test('synchronizeIdentityState marks acknowledged for v2 identity', () async {
+      await service.synchronizeIdentityState(_identityV2());
+      expect(await service.isAcknowledged(), isTrue);
+    });
+
+    test('synchronizeIdentityState does NOT mark acknowledged for v1 identity', () async {
+      await service.synchronizeIdentityState(_identityV1());
+      expect(await service.isAcknowledged(), isFalse);
+    });
   });
 }
 

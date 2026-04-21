@@ -24,5 +24,12 @@ linter:
     avoid_print: true
     # prefer_single_quotes: true  # Uncomment to enable the `prefer_single_quotes` rule
 
+coverage:
+  ignore:
+    - "**/*.g.dart"
+    - "**/capabilities/**_noop.dart"
+    - "**/generated/**"
+    - "**/test/**"
+    
 # Additional information about this file can be found at
 # https://dart.dev/guides/language/analysis-options
