@@ -17,6 +17,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/crypto/seed_service.dart';
 import '../../core/providers.dart';
 import '../../l10n/app_strings.dart';
 
@@ -285,6 +286,7 @@ class _CreateOrRestoreViewState extends ConsumerState<CreateOrRestoreView> {
       await ref.read(identityManagerProvider).restoreIdentityFromMnemonic(
             _mnemonicCtrl.text.trim().toLowerCase(),
             displayName: name,
+            derivationVersion: SeedService.preferredIdentityDerivationVersion,
           );
       widget.onCompleted(true);
     } catch (_) {
