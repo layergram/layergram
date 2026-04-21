@@ -219,5 +219,13 @@
   "contactStatusUnverified": "غیر تصدیق شدہ",
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
-  "confirmSeventhWordHint": "Confirm seventh word"
+  "confirmSeventhWordHint": "Confirm seventh word",
+  "shareAndroidWhatsAppWarning": "اگر WhatsApp میں پیغام کٹا ہوا نظر آئے تو \"کاپی\" استعمال کریں اور دستی طور پر پیسٹ کریں۔",
+  "shareAndroidWhatsAppDialogTitle": "پیغام کلپ بورڈ پر کاپی ہو گیا",
+  "shareAndroidWhatsAppDialogContent": "WhatsApp شیئر کردہ متن کو تراش دیتا ہے۔ مکمل بھیجنے کے لیے WhatsApp کھولیں اور پیغام دستی طور پر پیسٹ کریں۔",
+  "shareAndroidWhatsAppDialogOpen": "WhatsApp کھولیں",
+  "shareAndroidWhatsAppDialogCancel": "منسوخ",
+  "shareAndroidTelegramDialogTitle": "Telegram موافق نہیں ہے",
+  "shareAndroidTelegramDialogContent": "Telegram صفر-چوڑائی والے حروف کو فلٹر کرتا ہے، جس سے Layergram کے پوشیدہ پیغامات ہٹ جاتے ہیں۔ اس ایپ کے ذریعے شیئر کرنے کی سفارش نہیں کی جاتی۔",
+  "understood": "سمجھ گیا"
 }

@@ -219,5 +219,13 @@
   "contactStatusUnverified": "Não verificado",
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
-  "confirmSeventhWordHint": "Confirm seventh word"
+  "confirmSeventhWordHint": "Confirm seventh word",
+  "shareAndroidWhatsAppWarning": "Se a mensagem aparecer truncada no WhatsApp, use \"Copiar\" e cole manualmente.",
+  "shareAndroidWhatsAppDialogTitle": "Mensagem copiada para a área de transferência",
+  "shareAndroidWhatsAppDialogContent": "O WhatsApp trunca o texto compartilhado. Abra o WhatsApp e cole a mensagem manualmente para enviá-la completa.",
+  "shareAndroidWhatsAppDialogOpen": "Abrir WhatsApp",
+  "shareAndroidWhatsAppDialogCancel": "Cancelar",
+  "shareAndroidTelegramDialogTitle": "Telegram incompatível",
+  "shareAndroidTelegramDialogContent": "O Telegram filtra caracteres de largura zero, removendo mensagens ocultas do Layergram. Não é recomendado compartilhar por este aplicativo.",
+  "understood": "Entendido"
 }

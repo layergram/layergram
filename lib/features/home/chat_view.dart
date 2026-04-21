@@ -1487,18 +1487,17 @@ class ChatViewState extends ConsumerState<ChatView> {
                               );
                             },
                     ),
-                    if (!AppPlatform.isAndroid)
-                      IconButton(
-                        icon: const Icon(Icons.ios_share_outlined, size: 20),
-                        tooltip: t(context, 'share'),
-                        onPressed: (!_isInputValid || _sending)
-                            ? null
-                            : () async {
-                                final output = await _encodeAndPersist();
-                                if (output == null || !context.mounted) { return; }
-                                await shareTextExternally(context, output);
-                              },
-                      ),
+                    IconButton(
+                      icon: const Icon(Icons.ios_share_outlined, size: 20),
+                      tooltip: t(context, 'share'),
+                      onPressed: (!_isInputValid || _sending)
+                          ? null
+                          : () async {
+                              final output = await _encodeAndPersist();
+                              if (output == null || !context.mounted) { return; }
+                              await shareTextExternally(context, output);
+                            },
+                    ),
                   ],
                 ),
                 const SizedBox(height: 4),
@@ -2347,26 +2346,24 @@ class ChatViewState extends ConsumerState<ChatView> {
                                           ),
                                         ),
                                       ),
-                                      if (!AppPlatform.isAndroid) ...[
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: FocusTraversalOrder(
-                                            order: const NumericFocusOrder(4),
-                                            child: OutlinedButton.icon(
-                                              onPressed: (!_isInputValid || _sending)
-                                                  ? null
-                                                  : () async {
-                                                      final output =
-                                                          await _encodeAndPersist();
-                                                      if (output == null || !context.mounted) { return; }
-                                                      await shareTextExternally(context, output);
-                                                    },
-                                              icon: const Icon(Icons.ios_share_outlined, size: 18),
-                                              label: FittedBox(fit: BoxFit.scaleDown, child: Text(t(context, 'share'))),
-                                            ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: FocusTraversalOrder(
+                                          order: const NumericFocusOrder(4),
+                                          child: OutlinedButton.icon(
+                                            onPressed: (!_isInputValid || _sending)
+                                                ? null
+                                                : () async {
+                                                    final output =
+                                                        await _encodeAndPersist();
+                                                    if (output == null || !context.mounted) { return; }
+                                                    await shareTextExternally(context, output);
+                                                  },
+                                            icon: const Icon(Icons.ios_share_outlined, size: 18),
+                                            label: FittedBox(fit: BoxFit.scaleDown, child: Text(t(context, 'share'))),
                                           ),
                                         ),
-                                      ],
+                                      ),
                                     ],
                                   ),
                                 ),

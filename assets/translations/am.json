@@ -219,5 +219,13 @@
   "contactStatusUnverified": "ያልተረጋገጠ",
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
-  "confirmSeventhWordHint": "Confirm seventh word"
+  "confirmSeventhWordHint": "Confirm seventh word",
+  "shareAndroidWhatsAppWarning": "WhatsApp ላይ መልእክቱ ቆርጦ ቢቀርብ፣ \"ቅዳ\" ተጠቅሞ ጨብጦ ያሰምርበት።",
+  "shareAndroidWhatsAppDialogTitle": "መልእክት ወደ ክሊፕቦርድ ተገልብጧል",
+  "shareAndroidWhatsAppDialogContent": "ዋትስአፕ የሚያጋራውን ጽሑፍ ያሳጥራል። ዋትስአፕን ክፈት እና መልእክቱን ሙሉ በሙሉ ለመላክ በእጅ ያስገቡ።",
+  "shareAndroidWhatsAppDialogOpen": "ዋትስአፕ ክፈት",
+  "shareAndroidWhatsAppDialogCancel": "ይቅር",
+  "shareAndroidTelegramDialogTitle": "Telegram አይሰራም",
+  "shareAndroidTelegramDialogContent": "Telegram የየለም ገጽታ ምልክቶችን ያጠራል። ይህ የLayergram መልእክቶችን ሊያጠፋ ይችላል። በዚህ መተግበሪያ ለማጋራት የማይመች ነው።",
+  "understood": "ተረዳሁ"
 }

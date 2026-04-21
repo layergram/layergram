@@ -219,5 +219,13 @@
   "contactStatusUnverified": "غير موثّق",
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
-  "confirmSeventhWordHint": "Confirm seventh word"
+  "confirmSeventhWordHint": "Confirm seventh word",
+  "shareAndroidWhatsAppWarning": "إذا بدا النص مقطوعاً في WhatsApp، استخدم \"نسخ\" وألصقه يدوياً.",
+  "shareAndroidWhatsAppDialogTitle": "تم نسخ الرسالة إلى الحافظة",
+  "shareAndroidWhatsAppDialogContent": "يقوم WhatsApp باقتطاع النص المشترك. افتح WhatsApp والصق الرسالة يدويًا لإرسالها كاملة.",
+  "shareAndroidWhatsAppDialogOpen": "فتح WhatsApp",
+  "shareAndroidWhatsAppDialogCancel": "إلغاء",
+  "shareAndroidTelegramDialogTitle": "Telegram غير متوافق",
+  "shareAndroidTelegramDialogContent": "يقوم Telegram بتصفية الأحرف ذات العرض الصفري، مما يتسبب في إزالة الرسائل المخفية في Layergram. لا يوصى باستخدام هذا التطبيق للمشاركة.",
+  "understood": "مفهوم"
 }

@@ -219,5 +219,13 @@
   "contactStatusUnverified": "Kò ní ìdánimọ̀",
   "onboardingModeCreate": "Ṣẹda Idanimọ",
   "onboardingModeRestore": "Mu Idanimọ pada",
-  "confirmSeventhWordHint": "Tẹ ọrọ keje sii lati tẹsiwaju"
+  "confirmSeventhWordHint": "Tẹ ọrọ keje sii lati tẹsiwaju",
+  "shareAndroidWhatsAppWarning": "Ti ifiranṣẹ ba dabi ẹni ti a ge ni WhatsApp, lo \"Daakọ\" ki o fi ara rẹ jẹ.",
+  "shareAndroidWhatsAppDialogTitle": "Ifiranṣẹ ti a daakọ si kílíìbọọdì",
+  "shareAndroidWhatsAppDialogContent": "WhatsApp n gé ìforígbarílẹ̀ kúrò nínú ìpín ìròyìn. Ṣí WhatsApp ki o fi ifiranṣẹ síi pẹlọwọ́ láti fi ránṣẹ́ kíkún.",
+  "shareAndroidWhatsAppDialogOpen": "Ṣí WhatsApp",
+  "shareAndroidWhatsAppDialogCancel": "Fagilé",
+  "shareAndroidTelegramDialogTitle": "Telegram ko ni ibatan",
+  "shareAndroidTelegramDialogContent": "Telegram ń ṣàyẹ̀wò àwọn ìàmì ìwọ̀n odo, tó ń yọkúrò nínú àwọn ìfiránsẹ́ tí wọ́n fipamọ́ Layergram. Kì í ṣe ìmọrán láti pín nípasẹ̀ àwọn àpò yìí.",
+  "understood": "O yé mi"
 }

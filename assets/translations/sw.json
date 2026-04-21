@@ -219,5 +219,13 @@
   "contactStatusUnverified": "Haijathibitishwa",
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
-  "confirmSeventhWordHint": "Confirm seventh word"
+  "confirmSeventhWordHint": "Confirm seventh word",
+  "shareAndroidWhatsAppWarning": "Ikiwa ujumbe unaonekana kukatizwa kwenye WhatsApp, tumia \"Nakili\" na ubandike mwenyewe.",
+  "shareAndroidWhatsAppDialogTitle": "Ujumbe umenakiliwa kwenye ubao wa kunakili",
+  "shareAndroidWhatsAppDialogContent": "WhatsApp hukata maelezo yaliyoshirikiwa. Fungua WhatsApp na bandika ujumbe kwa mkono ili kuutuma kwa ukamilifu.",
+  "shareAndroidWhatsAppDialogOpen": "Fungua WhatsApp",
+  "shareAndroidWhatsAppDialogCancel": "Ghairi",
+  "shareAndroidTelegramDialogTitle": "Telegram haifanyi kazi",
+  "shareAndroidTelegramDialogContent": "Telegram inachuja viandiko vya upana wa sifuri, ikitoa ujumbe wa Layergram uliofichwa. Kushirikishwa kupitia programu hii hairuhusiwi.",
+  "understood": "Nimeelewa"
 }

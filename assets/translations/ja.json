@@ -219,5 +219,13 @@
   "contactStatusUnverified": "未確認",
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
-  "confirmSeventhWordHint": "Confirm seventh word"
+  "confirmSeventhWordHint": "Confirm seventh word",
+  "shareAndroidWhatsAppWarning": "WhatsAppでメッセージが途切れて表示された場合は、「コピー」を使って手動で貼り付けてください。",
+  "shareAndroidWhatsAppDialogTitle": "メッセージをクリップボードにコピーしました",
+  "shareAndroidWhatsAppDialogContent": "WhatsAppは共有テキストを切り詰めます。WhatsAppを開き、メッセージを手動で貼り付けて完全に送信してください。",
+  "shareAndroidWhatsAppDialogOpen": "WhatsAppを開く",
+  "shareAndroidWhatsAppDialogCancel": "キャンセル",
+  "shareAndroidTelegramDialogTitle": "Telegramは非対応",
+  "shareAndroidTelegramDialogContent": "Telegramはゼロ幅文字をフィルタリングし、Layergramの隠しメッセージを削除します。このアプリでの共有は推奨されません。",
+  "understood": "了解"
 }

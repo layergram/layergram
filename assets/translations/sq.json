@@ -219,5 +219,13 @@
   "contactStatusUnverified": "I paverifikuar",
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
-  "confirmSeventhWordHint": "Confirm seventh word"
+  "confirmSeventhWordHint": "Confirm seventh word",
+  "shareAndroidWhatsAppWarning": "Nëse mesazhi duket i prerë në WhatsApp, përdor \"Kopjo\" dhe ngjite manualisht.",
+  "shareAndroidWhatsAppDialogTitle": "Mesazhi u kopjua në kujtesën e fragmenteve",
+  "shareAndroidWhatsAppDialogContent": "WhatsApp shkurton tekstin e ndarë. Hap WhatsApp dhe ngjit mesazhin manualisht për ta dërguar të plotë.",
+  "shareAndroidWhatsAppDialogOpen": "Hap WhatsApp",
+  "shareAndroidWhatsAppDialogCancel": "Anulo",
+  "shareAndroidTelegramDialogTitle": "Telegram jo i pajtueshëm",
+  "shareAndroidTelegramDialogContent": "Telegram filtron karakteret me gjerësi zero, duke hequr mesazhet e fshehura të Layergram. Nuk rekomandohet ndarja përmes këtij aplikacioni.",
+  "understood": "E kuptova"
 }

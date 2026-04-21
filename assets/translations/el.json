@@ -219,5 +219,13 @@
   "contactStatusUnverified": "Μη επαληθευμένη",
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
-  "confirmSeventhWordHint": "Confirm seventh word"
+  "confirmSeventhWordHint": "Confirm seventh word",
+  "shareAndroidWhatsAppWarning": "Αν το κείμενο εμφανίζεται κομμένο στο WhatsApp, χρησιμοποίησε «Αντιγραφή» και επικόλλησέ το χειροκίνητα.",
+  "shareAndroidWhatsAppDialogTitle": "Το μήνυμα αντιγράφηκε στο πρόχειρο",
+  "shareAndroidWhatsAppDialogContent": "Το WhatsApp περικόπτει το κοινόχρηστο κείμενο. Άνοιξε το WhatsApp και επικόλλησε το μήνυμα χειροκίνητα για να το στείλεις πλήρες.",
+  "shareAndroidWhatsAppDialogOpen": "Άνοιγμα WhatsApp",
+  "shareAndroidWhatsAppDialogCancel": "Ακύρωση",
+  "shareAndroidTelegramDialogTitle": "Το Telegram δεν είναι συμβατό",
+  "shareAndroidTelegramDialogContent": "Το Telegram φιλτράρει χαρακτήρες μηδενικού πλάτους, αφαιρώντας κρυφά μηνύματα Layergram. Δεν συνιστάται κοινοποίηση σε αυτή την εφαρμογή.",
+  "understood": "Κατανοητό"
 }

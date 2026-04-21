@@ -219,5 +219,13 @@
   "contactStatusUnverified": "Ikke verifisert",
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
-  "confirmSeventhWordHint": "Confirm seventh word"
+  "confirmSeventhWordHint": "Confirm seventh word",
+  "shareAndroidWhatsAppWarning": "Hvis meldingen ser avkortet ut i WhatsApp, bruk «Kopier» og lim den inn manuelt.",
+  "shareAndroidWhatsAppDialogTitle": "Melding kopiert til utklippstavle",
+  "shareAndroidWhatsAppDialogContent": "WhatsApp kutter delt tekst. Åpne WhatsApp og lim inn meldingen manuelt for å sende den komplett.",
+  "shareAndroidWhatsAppDialogOpen": "Åpne WhatsApp",
+  "shareAndroidWhatsAppDialogCancel": "Avbryt",
+  "shareAndroidTelegramDialogTitle": "Telegram ikke kompatibel",
+  "shareAndroidTelegramDialogContent": "Telegram filtrerer nullbredde-tegn, som fjerner skjulte Layergram-meldinger. Deling via denne appen anbefales ikke.",
+  "understood": "Forstått"
 }

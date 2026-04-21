@@ -219,5 +219,13 @@
   "contactStatusUnverified": "Non verificato",
   "onboardingModeCreate": "Crea identità",
   "onboardingModeRestore": "Ripristina identità",
-  "confirmSeventhWordHint": "Conferma settima parola"
+  "confirmSeventhWordHint": "Conferma settima parola",
+  "shareAndroidWhatsAppWarning": "Se il messaggio appare troncato in WhatsApp, usa \"Copia\" e incollalo manualmente.",
+  "shareAndroidWhatsAppDialogTitle": "Messaggio copiato negli appunti",
+  "shareAndroidWhatsAppDialogContent": "WhatsApp tronca il testo condiviso. Apri WhatsApp e incolla il messaggio manualmente per inviarlo completo.",
+  "shareAndroidWhatsAppDialogOpen": "Apri WhatsApp",
+  "shareAndroidWhatsAppDialogCancel": "Annulla",
+  "shareAndroidTelegramDialogTitle": "Telegram non compatibile",
+  "shareAndroidTelegramDialogContent": "Telegram filtra i caratteri a larghezza zero, rimuovendo i messaggi nascosti di Layergram. La condivisione tramite questa app non è consigliata.",
+  "understood": "Capito"
 }

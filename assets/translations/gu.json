@@ -219,5 +219,13 @@
   "contactStatusUnverified": "ચકાસાયેલ નથી",
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
-  "confirmSeventhWordHint": "Confirm seventh word"
+  "confirmSeventhWordHint": "Confirm seventh word",
+  "shareAndroidWhatsAppWarning": "જો WhatsApp માં સંદેશ કાપાયેલો દેખાય, \"કૉપિ\" નો ઉપયોગ કરો અને મેન્યુઅલી પેસ્ટ કરો.",
+  "shareAndroidWhatsAppDialogTitle": "સંદેશ ક્લિપબોર્ડ પર કૉપિ થયો",
+  "shareAndroidWhatsAppDialogContent": "WhatsApp શેર કરેલ ટેક્સ્ટ કાપે છે. સંપૂર્ણ મોકલવા માટે WhatsApp ખોલો અને સંદેશ હસ્તચાલિત પેસ્ટ કરો.",
+  "shareAndroidWhatsAppDialogOpen": "WhatsApp ખોલો",
+  "shareAndroidWhatsAppDialogCancel": "રદ કરો",
+  "shareAndroidTelegramDialogTitle": "Telegram સુસંગત નથી",
+  "shareAndroidTelegramDialogContent": "Telegram શૂન્ય-પહોળાઈ અક્ષરો ફિલ્ટર કરે છે, જે Layergram છુપાયેલા સંદેશાઓને દૂર કરે છે. આ એપ્લિકેશન દ્વારા શેર કરવાની ભલામણ નથી કરવામાં આવતી.",
+  "understood": "સમજાઈ ગયું"
 }

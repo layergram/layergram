@@ -219,5 +219,13 @@
   "contactStatusUnverified": "Neverificat",
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
-  "confirmSeventhWordHint": "Confirm seventh word"
+  "confirmSeventhWordHint": "Confirm seventh word",
+  "shareAndroidWhatsAppWarning": "Dacă mesajul apare trunchiat în WhatsApp, folosește „Copiază\" și lipește-l manual.",
+  "shareAndroidWhatsAppDialogTitle": "Mesaj copiat în clipboard",
+  "shareAndroidWhatsAppDialogContent": "WhatsApp trunchiază textul partajat. Deschide WhatsApp și lipește mesajul manual pentru a-l trimite complet.",
+  "shareAndroidWhatsAppDialogOpen": "Deschide WhatsApp",
+  "shareAndroidWhatsAppDialogCancel": "Anulează",
+  "shareAndroidTelegramDialogTitle": "Telegram incompatibil",
+  "shareAndroidTelegramDialogContent": "Telegram filtrează caracterele cu lățime zero, eliminând mesajele ascunse Layergram. Nu este recomandată partajarea prin această aplicație.",
+  "understood": "Înțeles"
 }

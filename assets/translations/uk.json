@@ -219,5 +219,13 @@
   "contactStatusUnverified": "Непідтверджений",
   "onboardingModeCreate": "Створити особистість",
   "onboardingModeRestore": "Відновити особистість",
-  "confirmSeventhWordHint": "Підтвердити сьоме слово"
+  "confirmSeventhWordHint": "Підтвердити сьоме слово",
+  "shareAndroidWhatsAppWarning": "Якщо повідомлення виглядає обрізаним у WhatsApp, скористайтеся «Копіювати» та вставте вручну.",
+  "shareAndroidWhatsAppDialogTitle": "Повідомлення скопійовано в буфер обміну",
+  "shareAndroidWhatsAppDialogContent": "WhatsApp обрізає текст, що поширюється. Відкрийте WhatsApp і вставте повідомлення вручну, щоб надіслати його повністю.",
+  "shareAndroidWhatsAppDialogOpen": "Відкрити WhatsApp",
+  "shareAndroidWhatsAppDialogCancel": "Скасувати",
+  "shareAndroidTelegramDialogTitle": "Telegram несумісний",
+  "shareAndroidTelegramDialogContent": "Telegram фільтрує символи нульової ширини, видаляючи приховані повідомлення Layergram. Обмін через цей додаток не рекомендується.",
+  "understood": "Зрозуміло"
 }

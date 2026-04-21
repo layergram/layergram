@@ -219,5 +219,13 @@
   "contactStatusUnverified": "Niet geverifieerd",
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
-  "confirmSeventhWordHint": "Confirm seventh word"
+  "confirmSeventhWordHint": "Confirm seventh word",
+  "shareAndroidWhatsAppWarning": "Als het bericht afgekapt lijkt in WhatsApp, gebruik dan \"Kopiëren\" en plak het handmatig.",
+  "shareAndroidWhatsAppDialogTitle": "Bericht gekopieerd naar klembord",
+  "shareAndroidWhatsAppDialogContent": "WhatsApp knipt gedeelde tekst af. Open WhatsApp en plak het bericht handmatig om het volledig te verzenden.",
+  "shareAndroidWhatsAppDialogOpen": "WhatsApp openen",
+  "shareAndroidWhatsAppDialogCancel": "Annuleren",
+  "shareAndroidTelegramDialogTitle": "Telegram niet compatibel",
+  "shareAndroidTelegramDialogContent": "Telegram filtert tekens met nulbreedte, waardoor verborgen Layergram-berichten worden verwijderd. Delen via deze app wordt afgeraden.",
+  "understood": "Begrepen"
 }

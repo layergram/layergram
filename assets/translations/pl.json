@@ -219,5 +219,13 @@
   "contactStatusUnverified": "Niezweryfikowany",
   "onboardingModeCreate": "Create identity",
   "onboardingModeRestore": "Restore identity",
-  "confirmSeventhWordHint": "Confirm seventh word"
+  "confirmSeventhWordHint": "Confirm seventh word",
+  "shareAndroidWhatsAppWarning": "Jeśli wiadomość jest obcięta w WhatsApp, użyj „Kopiuj\" i wklej ją ręcznie.",
+  "shareAndroidWhatsAppDialogTitle": "Wiadomość skopiowana do schowka",
+  "shareAndroidWhatsAppDialogContent": "WhatsApp obcina udostępniany tekst. Otwórz WhatsApp i wklej wiadomość ręcznie, aby wysłać ją w całości.",
+  "shareAndroidWhatsAppDialogOpen": "Otwórz WhatsApp",
+  "shareAndroidWhatsAppDialogCancel": "Anuluj",
+  "shareAndroidTelegramDialogTitle": "Telegram niekompatybilny",
+  "shareAndroidTelegramDialogContent": "Telegram filtruje znaki o zerowej szerokości, usuwając ukryte wiadomości Layergram. Udostępnianie przez tę aplikację nie jest zalecane.",
+  "understood": "Rozumiem"
 }
