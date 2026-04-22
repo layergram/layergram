@@ -79,7 +79,14 @@ Future<ShareResult> shareTextExternally(
 
   // Auto-detect if text contains steganography
   final hasSteganography = _containsSteganography(text);
-  final shouldUseCustomSelector = forceStegoCover || hasSteganography;
+  // Deeplinks should always use standard share even if they contain zero-width chars
+  // (they shouldn't, but if there's a bug we don't want to block link sharing)
+  final isDeeplink = text.startsWith('layergram://');
+  final shouldUseCustomSelector = !isDeeplink && (forceStegoCover || hasSteganography);
+  
+  // Debug logging to investigate link sharing issues
+  debugPrint('shareTextExternally: forceStegoCover=$forceStegoCover, hasSteganography=$hasSteganography, isDeeplink=$isDeeplink, shouldUseCustomSelector=$shouldUseCustomSelector');
+  debugPrint('shareTextExternally: text length=${text.length}, startsWith=${text.substring(0, text.length > 50 ? 50 : text.length)}');
 
   // On Android, use custom share flow only for steganographic messages.
   // For deeplinks, use the standard share sheet.
