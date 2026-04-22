@@ -121,20 +121,81 @@ class _AndroidAppSelectorDialogState extends State<AndroidAppSelectorDialog> {
         // Always show clipboard and "Other apps" options
         installedApps.add(app);
       } else {
-        // Check if the app is installed
-        final intent = AndroidIntent(
-          action: 'action_send',
-          package: app.packageName,
-          type: 'text/plain',
-        );
-        final canResolve = await intent.canResolveActivity();
-        if (canResolve ?? false) {
+        // Check if the app is installed using action_view with the app's main activity
+        // This is more reliable than action_send for checking package availability
+        final canResolve = await _checkAppInstalled(app.packageName);
+        if (canResolve) {
           installedApps.add(app);
         }
       }
     }
 
+    // If no messaging apps detected (only clipboard + other apps), show all common apps
+    // as fallback - better to show apps that might not be installed than to hide installed ones
+    if (installedApps.length <= 2) {
+      // Add all messaging apps as fallback (user will get "app not installed" if they tap)
+      final installedPackageNames = installedApps.map((a) => a.packageName).toSet();
+      for (final app in _kCommonShareApps) {
+        if (app.packageName != 'clipboard' &&
+            app.packageName != 'standard' &&
+            !installedPackageNames.contains(app.packageName)) {
+          installedApps.insert(installedApps.length - 2, app);
+        }
+      }
+    }
+
     return installedApps;
+  }
+
+  /// Checks if an app is installed by attempting to resolve its main activity.
+  /// Uses multiple strategies for better reliability across different Android versions.
+  Future<bool> _checkAppInstalled(String packageName) async {
+    try {
+      // Strategy 1: Try to resolve the app's main launcher activity
+      final launchIntent = AndroidIntent(
+        action: 'action_main',
+        package: packageName,
+        category: 'category_launcher',
+      );
+      final canResolveLaunch = await launchIntent.canResolveActivity();
+      if (canResolveLaunch ?? false) {
+        return true;
+      }
+    } catch (e) {
+      // Ignore and try next strategy
+    }
+
+    try {
+      // Strategy 2: Try action_view with a generic URI
+      final viewIntent = AndroidIntent(
+        action: 'action_view',
+        package: packageName,
+        data: 'https://example.com',
+      );
+      final canResolveView = await viewIntent.canResolveActivity();
+      if (canResolveView ?? false) {
+        return true;
+      }
+    } catch (e) {
+      // Ignore and try next strategy
+    }
+
+    try {
+      // Strategy 3: Try action_send (original method as fallback)
+      final sendIntent = AndroidIntent(
+        action: 'action_send',
+        package: packageName,
+        type: 'text/plain',
+      );
+      final canResolveSend = await sendIntent.canResolveActivity();
+      if (canResolveSend ?? false) {
+        return true;
+      }
+    } catch (e) {
+      // Ignore
+    }
+
+    return false;
   }
 
   @override
