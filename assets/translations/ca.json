@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "Cancel·lar",
   "shareAndroidTelegramDialogTitle": "Telegram no és compatible",
   "shareAndroidTelegramDialogContent": "Telegram filtra els caràcters d'amplada zero, eliminant els missatges ocults de Layergram. No es recomana compartir amb aquesta aplicació.",
-  "understood": "Entesos"
+  "understood": "Entesos",
+  "shareAndroidDialogTitle": "Compartir amb",
+  "shareAndroidDialogCancel": "Cancel·lar",
+  "shareAppWhatsApp": "WhatsApp",
+  "shareAppTelegram": "Telegram",
+  "shareAppSignal": "Signal",
+  "shareAppGmail": "Gmail",
+  "shareAppMessages": "Missatges",
+  "shareAppCopyToClipboard": "Copiar al porta-retalls",
+  "shareAppOtherApps": "Altres aplicacions"
 }

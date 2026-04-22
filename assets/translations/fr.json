@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "Annuler",
   "shareAndroidTelegramDialogTitle": "Telegram non compatible",
   "shareAndroidTelegramDialogContent": "Telegram filtre les caractères de largeur nulle, supprimant les messages cachés de Layergram. Le partage via cette application est déconseillé.",
-  "understood": "Compris"
+  "understood": "Compris",
+  "shareAndroidDialogTitle": "Partager avec",
+  "shareAndroidDialogCancel": "Annuler",
+  "shareAppWhatsApp": "WhatsApp",
+  "shareAppTelegram": "Telegram",
+  "shareAppSignal": "Signal",
+  "shareAppGmail": "Gmail",
+  "shareAppMessages": "Messages",
+  "shareAppCopyToClipboard": "Copier dans le presse-papiers",
+  "shareAppOtherApps": "Autres applications"
 }

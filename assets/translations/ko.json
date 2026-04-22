@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "취소",
   "shareAndroidTelegramDialogTitle": "Telegram은 호환되지 않습니다",
   "shareAndroidTelegramDialogContent": "Telegram은 제로폭 문자를 필터링하여 Layergram 숨겨진 메시지를 제거합니다. 이 앱을 통해 공유하는 것은 권장되지 않습니다.",
-  "understood": "알겠습니다"
+  "understood": "알겠습니다",
+  "shareAndroidDialogTitle": "공유 대상",
+  "shareAndroidDialogCancel": "취소",
+  "shareAppWhatsApp": "WhatsApp",
+  "shareAppTelegram": "Telegram",
+  "shareAppSignal": "Signal",
+  "shareAppGmail": "Gmail",
+  "shareAppMessages": "메시지",
+  "shareAppCopyToClipboard": "클립보드에 복사",
+  "shareAppOtherApps": "기타 앱"
 }

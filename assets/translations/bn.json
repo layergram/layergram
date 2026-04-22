@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "বাতিল",
   "shareAndroidTelegramDialogTitle": "Telegram সামঞ্জস্যপূর্ণ নয়",
   "shareAndroidTelegramDialogContent": "Telegram শূন্য-প্রস্থ অক্ষরগুলি ফিল্টার করে, যা Layergram লুকানো বার্তাগুলি সরিয়ে দেয়। এই অ্যাপে শেয়ার করার পরামর্শ দেওয়া হয় না।",
-  "understood": "বোঝা গেছে"
+  "understood": "বোঝা গেছে",
+  "shareAndroidDialogTitle": "এর সাথে শেয়ার করুন",
+  "shareAndroidDialogCancel": "বাতিল",
+  "shareAppWhatsApp": "WhatsApp",
+  "shareAppTelegram": "Telegram",
+  "shareAppSignal": "Signal",
+  "shareAppGmail": "Gmail",
+  "shareAppMessages": "বার্তা",
+  "shareAppCopyToClipboard": "ক্লিপবোর্ডে কপি করুন",
+  "shareAppOtherApps": "অন্যান্য অ্যাপস"
 }

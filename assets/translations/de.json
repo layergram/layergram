@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "Abbrechen",
   "shareAndroidTelegramDialogTitle": "Telegram nicht kompatibel",
   "shareAndroidTelegramDialogContent": "Telegram filtert breitenlose Zeichen, wodurch versteckte Layergram-Nachrichten entfernt werden. Das Teilen über diese App wird nicht empfohlen.",
-  "understood": "Verstanden"
+  "understood": "Verstanden",
+  "shareAndroidDialogTitle": "Teilen mit",
+  "shareAndroidDialogCancel": "Abbrechen",
+  "shareAppWhatsApp": "WhatsApp",
+  "shareAppTelegram": "Telegram",
+  "shareAppSignal": "Signal",
+  "shareAppGmail": "Gmail",
+  "shareAppMessages": "Nachrichten",
+  "shareAppCopyToClipboard": "In Zwischenablage kopieren",
+  "shareAppOtherApps": "Andere Apps"
 }

@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "रद्द करें",
   "shareAndroidTelegramDialogTitle": "Telegram असंगत है",
   "shareAndroidTelegramDialogContent": "Telegram शून्य-चौड़ाई वाले अक्षरों को फ़िल्टर कर देता है, जिससे Layergram छिपे संदेश हट जाते हैं। इस ऐप के माध्यम से साझा करने की अनुशंसा नहीं की जाती है।",
-  "understood": "समझ गया"
+  "understood": "समझ गया",
+  "shareAndroidDialogTitle": "इसके साथ साझा करें",
+  "shareAndroidDialogCancel": "रद्द करें",
+  "shareAppWhatsApp": "WhatsApp",
+  "shareAppTelegram": "Telegram",
+  "shareAppSignal": "Signal",
+  "shareAppGmail": "Gmail",
+  "shareAppMessages": "संदेश",
+  "shareAppCopyToClipboard": "क्लिपबोर्ड पर कॉपी करें",
+  "shareAppOtherApps": "अन्य ऐप्स"
 }

@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "Anuluj",
   "shareAndroidTelegramDialogTitle": "Telegram niekompatybilny",
   "shareAndroidTelegramDialogContent": "Telegram filtruje znaki o zerowej szerokości, usuwając ukryte wiadomości Layergram. Udostępnianie przez tę aplikację nie jest zalecane.",
-  "understood": "Rozumiem"
+  "understood": "Rozumiem",
+  "shareAndroidDialogTitle": "Udostępnij do",
+  "shareAndroidDialogCancel": "Anuluj",
+  "shareAppWhatsApp": "WhatsApp",
+  "shareAppTelegram": "Telegram",
+  "shareAppSignal": "Signal",
+  "shareAppGmail": "Gmail",
+  "shareAppMessages": "Wiadomości",
+  "shareAppCopyToClipboard": "Kopiuj do schowka",
+  "shareAppOtherApps": "Inne aplikacje"
 }

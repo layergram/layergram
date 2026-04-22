@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "لغو",
   "shareAndroidTelegramDialogTitle": "تلگرام سازگار نیست",
   "shareAndroidTelegramDialogContent": "تلگرام کاراکترهای عرض صفر را فیلتر می‌کند و پیام‌های پنهان Layergram را حذف می‌کند. اشتراک‌گذاری از طریق این برنامه توصیه نمی‌شود.",
-  "understood": "متوجه شدم"
+  "understood": "فهمیدم",
+  "shareAndroidDialogTitle": "اشتراک‌گذاری با",
+  "shareAndroidDialogCancel": "لغو",
+  "shareAppWhatsApp": "واتساپ",
+  "shareAppTelegram": "تلگرام",
+  "shareAppSignal": "سیگنال",
+  "shareAppGmail": "جیمیل",
+  "shareAppMessages": "پیام‌ها",
+  "shareAppCopyToClipboard": "کپی به کلیپ‌بورد",
+  "shareAppOtherApps": "سایر برنامه‌ها"
 }

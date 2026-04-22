@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "रद्द करा",
   "shareAndroidTelegramDialogTitle": "Telegram सुसंगत नाही",
   "shareAndroidTelegramDialogContent": "Telegram शून्य-रुंदी अक्षरे फिल्टर करते, Layergram लपलेले संदेश काढून टाकते. या अ‍ॅपद्वारे सामायिक करण्याची शिफारस केली जात नाही.",
-  "understood": "समजले"
+  "understood": "समजले",
+  "shareAndroidDialogTitle": "याच्यासोबत शेअर करा",
+  "shareAndroidDialogCancel": "रद्द",
+  "shareAppWhatsApp": "WhatsApp",
+  "shareAppTelegram": "Telegram",
+  "shareAppSignal": "Signal",
+  "shareAppGmail": "Gmail",
+  "shareAppMessages": "संदेश",
+  "shareAppCopyToClipboard": "क्लिपबोर्डवर कॉपी करा",
+  "shareAppOtherApps": "इतर ॲप्स"
 }

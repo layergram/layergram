@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "Cancelar",
   "shareAndroidTelegramDialogTitle": "Telegram incompatível",
   "shareAndroidTelegramDialogContent": "O Telegram filtra caracteres de largura zero, removendo mensagens ocultas do Layergram. Não é recomendado partilhar por esta aplicação.",
-  "understood": "Entendido"
+  "understood": "Entendido",
+  "shareAndroidDialogTitle": "Partilhar com",
+  "shareAndroidDialogCancel": "Cancelar",
+  "shareAppWhatsApp": "WhatsApp",
+  "shareAppTelegram": "Telegram",
+  "shareAppSignal": "Signal",
+  "shareAppGmail": "Gmail",
+  "shareAppMessages": "Mensagens",
+  "shareAppCopyToClipboard": "Copiar para área de transferência",
+  "shareAppOtherApps": "Outras aplicações"
 }

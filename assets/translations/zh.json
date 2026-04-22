@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "取消",
   "shareAndroidTelegramDialogTitle": "Telegram 不兼容",
   "shareAndroidTelegramDialogContent": "Telegram 会过滤零宽字符，删除 Layergram 隐藏消息。不建议通过此应用分享。",
-  "understood": "明白了"
+  "understood": "明白了",
+  "shareAndroidDialogTitle": "分享到",
+  "shareAndroidDialogCancel": "取消",
+  "shareAppWhatsApp": "WhatsApp",
+  "shareAppTelegram": "Telegram",
+  "shareAppSignal": "Signal",
+  "shareAppGmail": "Gmail",
+  "shareAppMessages": "信息",
+  "shareAppCopyToClipboard": "复制到剪贴板",
+  "shareAppOtherApps": "其他应用"
 }

@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "Ghairi",
   "shareAndroidTelegramDialogTitle": "Telegram haifanyi kazi",
   "shareAndroidTelegramDialogContent": "Telegram inachuja viandiko vya upana wa sifuri, ikitoa ujumbe wa Layergram uliofichwa. Kushirikishwa kupitia programu hii hairuhusiwi.",
-  "understood": "Nimeelewa"
+  "understood": "Nimeelewa",
+  "shareAndroidDialogTitle": "Shiriki na",
+  "shareAndroidDialogCancel": "Ghairi",
+  "shareAppWhatsApp": "WhatsApp",
+  "shareAppTelegram": "Telegram",
+  "shareAppSignal": "Signal",
+  "shareAppGmail": "Gmail",
+  "shareAppMessages": "Ujumbe",
+  "shareAppCopyToClipboard": "Nakili kwenye clipboard",
+  "shareAppOtherApps": "Programu nyingine"
 }

@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "Anulează",
   "shareAndroidTelegramDialogTitle": "Telegram incompatibil",
   "shareAndroidTelegramDialogContent": "Telegram filtrează caracterele cu lățime zero, eliminând mesajele ascunse Layergram. Nu este recomandată partajarea prin această aplicație.",
-  "understood": "Înțeles"
+  "understood": "Am înțeles",
+  "shareAndroidDialogTitle": "Partajează cu",
+  "shareAndroidDialogCancel": "Anulează",
+  "shareAppWhatsApp": "WhatsApp",
+  "shareAppTelegram": "Telegram",
+  "shareAppSignal": "Signal",
+  "shareAppGmail": "Gmail",
+  "shareAppMessages": "Mesaje",
+  "shareAppCopyToClipboard": "Copiază în clipboard",
+  "shareAppOtherApps": "Alte aplicații"
 }

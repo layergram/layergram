@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "Скасувати",
   "shareAndroidTelegramDialogTitle": "Telegram несумісний",
   "shareAndroidTelegramDialogContent": "Telegram фільтрує символи нульової ширини, видаляючи приховані повідомлення Layergram. Обмін через цей додаток не рекомендується.",
-  "understood": "Зрозуміло"
+  "understood": "Зрозуміло",
+  "shareAndroidDialogTitle": "Поділитися",
+  "shareAndroidDialogCancel": "Скасувати",
+  "shareAppWhatsApp": "WhatsApp",
+  "shareAppTelegram": "Telegram",
+  "shareAppSignal": "Signal",
+  "shareAppGmail": "Gmail",
+  "shareAppMessages": "Повідомлення",
+  "shareAppCopyToClipboard": "Копіювати в буфер",
+  "shareAppOtherApps": "Інші додатки"
 }

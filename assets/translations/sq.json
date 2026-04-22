@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "Anulo",
   "shareAndroidTelegramDialogTitle": "Telegram jo i pajtueshëm",
   "shareAndroidTelegramDialogContent": "Telegram filtron karakteret me gjerësi zero, duke hequr mesazhet e fshehura të Layergram. Nuk rekomandohet ndarja përmes këtij aplikacioni.",
-  "understood": "E kuptova"
+  "understood": "E kuptova",
+  "shareAndroidDialogTitle": "Ndaj me",
+  "shareAndroidDialogCancel": "Anulo",
+  "shareAppWhatsApp": "WhatsApp",
+  "shareAppTelegram": "Telegram",
+  "shareAppSignal": "Signal",
+  "shareAppGmail": "Gmail",
+  "shareAppMessages": "Mesazhet",
+  "shareAppCopyToClipboard": "Kopjo në clipboard",
+  "shareAppOtherApps": "Aplikacione të tjera"
 }

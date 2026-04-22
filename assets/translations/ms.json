@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "Batal",
   "shareAndroidTelegramDialogTitle": "Telegram tidak serasi",
   "shareAndroidTelegramDialogContent": "Telegram menapis aksara lebar sifar, memadamkan mesej tersembunyi Layergram. Perkongsian melalui aplikasi ini tidak disyorkan.",
-  "understood": "Difahami"
+  "understood": "Difahami",
+  "shareAndroidDialogTitle": "Kongsi dengan",
+  "shareAndroidDialogCancel": "Batal",
+  "shareAppWhatsApp": "WhatsApp",
+  "shareAppTelegram": "Telegram",
+  "shareAppSignal": "Signal",
+  "shareAppGmail": "Gmail",
+  "shareAppMessages": "Mesej",
+  "shareAppCopyToClipboard": "Salin ke papan keratan",
+  "shareAppOtherApps": "Apl lain"
 }

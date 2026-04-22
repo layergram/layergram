@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "ரத்துசெய்",
   "shareAndroidTelegramDialogTitle": "Telegram பொருந்தாது",
   "shareAndroidTelegramDialogContent": "Telegram பூஜியம்-அகலம் கொண்ட எழுத்துக்களை வடிக்கிறது, Layergram மறைக்கப்பட்ட செய்திகளை நீக்குகிறது. இந்த பயன்பாட்டின் மூலம் பகிர்வது பரிந்துரைக்கப்படவில்லை.",
-  "understood": "புரிந்தது"
+  "understood": "புரிந்தது",
+  "shareAndroidDialogTitle": "இதுவுடன் பகிர்",
+  "shareAndroidDialogCancel": "ரத்து",
+  "shareAppWhatsApp": "WhatsApp",
+  "shareAppTelegram": "Telegram",
+  "shareAppSignal": "Signal",
+  "shareAppGmail": "Gmail",
+  "shareAppMessages": "செய்திகள்",
+  "shareAppCopyToClipboard": "கிளிப்போர்டுக்கு நகலெடு",
+  "shareAppOtherApps": "மற்ற பயன்பாடுகள்"
 }
