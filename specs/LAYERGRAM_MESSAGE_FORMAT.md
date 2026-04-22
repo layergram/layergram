@@ -1,9 +1,14 @@
 # Layergram Message Format (LMF) Specification
 
-**Version:** 1.1  
+**Version:** 2.0  
 **Status:** Stable  
 
 This document defines the **Layergram Message Format (LMF)**, the protocol used by Layergram to embed end-to-end encrypted messages within standard, visually innocuous text messages.
+
+## Version History
+
+- **LMF v2.0 (Current)**: Introduces structured inner container, gzip compression, hardened Unicode alphabet. Always encode with v2; decode supports v2 then v1 fallback.
+- **LMF v1.1 (Legacy)**: Original format with raw JSON encryption. Decode-only support for backward compatibility.
 
 The specification in this document is implemented by the public Layergram application and by official Layergram builds released through the project's official channels.
 
@@ -17,7 +22,7 @@ The **Layergram Message Format (LMF)** decouples the encryption layer from the t
 
 This approach provides:
 
-1. **Transport Agnosticism:** Messages can be sent over WhatsApp, Telegram, Signal, iMessage, email, or even standard SMS — any channel that preserves Unicode.
+1. **Transport Agnosticism:** Messages can be sent over WhatsApp, Telegram, Signal, iMessage, email — any channel that preserves Unicode. For channels that strip or normalize invisible characters, a **direct message link** format (`layergram://m/<payload>`) is available as a fallback (see Section 4.3).
 2. **Visual Deniability:** To an outside observer, automated filter, or platform moderator, the message looks like an ordinary conversation. The encrypted data does not contain any recognizable signature or prefix.
 3. **Resilience:** The encoding and distribution strategy is specifically designed to survive platform-specific character truncation.
 
@@ -54,10 +59,10 @@ The JSON serialization is encoded as UTF-8 before encryption. Any valid Unicode 
 
 | Field | Type | Description |
 |---|---|---|
-| `v` | int | Format version (currently `1`) |
+| `v` | int | Format version (`2` for LMF v2) |
 | `senderId` | string | Full sender identity ID |
 | `recipientId` | string | Full recipient identity ID |
-| `timestamp` | int | Unix timestamp (milliseconds) |
+| `timestamp` | int | Unix timestamp (milliseconds since epoch) |
 | `text` | string | The secret message content |
 | `senderDisplayName` | string? | Optional sender display name |
 | `expireAfter` | int? | Optional TTL in seconds |
@@ -71,11 +76,69 @@ To maximize deniability, the encrypted payload does **not** contain any plaintex
 rawPayloadBytes = 12-byte AES-GCM nonce || AES-GCM-ciphertext || 16-byte MAC
 ```
 
+### 2.3 LMF v2 Inner Container (LMFv2Inner)
+
+LMF v2 wraps the plaintext before encryption. This enables compression and future extensibility:
+
+```
+LMFv2Inner =
+    1 byte  formatVersion    (0x02)
+    1 byte  flags            (bitmask)
+    2 bytes reserved         (0x0000)
+    N bytes payloadBytes
+```
+
+**Field values:**
+
+| Field | Value | Description |
+|---|---|---|
+| `formatVersion` | `0x02` | LMF v2 format identifier |
+| `flags` | bitmask | bit 0 = 1 if payloadBytes is gzip-compressed |
+| `reserved` | `0x0000` | Must be zero (enables future extensions) |
+| `payloadBytes` | bytes | UTF-8 JSON (plain or gzip-compressed) |
+
+**Processing order for encoding:**
+1. Build v2 JSON envelope
+2. UTF-8 encode the JSON
+3. Optionally compress with gzip (see section 2.4)
+4. Construct LMFv2Inner container
+5. Encrypt LMFv2Inner with AES-GCM-256
+
+**Processing order for decoding:**
+1. Decrypt with AES-GCM-256
+2. Parse LMFv2Inner header (validate formatVersion, reserved, flags)
+3. Decompress if compression flag is set
+4. Decode UTF-8 JSON
+5. Validate `json.v == 2`
+
+### 2.4 Compression (LMF v2)
+
+LMF v2 uses **gzip** compression (via pure Dart `archive` package) to reduce payload size for long messages. Using gzip instead of zstd avoids native FFI dependencies that cause code signing issues on macOS, while still providing good compression ratios.
+
+**Policy:**
+- Compression level: 6 (gzip default)
+- Compression threshold: do not compress if plaintext < 96 bytes
+- Minimum savings: only use compressed form if it saves at least 4 bytes
+- If compression fails: fall back to uncompressed (set compression flag to 0)
+
+```
+if plaintextLen < 96:
+    use uncompressed
+else:
+    compressed = gzip(plaintext, level=6)
+    if compressedLen + 4 < plaintextLen:
+        use compressed, set compression flag = 1
+    else:
+        use uncompressed, set compression flag = 0
+```
+
 ---
 
 ## 3. Steganographic Encoding
 
-Layergram currently supports a single steganographic standard: the raw-binary zero-width format described in this section. Older logical-payload steganography formats are not part of the supported protocol.
+Layergram primarily uses a single steganographic standard: the raw-binary zero-width format described in this section. Older logical-payload steganography formats are not part of the supported protocol.
+
+**Note:** Steganographic embedding requires the transport to preserve zero-width Unicode characters. For transports that strip these characters (or when the user prefers explicit sharing), LMF supports an alternative **direct message link** format (see Section 4.3). Deep links make the presence of encryption visibly obvious, unlike steganographic embedding which requires instrumental analysis to detect.
 
 ### 3.1 Base-4 Symbol Alphabet
 
@@ -88,21 +151,39 @@ The `rawPayloadBytes` are converted to bits (each byte → 8 bits) and encoded a
 | `10` | `U+200D` | Zero Width Joiner |
 | `11` | `U+2061` | Function Application |
 
-For robustness, decoders **MAY** additionally accept `U+2060` and `U+2062` as aliases for `11` if these characters appear after transport-layer normalization. Encoders **MUST NOT** emit them as primary payload symbols.
+**LMF v2 vs v1 Alphabet Differences:**
+
+- **LMF v2 (current):** Uses exact alphabet only. Decoders accept only `U+200B`, `U+200C`, `U+200D`, `U+2061`.
+- **LMF v1 (legacy):** For backward compatibility, legacy decoders may accept `U+2060` and `U+2062` as aliases for `11`. These aliases are **not** valid in v2.
+
+Encoders **MUST NOT** emit aliases (`U+2060`, `U+2062`) or forbidden characters (`U+200E`, `U+200F`).
 
 ### 3.2 Noise Injection for Deniability
 
 To prevent the encoded message from presenting a predictable statistical pattern, **noise characters** are randomly injected into the hidden blocks during encoding.
 
+**LMF v2 Noise Alphabet:**
+
 | Noise Symbol | Unicode Name |
 |---|---|
-| `U+200E` | LEFT-TO-RIGHT MARK |
-| `U+200F` | RIGHT-TO-LEFT MARK |
 | `U+2063` | INVISIBLE SEPARATOR |
 | `U+2064` | INVISIBLE PLUS |
 | `U+FEFF` | ZERO WIDTH NO-BREAK SPACE (BOM) |
 
-Within each hidden block (see section 3.3), payload symbols and noise characters are **interleaved at random positions**. The relative order of payload symbols is preserved, but noise characters are placed at randomly chosen positions throughout the block. The decoder ignores noise characters entirely because they are not part of the core Base-4 alphabet.
+**Forbidden Characters (LMF v2):**
+
+These characters must **never** appear in LMF v2 steganographic output:
+
+| Forbidden Symbol | Unicode Name | Reason |
+|---|---|---|
+| `U+200E` | LEFT-TO-RIGHT MARK | Normalizes to U+200C on some platforms (Telegram) |
+| `U+200F` | RIGHT-TO-LEFT MARK | Normalizes to U+200C on some platforms (Telegram) |
+
+**Important rules:**
+- `U+200C` is **payload-only** in v2. Never use it as noise, separator, filler, or alias.
+- The decoder ignores noise characters entirely because they are not part of the payload alphabet.
+- Within each hidden block, payload symbols and noise characters are **interleaved at random positions**.
+- The relative order of payload symbols is preserved.
 
 ### 3.3 Distribution Across Cover Text
 
@@ -229,13 +310,68 @@ The `<base64url_raw_bytes>` is the entire `rawPayloadBytes` array, encoded in ba
 2. base64url-decode the remainder to get `rawPayloadBytes`.
 3. Proceed with the Multi-Key Trial Decryption (Section 4.2).
 
-#### Trade-Off
+#### Trade-Off and When to Use
 
-Direct message links sacrifice **visual deniability**: the link is clearly identifiable as a Layergram encrypted message. Use this method only on platforms that aggressively sanitize zero-width Unicode characters.
+Direct message links sacrifice **visual deniability**: the link is clearly identifiable as a Layergram encrypted message, making the presence of encrypted communication obvious to anyone who sees the link.
+
+**When to use deep links instead of steganography:**
+- Transport platforms that strip or normalize zero-width Unicode characters (some email gateways, certain web forms)
+- Situations where the recipient needs an obvious, clickable entry point to the message
+- When the user prefers explicit sharing over hidden embedding
+
+**Important:** Unlike steganographic embedding, deep links do not hide the existence of encrypted communication — they advertise it. Use steganography when you want the message to look like an ordinary conversation; use deep links when transport compatibility or usability is more important than hiding the message's existence.
 
 ---
 
-## 5. Examples
+## 5. Encoder and Decoder Behavior
+
+### 5.1 Encoding Policy (LMF v2 Only)
+
+**All newly encoded messages MUST use LMF v2.**
+
+The encoder:
+1. Constructs a v2 JSON envelope with `v: 2`
+2. UTF-8 encodes the JSON
+3. Applies gzip compression if beneficial (see section 2.4)
+4. Wraps in LMFv2Inner container with `formatVersion: 0x02`
+5. Encrypts with AES-GCM-256
+6. Maps bytes to v2 payload alphabet (U+200B, U+200C, U+200D, U+2061)
+7. Injects noise using v2 noise alphabet only (U+2063, U+2064, U+FEFF)
+8. Distributes hidden runes into cover text
+
+**Forbidden in v2 output:**
+- `U+200E` and `U+200F` (LRM/RLM)
+- `U+200C` used as noise
+- `U+2060` and `U+2062` (v1 aliases)
+
+### 5.2 Decoding Strategy (v2 then v1)
+
+When receiving a message, the decoder attempts:
+
+1. **LMF v2 decode first:**
+   - Extract only v2 payload runes (U+200B, U+200C, U+200D, U+2061)
+   - Ignore v2 noise runes (U+2063, U+2064, U+FEFF)
+   - Convert to bytes, decrypt, parse LMFv2Inner
+   - Validate header (formatVersion == 0x02, reserved == 0, flags valid)
+   - Decompress if compression flag set
+   - Validate JSON `v == 2`
+
+2. **If v2 fails: LMF v1 legacy decode:**
+   - Accept v1 payload alphabet plus aliases (U+2060, U+2062)
+   - Decrypt and parse as raw JSON (no LMFv2Inner container)
+   - Accept JSON without `v` field or with `v == 1`
+
+3. **If both fail:** Message does not contain a valid Layergram payload.
+
+### 5.3 Backward Compatibility
+
+- **Encode:** Always LMF v2 (never emit v1)
+- **Decode:** Try v2 first, fall back to v1 for legacy messages
+- Legacy v1 support is **decode-only** and isolated in the codebase
+
+---
+
+## 6. Examples
 
 ### Raw Binary Ciphertext
 ```

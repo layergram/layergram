@@ -14,24 +14,22 @@
 
 import 'dart:typed_data';
 
+import 'stego_alphabet_v2.dart';
+
+/// LMF v2 steganographic decoder.
+///
+/// Uses the exact v2 payload alphabet (U+200B, U+200C, U+200D, U+2061).
+/// Noise characters (U+2063, U+2064, U+FEFF) are ignored.
+/// V1 aliases (2060, 2062) are NOT accepted in v2 mode.
 class StegoDecoder {
-  // Must match encoder exactly, but decoder accepts extra aliases seen in WA.
-  // Primary alphabet (2 bits per rune): 200B=00, 200C=01, 200D=10, 2061=11.
-  // Aliases: 2060/2062 occasionally survive and are treated as '11'.
-  static const Map<int, int> _runeToVal = {
-    0x200B: 0, // 00
-    0x200C: 1, // 01
-    0x200D: 2, // 10
-    0x2061: 3, // 11
-    0x2060: 3, // alias to 11
-    0x2062: 3, // alias to 11
-  };
+  /// V2 payload alphabet: exact runes only, no aliases.
+  static const Map<int, int> _runeToVal = StegoAlphabetV2.payloadRuneToValue;
 
   // ── V2 binary decode ────────────────────────────────────────────────────────
 
   /// Extract raw bytes from zero-width characters in [text].
   ///
-  /// Noise runes (not in the encoding alphabet) are automatically ignored.
+  /// Noise runes (U+2063, U+2064, U+FEFF) are automatically ignored.
   /// Returns candidate byte arrays for each byte alignment (0-7) that
   /// produces at least [minBytes] bytes. Alignment 0 is the most likely
   /// correct one (encoding always starts byte-aligned).
@@ -61,13 +59,22 @@ class StegoDecoder {
     return candidates;
   }
 
+  /// Extract payload runes from text (for LMF v2 decoding).
+  /// Returns only valid v2 payload runes in order encountered.
+  List<int> extractPayloadRunes(String text) {
+    return StegoAlphabetV2.extractPayloadRunes(text);
+  }
+
   // ── Base-4 helpers ──────────────────────────────────────────────────────────
 
   List<int> _symsToBits(List<int> runes) {
     final bits = <int>[];
     for (final r in runes) {
       final val = _runeToVal[r];
-      if (val == null) continue; // noise runes are automatically skipped
+      if (val == null) {
+        // Noise runes (U+2063, U+2064, U+FEFF) and all other runes are skipped
+        continue;
+      }
       bits.add((val >> 1) & 1);
       bits.add(val & 1);
     }
