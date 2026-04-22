@@ -7,7 +7,7 @@ This document defines the **Layergram Message Format (LMF)**, the protocol used 
 
 ## Version History
 
-- **LMF v2.0 (Current)**: Introduces structured inner container, zstd compression, hardened Unicode alphabet. Always encode with v2; decode supports v2 then v1 fallback.
+- **LMF v2.0 (Current)**: Introduces structured inner container, gzip compression, hardened Unicode alphabet. Always encode with v2; decode supports v2 then v1 fallback.
 - **LMF v1.1 (Legacy)**: Original format with raw JSON encryption. Decode-only support for backward compatibility.
 
 The specification in this document is implemented by the public Layergram application and by official Layergram builds released through the project's official channels.
@@ -93,14 +93,14 @@ LMFv2Inner =
 | Field | Value | Description |
 |---|---|---|
 | `formatVersion` | `0x02` | LMF v2 format identifier |
-| `flags` | bitmask | bit 0 = 1 if payloadBytes is zstd-compressed |
+| `flags` | bitmask | bit 0 = 1 if payloadBytes is gzip-compressed |
 | `reserved` | `0x0000` | Must be zero (enables future extensions) |
-| `payloadBytes` | bytes | UTF-8 JSON (plain or zstd-compressed) |
+| `payloadBytes` | bytes | UTF-8 JSON (plain or gzip-compressed) |
 
 **Processing order for encoding:**
 1. Build v2 JSON envelope
 2. UTF-8 encode the JSON
-3. Optionally compress with zstd (see section 2.4)
+3. Optionally compress with gzip (see section 2.4)
 4. Construct LMFv2Inner container
 5. Encrypt LMFv2Inner with AES-GCM-256
 
@@ -113,10 +113,10 @@ LMFv2Inner =
 
 ### 2.4 Compression (LMF v2)
 
-LMF v2 uses **Zstandard (zstd)** compression to reduce payload size for long messages.
+LMF v2 uses **gzip** compression (via pure Dart `archive` package) to reduce payload size for long messages. Using gzip instead of zstd avoids native FFI dependencies that cause code signing issues on macOS, while still providing good compression ratios.
 
 **Policy:**
-- Compression level: 3 (zstd default)
+- Compression level: 6 (gzip default)
 - Compression threshold: do not compress if plaintext < 96 bytes
 - Minimum savings: only use compressed form if it saves at least 4 bytes
 - If compression fails: fall back to uncompressed (set compression flag to 0)
@@ -125,7 +125,7 @@ LMF v2 uses **Zstandard (zstd)** compression to reduce payload size for long mes
 if plaintextLen < 96:
     use uncompressed
 else:
-    compressed = zstd(plaintext, level=3)
+    compressed = gzip(plaintext, level=6)
     if compressedLen + 4 < plaintextLen:
         use compressed, set compression flag = 1
     else:
@@ -332,7 +332,7 @@ Direct message links sacrifice **visual deniability**: the link is clearly ident
 The encoder:
 1. Constructs a v2 JSON envelope with `v: 2`
 2. UTF-8 encodes the JSON
-3. Applies zstd compression if beneficial (see section 2.4)
+3. Applies gzip compression if beneficial (see section 2.4)
 4. Wraps in LMFv2Inner container with `formatVersion: 0x02`
 5. Encrypts with AES-GCM-256
 6. Maps bytes to v2 payload alphabet (U+200B, U+200C, U+200D, U+2061)

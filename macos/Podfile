@@ -1,4 +1,4 @@
-platform :osx, '15.0'
+platform :osx, '10.15'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -38,19 +38,5 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_macos_build_settings(target)
-  end
-
-  # Configure zstd framework for proper code signing during app build
-  installer.pods_project.targets.each do |target|
-    if target.name == 'zstd'
-      target.build_configurations.each do |config|
-        # Let the app's code signing handle the framework
-        config.build_settings['CODE_SIGN_IDENTITY'] = ''
-        config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
-        # Ensure the framework is built for the correct architecture
-        config.build_settings['ONLY_ACTIVE_ARCH'] = 'NO'
-        config.build_settings['VALID_ARCHS'] = 'arm64 x86_64'
-      end
-    end
   end
 end

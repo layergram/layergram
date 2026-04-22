@@ -14,29 +14,35 @@
 
 import 'dart:typed_data';
 
-import 'package:zstd/zstd.dart';
+import 'package:archive/archive.dart';
 
-/// LMF v2 compression using Zstandard (zstd).
+/// LMF v2 compression using gzip (via archive package).
 ///
-/// Compression policy:
-/// - Level: 3 (default)
-/// - Skip if plaintext < 96 bytes
-/// - Only use compressed if it saves at least 4 bytes
+/// Note: This is a pure Dart implementation that avoids native FFI dependencies
+/// that cause code signing issues on macOS.
+///
+/// Policy:
+/// - Compression level: 6 (gzip default)
+/// - Compression threshold: do not compress if plaintext < 96 bytes
+/// - Minimum savings: only use compressed if it saves at least 4 bytes
+/// - If compression fails: fall back to uncompressed
 class CompressionZstd {
-  /// Minimum plaintext size to attempt compression.
+  const CompressionZstd._();
+
+  /// Default compression level for gzip (6 is a good balance).
+  static const int compressionLevel = 6;
+
+  /// Do not compress if plaintext is smaller than this threshold.
   static const int compressionThresholdBytes = 96;
 
-  /// Minimum byte savings required to use compressed form.
+  /// Only use compressed form if it saves at least this many bytes.
   static const int minSavingsBytes = 4;
 
-  /// Zstd compression level (1-22, where 3 is the default).
-  static const int compressionLevel = 3;
-
-  /// Compress [plaintext] according to LMF v2 policy.
+  /// Compress [plaintext] using gzip with LMF v2 policy.
   ///
   /// Returns a tuple: (bytes, wasCompressed)
   /// - If plaintext < 96 bytes: returns (original, false)
-  /// - Otherwise tries zstd compression
+  /// - Otherwise tries gzip compression
   /// - Uses compressed only if it saves at least 4 bytes
   static (Uint8List bytes, bool wasCompressed) compress(Uint8List plaintext) {
     // Policy: don't compress if below threshold
@@ -45,7 +51,7 @@ class CompressionZstd {
     }
 
     try {
-      final compressed = ZstdCodec(level: compressionLevel).encode(plaintext);
+      final compressed = const GZipEncoder().encode(plaintext);
 
       // Policy: only use compressed if it saves at least 4 bytes
       if (compressed.length + minSavingsBytes < plaintext.length) {
@@ -59,12 +65,12 @@ class CompressionZstd {
     }
   }
 
-  /// Decompress zstd-compressed bytes.
+  /// Decompress gzip-compressed bytes.
   ///
   /// Returns the decompressed bytes, or null if decompression fails.
   static Uint8List? decompress(Uint8List compressed) {
     try {
-      final decompressed = ZstdCodec().decode(compressed);
+      final decompressed = const GZipDecoder().decodeBytes(compressed);
       return Uint8List.fromList(decompressed);
     } catch (_) {
       return null;
@@ -75,7 +81,7 @@ class CompressionZstd {
   /// Used for testing or when policy is applied externally.
   static Uint8List? compressRaw(Uint8List plaintext, {int level = compressionLevel}) {
     try {
-      final compressed = ZstdCodec(level: level).encode(plaintext);
+      final compressed = const GZipEncoder().encode(plaintext);
       return Uint8List.fromList(compressed);
     } catch (_) {
       return null;
