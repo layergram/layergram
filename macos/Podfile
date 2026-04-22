@@ -39,4 +39,15 @@ post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_macos_build_settings(target)
   end
+
+  # Configure zstd framework for proper code signing
+  installer.pods_project.targets.each do |target|
+    if target.name == 'zstd'
+      target.build_configurations.each do |config|
+        config.build_settings['CODE_SIGN_IDENTITY'] = ''
+        config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
+        config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+      end
+    end
+  end
 end
