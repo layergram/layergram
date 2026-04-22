@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "Peruuta",
   "shareAndroidTelegramDialogTitle": "Telegram ei ole yhteensopiva",
   "shareAndroidTelegramDialogContent": "Telegram suodattaa nollaleveyiset merkit, poistaen Layergramin piilotetut viestit. Jakaminen tämän sovelluksen kautta ei ole suositeltavaa.",
-  "understood": "Ymmärretty"
+  "understood": "Ymmärretty",
+  "shareAndroidDialogTitle": "Jaa sovelluksella",
+  "shareAndroidDialogCancel": "Peruuta",
+  "shareAppWhatsApp": "WhatsApp",
+  "shareAppTelegram": "Telegram",
+  "shareAppSignal": "Signal",
+  "shareAppGmail": "Gmail",
+  "shareAppMessages": "Viestit",
+  "shareAppCopyToClipboard": "Kopioi leikepöydälle",
+  "shareAppOtherApps": "Muut sovellukset"
 }

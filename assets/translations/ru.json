@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "Отмена",
   "shareAndroidTelegramDialogTitle": "Telegram несовместим",
   "shareAndroidTelegramDialogContent": "Telegram фильтрует символы нулевой ширины, удаляя скрытые сообщения Layergram. Обмен через это приложение не рекомендуется.",
-  "understood": "Понятно"
+  "understood": "Понятно",
+  "shareAndroidDialogTitle": "Поделиться",
+  "shareAndroidDialogCancel": "Отмена",
+  "shareAppWhatsApp": "WhatsApp",
+  "shareAppTelegram": "Telegram",
+  "shareAppSignal": "Signal",
+  "shareAppGmail": "Gmail",
+  "shareAppMessages": "Сообщения",
+  "shareAppCopyToClipboard": "Копировать в буфер",
+  "shareAppOtherApps": "Другие приложения"
 }

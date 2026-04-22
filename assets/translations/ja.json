@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "キャンセル",
   "shareAndroidTelegramDialogTitle": "Telegramは非対応",
   "shareAndroidTelegramDialogContent": "Telegramはゼロ幅文字をフィルタリングし、Layergramの隠しメッセージを削除します。このアプリでの共有は推奨されません。",
-  "understood": "了解"
+  "understood": "了解",
+  "shareAndroidDialogTitle": "共有先",
+  "shareAndroidDialogCancel": "キャンセル",
+  "shareAppWhatsApp": "WhatsApp",
+  "shareAppTelegram": "Telegram",
+  "shareAppSignal": "Signal",
+  "shareAppGmail": "Gmail",
+  "shareAppMessages": "メッセージ",
+  "shareAppCopyToClipboard": "クリップボードにコピー",
+  "shareAppOtherApps": "その他のアプリ"
 }

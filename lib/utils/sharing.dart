@@ -18,11 +18,34 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../core/crypto/stego_alphabet_v2.dart';
 import '../core/providers.dart';
 import '../l10n/app_strings.dart';
 import 'app_platform.dart';
+import 'sharing_android.dart' show AndroidShareApp, AndroidAppSelectorDialog;
 
 export 'sharing_io.dart' if (dart.library.html) 'sharing_stub.dart';
+
+/// Returns true if the text contains zero-width characters used for
+/// Layergram steganographic encoding.
+bool _containsSteganography(String text) {
+  final runes = text.runes;
+  // Check for both v1 and v2 payload alphabets
+  for (final rune in runes) {
+    if (StegoAlphabetV2.payloadRuneToValue.containsKey(rune) ||
+        StegoAlphabetV2.noiseRunesSet.contains(rune) ||
+        _isV1PayloadRune(rune)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/// Checks if a rune is from LMF v1 payload alphabet.
+bool _isV1PayloadRune(int rune) {
+  // LMF v1 payload alphabet: U+200B, U+200C, U+200D, U+2060
+  return rune == 0x200B || rune == 0x200C || rune == 0x200D || rune == 0x2060;
+}
 
 Rect? sharePositionOriginForContext(BuildContext context) {
   final renderObject = context.findRenderObject();
@@ -37,18 +60,40 @@ bool isWhatsAppShareActivityType(String rawActivityType) {
   return normalized.isNotEmpty && normalized.contains('whatsapp');
 }
 
+/// Shares text externally.
+///
+/// When [forceStegoCover] is explicitly set to true, or when the text
+/// contains steganographic zero-width characters, on Android a custom app
+/// selector is shown that blocks direct WhatsApp sharing to prevent
+/// message truncation.
+///
+/// For deeplinks or plain text without steganography, the standard Android
+/// share sheet is used directly.
 Future<ShareResult> shareTextExternally(
   BuildContext context,
-  String text,
-) async {
+  String text, {
+  bool forceStegoCover = false,
+}) async {
   final container = ProviderScope.containerOf(context);
   container.read(isSharingProvider.notifier).state = true;
 
-  // On Android, when sharing to WhatsApp, we copy the full message to
-  // clipboard first because WhatsApp truncates text via ACTION_SEND Intent.
-  // The user will be prompted to open WhatsApp and paste manually.
-  if (AppPlatform.isAndroid) {
-    await Clipboard.setData(ClipboardData(text: text));
+  // Auto-detect if text contains steganography
+  final hasSteganography = _containsSteganography(text);
+  // Deeplinks should always use standard share even if they contain zero-width chars
+  // (they shouldn't, but if there's a bug we don't want to block link sharing)
+  final isDeeplink = text.startsWith('layergram://');
+  final shouldUseCustomSelector = !isDeeplink && (forceStegoCover || hasSteganography);
+  
+  // Debug logging to investigate link sharing issues
+  debugPrint('shareTextExternally: forceStegoCover=$forceStegoCover, hasSteganography=$hasSteganography, isDeeplink=$isDeeplink, shouldUseCustomSelector=$shouldUseCustomSelector');
+  debugPrint('shareTextExternally: text length=${text.length}, startsWith=${text.substring(0, text.length > 50 ? 50 : text.length)}');
+
+  // On Android, use custom share flow only for steganographic messages.
+  // For deeplinks, use the standard share sheet.
+  if (AppPlatform.isAndroid && context.mounted && shouldUseCustomSelector) {
+    final result = await _shareTextAndroid(context, text);
+    container.read(isSharingProvider.notifier).state = false;
+    return result;
   }
 
   final result = await SharePlus.instance.share(
@@ -75,17 +120,43 @@ Future<ShareResult> shareTextExternally(
     }
   }
 
-  if (AppPlatform.isAndroid &&
-      result.status == ShareResultStatus.success &&
-      isWhatsAppShareActivityType(result.raw) &&
-      context.mounted) {
-    // WhatsApp on Android truncates text via ACTION_SEND Intent to ~1600-2000 chars.
-    // Show a dialog prompting the user to open WhatsApp and paste the full message
-    // that is already in clipboard.
-    await _showWhatsAppAndroidDialog(context);
+  return result;
+}
+
+Future<ShareResult> _shareTextAndroid(BuildContext context, String text) async {
+  // Copy text to clipboard in case user wants to paste it
+  await Clipboard.setData(ClipboardData(text: text));
+
+  // Show app selector dialog
+  final selectedApp = await showDialog<AndroidShareApp>(
+    context: context,
+    builder: (context) => AndroidAppSelectorDialog(text: text),
+  );
+
+  if (selectedApp == null) {
+    // User cancelled
+    return const ShareResult('', ShareResultStatus.dismissed);
   }
 
-  return result;
+  if (selectedApp.isWhatsApp) {
+    // For WhatsApp, show warning dialog instead of sharing directly
+    if (context.mounted) {
+      await _showWhatsAppAndroidDialog(context);
+    }
+    return const ShareResult('whatsapp', ShareResultStatus.success);
+  }
+
+  if (selectedApp.isStandardShare) {
+    // For "Other apps", launch the standard Android share sheet
+    return SharePlus.instance.share(
+      ShareParams(
+        text: text,
+      ),
+    );
+  }
+
+  // For other apps, share directly
+  return selectedApp.share(text);
 }
 
 Future<void> _showWhatsAppAndroidDialog(BuildContext context) async {

@@ -1495,7 +1495,7 @@ class ChatViewState extends ConsumerState<ChatView> {
                           : () async {
                               final output = await _encodeAndPersist();
                               if (output == null || !context.mounted) { return; }
-                              await shareTextExternally(context, output);
+                              await shareTextExternally(context, output, forceStegoCover: true);
                             },
                     ),
                   ],
@@ -2357,7 +2357,7 @@ class ChatViewState extends ConsumerState<ChatView> {
                                                     final output =
                                                         await _encodeAndPersist();
                                                     if (output == null || !context.mounted) { return; }
-                                                    await shareTextExternally(context, output);
+                                                    await shareTextExternally(context, output, forceStegoCover: true);
                                                   },
                                             icon: const Icon(Icons.ios_share_outlined, size: 18),
                                             label: FittedBox(fit: BoxFit.scaleDown, child: Text(t(context, 'share'))),

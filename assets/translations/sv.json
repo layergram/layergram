@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "Avbryt",
   "shareAndroidTelegramDialogTitle": "Telegram ej kompatibel",
   "shareAndroidTelegramDialogContent": "Telegram filtrerar tecken med nollbredd, vilket tar bort dolda Layergram-meddelanden. Delning via denna app rekommenderas inte.",
-  "understood": "Förstått"
+  "understood": "Förstått",
+  "shareAndroidDialogTitle": "Dela med",
+  "shareAndroidDialogCancel": "Avbryt",
+  "shareAppWhatsApp": "WhatsApp",
+  "shareAppTelegram": "Telegram",
+  "shareAppSignal": "Signal",
+  "shareAppGmail": "Gmail",
+  "shareAppMessages": "Meddelanden",
+  "shareAppCopyToClipboard": "Kopiera till urklipp",
+  "shareAppOtherApps": "Andra appar"
 }

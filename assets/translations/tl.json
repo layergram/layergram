@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "Kanselahin",
   "shareAndroidTelegramDialogTitle": "Hindi compatible ang Telegram",
   "shareAndroidTelegramDialogContent": "Inaalis ng Telegram ang mga zero-width character, na nag-aalis ng mga nakatagong mensahe ng Layergram. Hindi inirerekomenda ang pagbabahagi sa pamamagitan ng app na ito.",
-  "understood": "Naintindihan"
+  "understood": "Naintindihan",
+  "shareAndroidDialogTitle": "Ibahagi sa",
+  "shareAndroidDialogCancel": "Kanselahin",
+  "shareAppWhatsApp": "WhatsApp",
+  "shareAppTelegram": "Telegram",
+  "shareAppSignal": "Signal",
+  "shareAppGmail": "Gmail",
+  "shareAppMessages": "Mga mensahe",
+  "shareAppCopyToClipboard": "Kopyahin sa clipboard",
+  "shareAppOtherApps": "Iba pang mga app"
 }

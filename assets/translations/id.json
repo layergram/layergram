@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "Batal",
   "shareAndroidTelegramDialogTitle": "Telegram tidak kompatibel",
   "shareAndroidTelegramDialogContent": "Telegram menyaring karakter lebar nol, menghapus pesan tersembunyi Layergram. Berbagi melalui aplikasi ini tidak disarankan.",
-  "understood": "Dipahami"
+  "understood": "Dipahami",
+  "shareAndroidDialogTitle": "Bagikan ke",
+  "shareAndroidDialogCancel": "Batal",
+  "shareAppWhatsApp": "WhatsApp",
+  "shareAppTelegram": "Telegram",
+  "shareAppSignal": "Signal",
+  "shareAppGmail": "Gmail",
+  "shareAppMessages": "Pesan",
+  "shareAppCopyToClipboard": "Salin ke papan klip",
+  "shareAppOtherApps": "Aplikasi lain"
 }

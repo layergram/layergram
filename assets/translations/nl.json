@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "Annuleren",
   "shareAndroidTelegramDialogTitle": "Telegram niet compatibel",
   "shareAndroidTelegramDialogContent": "Telegram filtert tekens met nulbreedte, waardoor verborgen Layergram-berichten worden verwijderd. Delen via deze app wordt afgeraden.",
-  "understood": "Begrepen"
+  "understood": "Begrepen",
+  "shareAndroidDialogTitle": "Delen met",
+  "shareAndroidDialogCancel": "Annuleren",
+  "shareAppWhatsApp": "WhatsApp",
+  "shareAppTelegram": "Telegram",
+  "shareAppSignal": "Signal",
+  "shareAppGmail": "Gmail",
+  "shareAppMessages": "Berichten",
+  "shareAppCopyToClipboard": "Kopiëren naar klembord",
+  "shareAppOtherApps": "Andere apps"
 }

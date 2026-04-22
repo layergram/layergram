@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "ይቅር",
   "shareAndroidTelegramDialogTitle": "Telegram አይሰራም",
   "shareAndroidTelegramDialogContent": "Telegram የየለም ገጽታ ምልክቶችን ያጠራል። ይህ የLayergram መልእክቶችን ሊያጠፋ ይችላል። በዚህ መተግበሪያ ለማጋራት የማይመች ነው።",
-  "understood": "ተረዳሁ"
+  "understood": "ተረዳሁ",
+  "shareAndroidDialogTitle": "አጋራ",
+  "shareAndroidDialogCancel": "ይቅር",
+  "shareAppWhatsApp": "WhatsApp",
+  "shareAppTelegram": "Telegram",
+  "shareAppSignal": "Signal",
+  "shareAppGmail": "Gmail",
+  "shareAppMessages": "መልዕክቶች",
+  "shareAppCopyToClipboard": "በclipboard ውስጥ ቅዳ",
+  "shareAppOtherApps": "ሌሎች መተግበሪያዎች"
 }

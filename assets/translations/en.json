@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "Cancel",
   "shareAndroidTelegramDialogTitle": "Telegram not compatible",
   "shareAndroidTelegramDialogContent": "Telegram filters out zero-width characters, removing Layergram hidden messages. Sharing via this app is not recommended.",
-  "understood": "Understood"
+  "understood": "Understood",
+  "shareAndroidDialogTitle": "Share to",
+  "shareAndroidDialogCancel": "Cancel",
+  "shareAppWhatsApp": "WhatsApp",
+  "shareAppTelegram": "Telegram",
+  "shareAppSignal": "Signal",
+  "shareAppGmail": "Gmail",
+  "shareAppMessages": "Messages",
+  "shareAppCopyToClipboard": "Copy to clipboard",
+  "shareAppOtherApps": "Other apps"
 }

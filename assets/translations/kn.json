@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "ರದ್ದುಮಾಡಿ",
   "shareAndroidTelegramDialogTitle": "Telegram ಹೊಂದಿಕೆಯಾಗುವುದಿಲ್ಲ",
   "shareAndroidTelegramDialogContent": "Telegram ಶೂನ್ಯ-ಅಗಲ ಅಕ್ಷರಗಳನ್ನು ಫಿಲ್ಟರ್ ಮಾಡುತ್ತದೆ, Layergram ಮರೆಮಾಡಿದ ಸಂದೇಶಗಳನ್ನು ತೆಗೆದುಹಾಕುತ್ತದೆ. ಈ ಅಪ್ಲಿಕೇಶನ್ ಮೂಲಕ ಹಂಚಿಕೊಳ್ಳುವುದನ್ನು ಶಿಫಾರಸು ಮಾಡಲಾಗಿಲ್ಲ.",
-  "understood": "ಅರ್ಥವಾಯಿತು"
+  "understood": "ಅರ್ಥವಾಯಿತು",
+  "shareAndroidDialogTitle": "ಇದರೊಂದಿಗೆ ಹಂಚಿಕೊಳ್ಳಿ",
+  "shareAndroidDialogCancel": "ರದ್ದು",
+  "shareAppWhatsApp": "WhatsApp",
+  "shareAppTelegram": "Telegram",
+  "shareAppSignal": "Signal",
+  "shareAppGmail": "Gmail",
+  "shareAppMessages": "ಸಂದೇಶಗಳು",
+  "shareAppCopyToClipboard": "ಕ್ಲಿಪ್‌ಬೋರ್ಡ್‌ಗೆ ನಕಲಿಸಿ",
+  "shareAppOtherApps": "ಇತರ ಅಪ್ಲಿಕೇಶನ್‌ಗಳು"
 }

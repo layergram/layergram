@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "إلغاء",
   "shareAndroidTelegramDialogTitle": "Telegram غير متوافق",
   "shareAndroidTelegramDialogContent": "يقوم Telegram بتصفية الأحرف ذات العرض الصفري، مما يتسبب في إزالة الرسائل المخفية في Layergram. لا يوصى باستخدام هذا التطبيق للمشاركة.",
-  "understood": "مفهوم"
+  "understood": "مفهوم",
+  "shareAndroidDialogTitle": "مشاركة مع",
+  "shareAndroidDialogCancel": "إلغاء",
+  "shareAppWhatsApp": "واتساب",
+  "shareAppTelegram": "تلغرام",
+  "shareAppSignal": "سيغنال",
+  "shareAppGmail": "جيميل",
+  "shareAppMessages": "الرسائل",
+  "shareAppCopyToClipboard": "نسخ إلى الحافظة",
+  "shareAppOtherApps": "تطبيقات أخرى"
 }

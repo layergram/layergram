@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "Ακύρωση",
   "shareAndroidTelegramDialogTitle": "Το Telegram δεν είναι συμβατό",
   "shareAndroidTelegramDialogContent": "Το Telegram φιλτράρει χαρακτήρες μηδενικού πλάτους, αφαιρώντας κρυφά μηνύματα Layergram. Δεν συνιστάται κοινοποίηση σε αυτή την εφαρμογή.",
-  "understood": "Κατανοητό"
+  "understood": "Κατανοητό",
+  "shareAndroidDialogTitle": "Κοινοποίηση σε",
+  "shareAndroidDialogCancel": "Ακύρωση",
+  "shareAppWhatsApp": "WhatsApp",
+  "shareAppTelegram": "Telegram",
+  "shareAppSignal": "Signal",
+  "shareAppGmail": "Gmail",
+  "shareAppMessages": "Μηνύματα",
+  "shareAppCopyToClipboard": "Αντιγραφή στο πρόχειρο",
+  "shareAppOtherApps": "Άλλες εφαρμογές"
 }

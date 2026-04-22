@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "Fagilé",
   "shareAndroidTelegramDialogTitle": "Telegram ko ni ibatan",
   "shareAndroidTelegramDialogContent": "Telegram ń ṣàyẹ̀wò àwọn ìàmì ìwọ̀n odo, tó ń yọkúrò nínú àwọn ìfiránsẹ́ tí wọ́n fipamọ́ Layergram. Kì í ṣe ìmọrán láti pín nípasẹ̀ àwọn àpò yìí.",
-  "understood": "O yé mi"
+  "understood": "Mo ti gbo",
+  "shareAndroidDialogTitle": "Pin pẹlu",
+  "shareAndroidDialogCancel": "Fagilee",
+  "shareAppWhatsApp": "WhatsApp",
+  "shareAppTelegram": "Telegram",
+  "shareAppSignal": "Signal",
+  "shareAppGmail": "Gmail",
+  "shareAppMessages": "Awọn ifiranṣẹ",
+  "shareAppCopyToClipboard": "Daakọ si clipboard",
+  "shareAppOtherApps": "Awọn ọmọ ẹlẹya miiran"
 }

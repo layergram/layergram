@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "ਰੱਦ ਕਰੋ",
   "shareAndroidTelegramDialogTitle": "Telegram ਅਨੁਕੂਲ ਨਹੀਂ ਹੈ",
   "shareAndroidTelegramDialogContent": "Telegram ਜੀਰੋ-ਚੌੜਾਈ ਅੱਖਰਾਂ ਨੂੰ ਫਿਲਟਰ ਕਰਦਾ ਹੈ, Layergram ਦੇ ਲੁਕੇ ਸੁਨੇਹਿਆਂ ਨੂੰ ਹਟਾ ਦਿੰਦਾ ਹੈ। ਇਸ ਐਪ ਰਾਹੀਂ ਸਾਂਝਾ ਕਰਨ ਦੀ ਸਿਫਾਰਸ਼ ਨਹੀਂ ਕੀਤੀ ਜਾਂਦੀ।",
-  "understood": "ਸਮਝ ਗਿਆ"
+  "understood": "ਸਮਝ ਗਿਆ",
+  "shareAndroidDialogTitle": "ਇਸਨਾਲ ਸਾਂਝਾ ਕਰੋ",
+  "shareAndroidDialogCancel": "ਰੱਦ ਕਰੋ",
+  "shareAppWhatsApp": "ਵਾਟਸਐਪ",
+  "shareAppTelegram": "ਟੈਲੀਗ੍ਰਾਮ",
+  "shareAppSignal": "ਸਿਗਨਲ",
+  "shareAppGmail": "ਜੀਮੇਲ",
+  "shareAppMessages": "ਸੁਨੇਹੇ",
+  "shareAppCopyToClipboard": "ਕਲਿੱਪਬੋਰਡ 'ਤੇ ਕਾਪੀ ਕਰੋ",
+  "shareAppOtherApps": "ਹੋਰ ਐਪਸ"
 }

@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "İptal",
   "shareAndroidTelegramDialogTitle": "Telegram uyumsuz",
   "shareAndroidTelegramDialogContent": "Telegram sıfır genişlikli karakterleri filtreleyerek Layergram gizli mesajlarını kaldırır. Bu uygulama üzerinden paylaşım önerilmez.",
-  "understood": "Anlaşıldı"
+  "understood": "Anlaşıldı",
+  "shareAndroidDialogTitle": "Şununla paylaş",
+  "shareAndroidDialogCancel": "İptal",
+  "shareAppWhatsApp": "WhatsApp",
+  "shareAppTelegram": "Telegram",
+  "shareAppSignal": "Signal",
+  "shareAppGmail": "Gmail",
+  "shareAppMessages": "Mesajlar",
+  "shareAppCopyToClipboard": "Panoya kopyala",
+  "shareAppOtherApps": "Diğer uygulamalar"
 }

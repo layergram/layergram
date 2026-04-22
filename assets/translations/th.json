@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "ยกเลิก",
   "shareAndroidTelegramDialogTitle": "Telegram ไม่เข้ากันได้",
   "shareAndroidTelegramDialogContent": "Telegram กรองอักขระความกว้างเป็นศูนย์ ทำให้ข้อความที่ซ่อนไว้ของ Layergram ถูกลบออก ไม่แนะนำให้แชร์ผ่านแอปนี้",
-  "understood": "เข้าใจแล้ว"
+  "understood": "เข้าใจแล้ว",
+  "shareAndroidDialogTitle": "แชร์ไปยัง",
+  "shareAndroidDialogCancel": "ยกเลิก",
+  "shareAppWhatsApp": "WhatsApp",
+  "shareAppTelegram": "Telegram",
+  "shareAppSignal": "Signal",
+  "shareAppGmail": "Gmail",
+  "shareAppMessages": "ข้อความ",
+  "shareAppCopyToClipboard": "คัดลอกไปยังคลิปบอร์ด",
+  "shareAppOtherApps": "แอพอื่น"
 }

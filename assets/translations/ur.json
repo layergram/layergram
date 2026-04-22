@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "منسوخ",
   "shareAndroidTelegramDialogTitle": "Telegram موافق نہیں ہے",
   "shareAndroidTelegramDialogContent": "Telegram صفر-چوڑائی والے حروف کو فلٹر کرتا ہے، جس سے Layergram کے پوشیدہ پیغامات ہٹ جاتے ہیں۔ اس ایپ کے ذریعے شیئر کرنے کی سفارش نہیں کی جاتی۔",
-  "understood": "سمجھ گیا"
+  "understood": "سمجھ گیا",
+  "shareAndroidDialogTitle": "اس کے ساتھ شیئر کریں",
+  "shareAndroidDialogCancel": "منسوخ کریں",
+  "shareAppWhatsApp": "واٹس ایپ",
+  "shareAppTelegram": "ٹیلیگرام",
+  "shareAppSignal": "سگنل",
+  "shareAppGmail": "جی میل",
+  "shareAppMessages": "پیغامات",
+  "shareAppCopyToClipboard": "کلپ بورڈ پر کاپی کریں",
+  "shareAppOtherApps": "دیگر ایپس"
 }

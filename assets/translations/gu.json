@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "રદ કરો",
   "shareAndroidTelegramDialogTitle": "Telegram સુસંગત નથી",
   "shareAndroidTelegramDialogContent": "Telegram શૂન્ય-પહોળાઈ અક્ષરો ફિલ્ટર કરે છે, જે Layergram છુપાયેલા સંદેશાઓને દૂર કરે છે. આ એપ્લિકેશન દ્વારા શેર કરવાની ભલામણ નથી કરવામાં આવતી.",
-  "understood": "સમજાઈ ગયું"
+  "understood": "સમજાઈ ગયું",
+  "shareAndroidDialogTitle": "આની સાથે શેર કરો",
+  "shareAndroidDialogCancel": "રદ કરો",
+  "shareAppWhatsApp": "વોટ્સએપ",
+  "shareAppTelegram": "ટેલિગ્રામ",
+  "shareAppSignal": "સિગ્નલ",
+  "shareAppGmail": "જીમેલ",
+  "shareAppMessages": "સંદેશાઓ",
+  "shareAppCopyToClipboard": "ક્લિપબોર્ડ પર કોપી કરો",
+  "shareAppOtherApps": "અન્ય ઍપ્સ"
 }

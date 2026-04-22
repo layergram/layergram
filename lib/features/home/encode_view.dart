@@ -485,7 +485,7 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
                           Expanded(
                             child: FilledButton.icon(
                               onPressed: () async {
-                                await shareTextExternally(context, _output);
+                                await shareTextExternally(context, _output, forceStegoCover: true);
                               },
                               icon: const Icon(Icons.share_outlined),
                               label: Text(strings(context, 'share')),

@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "రద్దు",
   "shareAndroidTelegramDialogTitle": "Telegram సరిపోదు",
   "shareAndroidTelegramDialogContent": "Telegram సున్నా-వెడల్పు అక్షరాలను ఫిల్టర్ చేస్తుంది, Layergram దాచిన సందేశాలను తొలగిస్తుంది. ఈ యాప్ ద్వారా భాగస్వామ్యం చేయడం సూచించబడలేదు.",
-  "understood": "అర్థమైంది"
+  "understood": "అర్థమైంది",
+  "shareAndroidDialogTitle": "దీనితో భాగస్వామ్యం చేయి",
+  "shareAndroidDialogCancel": "రద్దు",
+  "shareAppWhatsApp": "WhatsApp",
+  "shareAppTelegram": "Telegram",
+  "shareAppSignal": "Signal",
+  "shareAppGmail": "Gmail",
+  "shareAppMessages": "సందేశాలు",
+  "shareAppCopyToClipboard": "క్లిప్‌బోర్డ్‌కు కాపీ చేయి",
+  "shareAppOtherApps": "ఇతర యాప్‌లు"
 }

@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "Avbryt",
   "shareAndroidTelegramDialogTitle": "Telegram ikke kompatibel",
   "shareAndroidTelegramDialogContent": "Telegram filtrerer nullbredde-tegn, som fjerner skjulte Layergram-meldinger. Deling via denne appen anbefales ikke.",
-  "understood": "Forstått"
+  "understood": "Forstått",
+  "shareAndroidDialogTitle": "Del med",
+  "shareAndroidDialogCancel": "Avbryt",
+  "shareAppWhatsApp": "WhatsApp",
+  "shareAppTelegram": "Telegram",
+  "shareAppSignal": "Signal",
+  "shareAppGmail": "Gmail",
+  "shareAppMessages": "Meldinger",
+  "shareAppCopyToClipboard": "Kopier til utklippstavle",
+  "shareAppOtherApps": "Andre apper"
 }

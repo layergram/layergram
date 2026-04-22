@@ -227,5 +227,14 @@
   "shareAndroidWhatsAppDialogCancel": "Hủy",
   "shareAndroidTelegramDialogTitle": "Telegram không tương thích",
   "shareAndroidTelegramDialogContent": "Telegram lọc bỏ ký tự độ rộng bằng không, xóa thông điệp ẩn của Layergram. Không khuyến nghị chia sẻ qua ứng dụng này.",
-  "understood": "Đã hiểu"
+  "understood": "Đã hiểu",
+  "shareAndroidDialogTitle": "Chia sẻ với",
+  "shareAndroidDialogCancel": "Hủy",
+  "shareAppWhatsApp": "WhatsApp",
+  "shareAppTelegram": "Telegram",
+  "shareAppSignal": "Signal",
+  "shareAppGmail": "Gmail",
+  "shareAppMessages": "Tin nhắn",
+  "shareAppCopyToClipboard": "Sao chép vào bảng tạm",
+  "shareAppOtherApps": "Ứng dụng khác"
 }
