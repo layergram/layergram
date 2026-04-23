@@ -208,7 +208,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
                           padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
                           child: TextField(
                             controller: searchCtrl,
-                            autofocus: true,
+                            autofocus: false,
                             decoration: InputDecoration(
                               prefixIcon: const Icon(Icons.search),
                               hintText: AppStrings.t(context, 'searchContact'),
@@ -216,6 +216,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
                             onChanged: (q) {
                               setStateModal(() {});
                             },
+                            onTapOutside: (_) => FocusScope.of(modalContext).unfocus(),
                           ),
                         ),
                         const Divider(height: 1),
