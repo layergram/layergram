@@ -20,6 +20,7 @@ import '../../core/providers.dart';
 import '../../l10n/app_strings.dart';
 import '../contact_verification/contact_verification_view.dart';
 import '../home/chat_view.dart';
+import '../home/home_controller.dart';
 import 'identities_controller.dart';
 
 class IdentityDetailView extends ConsumerStatefulWidget {
