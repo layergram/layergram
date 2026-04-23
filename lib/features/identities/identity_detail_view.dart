@@ -19,6 +19,8 @@ import '../../core/crypto/models.dart';
 import '../../core/providers.dart';
 import '../../l10n/app_strings.dart';
 import '../contact_verification/contact_verification_view.dart';
+import '../home/chat_view.dart';
+import '../home/home_controller.dart';
 import 'identities_controller.dart';
 
 class IdentityDetailView extends ConsumerStatefulWidget {
@@ -153,6 +155,21 @@ class _IdentityDetailViewState extends ConsumerState<IdentityDetailView> {
                       spacing: 8,
                       runSpacing: 8,
                       children: [
+                        // Open chat button (always shown)
+                        FilledButton.tonal(
+                          onPressed: _saving
+                              ? null
+                              : () {
+                                  // Set the recipient and navigate to chat
+                                  ref.read(encodeRecipientProvider.notifier).state = _identity;
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => ChatView(contact: _identity),
+                                    ),
+                                  );
+                                },
+                          child: Text(t(context, 'home')),
+                        ),
                         if (!isMe)
                           FilledButton.tonal(
                             onPressed: _saving ? null : _handleVerifyAction,
