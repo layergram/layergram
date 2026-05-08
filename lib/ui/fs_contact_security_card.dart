@@ -78,7 +78,7 @@ class FsContactSecurityCard extends ConsumerWidget {
             const SizedBox(height: 4),
 
             // ── Prominent current status ───────────────────────────────────
-            _StatusBadge(fsState: topState),
+            _StatusBadge(fsState: topState, sessions: sessions),
             const SizedBox(height: 12),
 
             // ── Per-session rows (only when >1 sessions or state is active) ─
@@ -206,9 +206,13 @@ class FsContactSecurityCard extends ConsumerWidget {
 // ── Prominent status badge ────────────────────────────────────────────────────
 
 class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({required this.fsState});
+  const _StatusBadge({
+    required this.fsState,
+    required this.sessions,
+  });
 
   final FsSessionState fsState;
+  final List<FsContactSecurityState> sessions;
 
   @override
   Widget build(BuildContext context) {
@@ -249,6 +253,26 @@ class _StatusBadge extends StatelessWidget {
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
+                if (_remainingExchanges(fsState) > 0) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.sync_alt,
+                        size: 12,
+                        color: Colors.amber.shade700,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        _progressText(context, fsState),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: Colors.amber.shade800,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
@@ -278,6 +302,41 @@ class _StatusBadge extends StatelessWidget {
       case FsSessionState.legacyOnly:
         return cs.onSurfaceVariant;
     }
+  }
+
+  /// Returns estimated remaining message exchanges before FS is active.
+  static int _remainingExchanges(FsSessionState state) {
+    switch (state) {
+      case FsSessionState.legacyOnly:
+        return 3; // Need: send/receive init, reply, confirm
+      case FsSessionState.fsInitSent:
+      case FsSessionState.fsInitSeen:
+        return 2; // Need: reply + confirm
+      case FsSessionState.fsReplySent:
+      case FsSessionState.fsReplySeen:
+        return 1; // Need: confirm
+      case FsSessionState.fsConfirmSent:
+      case FsSessionState.fsConfirmed:
+        return 1; // Need: final activation
+      case FsSessionState.fsActive:
+      case FsSessionState.strictFsActive:
+      case FsSessionState.strictRequested:
+      case FsSessionState.fsBroken:
+      case FsSessionState.fsSuspended:
+        return 0;
+    }
+  }
+
+  /// Returns localized progress text showing remaining exchanges.
+  String _progressText(BuildContext context, FsSessionState state) {
+    final t = AppStrings.t;
+    final remaining = _remainingExchanges(state);
+    if (remaining == 0) return '';
+    if (remaining == 1) {
+      return t(context, 'security.fs.progress.one_more_exchange');
+    }
+    return t(context, 'security.fs.progress.exchanges_remaining')
+        .replaceAll('{n}', '$remaining');
   }
 }
 

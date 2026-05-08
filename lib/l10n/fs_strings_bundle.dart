@@ -134,6 +134,10 @@ class FsStringsBundle {
     'security.fs.info.section_advantages': 'Advantages',
     'security.fs.info.section_keep_in_mind': 'Keep in mind',
 
+    // Progress indicator — message exchanges remaining before FS active
+    'security.fs.progress.one_more_exchange': 'One more message exchange to activate',
+    'security.fs.progress.exchanges_remaining': 'About {n} message exchanges to activate',
+
     // Recoverability warning (§14.6.1)
     'security.fs.warning.recoverability_title': 'Some messages may not be readable later',
     'security.fs.warning.recoverability_body':
