@@ -45,6 +45,8 @@ import 'crypto/message_record_cipher.dart';
 import '../features/contact_verification/contact_sas_service.dart';
 import '../features/identity_migration_notice/identity_migration_notice_controller.dart';
 import '../features/identity_migration_notice/identity_migration_notice_service.dart';
+import 'crypto/fs_contact_security_state.dart';
+import 'crypto/fs_session_manager.dart';
 
 final seedServiceProvider = Provider((_) => SeedService());
 final stegoEncoderProvider = Provider((_) => StegoEncoder());
@@ -316,4 +318,55 @@ final effectiveKeyTagProvider = Provider<String?>((ref) {
 /// Whether a passphrase is currently active.
 final isPassphraseActiveProvider = Provider<bool>((ref) {
   return ref.watch(passphraseProvider).isActive;
+});
+
+/// Single in-memory registry of FS contact security states.
+///
+/// Scoped to the app lifetime. Controllers call [FsContactSecurityRegistry.upsert]
+/// to update state; widgets watch [fsStateForContactProvider] to read it.
+final fsContactSecurityRegistryProvider =
+    Provider<FsContactSecurityRegistry>((_) => FsContactSecurityRegistry());
+
+/// Notifier that widgets use to trigger a UI refresh after an FS state change.
+///
+/// Increment this whenever [FsContactSecurityRegistry.upsert] is called so that
+/// [fsStateForContactProvider] family providers re-evaluate.
+final fsRegistryVersionProvider = StateProvider<int>((_) => 0);
+
+/// Returns the most-prominent [FsSessionState] for [contactId] in the primary
+/// identity context.
+///
+/// Priority order (highest wins):
+///   strictFsActive > fsActive > strictRequested > handshake-in-progress > legacyOnly
+///
+/// Returns [FsSessionState.legacyOnly] when no entry exists.
+final fsStateForContactProvider =
+    Provider.family<FsSessionState, String>((ref, contactId) {
+  ref.watch(fsRegistryVersionProvider); // rebuild when registry changes
+  final registry = ref.watch(fsContactSecurityRegistryProvider);
+  final entries = registry.forContactAllContexts(contactId);
+  if (entries.isEmpty) return FsSessionState.legacyOnly;
+
+  const priority = [
+    FsSessionState.fsBroken,
+    FsSessionState.strictFsActive,
+    FsSessionState.fsActive,
+    FsSessionState.strictRequested,
+    FsSessionState.fsConfirmed,
+    FsSessionState.fsConfirmSent,
+    FsSessionState.fsReplySeen,
+    FsSessionState.fsReplySent,
+    FsSessionState.fsInitSeen,
+    FsSessionState.fsInitSent,
+    FsSessionState.fsSuspended,
+    FsSessionState.legacyOnly,
+  ];
+
+  FsSessionState best = FsSessionState.legacyOnly;
+  for (final e in entries) {
+    final pi = priority.indexOf(e.fsState);
+    final bi = priority.indexOf(best);
+    if (pi < bi) best = e.fsState;
+  }
+  return best;
 });

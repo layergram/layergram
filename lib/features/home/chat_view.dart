@@ -12,6 +12,7 @@ import '../../core/crypto/stego_encoder.dart';
 import '../../core/providers.dart';
 import '../../core/storage/messages_repository.dart';
 import '../../l10n/app_strings.dart';
+import '../../ui/fs_status_icon.dart';
 import '../../ui/passphrase_button.dart';
 import '../../utils/app_platform.dart';
 import '../../utils/sharing.dart';
@@ -1616,7 +1617,24 @@ class ChatViewState extends ConsumerState<ChatView> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
-        title: Text(widget.contact.displayName),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                widget.contact.displayName,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 6),
+            FsStatusIcon(
+              fsState: ref.watch(
+                fsStateForContactProvider(widget.contact.identityId),
+              ),
+              size: 14,
+            ),
+          ],
+        ),
         actions: [
           IconButton(
             tooltip: t(context, 'search'),
