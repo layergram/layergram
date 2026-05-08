@@ -52,7 +52,7 @@ class FsInfoSheet extends StatelessWidget {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
 
-    final descKey = _descriptionKey(fsState);
+    final descKey = descriptionKeyFor(fsState);
     final advantagesKey = _advantagesKey(fsState);
     final keepInMindKey = _keepInMindKey(fsState);
 
@@ -83,7 +83,7 @@ class FsInfoSheet extends StatelessWidget {
                   FsStatusIcon(fsState: fsState, size: 18, showTooltip: false),
                   const SizedBox(width: 8),
                   Text(
-                    t(context, _statusKey(fsState)),
+                    t(context, statusKeyFor(fsState)),
                     style: theme.textTheme.labelLarge,
                   ),
                 ],
@@ -130,7 +130,7 @@ class FsInfoSheet extends StatelessWidget {
 
   // ── Key helpers ─────────────────────────────────────────────────────────────
 
-  static String _statusKey(FsSessionState state) {
+  static String statusKeyFor(FsSessionState state) {
     switch (state) {
       case FsSessionState.legacyOnly:
         return 'security.fs.status.legacy';
@@ -154,7 +154,7 @@ class FsInfoSheet extends StatelessWidget {
     }
   }
 
-  static String _descriptionKey(FsSessionState state) {
+  static String descriptionKeyFor(FsSessionState state) {
     switch (state) {
       case FsSessionState.legacyOnly:
         return 'security.fs.info.legacy_description';

@@ -75,17 +75,15 @@ class FsContactSecurityCard extends ConsumerWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
 
-            // ── Session rows ───────────────────────────────────────────────
-            if (sessions.isEmpty)
-              Text(
-                t(context, 'security.fs.card.no_sessions'),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.disabledColor,
-                ),
-              )
-            else ...[
+            // ── Prominent current status ───────────────────────────────────
+            _StatusBadge(fsState: topState),
+            const SizedBox(height: 12),
+
+            // ── Per-session rows (only when >1 sessions or state is active) ─
+            if (sessions.length > 1) ...[
+              const Divider(height: 20),
               ...sessions.asMap().entries.map(
                     (entry) => _SessionRow(
                       session: entry.value,
@@ -202,6 +200,84 @@ class FsContactSecurityCard extends ConsumerWidget {
         ),
       ),
     );
+  }
+}
+
+// ── Prominent status badge ────────────────────────────────────────────────────
+
+class _StatusBadge extends StatelessWidget {
+  const _StatusBadge({required this.fsState});
+
+  final FsSessionState fsState;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppStrings.t;
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    final statusKey = FsInfoSheet.statusKeyFor(fsState);
+    final descKey = FsInfoSheet.descriptionKeyFor(fsState);
+    final badgeColor = _badgeColor(cs, fsState);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: badgeColor.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: badgeColor.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          FsStatusIcon(fsState: fsState, size: 20, showTooltip: false),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  t(context, statusKey),
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: badgeColor,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  t(context, descKey),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Color _badgeColor(ColorScheme cs, FsSessionState state) {
+    switch (state) {
+      case FsSessionState.fsBroken:
+        return cs.error;
+      case FsSessionState.strictFsActive:
+        return Colors.indigo;
+      case FsSessionState.fsActive:
+        return Colors.green.shade700;
+      case FsSessionState.strictRequested:
+      case FsSessionState.fsInitSent:
+      case FsSessionState.fsInitSeen:
+      case FsSessionState.fsReplySent:
+      case FsSessionState.fsReplySeen:
+      case FsSessionState.fsConfirmSent:
+      case FsSessionState.fsConfirmed:
+        return Colors.amber.shade800;
+      case FsSessionState.fsSuspended:
+        return Colors.orange.shade700;
+      case FsSessionState.legacyOnly:
+        return cs.onSurfaceVariant;
+    }
   }
 }
 
