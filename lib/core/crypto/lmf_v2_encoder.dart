@@ -52,6 +52,12 @@ class LmfV2Encoder {
   // ── JSON envelope fields ────────────────────────────────────────────────
 
   /// Build the v2 JSON envelope with required fields.
+  ///
+  /// [fsExtension] is an optional Forward Secrecy control block embedded under
+  /// the `x.fs` key.  Old clients that do not understand `x` will ignore it
+  /// (spec §5.3 — unknown fields must be ignored by legacy decoders).
+  /// The value must be the result of [FsInitMessage.toJson],
+  /// [FsReplyMessage.toJson], or [FsConfirmMessage.toJson].
   static Map<String, dynamic> buildJsonEnvelope({
     required String senderId,
     required String recipientId,
@@ -60,6 +66,7 @@ class LmfV2Encoder {
     String? senderDisplayName,
     int? expireAfter,
     bool deleteAfterRead = false,
+    Map<String, dynamic>? fsExtension,
   }) {
     return {
       'v': 2,
@@ -70,6 +77,7 @@ class LmfV2Encoder {
       if (senderDisplayName != null) 'senderDisplayName': senderDisplayName,
       if (expireAfter != null) 'expireAfter': expireAfter,
       'deleteAfterRead': deleteAfterRead,
+      if (fsExtension != null) 'x': {'fs': fsExtension},
     };
   }
 

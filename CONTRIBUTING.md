@@ -164,7 +164,30 @@ The project may adopt a Contributor License Agreement (CLA) or similar mechanism
 
 ---
 
-## 10. Code of Conduct
+## 10. Forward Secrecy implementation invariant
+
+Any contribution to the Forward Secrecy subsystem must respect the following non-negotiable design constraint:
+
+**Layergram has no direct app-to-app channel, no server, and no background synchronization.**
+
+All FS negotiation, session repair, retry, confirmation, and capability discovery must occur only through ordinary Layergram messages that users copy, paste, share, import, or receive through external apps.
+
+Implementation must never assume:
+
+- direct socket communication between Layergram clients;
+- background sync or push-based Layergram delivery;
+- server-side device registry or remote prekey fetch;
+- transport-level acknowledgement;
+- ordered delivery or guaranteed receipt;
+- remote device availability or online status.
+
+UX wording must not imply any of the above. Avoid phrases like "Connecting to contact…", "Waiting for remote device…", or "Fetching secure session…". Use phrases like "Waiting for a compatible reply." or "Security upgrade will continue when this contact sends the next Layergram message."
+
+This invariant is essential for Layergram's transport-agnostic design and for the plausible-deniability properties of passphrase-derived identities.
+
+---
+
+## 11. Code of Conduct
 
 We want a welcoming and respectful community.
 

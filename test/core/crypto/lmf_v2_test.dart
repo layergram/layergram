@@ -290,4 +290,174 @@ void main() {
       expect(runeCount, equals(estimatedBytes * 4)); // 4 runes per byte (2 bits per rune)
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Phase 5 — LMF v2 x.fs extension tests
+  // ---------------------------------------------------------------------------
+
+  group('LMF v2 x.fs extension (Phase 5)', () {
+    late SecretKey testKey;
+    const _coverText = 'Hello from Layergram. This is a moderately long cover text for testing purposes, ensuring there is enough capacity for the hidden payload with the FS extension attached to the message.';
+
+    setUp(() async {
+      testKey = SecretKey(Uint8List(32)..fillRange(0, 32, 0x42));
+    });
+
+    // T5.1 — envelope with no x.fs round-trips correctly.
+    test('T5.1: envelope without x.fs round-trips (baseline compatibility)', () async {
+      final env = LmfV2Encoder.buildJsonEnvelope(
+        senderId: 'alice',
+        recipientId: 'bob',
+        timestampMillis: 1700000000000,
+        text: 'Hello',
+      );
+      expect(env.containsKey('x'), isFalse);
+
+      final stego = await LmfV2Encoder.encode(
+        jsonEnvelope: env,
+        key: testKey,
+        coverText: _coverText,
+      );
+      final decoded = await LmfV2Decoder.decode(stegoText: stego, key: testKey);
+      expect(decoded, isNotNull);
+      expect(decoded!['text'], equals('Hello'));
+      expect(LmfV2Decoder.extractFsExtension(decoded), isNull);
+    });
+
+    // T5.2 — envelope with fs_init round-trips and x.fs is extractable.
+    test('T5.2: envelope with x.fs fs_init round-trips', () async {
+      final fsInit = {
+        'v': 1,
+        'type': 'fs_init',
+        'initId': 'abc123',
+        'initiatorDevicePub': 'AQ' + 'A' * 42,
+        'initiatorEphemeralPub': 'AQ' + 'A' * 42,
+        'caps': ['lgfs1', 'dr1'],
+        'createdAt': 1700000000,
+      };
+      final env = LmfV2Encoder.buildJsonEnvelope(
+        senderId: 'alice',
+        recipientId: 'bob',
+        timestampMillis: 1700000000000,
+        text: 'Hey',
+        fsExtension: fsInit,
+      );
+      expect(env['x'], isA<Map<String, dynamic>>());
+      expect((env['x'] as Map)['fs'], equals(fsInit));
+
+      final stego = await LmfV2Encoder.encode(
+        jsonEnvelope: env,
+        key: testKey,
+        coverText: _coverText,
+      );
+      final decoded = await LmfV2Decoder.decode(stegoText: stego, key: testKey);
+      expect(decoded, isNotNull);
+      final fs = LmfV2Decoder.extractFsExtension(decoded!);
+      expect(fs, isNotNull, reason: 'x.fs must survive encrypt→decrypt round-trip');
+      expect(fs!['type'], equals('fs_init'));
+      expect(fs['initId'], equals('abc123'));
+      expect(LmfV2Decoder.fsMsgType(decoded), equals('fs_init'));
+    });
+
+    // T5.3 — envelope with fs_reply round-trips.
+    test('T5.3: envelope with x.fs fs_reply round-trips', () async {
+      final fsReply = {
+        'v': 1,
+        'type': 'fs_reply',
+        'initId': 'abc123',
+        'replyId': 'reply456',
+        'responderDevicePub': 'AQ' + 'B' * 42,
+        'responderEphemeralPub': 'AQ' + 'C' * 42,
+        'responderInitialRatchetPub': 'AQ' + 'D' * 42,
+        'caps': ['lgfs1'],
+        'createdAt': 1700000001,
+      };
+      final env = LmfV2Encoder.buildJsonEnvelope(
+        senderId: 'bob',
+        recipientId: 'alice',
+        timestampMillis: 1700000001000,
+        text: 'Sure',
+        fsExtension: fsReply,
+      );
+
+      final stego = await LmfV2Encoder.encode(
+        jsonEnvelope: env,
+        key: testKey,
+        coverText: _coverText,
+      );
+      final decoded = await LmfV2Decoder.decode(stegoText: stego, key: testKey);
+      expect(decoded, isNotNull);
+      final fs = LmfV2Decoder.extractFsExtension(decoded!);
+      expect(fs, isNotNull);
+      expect(fs!['type'], equals('fs_reply'));
+      expect(fs['replyId'], equals('reply456'));
+    });
+
+    // T5.4 — envelope with fs_confirm round-trips.
+    test('T5.4: envelope with x.fs fs_confirm round-trips', () async {
+      final fsConfirm = {
+        'v': 1,
+        'type': 'fs_confirm',
+        'initId': 'abc123',
+        'replyId': 'reply456',
+        'transcriptHash': 'A' * 43,
+        'confirmTag': 'B' * 43,
+        'initiatorInitialRatchetPub': 'AQ' + 'E' * 42,
+      };
+      final env = LmfV2Encoder.buildJsonEnvelope(
+        senderId: 'alice',
+        recipientId: 'bob',
+        timestampMillis: 1700000002000,
+        text: 'Done',
+        fsExtension: fsConfirm,
+      );
+
+      final stego = await LmfV2Encoder.encode(
+        jsonEnvelope: env,
+        key: testKey,
+        coverText: _coverText,
+      );
+      final decoded = await LmfV2Decoder.decode(stegoText: stego, key: testKey);
+      expect(decoded, isNotNull);
+      final fs = LmfV2Decoder.extractFsExtension(decoded!);
+      expect(fs, isNotNull);
+      expect(fs!['type'], equals('fs_confirm'));
+      expect(fs['confirmTag'], equals('B' * 43));
+    });
+
+    // T5.5 — legacy decoder ignores unknown x field.
+    test('T5.5: envelope with x.fs is still a valid v=2 message (legacy compatible)', () async {
+      final env = LmfV2Encoder.buildJsonEnvelope(
+        senderId: 'alice',
+        recipientId: 'bob',
+        timestampMillis: 1700000000000,
+        text: 'Legacy compatible',
+        fsExtension: {'v': 1, 'type': 'fs_init', 'initId': 'x', 'caps': ['lgfs1'], 'createdAt': 1700000000},
+      );
+      final stego = await LmfV2Encoder.encode(
+        jsonEnvelope: env,
+        key: testKey,
+        coverText: _coverText,
+      );
+      final decoded = await LmfV2Decoder.decode(stegoText: stego, key: testKey);
+      expect(decoded, isNotNull, reason: 'Message with x.fs must still decode successfully');
+      expect(decoded!['v'], equals(2));
+      expect(decoded['senderId'], equals('alice'));
+      expect(decoded['text'], equals('Legacy compatible'));
+    });
+
+    // T5.6 — fsMsgType returns null when x.fs absent.
+    test('T5.6: fsMsgType returns null when x.fs absent', () {
+      final env = {
+        'v': 2,
+        'senderId': 'alice',
+        'recipientId': 'bob',
+        'timestamp': 1700000000000,
+        'text': 'No FS',
+        'deleteAfterRead': false,
+      };
+      expect(LmfV2Decoder.fsMsgType(env), isNull);
+      expect(LmfV2Decoder.extractFsExtension(env), isNull);
+    });
+  });
 }

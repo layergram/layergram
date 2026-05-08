@@ -187,7 +187,17 @@ class MessagesRepositoryCore {
     await _ensureLoaded();
     if (!_hasScope) return;
 
-    final keysToDelete = _box.keys.where(_isScopedKey).toList();
+    // Delete all scoped message/hidden records, but leave any record that
+    // carries the aux-record marker ('a': true) — those belong to
+    // AuxRecordRepository and must not be touched by the message persist cycle.
+    final keysToDelete = _box.keys
+        .where(_isScopedKey)
+        .where((k) {
+          final raw = _box.get(k);
+          if (raw == null) return true;
+          return raw['a'] != true;
+        })
+        .toList();
     for (final key in keysToDelete) {
       await _box.delete(key);
     }

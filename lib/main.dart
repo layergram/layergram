@@ -23,6 +23,7 @@ import 'core/storage/local_storage_security_service.dart';
 import 'core/storage/secure_storage.dart';
 import 'features/identity_migration_notice/identity_migration_notice_strings.dart';
 import 'l10n/app_strings.dart';
+import 'l10n/fs_strings_bundle.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -37,6 +38,7 @@ void main() async {
   );
   await localStorageSecurity.ensureCurrentLayout();
   registerIdentityMigrationNoticeStrings();
+  AppStrings.registerStrings(FsStringsBundle.bundle);
   runApp(
     EasyLocalization(
       supportedLocales: AppStrings.supportedLocales,

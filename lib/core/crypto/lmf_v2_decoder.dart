@@ -185,4 +185,27 @@ class LmfV2Decoder {
       return null;
     }
   }
+
+  // ── x.fs extension helpers ──────────────────────────────────────────────
+
+  /// Extracts the `x.fs` Forward Secrecy extension from a decoded [envelope].
+  ///
+  /// Returns the raw JSON map under `envelope['x']['fs']`, or null if absent
+  /// or malformed.  Callers should check the `type` field to dispatch to the
+  /// correct [FsInitMessage.fromJson] / [FsReplyMessage.fromJson] /
+  /// [FsConfirmMessage.fromJson] parser.
+  static Map<String, dynamic>? extractFsExtension(
+    Map<String, dynamic> envelope,
+  ) {
+    final x = envelope['x'];
+    if (x is! Map<String, dynamic>) return null;
+    final fs = x['fs'];
+    if (fs is! Map<String, dynamic>) return null;
+    return fs;
+  }
+
+  /// Returns the `type` string from the `x.fs` extension, or null if absent.
+  static String? fsMsgType(Map<String, dynamic> envelope) {
+    return extractFsExtension(envelope)?['type'] as String?;
+  }
 }
