@@ -77,7 +77,7 @@ class FsStringsBundle {
     // Info modal
     'security.fs.info.title': 'Security with this contact',
     'security.fs.info.legacy_description':
-        'Messages are encrypted end-to-end. Forward Secrecy is not yet active.',
+        'Messages are encrypted end-to-end. Forward Secrecy will activate automatically as you exchange messages.',
     'security.fs.info.active_description':
         'Forward Secrecy is active. Each message uses a unique key derived from an ephemeral handshake.',
     'security.fs.info.active_advantage':
@@ -88,7 +88,7 @@ class FsStringsBundle {
     'security.fs.info.broken_description':
         'The secure channel could not be verified. No messages have been sent or received in this state.',
     'security.fs.info.upgrading_description':
-        'A Forward Secrecy upgrade is in progress. Complete the handshake by exchanging a message.',
+        'Forward Secrecy is upgrading automatically. Continue exchanging messages to complete the secure session.',
 
     // Maximum / Strict FS
     'security.fs.maximum.confirm_title': 'Enable Maximum Forward Secrecy?',
@@ -102,13 +102,13 @@ class FsStringsBundle {
 
     // Info modal — mode-specific descriptions (§14.4)
     'security.fs.info.legacy_advantages':
-        'Maximum compatibility. Works with older versions and unsynchronized devices.',
+        'Maximum compatibility with all your devices. Works across multiple devices simultaneously. Forward Secrecy upgrades automatically when supported.',
     'security.fs.info.legacy_keep_in_mind':
-        'These messages are not protected by Forward Secrecy.',
+        'These messages are not yet protected by Forward Secrecy. Upgrade happens automatically as you exchange messages.',
     'security.fs.info.upgrading_advantages':
-        'Improves protection automatically. Keeps compatibility with older or changed devices.',
+        'Improves protection automatically. Keeps compatibility across all your devices.',
     'security.fs.info.upgrading_keep_in_mind':
-        'Forward Secrecy applies only after the secure session is established.',
+        'Forward Secrecy applies only after the secure session is established. This happens automatically by exchanging messages.',
     'security.fs.info.active_keep_in_mind':
         'If this contact changes device or reinstalls Layergram, a new secure session may be needed.',
     'security.fs.info.strict_advantages':
@@ -171,7 +171,8 @@ class FsStringsBundle {
     'security.fs.card.title': 'Security for this context',
     'security.fs.card.no_sessions': 'No active sessions with this contact.',
     'security.fs.card.explanation_prefix':
-        'Forward Secrecy protects only messages sent after a secure session has been established. '
+        'Forward Secrecy activates automatically as you exchange messages. '
+        'It protects only messages sent after the secure session is established. '
         'Messages sent before this upgrade remain protected by the previous Layergram encryption model.',
 
     // Passphrase context
