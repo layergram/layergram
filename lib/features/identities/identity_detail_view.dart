@@ -152,8 +152,6 @@ class _IdentityDetailViewState extends ConsumerState<IdentityDetailView> {
                     SelectableText(
                         '${t(context, 'publicKeyLabel')}: ${_identity.publicKeyBase64}'),
                     const SizedBox(height: 16),
-                    if (!isMe) FsContactSecurityCard(contactId: _identity.identityId),
-                    if (!isMe) const SizedBox(height: 16),
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
@@ -232,6 +230,8 @@ class _IdentityDetailViewState extends ConsumerState<IdentityDetailView> {
                         ),
                       ],
                     ),
+                    if (!isMe) const SizedBox(height: 16),
+                    if (!isMe) FsContactSecurityCard(contactId: _identity.identityId),
                   ],
                 ),
               ),
