@@ -12,6 +12,7 @@ import '../../core/crypto/stego_encoder.dart';
 import '../../core/providers.dart';
 import '../../core/storage/messages_repository.dart';
 import '../../l10n/app_strings.dart';
+import '../../ui/fs_info_sheet.dart';
 import '../../ui/fs_status_icon.dart';
 import '../../ui/passphrase_button.dart';
 import '../../utils/app_platform.dart';
@@ -1627,11 +1628,20 @@ class ChatViewState extends ConsumerState<ChatView> {
               ),
             ),
             const SizedBox(width: 6),
-            FsStatusIcon(
-              fsState: ref.watch(
-                fsStateForContactProvider(widget.contact.identityId),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () {
+                final fsState = ref.read(
+                  fsStateForContactProvider(widget.contact.identityId),
+                );
+                showFsInfoSheet(context, fsState);
+              },
+              child: FsStatusIcon(
+                fsState: ref.watch(
+                  fsStateForContactProvider(widget.contact.identityId),
+                ),
+                size: 14,
               ),
-              size: 14,
             ),
           ],
         ),

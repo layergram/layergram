@@ -15,11 +15,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/crypto/fs_session_manager.dart';
 import '../../core/crypto/models.dart';
 import '../../core/providers.dart';
 import '../../l10n/app_strings.dart';
-import '../../ui/fs_status_icon.dart';
+import '../../ui/fs_contact_security_card.dart';
 import '../contact_verification/contact_verification_view.dart';
 import '../home/chat_view.dart';
 import '../home/home_controller.dart';
@@ -112,9 +111,6 @@ class _IdentityDetailViewState extends ConsumerState<IdentityDetailView> {
   @override
   Widget build(BuildContext context) {
     final t = AppStrings.t;
-    // suppress unused import warning
-    // ignore: unused_local_variable
-    final _ = FsSessionState.legacyOnly;
     final isMe = _myIdentityId != null && _identity.identityId == _myIdentityId;
 
     return Scaffold(
@@ -156,7 +152,7 @@ class _IdentityDetailViewState extends ConsumerState<IdentityDetailView> {
                     SelectableText(
                         '${t(context, 'publicKeyLabel')}: ${_identity.publicKeyBase64}'),
                     const SizedBox(height: 16),
-                    if (!isMe) _FsStatusRow(contactId: _identity.identityId),
+                    if (!isMe) FsContactSecurityCard(contactId: _identity.identityId),
                     if (!isMe) const SizedBox(height: 16),
                     Wrap(
                       spacing: 8,
@@ -243,61 +239,6 @@ class _IdentityDetailViewState extends ConsumerState<IdentityDetailView> {
           ],
         ),
       ),
-    );
-  }
-}
-
-/// Compact FS status row shown inside the contact detail card.
-class _FsStatusRow extends ConsumerWidget {
-  const _FsStatusRow({required this.contactId});
-
-  final String contactId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final t = AppStrings.t;
-    final fsState = ref.watch(fsStateForContactProvider(contactId));
-    final theme = Theme.of(context);
-
-    final String descKey;
-    switch (fsState) {
-      case FsSessionState.fsActive:
-        descKey = 'security.fs.status.active';
-        break;
-      case FsSessionState.strictFsActive:
-        descKey = 'security.fs.status.strict';
-        break;
-      case FsSessionState.fsBroken:
-        descKey = 'security.fs.status.broken';
-        break;
-      case FsSessionState.fsSuspended:
-        descKey = 'security.fs.status.suspended';
-        break;
-      case FsSessionState.fsInitSent:
-      case FsSessionState.fsInitSeen:
-      case FsSessionState.fsReplySent:
-      case FsSessionState.fsReplySeen:
-      case FsSessionState.fsConfirmSent:
-      case FsSessionState.fsConfirmed:
-      case FsSessionState.strictRequested:
-        descKey = 'security.fs.status.upgrading';
-        break;
-      case FsSessionState.legacyOnly:
-        descKey = 'security.fs.status.legacy';
-        break;
-    }
-
-    return Row(
-      children: [
-        FsStatusIcon(fsState: fsState, size: 18),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            t(context, descKey),
-            style: theme.textTheme.bodyMedium,
-          ),
-        ),
-      ],
     );
   }
 }

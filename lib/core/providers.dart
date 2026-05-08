@@ -47,6 +47,7 @@ import '../features/identity_migration_notice/identity_migration_notice_controll
 import '../features/identity_migration_notice/identity_migration_notice_service.dart';
 import 'crypto/fs_contact_security_state.dart';
 import 'crypto/fs_session_manager.dart';
+import 'crypto/fs_strict_mode_controller.dart';
 
 final seedServiceProvider = Provider((_) => SeedService());
 final stegoEncoderProvider = Provider((_) => StegoEncoder());
@@ -318,6 +319,28 @@ final effectiveKeyTagProvider = Provider<String?>((ref) {
 /// Whether a passphrase is currently active.
 final isPassphraseActiveProvider = Provider<bool>((ref) {
   return ref.watch(passphraseProvider).isActive;
+});
+
+/// Per-contact [FsSessionManager] instances, keyed by contactId.
+///
+/// Each contact gets its own state machine. These are RAM-only; the caller
+/// is responsible for persisting state to aux records.
+final fsSessionManagerProvider =
+    Provider.family<FsSessionManager, String>((ref, contactId) {
+  return FsSessionManager();
+});
+
+/// Per-contact [FsStrictModeController], keyed by contactId.
+///
+/// Uses the primary identity context (`'primary'`) for non-passphrase use.
+final fsStrictModeControllerProvider =
+    Provider.family<FsStrictModeController, String>((ref, contactId) {
+  return FsStrictModeController(
+    contactId: contactId,
+    identityContext: 'primary',
+    sessionManager: ref.watch(fsSessionManagerProvider(contactId)),
+    registry: ref.watch(fsContactSecurityRegistryProvider),
+  );
 });
 
 /// Single in-memory registry of FS contact security states.

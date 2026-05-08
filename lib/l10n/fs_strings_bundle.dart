@@ -100,6 +100,80 @@ class FsStringsBundle {
     'security.fs.maximum.pending_notice':
         'Waiting for {contact} to confirm Maximum Forward Secrecy.',
 
+    // Info modal — mode-specific descriptions (§14.4)
+    'security.fs.info.legacy_advantages':
+        'Maximum compatibility. Works with older versions and unsynchronized devices.',
+    'security.fs.info.legacy_keep_in_mind':
+        'These messages are not protected by Forward Secrecy.',
+    'security.fs.info.upgrading_advantages':
+        'Improves protection automatically. Keeps compatibility with older or changed devices.',
+    'security.fs.info.upgrading_keep_in_mind':
+        'Forward Secrecy applies only after the secure session is established.',
+    'security.fs.info.active_keep_in_mind':
+        'If this contact changes device or reinstalls Layergram, a new secure session may be needed.',
+    'security.fs.info.strict_advantages':
+        'Strongest protection for this contact. Prevents silent downgrade for user messages.',
+    'security.fs.info.strict_keep_in_mind':
+        'If either person changes device, reinstalls Layergram, or loses session state, sending may pause until the session is repaired. Some old messages may not be recoverable.',
+    'security.fs.info.strict_requested_description':
+        'You requested Maximum Forward Secrecy for this contact. It is not active yet — Layergram is waiting for a confirmed secure session.',
+    'security.fs.info.strict_requested_advantages':
+        'Prepares this contact for the strongest device-bound mode.',
+    'security.fs.info.strict_requested_keep_in_mind':
+        'You and this contact should agree to use the expected device(s). Messages may not be readable from other devices until a new secure session is established.',
+    'security.fs.info.broken_keep_in_mind':
+        'Repair or re-establish the secure session before sending.',
+    'security.fs.info.suspended_description':
+        'A previous Forward Secure session cannot currently be used. Layergram may retry negotiation.',
+    'security.fs.info.suspended_keep_in_mind':
+        'Send a message to trigger a new secure session upgrade.',
+
+    // Info modal — actions (§14.4)
+    'security.fs.info.action_close': 'Close',
+    'security.fs.info.action_view_details': 'View details',
+    'security.fs.info.section_advantages': 'Advantages',
+    'security.fs.info.section_keep_in_mind': 'Keep in mind',
+
+    // Recoverability warning (§14.6.1)
+    'security.fs.warning.recoverability_title': 'Some messages may not be readable later',
+    'security.fs.warning.recoverability_body':
+        'This mode improves protection by reducing how long old keys or readable history remain available. '
+        'If you delete messages, reset sessions, reinstall Layergram, or clean the encrypted archive, '
+        'some older messages may not be recoverable even if you still have the correct passphrase.',
+    'security.fs.warning.recoverability_confirm':
+        'I understand that some old messages may become unrecoverable.',
+
+    // Device-bound warning (§14.6.2)
+    'security.fs.warning.device_bound_title': 'This mode is bound to verified devices',
+    'security.fs.warning.device_bound_body':
+        'Use it only if you and this contact agree to use the expected device(s). '
+        'If either person changes device, reinstalls Layergram, resets sessions, or uses an older version, '
+        'messages may not be readable until a new secure session is established.',
+    'security.fs.warning.device_bound_confirm':
+        'I have agreed this with the contact and understand that this mode is device-bound.',
+
+    // Pending activation (§14.6.3)
+    'security.fs.warning.pending_title': 'Maximum FS requested',
+    'security.fs.warning.pending_body':
+        'Maximum FS is not active yet. Layergram is waiting for a confirmed secure session. '
+        'Until confirmation, this contact is not yet using Maximum Forward Secrecy.',
+
+    // Per-device/session labels (§14.4)
+    'security.fs.device.session_label': 'Session {n}',
+    'security.fs.device.unknown': 'Unknown session',
+    'security.fs.device.fallback_allowed': 'Fallback: allowed',
+    'security.fs.device.fallback_not_allowed': 'Fallback: not allowed',
+    'security.fs.device.mode_base': 'Mode: Base',
+    'security.fs.device.mode_advanced': 'Mode: Advanced',
+    'security.fs.device.mode_strict': 'Mode: Strict',
+
+    // Contact-card section header (§14.4)
+    'security.fs.card.title': 'Security for this context',
+    'security.fs.card.no_sessions': 'No active sessions with this contact.',
+    'security.fs.card.explanation_prefix':
+        'Forward Secrecy protects only messages sent after a secure session has been established. '
+        'Messages sent before this upgrade remain protected by the previous Layergram encryption model.',
+
     // Passphrase context
     'security.passphrase.fs_active': 'Passphrase Forward Secrecy active',
     'security.passphrase.fs_inactive': 'Passphrase context not active',
