@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -288,28 +289,60 @@ class HomeController {
       return null;
     }
 
-    final key = await _displayKeyForContact(contact);
-    if (key == null) return null;
+    final privateKey = await _activePrivateKey();
+    if (privateKey == null) return null;
 
-    final decrypted = await ref.read(encryptionServiceProvider).tryDecryptWithKey(
-          message: EncryptedMessage(
-            version: 1,
-            senderId: message.senderId,
-            recipientId: message.recipientId,
-            nonceBase64: message.nonceBase64 ?? '',
-            ciphertextBase64: message.ciphertextBase64 ?? '',
-          ),
-          key: key,
-        );
-    return decrypted?.text;
+    // Get ratchet state if FS session is active for this contact
+    RatchetState? ratchetState;
+    final sessionManager = ref.read(fsSessionManagerProvider(contact.identityId));
+    final activeSessionId = sessionManager.activeSessionId;
+    if (activeSessionId != null) {
+      ratchetState = ref.read(fsRatchetStateCacheProvider)[activeSessionId];
+    }
+
+    final encMessage = EncryptedMessage(
+      version: 1,
+      senderId: message.senderId,
+      recipientId: message.recipientId,
+      nonceBase64: message.nonceBase64 ?? '',
+      ciphertextBase64: message.ciphertextBase64 ?? '',
+    );
+
+    final result = await ref.read(encryptionServiceProvider).decrypt(
+      recipientPrivateKeyBase64: privateKey,
+      senderPublicKeyBase64: contact.publicKeyBase64,
+      message: encMessage,
+      ratchetState: ratchetState,
+    );
+
+    // Update ratchet state if it changed (e.g., received new message advanced counter)
+    if (result.newRatchetState != null && activeSessionId != null) {
+      final newState = result.newRatchetState!;
+      ref.read(fsRatchetStateCacheProvider.notifier).update((cache) => {
+            ...cache,
+            activeSessionId: newState,
+          });
+      // Persist updated state
+      await ref.read(fsRatchetPersistenceServiceProvider).saveRatchetState(newState);
+    }
+
+    return result.payload.text;
   }
 
   Future<DecryptedMessagePreview?> getLastDecryptableMessagePreview({
     required List<MessageRecord> messages,
     required RemoteIdentity contact,
   }) async {
-    final key = await _displayKeyForContact(contact);
-    if (key == null) return null;
+    final privateKey = await _activePrivateKey();
+    if (privateKey == null) return null;
+
+    // Get ratchet state if FS session is active for this contact
+    final sessionManager = ref.read(fsSessionManagerProvider(contact.identityId));
+    final activeSessionId = sessionManager.activeSessionId;
+    RatchetState? ratchetState;
+    if (activeSessionId != null) {
+      ratchetState = ref.read(fsRatchetStateCacheProvider)[activeSessionId];
+    }
 
     // Sort messages descending by timestamp to find the latest
     final sortedMessages = List<MessageRecord>.from(messages)
@@ -320,22 +353,35 @@ class HomeController {
         continue;
       }
 
-      final decrypted = await ref.read(encryptionServiceProvider).tryDecryptWithKey(
-            message: EncryptedMessage(
-              version: 1,
-              senderId: message.senderId,
-              recipientId: message.recipientId,
-              nonceBase64: message.nonceBase64 ?? '',
-              ciphertextBase64: message.ciphertextBase64 ?? '',
-            ),
-            key: key,
-          );
-      if (decrypted != null) {
-        return DecryptedMessagePreview(
-          text: decrypted.text,
-          timestamp: message.timestamp,
-        );
+      final result = await ref.read(encryptionServiceProvider).decrypt(
+        recipientPrivateKeyBase64: privateKey,
+        senderPublicKeyBase64: contact.publicKeyBase64,
+        message: EncryptedMessage(
+          version: 1,
+          senderId: message.senderId,
+          recipientId: message.recipientId,
+          nonceBase64: message.nonceBase64 ?? '',
+          ciphertextBase64: message.ciphertextBase64 ?? '',
+        ),
+        ratchetState: ratchetState,
+      );
+
+      // Update ratchet state if it changed
+      if (result.newRatchetState != null && activeSessionId != null) {
+        final newState = result.newRatchetState!;
+        ratchetState = newState; // Update local var for next iteration
+        ref.read(fsRatchetStateCacheProvider.notifier).update((cache) => {
+              ...cache,
+              activeSessionId: newState,
+            });
+        // Persist updated state (don't await in loop)
+        unawaited(ref.read(fsRatchetPersistenceServiceProvider).saveRatchetState(newState));
       }
+
+      return DecryptedMessagePreview(
+        text: result.payload.text,
+        timestamp: message.timestamp,
+      );
     }
 
     return null;
