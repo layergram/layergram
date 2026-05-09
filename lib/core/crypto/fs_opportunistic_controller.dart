@@ -159,23 +159,30 @@ class FsOpportunisticController {
           return const FsOutgoingExtension._(json: null);
         }
 
-        // Activates session immediately for initiator (responder activates on confirm receipt)
-        _sessionManager.activateSession(pendingConfirm.replyId);
-
-        _updateRegistry(
-          sessionId: pendingConfirm.replyId,
-          state: _sessionManager.state,
-        );
-
-        // Initialize the double ratchet for initiator
+        // Initialize the double ratchet for initiator FIRST
         // Note: initiator needs responder's ratchet pub from pendingReply
+        bool ratchetInitialized = false;
         if (pendingReply != null) {
-          _initializeRatchetForInitiator(
+          ratchetInitialized = await _initializeRatchetForInitiator(
             sessionId: pendingConfirm.replyId,
             confirmPayload: pendingConfirm,
             replyPayload: pendingReply,
           );
         }
+
+        // CRITICAL: Only activate session if ratchet was successfully initialized
+        // If ratchet initialization failed (e.g., after identity reset), mark broken
+        if (ratchetInitialized) {
+          _sessionManager.activateSession(pendingConfirm.replyId);
+        } else {
+          print('[FS-INITIATOR] CRITICAL: Ratchet initialization failed - marking session broken');
+          _sessionManager.markBroken();
+        }
+
+        _updateRegistry(
+          sessionId: pendingConfirm.replyId,
+          state: _sessionManager.state,
+        );
 
         return FsOutgoingExtension._(json: json);
 
@@ -329,15 +336,21 @@ class FsOpportunisticController {
 
       // Activate the session after successful confirm
       if (verified) {
-        _sessionManager.activateSession(msg.replyId);
-        _updateRegistry(sessionId: msg.replyId, state: _sessionManager.state);
-
-        // Initialize the double ratchet with stored handshake keys
-        await _initializeRatchetAfterHandshake(
+        // Initialize the double ratchet FIRST (before activating session)
+        final ratchetInitialized = await _initializeRatchetAfterHandshake(
           sessionId: msg.replyId,
           isInitiator: false,
           remoteRatchetPub: msg.initiatorInitialRatchetPub,
         );
+
+        // CRITICAL: Only activate session if ratchet was successfully initialized
+        if (ratchetInitialized) {
+          _sessionManager.activateSession(msg.replyId);
+        } else {
+          print('[FS-RESPONDER] CRITICAL: Ratchet initialization failed - marking session broken');
+          _sessionManager.markBroken();
+        }
+        _updateRegistry(sessionId: msg.replyId, state: _sessionManager.state);
       }
     }
 
@@ -369,7 +382,8 @@ class FsOpportunisticController {
   // ---------------------------------------------------------------------------
 
   /// Initializes the double ratchet for the responder after FS_CONFIRM verification.
-  Future<void> _initializeRatchetAfterHandshake({
+  /// Returns true if initialization succeeded, false otherwise.
+  Future<bool> _initializeRatchetAfterHandshake({
     required String sessionId,
     required bool isInitiator,
     required String? remoteRatchetPub,
@@ -379,7 +393,10 @@ class FsOpportunisticController {
       final partialState = isInitiator
           ? _sessionManager.initiatorPartialState
           : _sessionManager.responderPartialState;
-      if (partialState == null) return;
+      if (partialState == null) {
+        print('[FS-RATCHET-INIT] No partial state available');
+        return false;
+      }
 
       // Decode remote ratchet public key if provided
       Uint8List? lastRemoteRatchetPub;
@@ -403,13 +420,17 @@ class FsOpportunisticController {
 
       // Also persist via service if available
       await _ratchetPersistenceService?.saveRatchetState(ratchetState);
-    } catch (_) {
-      // Silently fail - ratchet will be re-initialized on next handshake attempt
+      
+      return true;
+    } catch (e) {
+      print('[FS-RATCHET-INIT] Failed to initialize ratchet: $e');
+      return false;
     }
   }
 
   /// Initializes the double ratchet for the initiator after sending FS_CONFIRM.
-  void _initializeRatchetForInitiator({
+  /// Returns true if initialization succeeded, false otherwise.
+  Future<bool> _initializeRatchetForInitiator({
     required String sessionId,
     required FsConfirmPayload confirmPayload,
     required FsReplyPayload replyPayload,
@@ -432,7 +453,7 @@ class FsOpportunisticController {
         localRatchetPub = FsKeyCodec.decodeKey(confirmPayload.initiatorInitialRatchetPub);
       }
 
-      if (localRatchetPub == null) return;
+      if (localRatchetPub == null) return false;
 
       // Initialize the ratchet
       final ratchetState = await FsDoubleRatchet.initRatchet(
@@ -448,8 +469,10 @@ class FsOpportunisticController {
       // Notify callback and persist
       _onRatchetInitialized?.call(ratchetState);
       await _ratchetPersistenceService?.saveRatchetState(ratchetState);
-    } catch (_) {
-      // Silently fail
+      return true;
+    } catch (e) {
+      print('[FS-RATCHET-INIT-INITIATOR] Failed to initialize ratchet: $e');
+      return false;
     }
   }
 
