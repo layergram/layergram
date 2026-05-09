@@ -145,28 +145,30 @@ class FsOpportunisticController {
         return FsOutgoingExtension._(json: json);
 
       case FsSessionState.fsReplySeen:
-        if (pendingConfirm == null) return null;
-        final msg = pendingConfirm.toMessage();
-        final json = msg.toJson();
-        if (!FsPayloadBudget.fitsInOpportunisticBudget(json)) {
-          return FsOutgoingExtension._(
-            json: null,
-            droppedReason: FsExtensionDropReason.payloadTooLarge,
-          );
+        // Generate FS_CONFIRM in response to received FS_REPLY
+        // pendingConfirm is passed as parameter to buildOutgoingExtension
+        if (pendingConfirm == null) {
+          return const FsOutgoingExtension._(json: null);
         }
+
+        // Build FS_CONFIRM extension with the confirm payload
+        final json = pendingConfirm.toMessage().toJson();
+
+        // Record that we are sending FS_CONFIRM
         final confirmResult = _sessionManager.recordFsConfirmSent(pendingConfirm);
         if (!confirmResult.accepted) {
           return const FsOutgoingExtension._(json: null);
         }
 
         // Initialize the double ratchet for initiator FIRST
-        // Note: initiator needs responder's ratchet pub from pendingReply
+        // Get responder's ratchet pub from the stored FS_REPLY message
+        final storedReply = _sessionManager.storedReplyMessage;
         bool ratchetInitialized = false;
-        if (pendingReply != null) {
+        if (storedReply != null) {
           ratchetInitialized = await _initializeRatchetForInitiator(
             sessionId: pendingConfirm.replyId,
             confirmPayload: pendingConfirm,
-            replyPayload: pendingReply,
+            responderRatchetPub: storedReply.responderInitialRatchetPub,
           );
         }
 
@@ -433,15 +435,15 @@ class FsOpportunisticController {
   Future<bool> _initializeRatchetForInitiator({
     required String sessionId,
     required FsConfirmPayload confirmPayload,
-    required FsReplyPayload replyPayload,
+    required String? responderRatchetPub,
   }) async {
     try {
       final partialState = confirmPayload.partialState;
 
-      // Decode responder's ratchet public key from reply
+      // Decode responder's ratchet public key
       Uint8List? lastRemoteRatchetPub;
-      if (replyPayload.responderInitialRatchetPub != null) {
-        lastRemoteRatchetPub = FsKeyCodec.decodeKey(replyPayload.responderInitialRatchetPub!);
+      if (responderRatchetPub != null) {
+        lastRemoteRatchetPub = FsKeyCodec.decodeKey(responderRatchetPub);
       }
 
       // initiatorInitialRatchetPriv is already Uint8List (not encoded)
