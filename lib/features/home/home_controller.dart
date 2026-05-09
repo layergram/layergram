@@ -301,10 +301,8 @@ class HomeController {
       ratchetState = ref.read(fsRatchetStateCacheProvider)[activeSessionId];
     }
 
-    assert(() {
-      print('[FS-DECRYPT] contact=${contact.identityId}, sessionState=${sessionManager.state}, activeSessionId=$activeSessionId, ratchetState=${ratchetState != null ? "present" : "null"}');
-      return true;
-    }());
+    // Production logging for FS decryption tracking
+    print('[FS-CHAT-DECRYPT] contact=${contact.identityId}, sessionState=${sessionManager.state}, activeSessionId=$activeSessionId, ratchetInCache=${ratchetState != null}');
 
     final encMessage = EncryptedMessage(
       version: 1,
@@ -321,14 +319,17 @@ class HomeController {
       ratchetState: ratchetState,
     );
 
-    assert(() {
-      print('[FS-DECRYPT] Decrypted text length=${result.payload.text.length}, newRatchetState=${result.newRatchetState != null ? "present" : "null"}');
-      return true;
-    }());
+    // Production logging for successful decryption
+    if (result.newRatchetState != null) {
+      print('[FS-CHAT-DECRYPT] SUCCESS with FS - session=${result.newRatchetState!.sessionId}, counter=${result.newRatchetState!.recvCounter}');
+    } else {
+      print('[FS-CHAT-DECRYPT] SUCCESS with LEGACY (no FS)');
+    }
 
     // Update ratchet state if it changed (e.g., received new message advanced counter)
     if (result.newRatchetState != null && activeSessionId != null) {
       final newState = result.newRatchetState!;
+      print('[FS-CHAT-DECRYPT] Updating cache - session=${newState.sessionId}, send=${newState.sendCounter}, recv=${newState.recvCounter}');
       ref.read(fsRatchetStateCacheProvider.notifier).update((cache) => {
             ...cache,
             activeSessionId: newState,

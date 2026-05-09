@@ -195,9 +195,15 @@ class EncryptionService {
         return true;
       }());
 
+      // Production logging - always log FS decryption attempts
+      if (isFsEncrypted) {
+        print('[FS-DECRYPT-PROD] FS msg detected - session=${map['fs_session']}, counter=${map['fs_counter']}, hasRatchet=${ratchetState != null}');
+      }
+
       if (isFsEncrypted) {
         // FS-encrypted message requires ratchet state
         if (ratchetState == null) {
+          print('[FS-DECRYPT-PROD] ERROR: FS msg but ratchetState is NULL - rejecting');
           throw Exception(
             'FS-encrypted message received but no ratchet state available. '
             'Session may have been reset or broken.',
@@ -205,6 +211,7 @@ class EncryptionService {
         }
 
         // Decrypt the inner FS payload
+        print('[FS-DECRYPT-PROD] Attempting FS decrypt with ratchet session=${ratchetState?.sessionId}');
         final fsCipher = base64Decode(map['fs_cipher'] as String);
         final fsNonce = base64Decode(map['fs_nonce'] as String);
         final fsSessionId = map['fs_session'] as String? ?? ratchetState.sessionId;
@@ -224,6 +231,7 @@ class EncryptionService {
           message: fsMessage,
         );
 
+        print('[FS-DECRYPT-PROD] FS decrypt SUCCESS - session=${newState.sessionId}, newCounter=${newState.recvCounter}');
         return DecryptionResult(
           payload: PlaintextPayload(
             senderId: map['senderId'] as String,
@@ -239,6 +247,9 @@ class EncryptionService {
       }
 
       // Not an FS message, return legacy result
+      if (isFsEncrypted) {
+        print('[FS-DECRYPT-PROD] WARNING: FS msg but returning LEGACY result - should not happen!');
+      }
       return outerResult;
     } on Exception catch (e) {
       // Re-throw FS-related errors (missing ratchet state, broken session)
