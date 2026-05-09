@@ -15,7 +15,6 @@
 import 'dart:typed_data';
 
 import 'fs_handshake.dart';
-import 'fs_key_codec.dart';
 
 /// All possible states of a Forward Secrecy session.
 ///
@@ -129,7 +128,69 @@ class FsSessionManager {
   /// The session ID of the active ratchet session (set after [FsSessionState.fsActive]).
   String? activeSessionId;
 
+  /// The FS_INIT message received from remote (needed to generate FS_REPLY).
+  FsInitMessage? _storedInitMessage;
+
+  /// The FS_INIT message we sent (needed to generate FS_CONFIRM).
+  FsInitMessage? _storedSentInitMessage;
+
+  /// The FS_REPLY message received from remote (needed to generate FS_CONFIRM).
+  FsReplyMessage? _storedReplyMessage;
+
+  /// The ephemeral private key generated when sending FS_INIT (needed for confirm).
+  Uint8List? _pendingInitEphemeralPriv;
+
+  /// The ephemeral private key generated when sending FS_REPLY (needed for ratchet).
+  Uint8List? _pendingReplyEphemeralPriv;
+
+  /// The raw root secret stored by responder to verify FS_CONFIRM (wiped after verification).
+  Uint8List? _pendingRawRootSecret;
+
+  /// The transcript hash stored by responder to verify FS_CONFIRM.
+  Uint8List? _pendingTranscriptHash;
+
   FsSessionState get state => _state;
+
+  /// Returns the stored FS_INIT message received from remote (for generating FS_REPLY).
+  FsInitMessage? get storedInitMessage => _storedInitMessage;
+
+  /// Returns the FS_INIT message we sent (for generating FS_CONFIRM).
+  FsInitMessage? get storedSentInitMessage => _storedSentInitMessage;
+
+  /// Returns the stored FS_REPLY message received from remote (for generating FS_CONFIRM).
+  FsReplyMessage? get storedReplyMessage => _storedReplyMessage;
+
+  /// Returns the ephemeral private key from our sent FS_INIT (for completing handshake).
+  Uint8List? get pendingInitEphemeralPriv => _pendingInitEphemeralPriv;
+
+  /// Returns the ephemeral private key from our sent FS_REPLY (for ratchet initialization).
+  Uint8List? get pendingReplyEphemeralPriv => _pendingReplyEphemeralPriv;
+
+  /// Returns the raw root secret for FS_CONFIRM verification (responder only).
+  Uint8List? get pendingRawRootSecret => _pendingRawRootSecret;
+
+  /// Returns the transcript hash for FS_CONFIRM verification (responder only).
+  Uint8List? get pendingTranscriptHash => _pendingTranscriptHash;
+
+  /// Sets the ephemeral private key used for FS_INIT (must be called after generating init).
+  void setPendingInitEphemeralPriv(Uint8List key) {
+    _pendingInitEphemeralPriv = key;
+  }
+
+  /// Sets the ephemeral private key used for FS_REPLY (must be called after generating reply).
+  void setPendingReplyEphemeralPriv(Uint8List key) {
+    _pendingReplyEphemeralPriv = key;
+  }
+
+  /// Sets the raw root secret for FS_CONFIRM verification (responder only).
+  void setPendingRawRootSecret(Uint8List secret) {
+    _pendingRawRootSecret = secret;
+  }
+
+  /// Sets the transcript hash for FS_CONFIRM verification (responder only).
+  void setPendingTranscriptHash(Uint8List hash) {
+    _pendingTranscriptHash = hash;
+  }
 
   // ---------------------------------------------------------------------------
   // Outgoing: this device initiates
@@ -151,6 +212,7 @@ class FsSessionManager {
     }
 
     pendingInitId = payload.initId;
+    _storedSentInitMessage = payload.toMessage();
     handshakeStartedAt = _clock.nowSeconds();
     _state = FsSessionState.fsInitSent;
 
@@ -245,6 +307,7 @@ class FsSessionManager {
       } else {
         // Remote wins → we become the responder.
         pendingInitId = message.initId;
+        _storedInitMessage = message;
         _state = FsSessionState.fsInitSeen;
         return FsSessionTransitionResult.ok(_state, message);
       }
@@ -259,6 +322,7 @@ class FsSessionManager {
     }
 
     pendingInitId = message.initId;
+    _storedInitMessage = message;
     handshakeStartedAt = _clock.nowSeconds();
     _state = FsSessionState.fsInitSeen;
 
@@ -296,6 +360,7 @@ class FsSessionManager {
     }
 
     pendingReplyId = message.replyId;
+    _storedReplyMessage = message;
     _state = FsSessionState.fsReplySeen;
 
     return FsSessionTransitionResult.ok(_state, message);
@@ -468,12 +533,26 @@ class FsSessionManager {
     pendingInitId = null;
     pendingReplyId = null;
     handshakeStartedAt = null;
+    _storedInitMessage = null;
+    _storedSentInitMessage = null;
+    _storedReplyMessage = null;
+    _pendingInitEphemeralPriv = null;
+    _pendingReplyEphemeralPriv = null;
+    _pendingRawRootSecret = null;
+    _pendingTranscriptHash = null;
   }
 
   void _clearHandshakeMaterial() {
     pendingInitId = null;
     pendingReplyId = null;
     handshakeStartedAt = null;
+    _storedInitMessage = null;
+    _storedSentInitMessage = null;
+    _storedReplyMessage = null;
+    _pendingInitEphemeralPriv = null;
+    _pendingReplyEphemeralPriv = null;
+    _pendingRawRootSecret = null;
+    _pendingTranscriptHash = null;
   }
 
   /// Tie-break: returns the initId that wins (lexicographically smaller).

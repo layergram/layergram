@@ -46,6 +46,7 @@ import '../features/contact_verification/contact_sas_service.dart';
 import '../features/identity_migration_notice/identity_migration_notice_controller.dart';
 import '../features/identity_migration_notice/identity_migration_notice_service.dart';
 import 'crypto/fs_contact_security_state.dart';
+import 'crypto/fs_opportunistic_controller.dart';
 import 'crypto/fs_session_manager.dart';
 import 'crypto/fs_strict_mode_controller.dart';
 
@@ -337,6 +338,19 @@ final fsStrictModeControllerProvider =
     Provider.family<FsStrictModeController, String>((ref, contactId) {
   return FsStrictModeController(
     contactId: contactId,
+    identityContext: 'primary',
+    sessionManager: ref.watch(fsSessionManagerProvider(contactId)),
+    registry: ref.watch(fsContactSecurityRegistryProvider),
+  );
+});
+
+/// Per-contact [FsOpportunisticController], keyed by contactId.
+///
+/// Orchestrates the opportunistic FS handshake (FS_INIT → FS_REPLY → FS_CONFIRM).
+final fsOpportunisticControllerProvider =
+    Provider.family<FsOpportunisticController, String>((ref, contactId) {
+  return FsOpportunisticController(
+    localContactId: contactId,
     identityContext: 'primary',
     sessionManager: ref.watch(fsSessionManagerProvider(contactId)),
     registry: ref.watch(fsContactSecurityRegistryProvider),

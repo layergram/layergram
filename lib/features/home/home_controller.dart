@@ -20,6 +20,9 @@ import 'package:cryptography/cryptography.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/crypto/fs_handshake.dart';
+import '../../core/crypto/fs_opportunistic_controller.dart';
+import '../../core/crypto/fs_session_manager.dart';
 import '../../core/crypto/message_record_cipher.dart';
 import '../../core/crypto/models.dart';
 import '../../core/crypto/passphrase_service.dart';
@@ -120,6 +123,19 @@ class HomeController {
       throw StateError('Identity not initialized');
     }
 
+    // Check Maximum/Strict FS policy before sending
+    if (!selfCopy) {
+      final strictController = ref.read(
+        fsStrictModeControllerProvider(recipient.identityId),
+      );
+      // TODO: Track device changes for strict mode - currently assumes known device
+      if (!strictController.canSendMessage(deviceChanged: false)) {
+        final reason = strictController.sendBlockReason(deviceChanged: false)
+            ?? 'Maximum Forward Secrecy prevents sending in current state';
+        throw StateError(reason);
+      }
+    }
+
     final payload = PlaintextPayload(
       senderId: local.identityId,
       recipientId: selfCopy ? local.identityId : recipient.identityId,
@@ -136,11 +152,38 @@ class HomeController {
         ? pp.publicKeyBase64!
         : local.publicKeyBase64;
 
+    // Get FS extension for opportunistic Forward Secrecy handshake
+    Map<String, dynamic>? fsExtension;
+    if (!selfCopy) {
+      final fsController = ref.read(
+        fsOpportunisticControllerProvider(recipient.identityId),
+      );
+      final sessionManager = ref.read(
+        fsSessionManagerProvider(recipient.identityId),
+      );
+
+      // Prepare handshake payload based on current state
+      final state = sessionManager.state;
+      final outgoingExt = await _buildFsOutgoingExtension(
+        fsController: fsController,
+        sessionManager: sessionManager,
+        state: state,
+        recipient: recipient,
+        privateKey: privateKey,
+      );
+      if (outgoingExt?.json != null) {
+        fsExtension = outgoingExt!.json;
+      }
+      // Trigger UI refresh if FS state changed
+      ref.read(fsRegistryVersionProvider.notifier).state++;
+    }
+
     return ref.read(encryptionServiceProvider).encrypt(
           senderPrivateKeyBase64: privateKey,
           recipientPublicKeyBase64:
               selfCopy ? selfPublic : recipient.publicKeyBase64,
           payload: payload,
+          fsExtension: fsExtension,
         );
   }
 
@@ -350,11 +393,36 @@ class HomeController {
           localPrivateKeyBase64: privateKey,
           remotePublicKeyBase64: contact.publicKeyBase64,
         );
-        final payload = await encService.tryDecryptWithKey(
+        // Decrypt full envelope to access FS extension
+        final envelope = await encService.tryDecryptEnvelopeWithKey(
           message: msg,
           key: key,
         );
-        if (payload == null) continue;
+        if (envelope == null) continue;
+
+        // Process FS extension for opportunistic Forward Secrecy handshake
+        final fsController = ref.read(
+          fsOpportunisticControllerProvider(contact.identityId),
+        );
+        final fsResult = await fsController.processIncomingEnvelope(
+          envelope,
+          remoteContactId: contact.identityId,
+        );
+        // Trigger UI refresh if FS state changed
+        if (fsResult.type != FsIncomingType.noExtension) {
+          ref.read(fsRegistryVersionProvider.notifier).state++;
+        }
+
+        // Extract payload from envelope
+        final payload = PlaintextPayload(
+          senderId: envelope['senderId'] as String,
+          recipientId: envelope['recipientId'] as String,
+          text: envelope['text'] as String,
+          timestamp: envelope['timestamp'] as int,
+          senderDisplayName: envelope['senderDisplayName'] as String?,
+          expireAfter: envelope['expireAfter'] as int?,
+          deleteAfterRead: (envelope['deleteAfterRead'] as bool?) ?? false,
+        );
 
         // Decryption succeeded!
         return _persistAndReturn(
@@ -502,6 +570,136 @@ class HomeController {
     return lines
         .firstWhere((line) => line.trim().isNotEmpty, orElse: () => '')
         .trim();
+  }
+
+  // ── Forward Secrecy handshake payload preparation ───────────────────────
+
+  /// Prepares the appropriate handshake payload for the current FS state.
+  ///
+  /// This generates FS_INIT, FS_REPLY, or FS_CONFIRM payloads based on the
+  /// session state. Only FS_INIT generation is fully implemented here;
+  /// FS_REPLY and FS_CONFIRM require state from previous handshake messages
+  /// that should be stored in the session manager.
+  Future<FsOutgoingExtension?> _buildFsOutgoingExtension({
+    required FsOpportunisticController fsController,
+    required FsSessionManager sessionManager,
+    required FsSessionState state,
+    required RemoteIdentity recipient,
+    required String privateKey,
+  }) async {
+    switch (state) {
+      case FsSessionState.legacyOnly:
+        // Generate FS_INIT payload to start handshake
+        final identityManager = ref.read(identityManagerProvider);
+        final local = await identityManager.getLocalIdentity();
+        if (local == null) return null;
+
+        // Derive device key from identity key (simplified: use identity key as device key)
+        final ikPrivBytes = base64Decode(privateKey);
+        final dkPrivBytes = ikPrivBytes; // In production, derive separate device key
+
+        final initPayload = await FsHandshake.generateFsInit(
+          ikAPriv: ikPrivBytes,
+          dkAPriv: dkPrivBytes,
+        );
+
+        // Store the ephemeral key for later use in FS_CONFIRM
+        sessionManager.setPendingInitEphemeralPriv(initPayload.ekAPrivBytes);
+
+        return fsController.buildOutgoingExtension(pendingInit: initPayload);
+
+      case FsSessionState.fsInitSeen:
+        // Generate FS_REPLY in response to received FS_INIT
+        final initMessage = sessionManager.storedInitMessage;
+        if (initMessage == null) {
+          return fsController.buildOutgoingExtension();
+        }
+
+        // Decode remote identity public key
+        final remoteIkPub = base64Decode(recipient.publicKeyBase64);
+
+        // Use local identity keys (simplified: derive device key from identity key)
+        final ikPrivBytes = base64Decode(privateKey);
+        final dkPrivBytes = ikPrivBytes; // In production, derive separate device key
+
+        try {
+          final replyPayload = await FsHandshake.processFsInitAsResponder(
+            ikBPriv: ikPrivBytes,
+            dkBPriv: dkPrivBytes,
+            ikAPub: remoteIkPub,
+            init: initMessage,
+          );
+
+          // Store the ratchet private key and raw root secret for later use
+          sessionManager.setPendingReplyEphemeralPriv(
+            replyPayload.responderInitialRatchetPriv,
+          );
+          // Store raw root secret and transcript hash for FS_CONFIRM verification
+          if (replyPayload.partialState.rawRootSecret != null) {
+            sessionManager.setPendingRawRootSecret(
+              replyPayload.partialState.rawRootSecret!,
+            );
+          }
+          sessionManager.setPendingTranscriptHash(
+            replyPayload.partialState.transcriptHash,
+          );
+
+          return fsController.buildOutgoingExtension(pendingReply: replyPayload);
+        } catch (e) {
+          // Failed to generate reply, skip FS extension this message
+          return fsController.buildOutgoingExtension();
+        }
+
+      case FsSessionState.fsReplySeen:
+        // Generate FS_CONFIRM in response to received FS_REPLY
+        final replyMessage = sessionManager.storedReplyMessage;
+        final ekAPriv = sessionManager.pendingInitEphemeralPriv;
+        if (replyMessage == null || ekAPriv == null) {
+          return fsController.buildOutgoingExtension();
+        }
+
+        // Decode remote identity public key
+        final remoteIkPub = base64Decode(recipient.publicKeyBase64);
+
+        // Use local identity and device keys
+        final ikPrivBytes = base64Decode(privateKey);
+        final dkPrivBytes = ikPrivBytes; // In production, derive separate device key
+
+        // Retrieve the init message we originally sent
+        final sentInit = sessionManager.storedSentInitMessage;
+        if (sentInit == null) {
+          return fsController.buildOutgoingExtension();
+        }
+
+        try {
+          // Generate FS_CONFIRM using stored ephemeral key and received reply
+          final confirmPayload = await FsHandshake.processFsReplyAsInitiator(
+            ikAPriv: ikPrivBytes,
+            dkAPriv: dkPrivBytes,
+            ekAPrivBytes: ekAPriv,
+            ikBPub: remoteIkPub,
+            sentInit: sentInit,
+            reply: replyMessage,
+          );
+
+          return fsController.buildOutgoingExtension(pendingConfirm: confirmPayload);
+        } catch (e) {
+          // Failed to generate confirm, skip FS extension this message
+          return fsController.buildOutgoingExtension();
+        }
+
+      case FsSessionState.fsActive:
+      case FsSessionState.strictFsActive:
+      case FsSessionState.strictRequested:
+      case FsSessionState.fsInitSent:
+      case FsSessionState.fsReplySent:
+      case FsSessionState.fsConfirmSent:
+      case FsSessionState.fsConfirmed:
+      case FsSessionState.fsSuspended:
+      case FsSessionState.fsBroken:
+        // No handshake message needed in these states
+        return fsController.buildOutgoingExtension();
+    }
   }
 }
 

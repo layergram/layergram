@@ -28,22 +28,28 @@ class EncryptionService {
     required String senderPrivateKeyBase64,
     required String recipientPublicKeyBase64,
     required PlaintextPayload payload,
+    Map<String, dynamic>? fsExtension,
   }) async {
     final key = await _deriveSymmetricKey(
       localPrivateKeyBase64: senderPrivateKeyBase64,
       remotePublicKeyBase64: recipientPublicKeyBase64,
     );
     final nonce = _algo.newNonce();
-    final plainJson = jsonEncode({
-      'v': 1,
+
+    // Build v2 envelope with optional FS extension
+    final envelope = <String, dynamic>{
+      'v': 2,
       'senderId': payload.senderId,
       'recipientId': payload.recipientId,
       'timestamp': payload.timestamp,
       'text': payload.text,
-      'senderDisplayName': payload.senderDisplayName,
-      'expireAfter': payload.expireAfter,
+      if (payload.senderDisplayName != null)
+        'senderDisplayName': payload.senderDisplayName,
+      if (payload.expireAfter != null) 'expireAfter': payload.expireAfter,
       'deleteAfterRead': payload.deleteAfterRead,
-    });
+      if (fsExtension != null) 'x': <String, dynamic>{'fs': fsExtension},
+    };
+    final plainJson = jsonEncode(envelope);
 
     final box = await _algo.encrypt(
       utf8.encode(plainJson),
@@ -52,7 +58,7 @@ class EncryptionService {
     );
 
     return EncryptedMessage(
-      version: 1,
+      version: 2,
       senderId: payload.senderId,
       recipientId: payload.recipientId,
       nonceBase64: base64Encode(nonce),
@@ -116,6 +122,28 @@ class EncryptionService {
         expireAfter: map['expireAfter'] as int?,
         deleteAfterRead: (map['deleteAfterRead'] as bool?) ?? false,
       );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Try to decrypt [message] with a pre-derived [key].
+  /// Returns the full JSON envelope on success (including 'x.fs' extension),
+  /// or null if MAC verification fails (wrong key).
+  Future<Map<String, dynamic>?> tryDecryptEnvelopeWithKey({
+    required EncryptedMessage message,
+    required SecretKey key,
+  }) async {
+    try {
+      final allBytes = base64Decode(_fixBase64(_sanitizeBase64(message.ciphertextBase64)));
+      final nonce = base64Decode(_fixBase64(_sanitizeBase64(message.nonceBase64)));
+      if (allBytes.length < 16) return null;
+
+      final mac = Mac(allBytes.sublist(allBytes.length - 16));
+      final cipherText = allBytes.sublist(0, allBytes.length - 16);
+      final box = SecretBox(cipherText, nonce: nonce, mac: mac);
+      final clear = await _algo.decrypt(box, secretKey: key);
+      return jsonDecode(utf8.decode(clear)) as Map<String, dynamic>;
     } catch (_) {
       return null;
     }

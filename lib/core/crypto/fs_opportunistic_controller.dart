@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import 'dart:typed_data';
+
 import 'fs_contact_security_state.dart';
 import 'fs_handshake.dart';
 import 'fs_payload_budget.dart';
@@ -177,10 +179,10 @@ class FsOpportunisticController {
   /// legacy client; the contact state remains [FsSessionState.legacyOnly].
   ///
   /// [remoteContactId] is the `senderId` from the decoded envelope.
-  FsIncomingResult processIncomingEnvelope(
+  Future<FsIncomingResult> processIncomingEnvelope(
     Map<String, dynamic> envelope, {
     required String remoteContactId,
-  }) {
+  }) async {
     final fs = LmfV2Decoder.extractFsExtension(envelope);
     if (fs == null) {
       return const FsIncomingResult._(type: FsIncomingType.noExtension);
@@ -193,7 +195,7 @@ class FsOpportunisticController {
       case 'fs_reply':
         return _handleFsReply(fs, remoteContactId: remoteContactId);
       case 'fs_confirm':
-        return _handleFsConfirm(fs, remoteContactId: remoteContactId);
+        return await _handleFsConfirm(fs, remoteContactId: remoteContactId);
       default:
         return FsIncomingResult._(
           type: FsIncomingType.unknownType,
@@ -255,10 +257,10 @@ class FsOpportunisticController {
     );
   }
 
-  FsIncomingResult _handleFsConfirm(
+  Future<FsIncomingResult> _handleFsConfirm(
     Map<String, dynamic> fs, {
     required String remoteContactId,
-  }) {
+  }) async {
     late FsConfirmMessage msg;
     try {
       msg = FsConfirmMessage.fromJson(fs);
@@ -266,13 +268,47 @@ class FsOpportunisticController {
       return const FsIncomingResult._(type: FsIncomingType.malformed);
     }
 
+    // Verify FS_CONFIRM using stored responder state (if available)
+    bool verified = false;
+    final rawRootSecret = _sessionManager.pendingRawRootSecret;
+    final transcriptHash = _sessionManager.pendingTranscriptHash;
+
+    if (rawRootSecret != null && transcriptHash != null) {
+      // Create minimal partial state for verification
+      final partialState = FsHandshakePartialState(
+        transcriptHash: transcriptHash,
+        rootKey0: Uint8List(0), // dummy, not used for verification
+        sendingChainKey0: Uint8List(0), // dummy
+        receivingChainKey0: Uint8List(0), // dummy
+        isInitiator: false,
+        rawRootSecret: rawRootSecret,
+      );
+
+      // Get remote identity public key (if needed for verification)
+      // Note: ikAPub is not actually used in verifyFsConfirmAsResponder,
+      // but we pass an empty list since it's required by the API
+      verified = await FsHandshake.verifyFsConfirmAsResponder(
+        confirm: msg,
+        bState: partialState,
+        ikAPub: Uint8List(0), // not used for cryptographic verification
+      );
+    }
+
     final result = _sessionManager.processFsConfirmReceived(
       message: msg,
-      verified: true,
+      verified: verified,
     );
+
     if (result.accepted) {
       _updateRegistry(sessionId: msg.replyId, state: _sessionManager.state);
+
+      // Activate the session after successful confirm
+      if (verified) {
+        _sessionManager.activateSession(msg.replyId);
+        _updateRegistry(sessionId: msg.replyId, state: _sessionManager.state);
+      }
     }
+
     return FsIncomingResult._(
       type: result.accepted
           ? FsIncomingType.fsConfirmAccepted
