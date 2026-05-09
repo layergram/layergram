@@ -139,16 +139,15 @@ class FsStatePersistenceService {
   /// Called when the identity is reset to wipe all FS session metadata.
   /// Per spec §8.6.3: Reset clears all session state.
   ///
-  /// Note: Currently only 'primary' context is persisted. This method
-  /// clears all persisted entries regardless of context for primary.
+  /// Uses clearByKind to find and delete all records from the database,
+  /// filtering by identityContext, not just those in the in-memory cache.
   Future<void> removeAllStates(String identityContext) async {
-    // For primary context (the only persisted context), clear all entries
-    if (identityContext == _kPrimaryContext) {
-      for (final entry in _storageInfo.entries.toList()) {
-        await _auxRepository.delete(entry.value.storageId);
-      }
-      _storageInfo.clear();
-    }
+    await _auxRepository.clearByKind(_kRecordKind, identityContext: identityContext);
+
+    // Clear in-memory cache. We can't easily filter by identityContext
+    // from cache keys (they are contactId:sessionId), so clear all.
+    // The cache will be repopulated on next load if needed.
+    _storageInfo.clear();
   }
 
   // ---------------------------------------------------------------------------

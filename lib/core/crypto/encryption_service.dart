@@ -188,9 +188,17 @@ class EncryptionService {
       final map = jsonDecode(utf8.decode(clear)) as Map<String, dynamic>;
 
       // Check if this is an FS-encrypted message
-      if (ratchetState != null &&
-          map['fs_v'] != null &&
-          map['fs_cipher'] != null) {
+      final bool isFsEncrypted = map['fs_v'] != null && map['fs_cipher'] != null;
+
+      if (isFsEncrypted) {
+        // FS-encrypted message requires ratchet state
+        if (ratchetState == null) {
+          throw Exception(
+            'FS-encrypted message received but no ratchet state available. '
+            'Session may have been reset or broken.',
+          );
+        }
+
         // Decrypt the inner FS payload
         final fsCipher = base64Decode(map['fs_cipher'] as String);
         final fsNonce = base64Decode(map['fs_nonce'] as String);
@@ -225,10 +233,18 @@ class EncryptionService {
         );
       }
 
-      // Not an FS message or no ratchet state available, return legacy result
+      // Not an FS message, return legacy result
       return outerResult;
-    } catch (_) {
-      // On any error, return the legacy result
+    } on Exception catch (e) {
+      // Re-throw FS-related errors (missing ratchet state, broken session)
+      // These should not be silently caught as they indicate session issues
+      final message = e.toString();
+      if (message.contains('FS-encrypted message') ||
+          message.contains('ratchet state') ||
+          message.contains('Session may have been reset')) {
+        rethrow;
+      }
+      // For other errors, return the legacy result
       return outerResult;
     }
   }

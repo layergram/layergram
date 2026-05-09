@@ -91,6 +91,17 @@ class DataResetSection extends ConsumerWidget {
               // Clear in-memory ratchet state cache
               ref.read(fsRatchetStateCacheProvider.notifier).state = {};
 
+              // Invalidate ALL FS-related providers to ensure fresh state after reset
+              // Note: Provider.family instances are invalidated when their parent is invalidated
+              // or when they have no more listeners (which happens after logout)
+              ref.invalidate(fsContactSecurityRegistryProvider);
+              ref.invalidate(fsSessionManagerProvider);
+              ref.invalidate(fsStrictModeControllerProvider);
+              ref.invalidate(fsOpportunisticControllerProvider);
+              ref.invalidate(fsStateForContactProvider);
+              ref.invalidate(fsStatePersistenceServiceProvider);
+              ref.invalidate(fsRatchetPersistenceServiceProvider);
+
               // Increment registry version to trigger UI refresh
               ref.read(fsRegistryVersionProvider.notifier).state++;
             }

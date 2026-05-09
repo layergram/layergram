@@ -265,4 +265,88 @@ void main() {
       reason: 'Scope-b aux record must survive scope-a clearAll',
     );
   });
+
+  // ---------------------------------------------------------------------------
+  // T2.8  clearByKind only removes aux records of the specified kind
+  // ---------------------------------------------------------------------------
+  test('T2.8: clearByKind only deletes records of specified kind', () async {
+    final repo = await buildRepo(scope: 'kind-test');
+
+    // Write records of different kinds
+    final fsState = await repo.write(
+      payload: {'v': 1, 'kind': 'fs_state_v1', 'contactId': 'bob'},
+    );
+    final fsRatchet = await repo.write(
+      payload: {'v': 1, 'kind': 'fs_ratchet_v1', 'sessionId': 'abc'},
+    );
+    final other = await repo.write(
+      payload: {'v': 1, 'kind': 'other_kind', 'data': 'test'},
+    );
+
+    // Clear only fs_state_v1 records
+    await repo.clearByKind('fs_state_v1');
+
+    // fs_state_v1 record is gone
+    expect(
+      box.keys.any((k) => k.toString().contains(fsState.storageId)),
+      isFalse,
+      reason: 'fs_state_v1 record must be deleted by clearByKind',
+    );
+
+    // fs_ratchet_v1 record survives
+    expect(
+      box.keys.any((k) => k.toString().contains(fsRatchet.storageId)),
+      isTrue,
+      reason: 'fs_ratchet_v1 record must survive clearByKind(fs_state_v1)',
+    );
+
+    // other_kind record survives
+    expect(
+      box.keys.any((k) => k.toString().contains(other.storageId)),
+      isTrue,
+      reason: 'other_kind record must survive clearByKind(fs_state_v1)',
+    );
+  });
+
+  // ---------------------------------------------------------------------------
+  // T2.9  clearByKind with identityContext filters by both kind and context
+  // ---------------------------------------------------------------------------
+  test('T2.9: clearByKind with identityContext filters correctly', () async {
+    final repo = await buildRepo(scope: 'ctx-test');
+
+    // Write records with different identity contexts
+    final primary = await repo.write(
+      payload: {
+        'v': 1,
+        'kind': 'fs_state_v1',
+        'identityContext': 'primary',
+        'contactId': 'bob',
+      },
+    );
+    final passphrase = await repo.write(
+      payload: {
+        'v': 1,
+        'kind': 'fs_state_v1',
+        'identityContext': 'pp-ctx-123',
+        'contactId': 'alice',
+      },
+    );
+
+    // Clear only primary context records
+    await repo.clearByKind('fs_state_v1', identityContext: 'primary');
+
+    // primary record is gone
+    expect(
+      box.keys.any((k) => k.toString().contains(primary.storageId)),
+      isFalse,
+      reason: 'primary context record must be deleted',
+    );
+
+    // passphrase context record survives
+    expect(
+      box.keys.any((k) => k.toString().contains(passphrase.storageId)),
+      isTrue,
+      reason: 'passphrase context record must survive',
+    );
+  });
 }

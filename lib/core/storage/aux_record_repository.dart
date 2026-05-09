@@ -198,6 +198,54 @@ class AuxRecordRepository {
     }
   }
 
+  /// Deletes all auxiliary records of a specific [kind] in the current scope.
+  ///
+  /// If [identityContext] is provided, only records with matching
+  /// 'identityContext' field in their payload are deleted.
+  ///
+  /// This is used during identity reset to clear Forward Secrecy state
+  /// (kind = 'fs_state_v1' or 'fs_ratchet_v1') while preserving other
+  /// auxiliary records.
+  ///
+  /// Records are identified by reading and decrypting them first, then
+  /// matching the 'kind' field (and optionally 'identityContext') in the payload.
+  Future<void> clearByKind(String kind, {String? identityContext}) async {
+    if (!_hasScope || _auxStorageKey == null) return;
+
+    final allIds = getAllAuxRecordIds();
+    for (final entry in allIds.entries) {
+      final storageId = entry.key;
+      final recordId = entry.value;
+
+      // Try to read and decrypt the record
+      final raw = _box.get(_scopedKey(storageId));
+      if (raw == null) continue;
+
+      final encryptedRecord = raw['encryptedRecord'] as String?;
+      if (encryptedRecord == null) continue;
+
+      final payload = await AuxRecordCipher.decrypt(
+        encryptedRecord: encryptedRecord,
+        recordId: recordId,
+        auxStorageKey: _auxStorageKey!,
+      );
+
+      if (payload == null) continue;
+
+      // Check kind matches
+      if (payload['kind'] != kind) continue;
+
+      // If identityContext specified, check it matches too
+      if (identityContext != null &&
+          payload['identityContext'] != identityContext) {
+        continue;
+      }
+
+      // Delete matching record
+      await _box.delete(_scopedKey(storageId));
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------

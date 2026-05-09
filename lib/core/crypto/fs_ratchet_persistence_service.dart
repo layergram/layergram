@@ -146,10 +146,11 @@ class FsRatchetPersistenceService {
   ///
   /// Called when the identity is reset to wipe all FS session keys.
   /// Per spec §8.6.3: Reset requires re-handshake for all sessions.
+  ///
+  /// Uses clearByKind to find and delete all records from the database,
+  /// not just those in the in-memory cache.
   Future<void> removeAllRatchetStates() async {
-    for (final entry in _storageInfo.entries.toList()) {
-      await _auxRepository.delete(entry.value.storageId);
-    }
+    await _auxRepository.clearByKind(_kRecordKind);
     _storageInfo.clear();
   }
 
