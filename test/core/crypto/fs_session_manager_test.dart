@@ -341,4 +341,29 @@ void main() {
     expect(bobMgr.state, equals(FsSessionState.fsBroken),
         reason: 'Failed CONFIRM MAC must result in fsBroken');
   });
+
+  // T4.10 — fsBroken state blocks all handshake activity.
+  test('T4.10: fsBroken blocks FS_INIT sending and rejects incoming FS_INIT', () {
+    final mgr = FsSessionManager(clock: _FakeClock(_kNow));
+
+    // Force state to fsBroken using setStateForTesting
+    mgr.setStateForTesting(FsSessionState.fsBroken);
+
+    // Verify cannot send FS_INIT from fsBroken (via recordFsInitSent)
+    final sendResult = mgr.recordFsInitSent(_stubInitPayload());
+    expect(sendResult.accepted, isFalse,
+        reason: 'Cannot initiate handshake from fsBroken state');
+    expect(mgr.state, equals(FsSessionState.fsBroken),
+        reason: 'State must remain fsBroken after failed send attempt');
+
+    // Verify incoming FS_INIT is rejected
+    final receiveResult = mgr.processFsInitReceived(
+      message: _stubInit(),
+      localInitId: '',
+    );
+    expect(receiveResult.accepted, isFalse,
+        reason: 'FS_INIT must be rejected in fsBroken state');
+    expect(mgr.state, equals(FsSessionState.fsBroken),
+        reason: 'State must remain fsBroken after rejecting FS_INIT');
+  });
 }

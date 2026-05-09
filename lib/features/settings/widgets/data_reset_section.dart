@@ -83,13 +83,26 @@ class DataResetSection extends ConsumerWidget {
               // ── Reset FS state per spec §8.6.3 ─────────────────────────────
               // Mark all sessions as broken, wipe ratchet keys, clear persisted state
               final registry = ref.read(fsContactSecurityRegistryProvider);
+              final beforeCount = registry.length;
               registry.markAllBroken('primary');
+              assert(() {
+                print('[FS-RESET] Marked $beforeCount registry entries as broken');
+                return true;
+              }());
 
               await ref.read(fsStatePersistenceServiceProvider).removeAllStates('primary');
               await ref.read(fsRatchetPersistenceServiceProvider).removeAllRatchetStates();
+              assert(() {
+                print('[FS-RESET] Removed all persisted FS and ratchet states');
+                return true;
+              }());
 
               // Clear in-memory ratchet state cache
               ref.read(fsRatchetStateCacheProvider.notifier).state = {};
+              assert(() {
+                print('[FS-RESET] Cleared ratchet state cache');
+                return true;
+              }());
 
               // Invalidate ALL FS-related providers to ensure fresh state after reset
               // Note: Provider.family instances are invalidated when their parent is invalidated
@@ -101,6 +114,10 @@ class DataResetSection extends ConsumerWidget {
               ref.invalidate(fsStateForContactProvider);
               ref.invalidate(fsStatePersistenceServiceProvider);
               ref.invalidate(fsRatchetPersistenceServiceProvider);
+              assert(() {
+                print('[FS-RESET] Invalidated all FS providers');
+                return true;
+              }());
 
               // Increment registry version to trigger UI refresh
               ref.read(fsRegistryVersionProvider.notifier).state++;

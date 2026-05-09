@@ -534,15 +534,18 @@ class FsSessionManager {
   // ---------------------------------------------------------------------------
 
   bool _canSendFsInit() {
+    // Can send FS_INIT from legacy or suspended (to resume).
+    // Cannot send from fsBroken - requires manual reset/re-key.
     return _state == FsSessionState.legacyOnly ||
-        _state == FsSessionState.fsSuspended ||
-        _state == FsSessionState.fsBroken;
+        _state == FsSessionState.fsSuspended;
   }
 
   bool _isTerminal() {
     return _state == FsSessionState.fsConfirmed ||
         _state == FsSessionState.fsActive ||
-        _state == FsSessionState.strictFsActive;
+        _state == FsSessionState.strictFsActive ||
+        _state == FsSessionState.fsBroken ||
+        _state == FsSessionState.fsSuspended;
   }
 
   bool _isStale(int createdAt) {

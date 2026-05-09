@@ -190,6 +190,11 @@ class EncryptionService {
       // Check if this is an FS-encrypted message
       final bool isFsEncrypted = map['fs_v'] != null && map['fs_cipher'] != null;
 
+      assert(() {
+        print('[ENC-DECRYPT] isFsEncrypted=$isFsEncrypted, hasRatchetState=${ratchetState != null}, fs_session=${map['fs_session']}, fs_counter=${map['fs_counter']}');
+        return true;
+      }());
+
       if (isFsEncrypted) {
         // FS-encrypted message requires ratchet state
         if (ratchetState == null) {

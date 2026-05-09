@@ -301,6 +301,11 @@ class HomeController {
       ratchetState = ref.read(fsRatchetStateCacheProvider)[activeSessionId];
     }
 
+    assert(() {
+      print('[FS-DECRYPT] contact=${contact.identityId}, sessionState=${sessionManager.state}, activeSessionId=$activeSessionId, ratchetState=${ratchetState != null ? "present" : "null"}');
+      return true;
+    }());
+
     final encMessage = EncryptedMessage(
       version: 1,
       senderId: message.senderId,
@@ -315,6 +320,11 @@ class HomeController {
       message: encMessage,
       ratchetState: ratchetState,
     );
+
+    assert(() {
+      print('[FS-DECRYPT] Decrypted text length=${result.payload.text.length}, newRatchetState=${result.newRatchetState != null ? "present" : "null"}');
+      return true;
+    }());
 
     // Update ratchet state if it changed (e.g., received new message advanced counter)
     if (result.newRatchetState != null && activeSessionId != null) {

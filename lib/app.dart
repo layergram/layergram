@@ -485,7 +485,13 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
     try {
       // Get the private key (identity or passphrase-derived)
       final privateKeyB64 = await ref.read(identityManagerProvider).getLocalPrivateKeyBase64();
-      if (privateKeyB64 == null) return;
+      if (privateKeyB64 == null) {
+        assert(() {
+          print('[FS-LOAD] No private key, skipping FS state load');
+          return true;
+        }());
+        return;
+      }
 
       // Derive aux storage key
       final keyBytes = Uint8List.fromList(base64Decode(privateKeyB64));
@@ -508,8 +514,20 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
         cache[state.sessionId] = state;
       }
       ref.read(fsRatchetStateCacheProvider.notifier).state = cache;
+
+      assert(() {
+        print('[FS-LOAD] Loaded ${ratchetStates.length} ratchet states');
+        for (final s in ratchetStates) {
+          print('[FS-LOAD]   - Session ${s.sessionId}: counter=${s.chainKey.counter}');
+        }
+        return true;
+      }());
     } catch (_) {
       // Silently fail - FS state will start fresh (legacyOnly)
+      assert(() {
+        print('[FS-LOAD] Error loading FS state: $_');
+        return true;
+      }());
     }
   }
 
