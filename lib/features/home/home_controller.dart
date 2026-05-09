@@ -187,8 +187,31 @@ class HomeController {
         sessionId = sessionManager.activeSessionId;
         if (sessionId != null) {
           ratchetState = ref.read(fsRatchetStateCacheProvider)[sessionId];
+          // If not in cache but session is active, try to load from persistence
+          if (ratchetState == null) {
+            print('[FS-SEND] Ratchet not in cache, attempting to load from persistence - sessionId=$sessionId');
+            ratchetState = await ref.read(fsRatchetPersistenceServiceProvider)
+                .loadRatchetState(sessionId);
+            if (ratchetState != null) {
+              // Put it back in cache for future use
+              ref.read(fsRatchetStateCacheProvider.notifier).update((cache) => {
+                    ...cache,
+                    sessionId!: ratchetState!,
+                  });
+              print('[FS-SEND] Ratchet loaded from persistence and added to cache');
+            } else {
+              // CRITICAL: Ratchet state is missing from both cache and persistence.
+              // This should never happen in normal operation - the session is inconsistent.
+              // Mark session as broken and fall back to legacy encryption (safe default).
+              print('[FS-SEND] CRITICAL: Ratchet missing from both cache and persistence - marking session broken');
+              sessionManager.markBroken();
+            }
+          }
         }
       }
+
+      // Production logging for FS encryption
+      print('[FS-SEND] recipient=${recipient.identityId}, state=${sessionManager.state}, sessionId=$sessionId, ratchetAvailable=${ratchetState != null}');
 
       // Trigger UI refresh if FS state changed
       ref.read(fsRegistryVersionProvider.notifier).state++;
@@ -202,6 +225,9 @@ class HomeController {
       fsExtension: fsExtension,
       ratchetState: ratchetState,
     );
+
+    // Production logging for encryption result
+    print('[FS-SEND-RESULT] recipient=${recipient.identityId}, usedFS=${result.newRatchetState != null}');
 
     // Save updated ratchet state if FS was used
     if (result.newRatchetState != null && sessionId != null) {
