@@ -24,6 +24,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/capabilities/chat_folders_capability.dart';
 import 'core/crypto/aux_record_cipher.dart';
+import 'core/crypto/fs_double_ratchet.dart';
 import 'core/crypto/fs_ratchet_persistence_service.dart';
 import 'core/providers.dart';
 import 'core/security/app_lock_idle_controller.dart';
