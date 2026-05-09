@@ -17,19 +17,103 @@ import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 
+import 'fs_double_ratchet.dart';
 import 'models.dart';
+
+/// Result of an encryption operation with optional FS double ratchet.
+class EncryptionResult {
+  const EncryptionResult({
+    required this.message,
+    this.newRatchetState,
+  });
+
+  final EncryptedMessage message;
+  final RatchetState? newRatchetState;
+}
+
+/// Result of a decryption operation with optional FS double ratchet.
+class DecryptionResult {
+  const DecryptionResult({
+    required this.payload,
+    this.newRatchetState,
+  });
+
+  final PlaintextPayload payload;
+  final RatchetState? newRatchetState;
+}
 
 class EncryptionService {
   final _algo = AesGcm.with256bits();
   final _keyAgreement = X25519();
   final _hkdf = Hkdf(hmac: Hmac.sha256(), outputLength: 32);
 
-  Future<EncryptedMessage> encrypt({
+  /// Encrypts a message using legacy encryption or FS double ratchet.
+  ///
+  /// If [ratchetState] is provided, uses the double ratchet for encryption
+  /// and returns the updated state in [EncryptionResult.newRatchetState].
+  /// Otherwise, falls back to legacy X25519+HKDF encryption.
+  Future<EncryptionResult> encrypt({
     required String senderPrivateKeyBase64,
     required String recipientPublicKeyBase64,
     required PlaintextPayload payload,
     Map<String, dynamic>? fsExtension,
+    RatchetState? ratchetState,
   }) async {
+    // If we have an active ratchet state, use double ratchet encryption
+    if (ratchetState != null) {
+      final (:message, :newState) = await FsDoubleRatchet.encrypt(
+        state: ratchetState,
+        plaintext: utf8.encode(payload.text),
+        sessionId: ratchetState.sessionId,
+      );
+
+      // Build v2 envelope with FS-encrypted payload
+      final envelope = <String, dynamic>{
+        'v': 2,
+        'senderId': payload.senderId,
+        'recipientId': payload.recipientId,
+        'timestamp': payload.timestamp,
+        'fs_v': 1, // FS protocol version
+        'fs_session': message.sessionId,
+        'fs_ratchet_pub': message.localRatchetPub,
+        'fs_counter': message.counter,
+        'fs_cipher': base64Encode(message.ciphertext),
+        'fs_nonce': base64Encode(message.nonce),
+        if (payload.senderDisplayName != null)
+          'senderDisplayName': payload.senderDisplayName,
+        if (payload.expireAfter != null) 'expireAfter': payload.expireAfter,
+        'deleteAfterRead': payload.deleteAfterRead,
+        if (fsExtension != null) 'x': <String, dynamic>{'fs': fsExtension},
+      };
+      final plainJson = jsonEncode(envelope);
+
+      // Use legacy encryption for outer layer (backward compatibility)
+      // The inner payload is FS-encrypted, outer is legacy-encrypted
+      final key = await _deriveSymmetricKey(
+        localPrivateKeyBase64: senderPrivateKeyBase64,
+        remotePublicKeyBase64: recipientPublicKeyBase64,
+      );
+      final nonce = _algo.newNonce();
+
+      final box = await _algo.encrypt(
+        utf8.encode(plainJson),
+        secretKey: key,
+        nonce: nonce,
+      );
+
+      return EncryptionResult(
+        message: EncryptedMessage(
+          version: 2,
+          senderId: payload.senderId,
+          recipientId: payload.recipientId,
+          nonceBase64: base64Encode(nonce),
+          ciphertextBase64: base64Encode([...box.cipherText, ...box.mac.bytes]),
+        ),
+        newRatchetState: newState,
+      );
+    }
+
+    // Legacy encryption (non-FS)
     final key = await _deriveSymmetricKey(
       localPrivateKeyBase64: senderPrivateKeyBase64,
       remotePublicKeyBase64: recipientPublicKeyBase64,
@@ -57,16 +141,99 @@ class EncryptionService {
       nonce: nonce,
     );
 
-    return EncryptedMessage(
-      version: 2,
-      senderId: payload.senderId,
-      recipientId: payload.recipientId,
-      nonceBase64: base64Encode(nonce),
-      ciphertextBase64: base64Encode([...box.cipherText, ...box.mac.bytes]),
+    return EncryptionResult(
+      message: EncryptedMessage(
+        version: 2,
+        senderId: payload.senderId,
+        recipientId: payload.recipientId,
+        nonceBase64: base64Encode(nonce),
+        ciphertextBase64: base64Encode([...box.cipherText, ...box.mac.bytes]),
+      ),
     );
   }
 
-  Future<PlaintextPayload> decrypt({
+  /// Decrypts a message using legacy decryption or FS double ratchet.
+  ///
+  /// First decrypts the outer layer with legacy X25519+HKDF.
+  /// If the envelope contains FS-encrypted payload and [ratchetState] is provided,
+  /// decrypts the inner layer with the double ratchet.
+  Future<DecryptionResult> decrypt({
+    required String recipientPrivateKeyBase64,
+    required String senderPublicKeyBase64,
+    required EncryptedMessage message,
+    RatchetState? ratchetState,
+  }) async {
+    // Step 1: Decrypt outer layer with legacy encryption
+    final outerResult = await _legacyDecrypt(
+      recipientPrivateKeyBase64: recipientPrivateKeyBase64,
+      senderPublicKeyBase64: senderPublicKeyBase64,
+      message: message,
+    );
+
+    // Check if this is an FS-encrypted message (has fs_v and fs_cipher)
+    // Note: We need access to the raw envelope to check for FS fields
+    // Re-decrypt to get the envelope
+    final key = await _deriveSymmetricKey(
+      localPrivateKeyBase64: recipientPrivateKeyBase64,
+      remotePublicKeyBase64: senderPublicKeyBase64,
+    );
+    final allBytes = base64Decode(_fixBase64(_sanitizeBase64(message.ciphertextBase64)));
+    final nonce = base64Decode(_fixBase64(_sanitizeBase64(message.nonceBase64)));
+    final mac = Mac(allBytes.sublist(allBytes.length - 16));
+    final cipherText = allBytes.sublist(0, allBytes.length - 16);
+    final box = SecretBox(cipherText, nonce: nonce, mac: mac);
+
+    try {
+      final clear = await _algo.decrypt(box, secretKey: key);
+      final map = jsonDecode(utf8.decode(clear)) as Map<String, dynamic>;
+
+      // Check if this is an FS-encrypted message
+      if (ratchetState != null &&
+          map['fs_v'] != null &&
+          map['fs_cipher'] != null) {
+        // Decrypt the inner FS payload
+        final fsCipher = base64Decode(map['fs_cipher'] as String);
+        final fsNonce = base64Decode(map['fs_nonce'] as String);
+        final fsSessionId = map['fs_session'] as String? ?? ratchetState.sessionId;
+        final fsRatchetPub = map['fs_ratchet_pub'] as String;
+        final fsCounter = map['fs_counter'] as int;
+
+        final fsMessage = FsEncryptedMessage(
+          sessionId: fsSessionId,
+          localRatchetPub: fsRatchetPub,
+          counter: fsCounter,
+          ciphertext: fsCipher,
+          nonce: fsNonce,
+        );
+
+        final (:plaintext, :newState) = await FsDoubleRatchet.decrypt(
+          state: ratchetState,
+          message: fsMessage,
+        );
+
+        return DecryptionResult(
+          payload: PlaintextPayload(
+            senderId: map['senderId'] as String,
+            recipientId: map['recipientId'] as String,
+            text: utf8.decode(plaintext),
+            timestamp: map['timestamp'] as int,
+            senderDisplayName: map['senderDisplayName'] as String?,
+            expireAfter: map['expireAfter'] as int?,
+            deleteAfterRead: (map['deleteAfterRead'] as bool?) ?? false,
+          ),
+          newRatchetState: newState,
+        );
+      }
+
+      // Not an FS message or no ratchet state available, return legacy result
+      return outerResult;
+    } catch (_) {
+      // On any error, return the legacy result
+      return outerResult;
+    }
+  }
+
+  Future<DecryptionResult> _legacyDecrypt({
     required String recipientPrivateKeyBase64,
     required String senderPublicKeyBase64,
     required EncryptedMessage message,
@@ -84,14 +251,16 @@ class EncryptionService {
     final clear = await _algo.decrypt(box, secretKey: key);
     final map = jsonDecode(utf8.decode(clear)) as Map<String, dynamic>;
 
-    return PlaintextPayload(
-      senderId: map['senderId'] as String,
-      recipientId: map['recipientId'] as String,
-      text: map['text'] as String,
-      timestamp: map['timestamp'] as int,
-      senderDisplayName: map['senderDisplayName'] as String?,
-      expireAfter: map['expireAfter'] as int?,
-      deleteAfterRead: (map['deleteAfterRead'] as bool?) ?? false,
+    return DecryptionResult(
+      payload: PlaintextPayload(
+        senderId: map['senderId'] as String,
+        recipientId: map['recipientId'] as String,
+        text: map['text'] as String,
+        timestamp: map['timestamp'] as int,
+        senderDisplayName: map['senderDisplayName'] as String?,
+        expireAfter: map['expireAfter'] as int?,
+        deleteAfterRead: (map['deleteAfterRead'] as bool?) ?? false,
+      ),
     );
   }
 

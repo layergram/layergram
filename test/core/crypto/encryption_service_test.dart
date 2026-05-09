@@ -100,20 +100,20 @@ void main() {
         senderDisplayName: 'Àlice 😄',
       );
 
-      final encrypted = await service.encrypt(
+      final encResult = await service.encrypt(
         senderPrivateKeyBase64: alice.privateKeyBase64,
         recipientPublicKeyBase64: bob.publicKeyBase64,
         payload: payload,
       );
 
-      final decrypted = await service.decrypt(
+      final decResult = await service.decrypt(
         recipientPrivateKeyBase64: bob.privateKeyBase64,
         senderPublicKeyBase64: alice.publicKeyBase64,
-        message: encrypted,
+        message: encResult.message,
       );
 
-      expect(decrypted.text, payload.text);
-      expect(decrypted.senderDisplayName, payload.senderDisplayName);
+      expect(decResult.payload.text, payload.text);
+      expect(decResult.payload.senderDisplayName, payload.senderDisplayName);
     });
 
     test('encrypted message raw bytes roundtrip preserves nonce and ciphertext', () async {
@@ -128,11 +128,12 @@ void main() {
         timestamp: 42,
       );
 
-      final encrypted = await service.encrypt(
+      final encResult = await service.encrypt(
         senderPrivateKeyBase64: alice.privateKeyBase64,
         recipientPublicKeyBase64: bob.publicKeyBase64,
         payload: payload,
       );
+      final encrypted = encResult.message;
 
       final raw = encrypted.toRawBytes();
       final reconstructed = EncryptedMessage.fromRawBytes(raw);

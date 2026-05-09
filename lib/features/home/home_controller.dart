@@ -20,6 +20,7 @@ import 'package:cryptography/cryptography.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/crypto/fs_double_ratchet.dart';
 import '../../core/crypto/fs_handshake.dart';
 import '../../core/crypto/fs_opportunistic_controller.dart';
 import '../../core/crypto/fs_session_manager.dart';
@@ -154,6 +155,9 @@ class HomeController {
 
     // Get FS extension for opportunistic Forward Secrecy handshake
     Map<String, dynamic>? fsExtension;
+    RatchetState? ratchetState;
+    String? sessionId;
+
     if (!selfCopy) {
       final fsController = ref.read(
         fsOpportunisticControllerProvider(recipient.identityId),
@@ -174,17 +178,43 @@ class HomeController {
       if (outgoingExt?.json != null) {
         fsExtension = outgoingExt!.json;
       }
+
+      // If FS is active, get the ratchet state for encryption
+      if (state == FsSessionState.fsActive ||
+          state == FsSessionState.strictFsActive) {
+        sessionId = sessionManager.activeSessionId;
+        if (sessionId != null) {
+          ratchetState = ref.read(fsRatchetStateCacheProvider)[sessionId];
+        }
+      }
+
       // Trigger UI refresh if FS state changed
       ref.read(fsRegistryVersionProvider.notifier).state++;
     }
 
-    return ref.read(encryptionServiceProvider).encrypt(
-          senderPrivateKeyBase64: privateKey,
-          recipientPublicKeyBase64:
-              selfCopy ? selfPublic : recipient.publicKeyBase64,
-          payload: payload,
-          fsExtension: fsExtension,
-        );
+    final result = await ref.read(encryptionServiceProvider).encrypt(
+      senderPrivateKeyBase64: privateKey,
+      recipientPublicKeyBase64:
+          selfCopy ? selfPublic : recipient.publicKeyBase64,
+      payload: payload,
+      fsExtension: fsExtension,
+      ratchetState: ratchetState,
+    );
+
+    // Save updated ratchet state if FS was used
+    if (result.newRatchetState != null && sessionId != null) {
+      final newState = result.newRatchetState!;
+      final sid = sessionId; // Promote to non-nullable
+      ref.read(fsRatchetStateCacheProvider.notifier).update((cache) => {
+            ...cache,
+            sid: newState,
+          });
+
+      // Persist to storage
+      await ref.read(fsRatchetPersistenceServiceProvider).saveRatchetState(newState);
+    }
+
+    return result.message;
   }
 
   void clearSessionDecryptionCache() {

@@ -24,6 +24,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/capabilities/chat_folders_capability.dart';
 import 'core/crypto/aux_record_cipher.dart';
+import 'core/crypto/fs_ratchet_persistence_service.dart';
 import 'core/providers.dart';
 import 'core/security/app_lock_idle_controller.dart';
 import 'features/identities/add_identity_view.dart';
@@ -498,6 +499,14 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
 
       // Load persisted FS states
       await ref.read(fsStatePersistenceServiceProvider).loadPersistedState();
+
+      // Load persisted ratchet states into cache
+      final ratchetStates = await ref.read(fsRatchetPersistenceServiceProvider).loadAllRatchetStates();
+      final cache = <String, RatchetState>{};
+      for (final state in ratchetStates) {
+        cache[state.sessionId] = state;
+      }
+      ref.read(fsRatchetStateCacheProvider.notifier).state = cache;
     } catch (_) {
       // Silently fail - FS state will start fresh (legacyOnly)
     }

@@ -14,6 +14,7 @@
 
 import 'fs_contact_security_state.dart';
 import 'fs_session_manager.dart';
+import 'fs_state_persistence_service.dart';
 
 /// Per-contact Maximum / Strict FS policy controller.
 ///
@@ -38,15 +39,18 @@ class FsStrictModeController {
     required String identityContext,
     required FsSessionManager sessionManager,
     required FsContactSecurityRegistry registry,
+    FsStatePersistenceService? persistenceService,
   })  : _contactId = contactId,
         _identityContext = identityContext,
         _sessionManager = sessionManager,
-        _registry = registry;
+        _registry = registry,
+        _persistenceService = persistenceService;
 
   final String _contactId;
   final String _identityContext;
   final FsSessionManager _sessionManager;
   final FsContactSecurityRegistry _registry;
+  final FsStatePersistenceService? _persistenceService;
 
   // ---------------------------------------------------------------------------
   // Policy state
@@ -190,12 +194,15 @@ class FsStrictModeController {
     required String? sessionId,
     required FsSessionState state,
   }) {
-    _registry.upsert(FsContactSecurityState(
+    final stateEntry = FsContactSecurityState(
       contactId: _contactId,
       identityContext: _identityContext,
       sessionId: sessionId,
       fsState: state,
-    ));
+    );
+    _registry.upsert(stateEntry);
+    // Persist to storage (only for primary context)
+    _persistenceService?.saveState(stateEntry);
   }
 }
 

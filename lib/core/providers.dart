@@ -35,6 +35,8 @@ import 'security/session_decryption_cache_service.dart';
 import 'crypto/stego_decoder.dart';
 import 'crypto/stego_encoder.dart';
 import 'crypto/fs_state_persistence_service.dart';
+import 'crypto/fs_ratchet_persistence_service.dart';
+import 'crypto/fs_double_ratchet.dart' show RatchetState;
 import 'storage/aux_record_repository.dart';
 import 'storage/identities_repository.dart';
 import 'storage/chat_meta_repository.dart';
@@ -343,6 +345,7 @@ final fsStrictModeControllerProvider =
     identityContext: 'primary',
     sessionManager: ref.watch(fsSessionManagerProvider(contactId)),
     registry: ref.watch(fsContactSecurityRegistryProvider),
+    persistenceService: ref.watch(fsStatePersistenceServiceProvider),
   );
 });
 
@@ -428,3 +431,21 @@ final fsStatePersistenceServiceProvider = Provider<FsStatePersistenceService>((r
     registry: ref.watch(fsContactSecurityRegistryProvider),
   );
 });
+
+/// [FsRatchetPersistenceService] singleton for persisting Double Ratchet state.
+///
+/// Saves and loads [RatchetState] to/from auxiliary records,
+/// making active FS encryption sessions survive app restarts.
+///
+/// Call [loadAllRatchetStates] after identity context is initialized.
+final fsRatchetPersistenceServiceProvider = Provider<FsRatchetPersistenceService>((ref) {
+  return FsRatchetPersistenceService(
+    auxRepository: ref.watch(auxRecordRepositoryProvider),
+  );
+});
+
+/// In-memory cache of loaded ratchet states.
+///
+/// Key: sessionId → RatchetState
+/// This is populated at app startup and updated when sessions are created.
+final fsRatchetStateCacheProvider = StateProvider<Map<String, RatchetState>>((_) => {});

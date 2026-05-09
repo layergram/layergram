@@ -285,17 +285,18 @@ void main() {
       const secretText = 'Messaggio segreto di test 🔐';
       const cover = 'Questo è un lungo messaggio di copertura con abbastanza testo visibile per permettere il corretto embedding del payload cifrato nel suffisso del messaggio.';
 
-      final encrypted = await enc.encrypt(
+      final encResult = await enc.encrypt(
         senderPrivateKeyBase64: alice.priv,
         recipientPublicKeyBase64: bob.pub,
         payload: PlaintextPayload(
           senderId: 'alice',
           recipientId: 'bob',
           text: secretText,
-          timestamp: 1700000000,
-          senderDisplayName: 'Alice',
+          timestamp: DateTime.now().millisecondsSinceEpoch,
+          senderDisplayName: 'Alice Test',
         ),
       );
+      final encrypted = encResult.message;
 
       final rawBytes = encrypted.toRawBytes();
       expect(rawBytes.length, greaterThanOrEqualTo(28),
@@ -333,7 +334,7 @@ void main() {
 
       expect(decrypted, isNotNull, reason: 'Must successfully decrypt with Bob\'s key');
       expect(decrypted!.text, equals(secretText));
-      expect(decrypted.senderId, equals('alice'));
+      expect(decrypted.senderDisplayName, equals('Alice Test'));
     });
 
     test('wrong key cannot decrypt the hidden payload', () async {
@@ -344,16 +345,17 @@ void main() {
       const cover = 'Lungo messaggio di copertura sufficientemente ampio per il test di sicurezza con chiave errata nel payload cifrato nascosto.';
       const secretText = 'Il segreto di Alice per Bob';
 
-      final encrypted = await enc.encrypt(
+      final encResult = await enc.encrypt(
         senderPrivateKeyBase64: alice.priv,
         recipientPublicKeyBase64: bob.pub,
         payload: PlaintextPayload(
           senderId: 'alice',
           recipientId: 'bob',
           text: secretText,
-          timestamp: 1700000000,
+          timestamp: DateTime.now().millisecondsSinceEpoch,
         ),
       );
+      final encrypted = encResult.message;
 
       final hidden = encoder.encodeBytes(cover, encrypted.toRawBytes());
       final candidates = decoder.decodeByteCandidates(hidden);
@@ -384,17 +386,18 @@ void main() {
       const secretText = 'Caffè, mañana, déjà vu, résumé, 😄🔐🚀🌍 — un messaggio lungo con caratteri speciali!';
       const cover = 'Caro amico, ti scrivo questa lunga lettera di copertura che non contiene alcun significato nascosto ma è abbastanza lunga da tenere pulita la parte iniziale del preview per il destinatario.';
 
-      final encrypted = await enc.encrypt(
+      final encResult = await enc.encrypt(
         senderPrivateKeyBase64: alice.priv,
         recipientPublicKeyBase64: bob.pub,
         payload: PlaintextPayload(
           senderId: 'alice',
           recipientId: 'bob',
           text: secretText,
-          timestamp: 1700000001,
+          timestamp: DateTime.now().millisecondsSinceEpoch,
           senderDisplayName: 'Àlice 😄',
         ),
       );
+      final encrypted = encResult.message;
 
       final hidden = encoder.encodeBytes(cover, encrypted.toRawBytes());
       final candidates = decoder.decodeByteCandidates(hidden);
@@ -463,16 +466,17 @@ void main() {
       final alice = await _makeKeyPair();
       final bob = await _makeKeyPair();
 
-      final encrypted = await enc.encrypt(
+      final encResult = await enc.encrypt(
         senderPrivateKeyBase64: alice.priv,
         recipientPublicKeyBase64: bob.pub,
         payload: const PlaintextPayload(
           senderId: 'alice',
           recipientId: 'bob',
-          text: 'link format test',
-          timestamp: 1700000000,
+          text: 'Messaggio da cifrare',
+          timestamp: 1234567890,
         ),
       );
+      final encrypted = encResult.message;
 
       final raw = encrypted.toRawBytes();
       final link = 'layergram://m/${base64Url.encode(raw).replaceAll('=', '')}';
@@ -487,10 +491,10 @@ void main() {
         localPrivateKeyBase64: bob.priv,
         remotePublicKeyBase64: alice.pub,
       );
-      final decrypted = await enc.tryDecryptWithKey(message: msg, key: key);
+      final decryptedPayload = await enc.tryDecryptWithKey(message: msg, key: key);
 
-      expect(decrypted, isNotNull);
-      expect(decrypted!.text, equals('link format test'));
+      expect(decryptedPayload, isNotNull);
+      expect(decryptedPayload!.text, equals('Messaggio da cifrare'));
     });
   });
 
@@ -510,28 +514,27 @@ void main() {
 
       // Bob encrypts to Alice.
       final enc = EncryptionService();
-      final encrypted = await enc.encrypt(
+      final encResult = await enc.encrypt(
         senderPrivateKeyBase64: privB,
         recipientPublicKeyBase64: identityA.publicKeyBase64,
         payload: PlaintextPayload(
           senderId: identityB.identityId,
           recipientId: identityA.identityId,
-          text: 'Ciao Alice, questo è Bob!',
-          timestamp: 1700000000,
-          senderDisplayName: identityB.displayName,
+          text: 'Secret for Alice',
+          timestamp: 1234567890,
         ),
       );
 
       // Alice decrypts.
-      final decrypted = await enc.decrypt(
+      final decResult = await enc.decrypt(
         recipientPrivateKeyBase64: privA,
         senderPublicKeyBase64: identityB.publicKeyBase64,
-        message: encrypted,
+        message: encResult.message,
       );
 
-      expect(decrypted.text, equals('Ciao Alice, questo è Bob!'));
-      expect(decrypted.senderId, equals(identityB.identityId));
-      expect(decrypted.recipientId, equals(identityA.identityId));
+      expect(decResult.payload.text, equals('Secret for Alice'));
+      expect(decResult.payload.senderId, equals(identityB.identityId));
+      expect(decResult.payload.recipientId, equals(identityA.identityId));
     });
 
     test('restored identity can decrypt messages that were encrypted to it before restore', () async {
@@ -551,16 +554,17 @@ void main() {
       final bobPub = base64Encode((await bobPair.extractPublicKey()).bytes);
 
       final enc = EncryptionService();
-      final encrypted = await enc.encrypt(
+      final encResult = await enc.encrypt(
         senderPrivateKeyBase64: bobPriv,
         recipientPublicKeyBase64: original.publicKeyBase64,
-        payload: const PlaintextPayload(
+        payload: PlaintextPayload(
           senderId: 'bob',
-          recipientId: 'alice',
+          recipientId: original.identityId,
           text: 'Messaggio precedente al restore',
-          timestamp: 1700000000,
+          timestamp: 1234567890,
         ),
       );
+      final encrypted = encResult.message;
 
       // Now Alice restores her identity from mnemonic on a new device.
       final mgrRestored = _makeManager();
@@ -574,13 +578,13 @@ void main() {
           reason: 'Restored private key must equal original');
 
       // Decryption must succeed using the restored private key.
-      final decrypted = await enc.decrypt(
+      final decResult = await enc.decrypt(
         recipientPrivateKeyBase64: privRestored,
         senderPublicKeyBase64: bobPub,
         message: encrypted,
       );
 
-      expect(decrypted.text, equals('Messaggio precedente al restore'));
+      expect(decResult.payload.text, equals('Messaggio precedente al restore'));
     });
   });
 }
