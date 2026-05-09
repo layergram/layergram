@@ -149,6 +149,12 @@ class FsSessionManager {
   /// The transcript hash stored by responder to verify FS_CONFIRM.
   Uint8List? _pendingTranscriptHash;
 
+  /// Partial handshake state for initiator (stored when generating FS_CONFIRM, used for ratchet init).
+  FsHandshakePartialState? _initiatorPartialState;
+
+  /// Partial handshake state for responder (stored when generating FS_REPLY, used for ratchet init).
+  FsHandshakePartialState? _responderPartialState;
+
   /// Whether strict mode was requested before handshake completed.
   bool _strictRequestedBeforeHandshake = false;
 
@@ -168,6 +174,12 @@ class FsSessionManager {
 
   /// Returns the ephemeral private key from our sent FS_REPLY (for ratchet initialization).
   Uint8List? get pendingReplyEphemeralPriv => _pendingReplyEphemeralPriv;
+
+  /// Returns the initiator's partial handshake state (for ratchet initialization after confirm sent).
+  FsHandshakePartialState? get initiatorPartialState => _initiatorPartialState;
+
+  /// Returns the responder's partial handshake state (for ratchet initialization after confirm verified).
+  FsHandshakePartialState? get responderPartialState => _responderPartialState;
 
   /// Returns the raw root secret for FS_CONFIRM verification (responder only).
   Uint8List? get pendingRawRootSecret => _pendingRawRootSecret;
@@ -240,6 +252,7 @@ class FsSessionManager {
     }
 
     pendingReplyId = payload.replyId;
+    _responderPartialState = payload.partialState;
     _state = FsSessionState.fsReplySent;
 
     return FsSessionTransitionResult.ok(_state, payload);
@@ -262,6 +275,7 @@ class FsSessionManager {
       );
     }
 
+    _initiatorPartialState = payload.partialState;
     _state = FsSessionState.fsConfirmSent;
 
     return FsSessionTransitionResult.ok(_state, payload);
@@ -556,6 +570,8 @@ class FsSessionManager {
     _pendingReplyEphemeralPriv = null;
     _pendingRawRootSecret = null;
     _pendingTranscriptHash = null;
+    _initiatorPartialState = null;
+    _responderPartialState = null;
     _strictRequestedBeforeHandshake = false;
   }
 
@@ -570,6 +586,8 @@ class FsSessionManager {
     _pendingReplyEphemeralPriv = null;
     _pendingRawRootSecret = null;
     _pendingTranscriptHash = null;
+    _initiatorPartialState = null;
+    _responderPartialState = null;
     // Note: _strictRequestedBeforeHandshake is preserved here because
     // it should survive until session activation
   }

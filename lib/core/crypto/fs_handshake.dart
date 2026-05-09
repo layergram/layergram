@@ -185,6 +185,8 @@ class FsHandshake {
         receivingChainKey0: receivingChainKey0,
         isInitiator: false,
         rawRootSecret: rawRootSecretForB,
+        localRatchetPriv: ratchetBPriv,
+        localRatchetPub: ratchetBPub,
       ),
     );
   }
@@ -276,6 +278,8 @@ class FsHandshake {
         sendingChainKey0: sendingChainKey0,
         receivingChainKey0: receivingChainKey0,
         isInitiator: true,
+        localRatchetPriv: ratchetAPriv,
+        localRatchetPub: ratchetAPub,
       ),
     );
   }
@@ -779,6 +783,8 @@ class FsHandshakePartialState {
     required this.receivingChainKey0,
     required this.isInitiator,
     this.rawRootSecret,
+    this.localRatchetPriv,
+    this.localRatchetPub,
   });
 
   final Uint8List transcriptHash;
@@ -789,6 +795,12 @@ class FsHandshakePartialState {
 
   /// Kept by responder only until FS_CONFIRM verified.  Null for initiator.
   final Uint8List? rawRootSecret;
+
+  /// Local ratchet private key (available after generating FS_REPLY or FS_CONFIRM).
+  final Uint8List? localRatchetPriv;
+
+  /// Local ratchet public key (available after generating FS_REPLY or FS_CONFIRM).
+  final Uint8List? localRatchetPub;
 
   void wipeRawRootSecret() {
     if (rawRootSecret != null) {

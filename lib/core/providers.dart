@@ -360,6 +360,14 @@ final fsOpportunisticControllerProvider =
     sessionManager: ref.watch(fsSessionManagerProvider(contactId)),
     registry: ref.watch(fsContactSecurityRegistryProvider),
     persistenceService: ref.watch(fsStatePersistenceServiceProvider),
+    ratchetPersistenceService: ref.watch(fsRatchetPersistenceServiceProvider),
+    onRatchetInitialized: (ratchetState) {
+      // Update the cache when ratchet is initialized after handshake
+      ref.read(fsRatchetStateCacheProvider.notifier).update((cache) => {
+            ...cache,
+            ratchetState.sessionId: ratchetState,
+          });
+    },
   );
 });
 

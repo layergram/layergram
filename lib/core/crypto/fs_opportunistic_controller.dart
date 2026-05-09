@@ -15,8 +15,11 @@
 import 'dart:typed_data';
 
 import 'fs_contact_security_state.dart';
+import 'fs_double_ratchet.dart';
 import 'fs_handshake.dart';
+import 'fs_key_codec.dart';
 import 'fs_payload_budget.dart';
+import 'fs_ratchet_persistence_service.dart';
 import 'fs_session_manager.dart';
 import 'fs_state_persistence_service.dart';
 import 'lmf_v2_decoder.dart';
@@ -43,17 +46,23 @@ class FsOpportunisticController {
     required FsSessionManager sessionManager,
     required FsContactSecurityRegistry registry,
     FsStatePersistenceService? persistenceService,
+    FsRatchetPersistenceService? ratchetPersistenceService,
+    void Function(RatchetState)? onRatchetInitialized,
   })  : _localContactId = localContactId,
         _identityContext = identityContext,
         _sessionManager = sessionManager,
         _registry = registry,
-        _persistenceService = persistenceService;
+        _persistenceService = persistenceService,
+        _ratchetPersistenceService = ratchetPersistenceService,
+        _onRatchetInitialized = onRatchetInitialized;
 
   final String _localContactId;
   final String _identityContext;
   final FsSessionManager _sessionManager;
   final FsContactSecurityRegistry _registry;
   final FsStatePersistenceService? _persistenceService;
+  final FsRatchetPersistenceService? _ratchetPersistenceService;
+  final void Function(RatchetState)? _onRatchetInitialized;
 
   // ---------------------------------------------------------------------------
   // Outgoing message handling
@@ -157,6 +166,17 @@ class FsOpportunisticController {
           sessionId: pendingConfirm.replyId,
           state: _sessionManager.state,
         );
+
+        // Initialize the double ratchet for initiator
+        // Note: initiator needs responder's ratchet pub from pendingReply
+        if (pendingReply != null) {
+          _initializeRatchetForInitiator(
+            sessionId: pendingConfirm.replyId,
+            confirmPayload: pendingConfirm,
+            replyPayload: pendingReply,
+          );
+        }
+
         return FsOutgoingExtension._(json: json);
 
       case FsSessionState.fsActive:
@@ -311,6 +331,13 @@ class FsOpportunisticController {
       if (verified) {
         _sessionManager.activateSession(msg.replyId);
         _updateRegistry(sessionId: msg.replyId, state: _sessionManager.state);
+
+        // Initialize the double ratchet with stored handshake keys
+        await _initializeRatchetAfterHandshake(
+          sessionId: msg.replyId,
+          isInitiator: false,
+          remoteRatchetPub: msg.initiatorInitialRatchetPub,
+        );
       }
     }
 
@@ -335,6 +362,95 @@ class FsOpportunisticController {
     _registry.upsert(stateEntry);
     // Persist to storage (only for primary context)
     _persistenceService?.saveState(stateEntry);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Ratchet initialization after handshake
+  // ---------------------------------------------------------------------------
+
+  /// Initializes the double ratchet for the responder after FS_CONFIRM verification.
+  Future<void> _initializeRatchetAfterHandshake({
+    required String sessionId,
+    required bool isInitiator,
+    required String? remoteRatchetPub,
+  }) async {
+    try {
+      // Get the stored handshake state with initial keys
+      final partialState = isInitiator
+          ? _sessionManager.initiatorPartialState
+          : _sessionManager.responderPartialState;
+      if (partialState == null) return;
+
+      // Decode remote ratchet public key if provided
+      Uint8List? lastRemoteRatchetPub;
+      if (remoteRatchetPub != null) {
+        lastRemoteRatchetPub = FsKeyCodec.decodeKey(remoteRatchetPub);
+      }
+
+      // Initialize the ratchet with the handshake keys
+      final ratchetState = await FsDoubleRatchet.initRatchet(
+        sessionId: sessionId,
+        rootKey0: partialState.rootKey0,
+        sendingChainKey0: partialState.sendingChainKey0,
+        receivingChainKey0: partialState.receivingChainKey0,
+        localRatchetPriv: partialState.localRatchetPriv!,
+        localRatchetPub: partialState.localRatchetPub!,
+        lastRemoteRatchetPub: lastRemoteRatchetPub,
+      );
+
+      // Notify callback (used by HomeController to cache and persist)
+      _onRatchetInitialized?.call(ratchetState);
+
+      // Also persist via service if available
+      await _ratchetPersistenceService?.saveRatchetState(ratchetState);
+    } catch (_) {
+      // Silently fail - ratchet will be re-initialized on next handshake attempt
+    }
+  }
+
+  /// Initializes the double ratchet for the initiator after sending FS_CONFIRM.
+  void _initializeRatchetForInitiator({
+    required String sessionId,
+    required FsConfirmPayload confirmPayload,
+    required FsReplyPayload replyPayload,
+  }) async {
+    try {
+      final partialState = confirmPayload.partialState;
+
+      // Decode responder's ratchet public key from reply
+      Uint8List? lastRemoteRatchetPub;
+      if (replyPayload.responderInitialRatchetPub != null) {
+        lastRemoteRatchetPub = FsKeyCodec.decodeKey(replyPayload.responderInitialRatchetPub!);
+      }
+
+      // initiatorInitialRatchetPriv is already Uint8List (not encoded)
+      final localRatchetPriv = confirmPayload.initiatorInitialRatchetPriv;
+
+      // Decode initiator's ratchet public key (it's encoded as string)
+      Uint8List? localRatchetPub;
+      if (confirmPayload.initiatorInitialRatchetPub != null) {
+        localRatchetPub = FsKeyCodec.decodeKey(confirmPayload.initiatorInitialRatchetPub);
+      }
+
+      if (localRatchetPub == null) return;
+
+      // Initialize the ratchet
+      final ratchetState = await FsDoubleRatchet.initRatchet(
+        sessionId: sessionId,
+        rootKey0: partialState.rootKey0,
+        sendingChainKey0: partialState.sendingChainKey0,
+        receivingChainKey0: partialState.receivingChainKey0,
+        localRatchetPriv: localRatchetPriv,
+        localRatchetPub: localRatchetPub,
+        lastRemoteRatchetPub: lastRemoteRatchetPub,
+      );
+
+      // Notify callback and persist
+      _onRatchetInitialized?.call(ratchetState);
+      await _ratchetPersistenceService?.saveRatchetState(ratchetState);
+    } catch (_) {
+      // Silently fail
+    }
   }
 
   // ---------------------------------------------------------------------------
