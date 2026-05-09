@@ -800,6 +800,16 @@ class ChatViewState extends ConsumerState<ChatView> {
       }
       _messagesRepo.purgeReadDeleteAfterReadFor(widget.contact.identityId);
     });
+
+    // Listen for identity reload/reset events and clear decryption cache
+    // This ensures FS-encrypted messages cannot be decrypted after identity reset
+    // (FS ratchet keys are cleared on reset, so cached decryptions are invalid)
+    ref.listenManual<int>(identityReloadTokenProvider, (previous, next) {
+      if (previous != next) {
+        _decryptedCache.clear();
+        _decryptFutures.clear();
+      }
+    });
   }
 
   void _onScroll() {
