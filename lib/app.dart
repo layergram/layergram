@@ -518,7 +518,7 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
       assert(() {
         print('[FS-LOAD] Loaded ${ratchetStates.length} ratchet states');
         for (final s in ratchetStates) {
-          print('[FS-LOAD]   - Session ${s.sessionId}: counter=${s.chainKey.counter}');
+          print('[FS-LOAD]   - Session ${s.sessionId}: send=${s.sendCounter}, recv=${s.recvCounter}');
         }
         return true;
       }());
