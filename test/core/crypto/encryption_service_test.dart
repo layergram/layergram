@@ -55,7 +55,7 @@ void main() {
         deleteAfterRead: true,
       );
 
-      final encrypted = await service.encrypt(
+      final encResult = await service.encrypt(
         senderPrivateKeyBase64: alice.privateKeyBase64,
         recipientPublicKeyBase64: bob.publicKeyBase64,
         payload: payload,
@@ -71,11 +71,11 @@ void main() {
       );
 
       final decrypted = await service.tryDecryptWithKey(
-        message: encrypted,
+        message: encResult.message,
         key: correctKey,
       );
       final failed = await service.tryDecryptWithKey(
-        message: encrypted,
+        message: encResult.message,
         key: wrongKey,
       );
 

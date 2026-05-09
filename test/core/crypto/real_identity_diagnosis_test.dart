@@ -182,7 +182,7 @@ void main() {
       final enc = EncryptionService();
 
       // Sofia (v2) encrypts TO Alex using Alex's correct public key.
-      final encrypted = await enc.encrypt(
+      final encResult = await enc.encrypt(
         senderPrivateKeyBase64: privSofiaV2,
         recipientPublicKeyBase64: alexPub,
         payload: PlaintextPayload(
@@ -193,6 +193,7 @@ void main() {
           senderDisplayName: 'Sofia',
         ),
       );
+      final encrypted = encResult.message;
 
       // Alex decrypts with Sofia's V2 public key → SUCCESS (correct key).
       final correctDecrypt = await enc.tryDecryptWithKey(
@@ -257,7 +258,7 @@ void main() {
       final decoder = StegoDecoder();
 
       // Sofia encrypts to Alex.
-      final encrypted = await enc.encrypt(
+      final encResult = await enc.encrypt(
         senderPrivateKeyBase64: sofiaSimPriv,
         recipientPublicKeyBase64: alexSimPub,
         payload: PlaintextPayload(
@@ -268,6 +269,7 @@ void main() {
           senderDisplayName: 'Sofia',
         ),
       );
+      final encrypted = encResult.message;
 
       // Sofia embeds in cover text.
       final hiddenMsg = encoder.encodeBytes(_cover, encrypted.toRawBytes());
@@ -311,7 +313,7 @@ void main() {
       final encoder = StegoEncoder();
       final decoder = StegoDecoder();
 
-      final encrypted = await enc.encrypt(
+      final encResult = await enc.encrypt(
         senderPrivateKeyBase64: sofiaV2Priv,
         recipientPublicKeyBase64: alexPub,
         payload: PlaintextPayload(
@@ -322,7 +324,7 @@ void main() {
         ),
       );
 
-      final hiddenMsg = encoder.encodeBytes(_cover, encrypted.toRawBytes());
+      final hiddenMsg = encoder.encodeBytes(_cover, encResult.message.toRawBytes());
       final candidates = decoder.decodeByteCandidates(hiddenMsg);
       expect(candidates, isNotEmpty);
 

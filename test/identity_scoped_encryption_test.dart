@@ -99,7 +99,7 @@ void main() {
     // use identity B's public key as the sender.
     final service = EncryptionService();
 
-    final encryptedA = await service.encrypt(
+    final encResult = await service.encrypt(
       senderPrivateKeyBase64: a.privB64,
       recipientPublicKeyBase64: recipient.pubB64,
       payload: const PlaintextPayload(
@@ -110,18 +110,18 @@ void main() {
       ),
     );
 
-    final decrypted = await service.decrypt(
+    final decResult = await service.decrypt(
       recipientPrivateKeyBase64: recipient.privB64,
       senderPublicKeyBase64: a.pubB64,
-      message: encryptedA,
+      message: encResult.message,
     );
-    expect(decrypted.text, 'test');
+    expect(decResult.payload.text, 'test');
 
     expect(
       () => service.decrypt(
         recipientPrivateKeyBase64: recipient.privB64,
         senderPublicKeyBase64: b.pubB64,
-        message: encryptedA,
+        message: encResult.message,
       ),
       throwsA(isA<SecretBoxAuthenticationError>()),
     );
