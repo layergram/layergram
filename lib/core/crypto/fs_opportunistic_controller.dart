@@ -90,11 +90,11 @@ class FsOpportunisticController {
   ///
   /// [pendingConfirm] must be provided when [FsSessionState.fsReplySeen] so
   /// the initiator can include the `fs_confirm` extension.
-  FsOutgoingExtension? buildOutgoingExtension({
+  Future<FsOutgoingExtension?> buildOutgoingExtension({
     FsInitPayload? pendingInit,
     FsReplyPayload? pendingReply,
     FsConfirmPayload? pendingConfirm,
-  }) {
+  }) async {
     final state = _sessionManager.state;
 
     switch (state) {

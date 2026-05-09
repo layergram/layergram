@@ -742,13 +742,13 @@ class HomeController {
         // Store the ephemeral key for later use in FS_CONFIRM
         sessionManager.setPendingInitEphemeralPriv(initPayload.ekAPrivBytes);
 
-        return fsController.buildOutgoingExtension(pendingInit: initPayload);
+        return await fsController.buildOutgoingExtension(pendingInit: initPayload);
 
       case FsSessionState.fsInitSeen:
         // Generate FS_REPLY in response to received FS_INIT
         final initMessage = sessionManager.storedInitMessage;
         if (initMessage == null) {
-          return fsController.buildOutgoingExtension();
+          return await fsController.buildOutgoingExtension();
         }
 
         // Decode remote identity public key
@@ -780,10 +780,10 @@ class HomeController {
             replyPayload.partialState.transcriptHash,
           );
 
-          return fsController.buildOutgoingExtension(pendingReply: replyPayload);
+          return await fsController.buildOutgoingExtension(pendingReply: replyPayload);
         } catch (e) {
           // Failed to generate reply, skip FS extension this message
-          return fsController.buildOutgoingExtension();
+          return await fsController.buildOutgoingExtension();
         }
 
       case FsSessionState.fsReplySeen:
@@ -791,7 +791,7 @@ class HomeController {
         final replyMessage = sessionManager.storedReplyMessage;
         final ekAPriv = sessionManager.pendingInitEphemeralPriv;
         if (replyMessage == null || ekAPriv == null) {
-          return fsController.buildOutgoingExtension();
+          return await fsController.buildOutgoingExtension();
         }
 
         // Decode remote identity public key
@@ -804,7 +804,7 @@ class HomeController {
         // Retrieve the init message we originally sent
         final sentInit = sessionManager.storedSentInitMessage;
         if (sentInit == null) {
-          return fsController.buildOutgoingExtension();
+          return await fsController.buildOutgoingExtension();
         }
 
         try {
@@ -818,10 +818,10 @@ class HomeController {
             reply: replyMessage,
           );
 
-          return fsController.buildOutgoingExtension(pendingConfirm: confirmPayload);
+          return await fsController.buildOutgoingExtension(pendingConfirm: confirmPayload);
         } catch (e) {
           // Failed to generate confirm, skip FS extension this message
-          return fsController.buildOutgoingExtension();
+          return await fsController.buildOutgoingExtension();
         }
 
       case FsSessionState.fsActive:
@@ -834,7 +834,7 @@ class HomeController {
       case FsSessionState.fsSuspended:
       case FsSessionState.fsBroken:
         // No handshake message needed in these states
-        return fsController.buildOutgoingExtension();
+        return await fsController.buildOutgoingExtension();
     }
   }
 }
