@@ -23,6 +23,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/crypto/fs_double_ratchet.dart';
 import '../../core/crypto/fs_handshake.dart';
+import '../../core/crypto/encryption_service.dart';
 import '../../core/crypto/fs_opportunistic_controller.dart';
 import '../../core/crypto/fs_session_manager.dart';
 import '../../core/crypto/message_record_cipher.dart';
@@ -465,44 +466,66 @@ class HomeController {
 
       // Try each contact key.
       for (final contact in [selfRemote, ...orderedContacts]) {
+        // Get ratchet state if FS session is active for this contact
+        RatchetState? ratchetState;
+        final sessionManager = ref.read(fsSessionManagerProvider(contact.identityId));
+        final activeSessionId = sessionManager.activeSessionId;
+        if (activeSessionId != null) {
+          ratchetState = ref.read(fsRatchetStateCacheProvider)[activeSessionId];
+        }
+
+        // Try full decrypt (handles both legacy and FS-encrypted messages)
+        DecryptionResult? result;
+        try {
+          result = await encService.decrypt(
+            recipientPrivateKeyBase64: privateKey,
+            senderPublicKeyBase64: contact.publicKeyBase64,
+            message: msg,
+            ratchetState: ratchetState,
+          );
+        } catch (_) {
+          // Wrong key - try next contact
+          continue;
+        }
+
+        // Update ratchet state if it changed (e.g., received new message advanced counter)
+        if (result.newRatchetState != null && activeSessionId != null) {
+          final newState = result.newRatchetState!;
+          ref.read(fsRatchetStateCacheProvider.notifier).update((cache) => {
+                ...cache,
+                activeSessionId: newState,
+              });
+          // Persist updated state
+          unawaited(ref.read(fsRatchetPersistenceServiceProvider).saveRatchetState(newState));
+        }
+
+        // Process FS extension for opportunistic Forward Secrecy handshake
+        // We need to decrypt envelope separately to access FS extension
         final key = await encService.deriveSymmetricKey(
           localPrivateKeyBase64: privateKey,
           remotePublicKeyBase64: contact.publicKeyBase64,
         );
-        // Decrypt full envelope to access FS extension
         final envelope = await encService.tryDecryptEnvelopeWithKey(
           message: msg,
           key: key,
         );
-        if (envelope == null) continue;
-
-        // Process FS extension for opportunistic Forward Secrecy handshake
-        final fsController = ref.read(
-          fsOpportunisticControllerProvider(contact.identityId),
-        );
-        final fsResult = await fsController.processIncomingEnvelope(
-          envelope,
-          remoteContactId: contact.identityId,
-        );
-        // Trigger UI refresh if FS state changed
-        if (fsResult.type != FsIncomingType.noExtension) {
-          ref.read(fsRegistryVersionProvider.notifier).state++;
+        if (envelope != null) {
+          final fsController = ref.read(
+            fsOpportunisticControllerProvider(contact.identityId),
+          );
+          final fsResult = await fsController.processIncomingEnvelope(
+            envelope,
+            remoteContactId: contact.identityId,
+          );
+          // Trigger UI refresh if FS state changed
+          if (fsResult.type != FsIncomingType.noExtension) {
+            ref.read(fsRegistryVersionProvider.notifier).state++;
+          }
         }
-
-        // Extract payload from envelope
-        final payload = PlaintextPayload(
-          senderId: envelope['senderId'] as String,
-          recipientId: envelope['recipientId'] as String,
-          text: envelope['text'] as String,
-          timestamp: envelope['timestamp'] as int,
-          senderDisplayName: envelope['senderDisplayName'] as String?,
-          expireAfter: envelope['expireAfter'] as int?,
-          deleteAfterRead: (envelope['deleteAfterRead'] as bool?) ?? false,
-        );
 
         // Decryption succeeded!
         return _persistAndReturn(
-          payload: payload,
+          payload: result.payload,
           encryptedMessage: msg,
           rawSource: source,
           senderContact: contact,
