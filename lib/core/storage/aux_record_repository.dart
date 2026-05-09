@@ -143,6 +143,18 @@ class AuxRecordRepository {
     );
   }
 
+  /// Returns all storage IDs for aux records in the current scope.
+  ///
+  /// This is used by persistence services to reload their state after app restart.
+  List<String> getAllAuxStorageIds() {
+    if (!_hasScope) return const [];
+    return _box.keys
+        .where(_isScopedKey)
+        .where(_isAuxRecord)
+        .map((k) => (k as String).substring(_keyPrefix.length))
+        .toList(growable: false);
+  }
+
   // ---------------------------------------------------------------------------
   // Delete
   // ---------------------------------------------------------------------------
