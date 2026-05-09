@@ -149,6 +149,9 @@ class FsSessionManager {
   /// The transcript hash stored by responder to verify FS_CONFIRM.
   Uint8List? _pendingTranscriptHash;
 
+  /// Whether strict mode was requested before handshake completed.
+  bool _strictRequestedBeforeHandshake = false;
+
   FsSessionState get state => _state;
 
   /// Returns the stored FS_INIT message received from remote (for generating FS_REPLY).
@@ -413,7 +416,13 @@ class FsSessionManager {
     }
 
     activeSessionId = sessionId;
-    _state = FsSessionState.fsActive;
+    // If strict was requested before handshake, activate strict mode
+    if (_strictRequestedBeforeHandshake) {
+      _state = FsSessionState.strictFsActive;
+      _strictRequestedBeforeHandshake = false;
+    } else {
+      _state = FsSessionState.fsActive;
+    }
     _clearHandshakeMaterial();
 
     return FsSessionTransitionResult.ok(_state, null);
@@ -468,11 +477,18 @@ class FsSessionManager {
   /// Records that the user has requested Maximum FS for this contact.
   ///
   /// Transitions from [FsSessionState.fsActive] to
-  /// [FsSessionState.strictRequested].  Does nothing if the state is not
-  /// [FsSessionState.fsActive].
+  /// [FsSessionState.strictRequested]. If called before handshake completes,
+  /// sets a flag so that activateSession will transition to strictFsActive.
   void requestStrict() {
     if (_state == FsSessionState.fsActive) {
       _state = FsSessionState.strictRequested;
+    } else if (_state == FsSessionState.legacyOnly ||
+               _state == FsSessionState.fsInitSent ||
+               _state == FsSessionState.fsInitSeen ||
+               _state == FsSessionState.fsReplySent ||
+               _state == FsSessionState.fsReplySeen) {
+      // Set flag to activate strict mode after handshake completes
+      _strictRequestedBeforeHandshake = true;
     }
   }
 
@@ -540,6 +556,7 @@ class FsSessionManager {
     _pendingReplyEphemeralPriv = null;
     _pendingRawRootSecret = null;
     _pendingTranscriptHash = null;
+    _strictRequestedBeforeHandshake = false;
   }
 
   void _clearHandshakeMaterial() {
@@ -553,6 +570,8 @@ class FsSessionManager {
     _pendingReplyEphemeralPriv = null;
     _pendingRawRootSecret = null;
     _pendingTranscriptHash = null;
+    // Note: _strictRequestedBeforeHandshake is preserved here because
+    // it should survive until session activation
   }
 
   /// Tie-break: returns the initId that wins (lexicographically smaller).

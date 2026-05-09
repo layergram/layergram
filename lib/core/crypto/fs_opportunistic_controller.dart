@@ -143,14 +143,15 @@ class FsOpportunisticController {
         }
         final confirmResult = _sessionManager.recordFsConfirmSent(pendingConfirm);
         if (!confirmResult.accepted) {
-          return FsOutgoingExtension._(
-            json: null,
-            droppedReason: FsExtensionDropReason.payloadTooLarge,
-          );
+          return const FsOutgoingExtension._(json: null);
         }
+
+        // Activates session immediately for initiator (responder activates on confirm receipt)
+        _sessionManager.activateSession(pendingConfirm.replyId);
+
         _updateRegistry(
           sessionId: pendingConfirm.replyId,
-          state: FsSessionState.fsConfirmSent,
+          state: _sessionManager.state,
         );
         return FsOutgoingExtension._(json: json);
 

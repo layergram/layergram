@@ -87,7 +87,8 @@ FsConfirmPayload _confirmPayload({
     );
 
 // Build a controller for Alice talking to Bob.
-(FsOpportunisticController, FsContactSecurityRegistry) _buildAlice({
+(FsOpportunisticController, FsContactSecurityRegistry, FsSessionManager)
+    _buildAlice({
   _FakeClock? clock,
 }) {
   final registry = FsContactSecurityRegistry();
@@ -98,7 +99,7 @@ FsConfirmPayload _confirmPayload({
     sessionManager: mgr,
     registry: registry,
   );
-  return (ctrl, registry);
+  return (ctrl, registry, mgr);
 }
 
 // Build a controller for Bob talking to Alice.
@@ -120,7 +121,7 @@ FsConfirmPayload _confirmPayload({
 void main() {
   // T10.1 — buildOutgoingExtension from legacyOnly produces fs_init extension.
   test('T10.1: buildOutgoingExtension in legacyOnly attaches fs_init and advances state', () {
-    final (ctrl, registry) = _buildAlice();
+    final (ctrl, registry, _) = _buildAlice();
 
     expect(ctrl.state, equals(FsSessionState.legacyOnly));
 
@@ -259,7 +260,7 @@ void main() {
 
   // T10.7 — Payload too large → dropped with payloadTooLarge reason.
   test('T10.7: oversized pendingInit → FsExtensionDropReason.payloadTooLarge', () async {
-    final (ctrl, _) = _buildAlice();
+    final (ctrl, _, _) = _buildAlice();
 
     final oversized = FsInitPayload(
       initId: 'x' * 22,
@@ -288,7 +289,7 @@ void main() {
   // T10.8 — processIncomingEnvelope with fs_reply updates state and registry.
   test('T10.8: incoming fs_reply advances Alice to fsReplySeen', () async {
     final clock = _FakeClock(_kNow);
-    final (alice, aliceRegistry) = _buildAlice(clock: clock);
+    final (alice, aliceRegistry, _) = _buildAlice(clock: clock);
 
     // Alice sends fs_init.
     alice.buildOutgoingExtension(pendingInit: _initPayload());
@@ -400,5 +401,147 @@ void main() {
     expect(result.type, equals(FsIncomingType.unknownType));
     expect(result.rawType, equals('fs_future_extension'));
     expect(ctrl.state, equals(FsSessionState.legacyOnly));
+  });
+
+  // T10.12 — Initiator activates session immediately after sending fs_confirm.
+  test('T10.12: initiator reaches fsActive immediately after sending fs_confirm', () async {
+    final clock = _FakeClock(_kNow);
+    final (alice, aliceRegistry, aliceMgr) = _buildAlice(clock: clock);
+
+    // Step 1: Alice sends fs_init.
+    alice.buildOutgoingExtension(pendingInit: _initPayload());
+    expect(alice.state, equals(FsSessionState.fsInitSent));
+
+    // Step 2: Alice receives fs_reply.
+    await alice.processIncomingEnvelope(
+      {'v': 2, 'senderId': 'bob', 'x': {'fs': _replyPayload().toMessage().toJson()}},
+      remoteContactId: 'bob',
+    );
+    expect(alice.state, equals(FsSessionState.fsReplySeen));
+
+    // Step 3: Alice sends fs_confirm.
+    alice.buildOutgoingExtension(pendingConfirm: _confirmPayload());
+
+    // Initiator should immediately be in fsActive state.
+    expect(alice.state, equals(FsSessionState.fsActive),
+        reason: 'Initiator must activate session immediately after sending fs_confirm');
+
+    // Registry should reflect fsActive.
+    final regState = aliceRegistry.lookup(
+      contactId: 'alice',
+      identityContext: 'primary',
+      sessionId: 'reply-222',
+    );
+    expect(regState, isNotNull);
+    expect(regState!.fsState, equals(FsSessionState.fsActive));
+  });
+
+  // T10.13 — Strict mode: initiator reaches strictFsActive after confirm.
+  test('T10.13: strict mode initiator reaches strictFsActive after sending fs_confirm', () async {
+    final clock = _FakeClock(_kNow);
+    final aliceRegistry = FsContactSecurityRegistry();
+    final aliceMgr = FsSessionManager(clock: clock);
+    final alice = FsOpportunisticController(
+      localContactId: 'alice',
+      identityContext: 'primary',
+      sessionManager: aliceMgr,
+      registry: aliceRegistry,
+    );
+
+    // Set strict mode requested before handshake.
+    aliceMgr.requestStrict();
+
+    // Step 1: Alice sends fs_init.
+    alice.buildOutgoingExtension(pendingInit: _initPayload());
+    expect(alice.state, equals(FsSessionState.fsInitSent));
+
+    // Step 2: Alice receives fs_reply.
+    await alice.processIncomingEnvelope(
+      {'v': 2, 'senderId': 'bob', 'x': {'fs': _replyPayload().toMessage().toJson()}},
+      remoteContactId: 'bob',
+    );
+    expect(alice.state, equals(FsSessionState.fsReplySeen));
+
+    // Step 3: Alice sends fs_confirm.
+    alice.buildOutgoingExtension(pendingConfirm: _confirmPayload());
+
+    // Initiator should be in strictFsActive.
+    expect(alice.state, equals(FsSessionState.strictFsActive),
+        reason: 'Strict mode initiator must reach strictFsActive after sending fs_confirm');
+
+    final regState = aliceRegistry.lookup(
+      contactId: 'alice',
+      identityContext: 'primary',
+      sessionId: 'reply-222',
+    );
+    expect(regState!.fsState, equals(FsSessionState.strictFsActive));
+  });
+
+  // T10.14 — Passphrase context: initiator reaches fsActive after confirm.
+  test('T10.14: passphrase context initiator reaches fsActive after sending fs_confirm', () async {
+    final clock = _FakeClock(_kNow);
+    final passphraseRegistry = FsContactSecurityRegistry();
+    final passphraseMgr = FsSessionManager(clock: clock);
+    final alice = FsOpportunisticController(
+      localContactId: 'alice',
+      identityContext: 'passphrase-abc123', // passphrase-derived context
+      sessionManager: passphraseMgr,
+      registry: passphraseRegistry,
+    );
+
+    // Step 1: Alice sends fs_init.
+    alice.buildOutgoingExtension(pendingInit: _initPayload());
+    expect(alice.state, equals(FsSessionState.fsInitSent));
+
+    // Step 2: Alice receives fs_reply.
+    await alice.processIncomingEnvelope(
+      {'v': 2, 'senderId': 'bob', 'x': {'fs': _replyPayload().toMessage().toJson()}},
+      remoteContactId: 'bob',
+    );
+    expect(alice.state, equals(FsSessionState.fsReplySeen));
+
+    // Step 3: Alice sends fs_confirm.
+    alice.buildOutgoingExtension(pendingConfirm: _confirmPayload());
+
+    // Initiator should be in fsActive.
+    expect(alice.state, equals(FsSessionState.fsActive),
+        reason: 'Passphrase context initiator must reach fsActive after sending fs_confirm');
+
+    // Registry lookup in passphrase context.
+    final regState = passphraseRegistry.lookup(
+      contactId: 'alice',
+      identityContext: 'passphrase-abc123',
+      sessionId: 'reply-222',
+    );
+    expect(regState, isNotNull);
+    expect(regState!.fsState, equals(FsSessionState.fsActive));
+    expect(regState.identityContext, equals('passphrase-abc123'));
+  });
+
+  // T10.15 — Passphrase context strict mode: initiator reaches strictFsActive.
+  test('T10.15: passphrase strict mode initiator reaches strictFsActive after confirm', () async {
+    final clock = _FakeClock(_kNow);
+    final passphraseRegistry = FsContactSecurityRegistry();
+    final passphraseMgr = FsSessionManager(clock: clock);
+    final alice = FsOpportunisticController(
+      localContactId: 'alice',
+      identityContext: 'passphrase-xyz789', // passphrase-derived context
+      sessionManager: passphraseMgr,
+      registry: passphraseRegistry,
+    );
+
+    // Set strict mode in passphrase context.
+    passphraseMgr.requestStrict();
+
+    // Complete handshake.
+    alice.buildOutgoingExtension(pendingInit: _initPayload());
+    await alice.processIncomingEnvelope(
+      {'v': 2, 'senderId': 'bob', 'x': {'fs': _replyPayload().toMessage().toJson()}},
+      remoteContactId: 'bob',
+    );
+    alice.buildOutgoingExtension(pendingConfirm: _confirmPayload());
+
+    expect(alice.state, equals(FsSessionState.strictFsActive),
+        reason: 'Passphrase strict mode initiator must reach strictFsActive');
   });
 }
