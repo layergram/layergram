@@ -114,6 +114,8 @@ class DataResetSection extends ConsumerWidget {
               ref.invalidate(fsStateForContactProvider);
               ref.invalidate(fsStatePersistenceServiceProvider);
               ref.invalidate(fsRatchetPersistenceServiceProvider);
+              // CRITICAL: Also invalidate aux repository so clearByKind has proper scope
+              ref.invalidate(auxRecordRepositoryProvider);
               assert(() {
                 print('[FS-RESET] Invalidated all FS providers');
                 return true;

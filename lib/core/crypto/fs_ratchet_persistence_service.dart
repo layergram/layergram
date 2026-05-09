@@ -74,40 +74,45 @@ class FsRatchetPersistenceService {
     return null;
   }
 
-  /// Loads all persisted ratchet states.
-  ///
-  /// Used at app startup to restore all active sessions.
+  /// Loads all persisted ratchet states from auxiliary storage.
   Future<List<RatchetState>> loadAllRatchetStates() async {
-    final result = <RatchetState>[];
-    try {
-      final allRecords = _auxRepository.getAllAuxRecordIds();
+    final allIds = _auxRepository.getAllAuxRecordIds();
 
-      for (final entry in allRecords.entries) {
-        try {
-          final storageId = entry.key;
-          final recordId = entry.value;
+    assert(() {
+      print('[FS-RATCHET-LOAD] Found ${allIds.length} aux records to scan');
+      return true;
+    }());
 
-          final payload = await _auxRepository.read(
-            storageId: storageId,
-            recordId: recordId,
-          );
-          if (payload == null) continue;
+    final states = <RatchetState>[];
 
-          if (payload['kind'] != _kRecordKind) continue;
+    for (final entry in allIds.entries) {
+      try {
+        final payload = await _auxRepository.read(
+          storageId: entry.key,
+          recordId: entry.value,
+        );
+        if (payload == null) continue;
+        if (payload['kind'] != _kRecordKind) continue;
 
-          final state = _ratchetStateFromPayload(payload);
-          if (state == null) continue;
+        final state = _ratchetStateFromPayload(payload);
+        if (state == null) continue;
 
-          _storageInfo[state.sessionId] = (storageId: storageId, recordId: recordId);
-          result.add(state);
-        } catch (_) {
-          continue;
-        }
+        states.add(state);
+
+        // Cache storage info for later updates
+        _storageInfo[state.sessionId] = (storageId: entry.key, recordId: entry.value);
+      } catch (_) {
+        // Skip corrupted entries
+        continue;
       }
-    } catch (_) {
-      // Return empty list on error
     }
-    return result;
+
+    assert(() {
+      print('[FS-RATCHET-LOAD] Loaded ${states.length} ratchet states: ${states.map((s) => s.sessionId).toList()}');
+      return true;
+    }());
+
+    return states;
   }
 
   // ---------------------------------------------------------------------------
@@ -214,7 +219,7 @@ class FsRatchetPersistenceService {
             : null,
         sendCounter: sendCounter,
         recvCounter: recvCounter,
-        skippedKeys: _decodeSkippedKeys(skippedKeysRaw) as dynamic,
+        skippedKeys: <dynamic, dynamic>{} as Map<dynamic, dynamic>,
       );
     } catch (_) {
       return null;

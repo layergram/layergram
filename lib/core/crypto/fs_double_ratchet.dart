@@ -419,7 +419,7 @@ class RatchetState {
   final Uint8List? lastRemoteRatchetPub;
   final int sendCounter;
   final int recvCounter;
-  final Map<_SkippedKeyId, _SkippedEntry> skippedKeys;
+  final Map<dynamic, dynamic> skippedKeys;
 
   RatchetState copyWith({
     Uint8List? rootKey,
@@ -430,7 +430,7 @@ class RatchetState {
     Uint8List? lastRemoteRatchetPub,
     int? sendCounter,
     int? recvCounter,
-    Map<_SkippedKeyId, _SkippedEntry>? skippedKeys,
+    Map<dynamic, dynamic>? skippedKeys,
   }) =>
       RatchetState(
         sessionId: sessionId,

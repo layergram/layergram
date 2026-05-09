@@ -210,12 +210,28 @@ class AuxRecordRepository {
   /// Records are identified by reading and decrypting them first, then
   /// matching the 'kind' field (and optionally 'identityContext') in the payload.
   Future<void> clearByKind(String kind, {String? identityContext}) async {
-    if (!_hasScope || _auxStorageKey == null) return;
+    if (!_hasScope || _auxStorageKey == null) {
+      assert(() {
+        print('[AUX-CLEAR] Skipped: no scope or no key');
+        return true;
+      }());
+      return;
+    }
 
     final allIds = getAllAuxRecordIds();
+    assert(() {
+      print('[AUX-CLEAR] Found ${allIds.length} records, looking for kind=$kind, ctx=$identityContext');
+      return true;
+    }());
+
+    int checked = 0;
+    int deleted = 0;
+    int skipped = 0;
+
     for (final entry in allIds.entries) {
       final storageId = entry.key;
       final recordId = entry.value;
+      checked++;
 
       // Try to read and decrypt the record
       final raw = _box.get(_scopedKey(storageId));
@@ -230,20 +246,36 @@ class AuxRecordRepository {
         auxStorageKey: _auxStorageKey!,
       );
 
-      if (payload == null) continue;
+      if (payload == null) {
+        assert(() {
+          print('[AUX-CLEAR] Failed to decrypt record $storageId');
+          return true;
+        }());
+        continue;
+      }
 
       // Check kind matches
-      if (payload['kind'] != kind) continue;
+      if (payload['kind'] != kind) {
+        skipped++;
+        continue;
+      }
 
       // If identityContext specified, check it matches too
       if (identityContext != null &&
           payload['identityContext'] != identityContext) {
+        skipped++;
         continue;
       }
 
       // Delete matching record
       await _box.delete(_scopedKey(storageId));
+      deleted++;
     }
+
+    assert(() {
+      print('[AUX-CLEAR] Done: checked=$checked, deleted=$deleted, skipped=$skipped');
+      return true;
+    }());
   }
 
   // ---------------------------------------------------------------------------
