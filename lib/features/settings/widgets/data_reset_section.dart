@@ -79,6 +79,20 @@ class DataResetSection extends ConsumerWidget {
             if (second.deleteIdentities) {
               await ref.read(identityManagerProvider).clearLocalIdentity();
               ref.read(passphraseProvider.notifier).deactivate();
+
+              // ── Reset FS state per spec §8.6.3 ─────────────────────────────
+              // Mark all sessions as broken, wipe ratchet keys, clear persisted state
+              final registry = ref.read(fsContactSecurityRegistryProvider);
+              registry.markAllBroken('primary');
+
+              await ref.read(fsStatePersistenceServiceProvider).removeAllStates('primary');
+              await ref.read(fsRatchetPersistenceServiceProvider).removeAllRatchetStates();
+
+              // Clear in-memory ratchet state cache
+              ref.read(fsRatchetStateCacheProvider.notifier).state = {};
+
+              // Increment registry version to trigger UI refresh
+              ref.read(fsRegistryVersionProvider.notifier).state++;
             }
 
             // Force provider invalidation and log out if identity was deleted

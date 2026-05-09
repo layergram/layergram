@@ -352,4 +352,59 @@ void main() {
     expect(broken.isActive, isFalse);
     expect(broken.isBroken, isTrue);
   });
+
+  // T7.8 — markAllBroken marks all sessions in a context as broken (spec §8.6.3).
+  test('T7.8: markAllBroken marks all sessions as broken for identity reset', () {
+    final registry = FsContactSecurityRegistry();
+
+    // Setup: multiple active sessions in primary context
+    registry.upsert(FsContactSecurityState(
+      contactId: kBobId,
+      identityContext: kPrimary,
+      sessionId: kSession1,
+      fsState: FsSessionState.fsActive,
+    ));
+    registry.upsert(FsContactSecurityState(
+      contactId: kAliceId,
+      identityContext: kPrimary,
+      sessionId: kSession2,
+      fsState: FsSessionState.strictFsActive,
+    ));
+    // Session in passphrase context (should NOT be affected)
+    registry.upsert(FsContactSecurityState(
+      contactId: kBobId,
+      identityContext: kPassphrase,
+      sessionId: kSession1,
+      fsState: FsSessionState.fsActive,
+    ));
+
+    // Mark all primary sessions as broken (identity reset scenario)
+    registry.markAllBroken(kPrimary);
+
+    // Verify primary sessions are now broken
+    final bobPrimary = registry.lookup(
+      contactId: kBobId,
+      identityContext: kPrimary,
+      sessionId: kSession1,
+    );
+    expect(bobPrimary, isNotNull);
+    expect(bobPrimary!.fsState, equals(FsSessionState.fsBroken));
+
+    final alicePrimary = registry.lookup(
+      contactId: kAliceId,
+      identityContext: kPrimary,
+      sessionId: kSession2,
+    );
+    expect(alicePrimary, isNotNull);
+    expect(alicePrimary!.fsState, equals(FsSessionState.fsBroken));
+
+    // Verify passphrase context is unaffected
+    final bobPassphrase = registry.lookup(
+      contactId: kBobId,
+      identityContext: kPassphrase,
+      sessionId: kSession1,
+    );
+    expect(bobPassphrase, isNotNull);
+    expect(bobPassphrase!.fsState, equals(FsSessionState.fsActive));
+  });
 }

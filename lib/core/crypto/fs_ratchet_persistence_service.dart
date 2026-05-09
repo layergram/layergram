@@ -142,6 +142,17 @@ class FsRatchetPersistenceService {
     }
   }
 
+  /// Removes all persisted ratchet states.
+  ///
+  /// Called when the identity is reset to wipe all FS session keys.
+  /// Per spec §8.6.3: Reset requires re-handshake for all sessions.
+  Future<void> removeAllRatchetStates() async {
+    for (final entry in _storageInfo.entries.toList()) {
+      await _auxRepository.delete(entry.value.storageId);
+    }
+    _storageInfo.clear();
+  }
+
   // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------

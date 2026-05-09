@@ -195,6 +195,24 @@ class FsContactSecurityRegistry {
   /// Removes all entries. Used only in tests or full reset scenarios.
   void clearAll() => _entries.clear();
 
+  /// Marks all entries in [identityContext] as [FsSessionState.fsBroken].
+  ///
+  /// Called when the identity is reset to suspend all active FS sessions.
+  /// Per spec §8.6.3: Reset marks all sessions as broken/suspended.
+  void markAllBroken(String identityContext) {
+    for (final key in _entries.keys.toList()) {
+      if (key.identityContext == identityContext) {
+        final entry = _entries[key]!;
+        _entries[key] = FsContactSecurityState(
+          contactId: entry.contactId,
+          identityContext: entry.identityContext,
+          sessionId: entry.sessionId,
+          fsState: FsSessionState.fsBroken,
+        );
+      }
+    }
+  }
+
   /// Returns the number of registered entries.
   int get length => _entries.length;
 
