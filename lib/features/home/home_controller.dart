@@ -207,6 +207,12 @@ class HomeController {
               sessionManager.markBroken();
             }
           }
+        } else {
+          // CRITICAL: State is fsActive but activeSessionId is null.
+          // This is an inconsistent state - the session activation failed or was lost.
+          // Mark session as broken to recover gracefully.
+          print('[FS-SEND] CRITICAL: State is $state but activeSessionId is null - session inconsistent, marking broken');
+          sessionManager.markBroken();
         }
       }
 

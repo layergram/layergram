@@ -175,7 +175,9 @@ class FsOpportunisticController {
         // CRITICAL: Only activate session if ratchet was successfully initialized
         // If ratchet initialization failed (e.g., after identity reset), mark broken
         if (ratchetInitialized) {
-          _sessionManager.activateSession(pendingConfirm.replyId);
+          print('[FS-INITIATOR] Activating session with replyId=${pendingConfirm.replyId}, currentState=${_sessionManager.state}');
+          final result = _sessionManager.activateSession(pendingConfirm.replyId);
+          print('[FS-INITIATOR] activateSession result: accepted=${result.accepted}, newState=${_sessionManager.state}, activeSessionId=${_sessionManager.activeSessionId}');
         } else {
           print('[FS-INITIATOR] CRITICAL: Ratchet initialization failed - marking session broken');
           _sessionManager.markBroken();
@@ -347,7 +349,9 @@ class FsOpportunisticController {
 
         // CRITICAL: Only activate session if ratchet was successfully initialized
         if (ratchetInitialized) {
-          _sessionManager.activateSession(msg.replyId);
+          print('[FS-RESPONDER] Activating session with replyId=${msg.replyId}, currentState=${_sessionManager.state}');
+          final result = _sessionManager.activateSession(msg.replyId);
+          print('[FS-RESPONDER] activateSession result: accepted=${result.accepted}, newState=${_sessionManager.state}, activeSessionId=${_sessionManager.activeSessionId}');
         } else {
           print('[FS-RESPONDER] CRITICAL: Ratchet initialization failed - marking session broken');
           _sessionManager.markBroken();
