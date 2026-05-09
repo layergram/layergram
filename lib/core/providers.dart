@@ -34,6 +34,8 @@ import 'security/preview_service.dart';
 import 'security/session_decryption_cache_service.dart';
 import 'crypto/stego_decoder.dart';
 import 'crypto/stego_encoder.dart';
+import 'crypto/fs_state_persistence_service.dart';
+import 'storage/aux_record_repository.dart';
 import 'storage/identities_repository.dart';
 import 'storage/chat_meta_repository.dart';
 import 'storage/local_identity_vault.dart';
@@ -354,6 +356,7 @@ final fsOpportunisticControllerProvider =
     identityContext: 'primary',
     sessionManager: ref.watch(fsSessionManagerProvider(contactId)),
     registry: ref.watch(fsContactSecurityRegistryProvider),
+    persistenceService: ref.watch(fsStatePersistenceServiceProvider),
   );
 });
 
@@ -406,4 +409,22 @@ final fsStateForContactProvider =
     if (pi < bi) best = e.fsState;
   }
   return best;
+});
+
+/// [AuxRecordRepository] singleton for persisting sealed auxiliary records.
+///
+/// Used by FS state persistence and other auxiliary data storage.
+final auxRecordRepositoryProvider = Provider<AuxRecordRepository>((_) => AuxRecordRepository());
+
+/// [FsStatePersistenceService] singleton for persisting FS contact security state.
+///
+/// Saves and loads [FsContactSecurityState] entries to/from auxiliary records,
+/// making FS state survive app restarts.
+///
+/// Call [loadPersistedState] after identity context is initialized.
+final fsStatePersistenceServiceProvider = Provider<FsStatePersistenceService>((ref) {
+  return FsStatePersistenceService(
+    auxRepository: ref.watch(auxRecordRepositoryProvider),
+    registry: ref.watch(fsContactSecurityRegistryProvider),
+  );
 });

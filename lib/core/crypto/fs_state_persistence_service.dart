@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
-
-import 'package:cryptography/cryptography.dart';
 
 import '../storage/aux_record_repository.dart';
 import 'fs_contact_security_state.dart';
@@ -57,17 +55,22 @@ class FsStatePersistenceService {
   /// Must be called after the identity context is set (aux key available).
   /// Only loads 'primary' context entries; passphrase contexts remain empty.
   Future<void> loadPersistedState() async {
-    // Scan all aux records in the current scope
-    final allKeys = await _auxRepository.getAllKeys();
+    // Get all aux records with their recordIds
+    final allRecords = _auxRepository.getAllAuxRecordIds();
 
-    for (final key in allKeys) {
+    for (final entry in allRecords.entries) {
       try {
-        final record = await _auxRepository.readRaw(key);
-        if (record == null) continue;
+        final storageId = entry.key;
+        final recordId = entry.value;
 
-        // Try to parse as FS state record
-        final payload = jsonDecode(record) as Map<String, dynamic>?;
+        // Read and decrypt the record
+        final payload = await _auxRepository.read(
+          storageId: storageId,
+          recordId: recordId,
+        );
         if (payload == null) continue;
+
+        // Check if this is an FS state record
         if (payload['kind'] != _kRecordKind) continue;
 
         final state = _stateFromPayload(payload);
@@ -81,15 +84,7 @@ class FsStatePersistenceService {
 
         // Cache storage info for future updates
         final cacheKey = '${state.contactId}:${state.sessionId ?? "null"}';
-        // Extract storageId from the repository's key format: m|scope|storageId
-        final parts = key.split('|');
-        if (parts.length >= 3) {
-          final storageId = parts.sublist(2).join('|');
-          _storageInfo[cacheKey] = (
-            storageId: storageId,
-            recordId: payload['_rid'] as String? ?? '',
-          );
-        }
+        _storageInfo[cacheKey] = (storageId: storageId, recordId: recordId);
       } catch (_) {
         // Skip corrupted records
         continue;
@@ -152,7 +147,7 @@ class FsStatePersistenceService {
       'identityContext': state.identityContext,
       'sessionId': state.sessionId,
       'fsState': state.fsState.name,
-      'createdAt': state.createdAt.millisecondsSinceEpoch,
+      'remoteDeviceId': state.remoteDeviceId,
     };
   }
 
@@ -162,23 +157,20 @@ class FsStatePersistenceService {
       final identityContext = payload['identityContext'] as String?;
       final sessionId = payload['sessionId'] as String?;
       final fsStateName = payload['fsState'] as String?;
-      final createdAtMs = payload['createdAt'] as int?;
+      final remoteDeviceId = payload['remoteDeviceId'] as String?;
 
       if (contactId == null || identityContext == null || fsStateName == null) {
         return null;
       }
 
       final fsState = FsSessionState.values.byName(fsStateName);
-      final createdAt = createdAtMs != null
-          ? DateTime.fromMillisecondsSinceEpoch(createdAtMs)
-          : DateTime.now();
 
       return FsContactSecurityState(
         contactId: contactId,
         identityContext: identityContext,
         sessionId: sessionId,
         fsState: fsState,
-        createdAt: createdAt,
+        remoteDeviceId: remoteDeviceId,
       );
     } catch (_) {
       return null;
@@ -192,20 +184,5 @@ class FsStatePersistenceService {
       bytes[i] = random.nextInt(256);
     }
     return base64Url.encode(bytes).replaceAll('=', '');
-  }
-}
-
-// Helper extension to get all keys from AuxRecordRepository
-extension on AuxRecordRepository {
-  Future<List<String>> getAllKeys() async {
-    // This requires exposing the box or a method to list keys
-    // For now, we'll use the existing clearAll pattern to identify aux records
-    // Actually, we need a new method in AuxRecordRepository
-    throw UnimplementedError();
-  }
-
-  Future<String?> readRaw(String key) async {
-    // This also requires access to the box
-    throw UnimplementedError();
   }
 }

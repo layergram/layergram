@@ -14,6 +14,8 @@
 
 import 'dart:async';
 import 'dart:collection';
+import 'dart:convert';
+import 'dart:typed_data';
 import 'dart:ui' show FrameTiming;
 
 import 'package:easy_localization/easy_localization.dart';
@@ -21,6 +23,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/capabilities/chat_folders_capability.dart';
+import 'core/crypto/aux_record_cipher.dart';
 import 'core/providers.dart';
 import 'core/security/app_lock_idle_controller.dart';
 import 'features/identities/add_identity_view.dart';
@@ -470,8 +473,34 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
       if (nextId != null && !ref.read(appNeedsUnlockProvider)) {
         unawaited(ref.read(homeControllerProvider).warmSessionDisplayKeys());
       }
+      // Load persisted FS state after identity is loaded
+      await _loadPersistedFsState();
       return identity;
     });
+  }
+
+  Future<void> _loadPersistedFsState() async {
+    try {
+      // Get the private key (identity or passphrase-derived)
+      final privateKeyB64 = await ref.read(identityManagerProvider).getLocalPrivateKeyBase64();
+      if (privateKeyB64 == null) return;
+
+      // Derive aux storage key
+      final keyBytes = Uint8List.fromList(base64Decode(privateKeyB64));
+      final auxKey = await AuxRecordCipher.deriveAuxStorageKey(keyBytes);
+
+      // Set up aux repository context
+      final auxRepo = ref.read(auxRecordRepositoryProvider);
+      auxRepo.setActiveContext(
+        scopeToken: 'primary',
+        auxStorageKey: auxKey,
+      );
+
+      // Load persisted FS states
+      await ref.read(fsStatePersistenceServiceProvider).loadPersistedState();
+    } catch (_) {
+      // Silently fail - FS state will start fresh (legacyOnly)
+    }
   }
 
   @override

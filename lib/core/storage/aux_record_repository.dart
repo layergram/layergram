@@ -96,7 +96,12 @@ class AuxRecordRepository {
       auxStorageKey: _auxStorageKey!,
     );
     final storageId = _newOpaqueStorageId();
-    await _box.put(_scopedKey(storageId), {'encryptedRecord': encryptedRecord, 'a': true});
+    // Store recordId in cleartext (_rid) so we can retrieve it without decryption
+    await _box.put(_scopedKey(storageId), {
+      'encryptedRecord': encryptedRecord,
+      'a': true,
+      '_rid': recordId,
+    });
     return (storageId: storageId, recordId: recordId);
   }
 
@@ -143,16 +148,24 @@ class AuxRecordRepository {
     );
   }
 
-  /// Returns all storage IDs for aux records in the current scope.
+  /// Returns all storage IDs and their recordIds for aux records in the current scope.
   ///
   /// This is used by persistence services to reload their state after app restart.
-  List<String> getAllAuxStorageIds() {
-    if (!_hasScope) return const [];
-    return _box.keys
-        .where(_isScopedKey)
-        .where(_isAuxRecord)
-        .map((k) => (k as String).substring(_keyPrefix.length))
-        .toList(growable: false);
+  /// Returns a map of storageId → recordId (recordId is stored in cleartext for retrieval).
+  Map<String, String> getAllAuxRecordIds() {
+    if (!_hasScope) return const {};
+    final result = <String, String>{};
+    for (final key in _box.keys.where(_isScopedKey).where(_isAuxRecord)) {
+      final raw = _box.get(key);
+      if (raw != null) {
+        final recordId = raw['_rid'] as String?;
+        if (recordId != null && recordId.isNotEmpty) {
+          final storageId = (key as String).substring(_keyPrefix.length);
+          result[storageId] = recordId;
+        }
+      }
+    }
+    return result;
   }
 
   // ---------------------------------------------------------------------------

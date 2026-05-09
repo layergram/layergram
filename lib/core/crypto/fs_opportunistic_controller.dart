@@ -18,6 +18,7 @@ import 'fs_contact_security_state.dart';
 import 'fs_handshake.dart';
 import 'fs_payload_budget.dart';
 import 'fs_session_manager.dart';
+import 'fs_state_persistence_service.dart';
 import 'lmf_v2_decoder.dart';
 
 /// Orchestrates Opportunistic Forward Secrecy between two parties.
@@ -41,15 +42,18 @@ class FsOpportunisticController {
     required String identityContext,
     required FsSessionManager sessionManager,
     required FsContactSecurityRegistry registry,
+    FsStatePersistenceService? persistenceService,
   })  : _localContactId = localContactId,
         _identityContext = identityContext,
         _sessionManager = sessionManager,
-        _registry = registry;
+        _registry = registry,
+        _persistenceService = persistenceService;
 
   final String _localContactId;
   final String _identityContext;
   final FsSessionManager _sessionManager;
   final FsContactSecurityRegistry _registry;
+  final FsStatePersistenceService? _persistenceService;
 
   // ---------------------------------------------------------------------------
   // Outgoing message handling
@@ -322,12 +326,15 @@ class FsOpportunisticController {
     required String? sessionId,
     required FsSessionState state,
   }) {
-    _registry.upsert(FsContactSecurityState(
+    final stateEntry = FsContactSecurityState(
       contactId: _localContactId,
       identityContext: _identityContext,
       sessionId: sessionId,
       fsState: state,
-    ));
+    );
+    _registry.upsert(stateEntry);
+    // Persist to storage (only for primary context)
+    _persistenceService?.saveState(stateEntry);
   }
 
   // ---------------------------------------------------------------------------
