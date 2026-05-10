@@ -488,6 +488,9 @@ class FsOpportunisticController {
 
   /// Current FS session state.
   FsSessionState get state => _sessionManager.state;
+
+  /// The session manager for direct access (ensures consistency with controller state).
+  FsSessionManager get sessionManager => _sessionManager;
 }
 
 // ---------------------------------------------------------------------------

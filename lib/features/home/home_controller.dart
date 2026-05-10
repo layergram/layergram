@@ -164,9 +164,10 @@ class HomeController {
       final fsController = ref.read(
         fsOpportunisticControllerProvider(recipient.identityId),
       );
-      final sessionManager = ref.read(
-        fsSessionManagerProvider(recipient.identityId),
-      );
+      // CRITICAL: Use the controller's session manager to ensure we're using
+      // the same instance that the controller uses for state transitions.
+      // Using a separate provider could result in different instances.
+      final sessionManager = fsController.sessionManager;
 
       // Prepare handshake payload based on current state
       final state = sessionManager.state;
@@ -327,7 +328,9 @@ class HomeController {
 
     // Get ratchet state if FS session is active for this contact
     RatchetState? ratchetState;
-    final sessionManager = ref.read(fsSessionManagerProvider(contact.identityId));
+    // CRITICAL: Use controller's session manager to ensure consistency
+    final fsController = ref.read(fsOpportunisticControllerProvider(contact.identityId));
+    final sessionManager = fsController.sessionManager;
     final activeSessionId = sessionManager.activeSessionId;
     if (activeSessionId != null) {
       ratchetState = ref.read(fsRatchetStateCacheProvider)[activeSessionId];
@@ -381,7 +384,9 @@ class HomeController {
     if (privateKey == null) return null;
 
     // Get ratchet state if FS session is active for this contact
-    final sessionManager = ref.read(fsSessionManagerProvider(contact.identityId));
+    // CRITICAL: Use controller's session manager to ensure consistency
+    final fsController = ref.read(fsOpportunisticControllerProvider(contact.identityId));
+    final sessionManager = fsController.sessionManager;
     final activeSessionId = sessionManager.activeSessionId;
     RatchetState? ratchetState;
     if (activeSessionId != null) {
@@ -511,7 +516,9 @@ class HomeController {
       for (final contact in [selfRemote, ...orderedContacts]) {
         // Get ratchet state if FS session is active for this contact
         RatchetState? ratchetState;
-        final sessionManager = ref.read(fsSessionManagerProvider(contact.identityId));
+        // CRITICAL: Use controller's session manager for consistency
+        final fsController = ref.read(fsOpportunisticControllerProvider(contact.identityId));
+        final sessionManager = fsController.sessionManager;
         final activeSessionId = sessionManager.activeSessionId;
         if (activeSessionId != null) {
           ratchetState = ref.read(fsRatchetStateCacheProvider)[activeSessionId];
