@@ -1,8 +1,12 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:layergram/core/crypto/encryption_service.dart';
+import 'package:layergram/core/crypto/fs_double_ratchet.dart';
+import 'package:layergram/core/crypto/fs_handshake.dart';
+import 'package:layergram/core/crypto/fs_key_codec.dart';
 import 'package:layergram/core/crypto/models.dart';
 
 Future<({String privateKeyBase64, String publicKeyBase64})> _keyMaterial(
@@ -143,6 +147,212 @@ void main() {
       expect(reconstructed.version, 2);
       expect(reconstructed.senderId, isEmpty);
       expect(reconstructed.recipientId, isEmpty);
+    });
+  });
+
+  group('EncryptionService – FS encrypt/decrypt', () {
+    final _x25519 = X25519();
+
+    Future<(Uint8List, Uint8List)> _genDhPair() async {
+      final pair = await _x25519.newKeyPair();
+      final priv = Uint8List.fromList(await pair.extractPrivateKeyBytes());
+      final pub = Uint8List.fromList((await pair.extractPublicKey()).bytes);
+      return (priv, pub);
+    }
+
+    Future<(RatchetState, RatchetState)> _buildRatchets() async {
+      final (ikAPriv, ikAPub) = await _genDhPair();
+      final (dkAPriv, _) = await _genDhPair();
+      final (ikBPriv, ikBPub) = await _genDhPair();
+      final (dkBPriv, _) = await _genDhPair();
+
+      final initPayload = await FsHandshake.generateFsInit(
+        ikAPriv: ikAPriv,
+        dkAPriv: dkAPriv,
+      );
+      final fsInit = initPayload.toMessage();
+
+      final replyPayload = await FsHandshake.processFsInitAsResponder(
+        ikBPriv: ikBPriv,
+        dkBPriv: dkBPriv,
+        ikAPub: ikAPub,
+        init: fsInit,
+      );
+      final fsReply = replyPayload.toMessage();
+
+      final confirmPayload = await FsHandshake.processFsReplyAsInitiator(
+        ikAPriv: ikAPriv,
+        dkAPriv: dkAPriv,
+        ekAPrivBytes: initPayload.ekAPrivBytes,
+        ikBPub: ikBPub,
+        sentInit: fsInit,
+        reply: fsReply,
+      );
+      final fsConfirm = confirmPayload.toMessage();
+
+      final ok = await FsHandshake.verifyFsConfirmAsResponder(
+        confirm: fsConfirm,
+        bState: replyPayload.partialState,
+        ikAPub: ikAPub,
+      );
+      expect(ok, isTrue);
+      replyPayload.partialState.wipeRawRootSecret();
+
+      final aState = confirmPayload.partialState;
+      final bState = replyPayload.partialState;
+
+      final ratchetAPriv = confirmPayload.initiatorInitialRatchetPriv;
+      final ratchetAPub = FsKeyCodec.decodeKey(confirmPayload.initiatorInitialRatchetPub);
+      final ratchetBPriv = replyPayload.responderInitialRatchetPriv;
+      final ratchetBPub = FsKeyCodec.decodeKey(replyPayload.responderInitialRatchetPub);
+
+      final aRatchet = await FsDoubleRatchet.initRatchet(
+        rootKey0: aState.rootKey0,
+        sendingChainKey0: aState.sendingChainKey0,
+        receivingChainKey0: aState.receivingChainKey0,
+        localRatchetPriv: ratchetAPriv,
+        localRatchetPub: ratchetAPub,
+        lastRemoteRatchetPub: ratchetBPub,
+        sessionId: 'test-session',
+      );
+
+      final bRatchet = await FsDoubleRatchet.initRatchet(
+        rootKey0: bState.rootKey0,
+        sendingChainKey0: bState.sendingChainKey0,
+        receivingChainKey0: bState.receivingChainKey0,
+        localRatchetPriv: ratchetBPriv,
+        localRatchetPub: ratchetBPub,
+        lastRemoteRatchetPub: ratchetAPub,
+        sessionId: 'test-session',
+      );
+
+      return (aRatchet, bRatchet);
+    }
+
+    test('FS-encrypted message can be decrypted by recipient', () async {
+      final service = EncryptionService();
+      final alice = await _keyMaterial(await _x25519.newKeyPair());
+      final bob = await _keyMaterial(await _x25519.newKeyPair());
+      var (aRatchet, bRatchet) = await _buildRatchets();
+
+      const secretText = 'Messaggio con Forward Secrecy';
+      final encResult = await service.encrypt(
+        senderPrivateKeyBase64: alice.privateKeyBase64,
+        recipientPublicKeyBase64: bob.publicKeyBase64,
+        payload: PlaintextPayload(
+          senderId: 'alice',
+          recipientId: 'bob',
+          text: secretText,
+          timestamp: 1700000000,
+        ),
+        ratchetState: aRatchet,
+      );
+
+      expect(encResult.newRatchetState, isNotNull);
+      aRatchet = encResult.newRatchetState!;
+
+      final decResult = await service.decrypt(
+        recipientPrivateKeyBase64: bob.privateKeyBase64,
+        senderPublicKeyBase64: alice.publicKeyBase64,
+        message: encResult.message,
+        ratchetState: bRatchet,
+      );
+
+      expect(decResult.payload.text, equals(secretText));
+      expect(decResult.newRatchetState, isNotNull);
+    });
+
+    test('FS message cannot be re-decrypted after ratchet advances', () async {
+      final service = EncryptionService();
+      final alice = await _keyMaterial(await _x25519.newKeyPair());
+      final bob = await _keyMaterial(await _x25519.newKeyPair());
+      var (aRatchet, bRatchet) = await _buildRatchets();
+
+      final encResult = await service.encrypt(
+        senderPrivateKeyBase64: alice.privateKeyBase64,
+        recipientPublicKeyBase64: bob.publicKeyBase64,
+        payload: const PlaintextPayload(
+          senderId: 'alice',
+          recipientId: 'bob',
+          text: 'FS message',
+          timestamp: 1700000000,
+        ),
+        ratchetState: aRatchet,
+      );
+
+      // First decrypt succeeds and advances the ratchet.
+      final decResult = await service.decrypt(
+        recipientPrivateKeyBase64: bob.privateKeyBase64,
+        senderPublicKeyBase64: alice.publicKeyBase64,
+        message: encResult.message,
+        ratchetState: bRatchet,
+      );
+      expect(decResult.payload.text, equals('FS message'));
+      final advancedRatchet = decResult.newRatchetState!;
+
+      // Re-decrypt with advanced ratchet must throw (one-time decrypt).
+      expect(
+        () => service.decrypt(
+          recipientPrivateKeyBase64: bob.privateKeyBase64,
+          senderPublicKeyBase64: alice.publicKeyBase64,
+          message: encResult.message,
+          ratchetState: advancedRatchet,
+        ),
+        throwsA(anything),
+      );
+    });
+
+    test('sender cannot re-decrypt own FS-encrypted message', () async {
+      final service = EncryptionService();
+      final alice = await _keyMaterial(await _x25519.newKeyPair());
+      final bob = await _keyMaterial(await _x25519.newKeyPair());
+      var (aRatchet, bRatchet) = await _buildRatchets();
+
+      final encResult = await service.encrypt(
+        senderPrivateKeyBase64: alice.privateKeyBase64,
+        recipientPublicKeyBase64: bob.publicKeyBase64,
+        payload: const PlaintextPayload(
+          senderId: 'alice',
+          recipientId: 'bob',
+          text: 'FS sent message',
+          timestamp: 1700000000,
+        ),
+        ratchetState: aRatchet,
+      );
+
+      // Sender tries to decrypt own message with their ratchet — must fail
+      // because send and receive chains use different keys.
+      expect(
+        () => service.decrypt(
+          recipientPrivateKeyBase64: alice.privateKeyBase64,
+          senderPublicKeyBase64: bob.publicKeyBase64,
+          message: encResult.message,
+          ratchetState: encResult.newRatchetState!,
+        ),
+        throwsA(anything),
+      );
+    });
+
+    test('MessageRecord.text enables display without re-decryption', () {
+      const text = 'Stored plaintext';
+      final record = MessageRecord(
+        id: '1',
+        senderId: 'alice',
+        recipientId: 'bob',
+        direction: 'incoming',
+        timestamp: 1700000000,
+        text: text,
+        ciphertextBase64: 'encrypted_data',
+        nonceBase64: 'nonce_data',
+      );
+
+      // Verify text is stored and retrievable.
+      expect(record.text, equals(text));
+
+      // Verify text survives serialization round-trip.
+      final map = record.toMap();
+      final restored = MessageRecord.fromMap(map);
+      expect(restored.text, equals(text));
     });
   });
 }

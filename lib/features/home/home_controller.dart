@@ -319,6 +319,7 @@ class HomeController {
     required MessageRecord message,
     required RemoteIdentity contact,
   }) async {
+    if (message.text != null) return message.text;
     if (message.ciphertextBase64 == null || message.nonceBase64 == null) {
       return null;
     }
@@ -398,39 +399,50 @@ class HomeController {
       ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
     for (final message in sortedMessages) {
+      if (message.text != null) {
+        return DecryptedMessagePreview(
+          text: message.text!,
+          timestamp: message.timestamp,
+        );
+      }
+
       if (message.ciphertextBase64 == null || message.nonceBase64 == null) {
         continue;
       }
 
-      final result = await ref.read(encryptionServiceProvider).decrypt(
-        recipientPrivateKeyBase64: privateKey,
-        senderPublicKeyBase64: contact.publicKeyBase64,
-        message: EncryptedMessage(
-          version: 1,
-          senderId: message.senderId,
-          recipientId: message.recipientId,
-          nonceBase64: message.nonceBase64 ?? '',
-          ciphertextBase64: message.ciphertextBase64 ?? '',
-        ),
-        ratchetState: ratchetState,
-      );
+      try {
+        final result = await ref.read(encryptionServiceProvider).decrypt(
+          recipientPrivateKeyBase64: privateKey,
+          senderPublicKeyBase64: contact.publicKeyBase64,
+          message: EncryptedMessage(
+            version: 1,
+            senderId: message.senderId,
+            recipientId: message.recipientId,
+            nonceBase64: message.nonceBase64 ?? '',
+            ciphertextBase64: message.ciphertextBase64 ?? '',
+          ),
+          ratchetState: ratchetState,
+        );
 
-      // Update ratchet state if it changed
-      if (result.newRatchetState != null && activeSessionId != null) {
-        final newState = result.newRatchetState!;
-        ratchetState = newState; // Update local var for next iteration
-        ref.read(fsRatchetStateCacheProvider.notifier).update((cache) => {
-              ...cache,
-              activeSessionId: newState,
-            });
-        // Persist updated state (don't await in loop)
-        unawaited(ref.read(fsRatchetPersistenceServiceProvider).saveRatchetState(newState));
+        // Update ratchet state if it changed
+        if (result.newRatchetState != null && activeSessionId != null) {
+          final newState = result.newRatchetState!;
+          ratchetState = newState; // Update local var for next iteration
+          ref.read(fsRatchetStateCacheProvider.notifier).update((cache) => {
+                ...cache,
+                activeSessionId: newState,
+              });
+          // Persist updated state (don't await in loop)
+          unawaited(ref.read(fsRatchetPersistenceServiceProvider).saveRatchetState(newState));
+        }
+
+        return DecryptedMessagePreview(
+          text: result.payload.text,
+          timestamp: message.timestamp,
+        );
+      } catch (_) {
+        continue;
       }
-
-      return DecryptedMessagePreview(
-        text: result.payload.text,
-        timestamp: message.timestamp,
-      );
     }
 
     return null;
@@ -610,6 +622,7 @@ class HomeController {
             recipientId: payload.recipientId,
             direction: 'incoming',
             timestamp: recordTs,
+            text: payload.text,
             ciphertextBase64: encryptedMessage.ciphertextBase64,
             nonceBase64: encryptedMessage.nonceBase64,
             rawSource: rawSource,
