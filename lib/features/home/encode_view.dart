@@ -420,6 +420,7 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
                                     timestamp:
                                         DateTime.now().millisecondsSinceEpoch ~/
                                             1000,
+                                    text: _secretCtrl.text,
                                     ciphertextBase64: encrypted.ciphertextBase64,
                                     nonceBase64: encrypted.nonceBase64,
                                     rawSource: output,
