@@ -79,6 +79,7 @@ class FsOpportunisticController {
 
   final String _localContactId;
   final String _identityContext;
+  String get identityContext => _identityContext;
   final FsSessionManager _sessionManager;
   final FsContactSecurityRegistry _registry;
   final FsStatePersistenceService? _persistenceService;

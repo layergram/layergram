@@ -118,6 +118,18 @@ class FsContactSecurityCard extends ConsumerWidget {
                         fsSessionManagerProvider(contactId),
                       );
                       sm.reset();
+                      // Update registry so UI reflects legacyOnly immediately
+                      final registry =
+                          ref.read(fsContactSecurityRegistryProvider);
+                      final ctrl = ref.read(
+                        fsOpportunisticControllerProvider(contactId),
+                      );
+                      registry.upsert(FsContactSecurityState(
+                        contactId: contactId,
+                        identityContext: ctrl.identityContext,
+                        sessionId: null,
+                        fsState: FsSessionState.legacyOnly,
+                      ));
                       ref.read(fsRegistryVersionProvider.notifier).state++;
                     },
                   ),
@@ -141,7 +153,27 @@ class FsContactSecurityCard extends ConsumerWidget {
                           return c;
                         });
                       }
+                      // Update registry so UI reflects legacyOnly immediately
+                      final registry =
+                          ref.read(fsContactSecurityRegistryProvider);
+                      final ctrl = ref.read(
+                        fsOpportunisticControllerProvider(contactId),
+                      );
+                      registry.upsert(FsContactSecurityState(
+                        contactId: contactId,
+                        identityContext: ctrl.identityContext,
+                        sessionId: null,
+                        fsState: FsSessionState.legacyOnly,
+                      ));
                       ref.read(fsRegistryVersionProvider.notifier).state++;
+                      // Snackbar confirmation
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            t(context, 'security.fs.session_reset_done'),
+                          ),
+                        ),
+                      );
                     },
                   ),
                 if (topState == FsSessionState.strictFsActive)
