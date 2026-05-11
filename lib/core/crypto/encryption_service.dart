@@ -36,10 +36,17 @@ class DecryptionResult {
   const DecryptionResult({
     required this.payload,
     this.newRatchetState,
+    this.fsDecryptFailed = false,
   });
 
   final PlaintextPayload payload;
   final RatchetState? newRatchetState;
+
+  /// `true` when the message was FS-encrypted but the ratchet state is
+  /// missing (identity reset, broken session).  The outer legacy layer
+  /// was decrypted but the inner FS content is unrecoverable.
+  /// [payload.text] will be empty in this case.
+  final bool fsDecryptFailed;
 }
 
 class EncryptionService {
@@ -188,10 +195,23 @@ class EncryptionService {
       print('[FS-DECRYPT-PROD] FS msg detected - session=${map['fs_session']}, counter=${map['fs_counter']}, hasRatchet=${ratchetState != null}');
 
       if (ratchetState == null) {
-        print('[FS-DECRYPT-PROD] ERROR: FS msg but ratchetState is NULL - rejecting');
-        throw Exception(
-          'FS-encrypted message received but no ratchet state available. '
-          'Session may have been reset or broken.',
+        print('[FS-DECRYPT-PROD] WARN: FS msg but ratchetState is NULL — '
+            'session was reset, inner FS content unrecoverable');
+        // The outer legacy layer was decrypted successfully, but the FS
+        // inner payload requires the ratchet state which is gone (identity
+        // reset, app reinstall, etc.).  Return metadata-only result so the
+        // UI can show a placeholder instead of silently dropping the message.
+        return DecryptionResult(
+          payload: PlaintextPayload(
+            senderId: map['senderId'] as String,
+            recipientId: map['recipientId'] as String,
+            text: '',
+            timestamp: map['timestamp'] as int,
+            senderDisplayName: map['senderDisplayName'] as String?,
+            expireAfter: map['expireAfter'] as int?,
+            deleteAfterRead: (map['deleteAfterRead'] as bool?) ?? false,
+          ),
+          fsDecryptFailed: true,
         );
       }
 

@@ -489,6 +489,13 @@ class _HomeViewState extends ConsumerState<HomeView> {
           );
         }
         break;
+      case DecodeKind.fsLost:
+        messenger.showSnackBar(
+          SnackBar(
+              content:
+                  Text(AppStrings.t(context, 'security.fs.message_lost'))),
+        );
+        break;
       default:
         messenger.showSnackBar(
           SnackBar(content: Text(AppStrings.t(context, 'noMessageFoundDesc'))),

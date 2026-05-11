@@ -313,12 +313,14 @@ class FsSessionManager {
       );
     }
 
-    // If already confirmed/active, ignore — no downgrade.
+    // If already confirmed/active/broken/suspended, receiving a new fs_init
+    // means the remote partner has reset their FS state (e.g., identity
+    // restore).  Accept by resetting local state first (§8.8 recovery).
     if (_isTerminal()) {
-      return FsSessionTransitionResult.rejected(
-        _state,
-        'FS_INIT ignored: session already in terminal state $_state',
-      );
+      print('[FS-PARTNER-RESET] Received fs_init while in $_state — '
+          'partner likely reset.  Clearing local FS state and accepting.');
+      reset();
+      // Fall through to the normal acceptance path below.
     }
 
     if (_state == FsSessionState.fsInitSent) {

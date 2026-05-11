@@ -129,7 +129,18 @@ class FsContactSecurityCard extends ConsumerWidget {
                       final sm = ref.read(
                         fsSessionManagerProvider(contactId),
                       );
+                      final oldSessionId = sm.activeSessionId;
                       sm.reset();
+                      // Remove orphaned ratchet state from cache
+                      if (oldSessionId != null) {
+                        ref
+                            .read(fsRatchetStateCacheProvider.notifier)
+                            .update((cache) {
+                          final c = {...cache};
+                          c.remove(oldSessionId);
+                          return c;
+                        });
+                      }
                       ref.read(fsRegistryVersionProvider.notifier).state++;
                     },
                   ),

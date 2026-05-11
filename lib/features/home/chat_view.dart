@@ -1752,6 +1752,16 @@ class ChatViewState extends ConsumerState<ChatView> {
                     SnackBar(content: Text(t(context, 'decodeError'))),
                   );
                   break;
+                case DecodeKind.fsLost:
+                  if (!context.mounted) {
+                    return;
+                  }
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(t(context, 'security.fs.message_lost')),
+                    ),
+                  );
+                  break;
               }
             },
           ),

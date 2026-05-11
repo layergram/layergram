@@ -361,6 +361,12 @@ class HomeController {
       ratchetState: ratchetState,
     );
 
+    // FS-encrypted but ratchet state is missing (identity reset / broken session)
+    if (result.fsDecryptFailed) {
+      print('[FS-CHAT-DECRYPT] FS decrypt failed — ratchet lost, inner content unrecoverable');
+      return null;
+    }
+
     // Production logging for successful decryption
     final isFs = result.newRatchetState != null;
     if (isFs) {
@@ -622,6 +628,12 @@ class HomeController {
           if (fsResult.type != FsIncomingType.noExtension) {
             ref.read(fsRegistryVersionProvider.notifier).state++;
           }
+        }
+
+        // FS-encrypted but ratchet state is missing (identity reset)
+        if (result.fsDecryptFailed) {
+          print('[FS-DECODE] FS content unrecoverable — handshake re-started via envelope');
+          return const DecodeOutcome.fsLost();
         }
 
         // Decryption succeeded!
@@ -915,6 +927,7 @@ class DecodeOutcome {
   const DecodeOutcome.notForMe() : this._(kind: DecodeKind.notForMe);
   const DecodeOutcome.unknownSender() : this._(kind: DecodeKind.unknownSender);
   const DecodeOutcome.expired() : this._(kind: DecodeKind.expired);
+  const DecodeOutcome.fsLost() : this._(kind: DecodeKind.fsLost);
   const DecodeOutcome.error(String code)
       : this._(kind: DecodeKind.error, errorCode: code);
 
@@ -923,7 +936,7 @@ class DecodeOutcome {
   final String? errorCode;
 }
 
-enum DecodeKind { success, noData, notForMe, unknownSender, expired, error }
+enum DecodeKind { success, noData, notForMe, unknownSender, expired, fsLost, error }
 
 final homeControllerProvider = Provider<HomeController>((ref) {
   final controller = HomeController(ref);
