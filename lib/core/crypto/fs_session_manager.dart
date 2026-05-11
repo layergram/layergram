@@ -254,6 +254,8 @@ class FsSessionManager {
 
     pendingReplyId = payload.replyId;
     _responderPartialState = payload.partialState;
+    _pendingRawRootSecret = payload.partialState.rawRootSecret;
+    _pendingTranscriptHash = payload.partialState.transcriptHash;
     _state = FsSessionState.fsReplySent;
 
     return FsSessionTransitionResult.ok(_state, payload);
