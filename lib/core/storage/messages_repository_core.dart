@@ -391,6 +391,26 @@ class MessagesRepositoryCore {
     }
   }
 
+  /// Strips persisted plaintext from all FS-encrypted messages (§12.3).
+  ///
+  /// Called on identity reset to ensure old FS messages cannot be read after
+  /// the ratchet keys have been destroyed.
+  Future<void> stripFsPlaintext() async {
+    await _ensureLoaded();
+    var changed = false;
+    for (var i = 0; i < _messages.length; i++) {
+      final m = _messages[i];
+      if (m.isFsEncrypted && m.text != null) {
+        _messages[i] = m.copyWith(clearText: true);
+        changed = true;
+      }
+    }
+    if (changed) {
+      await _persistAll();
+      _controller.add(List.unmodifiable(_messages));
+    }
+  }
+
   void dispose() {
     _controller.close();
   }

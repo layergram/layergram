@@ -69,6 +69,7 @@ class FsStringsBundle {
 
     // Actions
     'security.fs.message_lost': 'This message was encrypted with a previous session and cannot be decrypted.',
+    'security.fs.message_expired_fs': 'Forward Secrecy message',
     'security.fs.session_reset_done': 'Secure session reset. A new session will be negotiated automatically.',
     'security.fs.action.retry': 'Retry upgrade',
     'security.fs.action.reset': 'Reset session',
@@ -214,6 +215,7 @@ class FsStringsBundle {
     'security.fs.warning.no_silent_downgrade':
         'Forward Secrecy massima attiva. I messaggi non possono essere inviati senza un canale sicuro confermato.',
     'security.fs.message_lost': 'Questo messaggio era cifrato con una sessione precedente e non può essere decifrato.',
+    'security.fs.message_expired_fs': 'Messaggio Forward Secrecy',
     'security.fs.session_reset_done': 'Sessione sicura reimpostata. Una nuova sessione sarà negoziata automaticamente.',
     'security.fs.action.retry': 'Riprova aggiornamento',
     'security.fs.action.reset': 'Reimposta sessione',
@@ -272,6 +274,7 @@ class FsStringsBundle {
     'security.fs.warning.no_silent_downgrade':
         'Forward Secrecy máximo activo. No se pueden enviar mensajes sin un canal seguro confirmado.',
     'security.fs.message_lost': 'Este mensaje fue cifrado con una sesión anterior y no se puede descifrar.',
+    'security.fs.message_expired_fs': 'Mensaje Forward Secrecy',
     'security.fs.session_reset_done': 'Sesión segura restablecida. Se negociará una nueva sesión automáticamente.',
     'security.fs.action.retry': 'Reintentar actualización',
     'security.fs.action.reset': 'Restablecer sesión',
@@ -328,6 +331,7 @@ class FsStringsBundle {
     'security.fs.warning.no_silent_downgrade':
         'Maximale Forward Secrecy aktiv. Nachrichten können nicht ohne einen bestätigten sicheren Kanal gesendet werden.',
     'security.fs.message_lost': 'Diese Nachricht wurde mit einer vorherigen Sitzung verschlüsselt und kann nicht entschlüsselt werden.',
+    'security.fs.message_expired_fs': 'Forward-Secrecy-Nachricht',
     'security.fs.session_reset_done': 'Sichere Sitzung zurückgesetzt. Eine neue Sitzung wird automatisch ausgehandelt.',
     'security.fs.action.retry': 'Upgrade wiederholen',
     'security.fs.action.reset': 'Sitzung zurücksetzen',
@@ -384,6 +388,7 @@ class FsStringsBundle {
     'security.fs.warning.no_silent_downgrade':
         'Forward Secrecy maximal actif. Les messages ne peuvent pas être envoyés sans canal sécurisé confirmé.',
     'security.fs.message_lost': 'Ce message a été chiffré avec une session précédente et ne peut pas être déchiffré.',
+    'security.fs.message_expired_fs': 'Message Forward Secrecy',
     'security.fs.session_reset_done': 'Session sécurisée réinitialisée. Une nouvelle session sera négociée automatiquement.',
     'security.fs.action.retry': 'Réessayer la mise à niveau',
     'security.fs.action.reset': 'Réinitialiser la session',
@@ -440,6 +445,7 @@ class FsStringsBundle {
     'security.fs.warning.no_silent_downgrade':
         'Forward Secrecy máximo ativo. Mensagens não podem ser enviadas sem um canal seguro confirmado.',
     'security.fs.message_lost': 'Esta mensagem foi criptografada com uma sessão anterior e não pode ser descriptografada.',
+    'security.fs.message_expired_fs': 'Mensagem Forward Secrecy',
     'security.fs.session_reset_done': 'Sessão segura redefinida. Uma nova sessão será negociada automaticamente.',
     'security.fs.action.retry': 'Tentar atualização novamente',
     'security.fs.action.reset': 'Redefinir sessão',

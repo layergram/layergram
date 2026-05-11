@@ -202,6 +202,7 @@ class MessageRecord {
     this.readAt,
     this.deletedAt,
     this.keyTag,
+    this.isFsEncrypted = false,
   });
 
   final String id;
@@ -218,6 +219,7 @@ class MessageRecord {
   final int? readAt;
   final int? deletedAt;
   final String? keyTag;
+  final bool isFsEncrypted;
 
   bool get isDeleted => deletedAt != null;
 
@@ -228,6 +230,7 @@ class MessageRecord {
     String? direction,
     int? timestamp,
     String? text,
+    bool clearText = false,
     String? ciphertextBase64,
     String? nonceBase64,
     String? rawSource,
@@ -236,6 +239,7 @@ class MessageRecord {
     int? readAt,
     int? deletedAt,
     String? keyTag,
+    bool? isFsEncrypted,
   }) {
     return MessageRecord(
       id: id ?? this.id,
@@ -243,7 +247,7 @@ class MessageRecord {
       recipientId: recipientId ?? this.recipientId,
       direction: direction ?? this.direction,
       timestamp: timestamp ?? this.timestamp,
-      text: text ?? this.text,
+      text: clearText ? null : (text ?? this.text),
       ciphertextBase64: ciphertextBase64 ?? this.ciphertextBase64,
       nonceBase64: nonceBase64 ?? this.nonceBase64,
       rawSource: rawSource ?? this.rawSource,
@@ -252,6 +256,7 @@ class MessageRecord {
       readAt: readAt ?? this.readAt,
       deletedAt: deletedAt ?? this.deletedAt,
       keyTag: keyTag ?? this.keyTag,
+      isFsEncrypted: isFsEncrypted ?? this.isFsEncrypted,
     );
   }
 
@@ -271,6 +276,7 @@ class MessageRecord {
       'readAt': readAt,
       'deletedAt': deletedAt,
       'keyTag': keyTag,
+      if (isFsEncrypted) 'isFsEncrypted': true,
     };
   }
 
@@ -290,6 +296,7 @@ class MessageRecord {
       readAt: map['readAt'] as int?,
       deletedAt: map['deletedAt'] as int?,
       keyTag: map['keyTag'] as String?,
+      isFsEncrypted: (map['isFsEncrypted'] as bool?) ?? false,
     );
   }
 }

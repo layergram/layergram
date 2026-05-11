@@ -1337,13 +1337,14 @@ class ChatViewState extends ConsumerState<ChatView> {
           : (DateTime.now().millisecondsSinceEpoch ~/ 1000) +
               (expiresMinutes * 60);
 
-      final encrypted =
+      final encResult =
           await ref.read(homeControllerProvider).encryptForRecipient(
                 secretText: _secretCtrl.text,
                 recipient: recipient,
                 expireAfter: expireAfter,
                 deleteAfterRead: _deleteAfterRead,
               );
+      final encrypted = encResult.message;
 
       final output = _linkMode
           ? ref.read(homeControllerProvider).buildLinkPayload(encrypted)
@@ -1358,20 +1359,34 @@ class ChatViewState extends ConsumerState<ChatView> {
       final controller = ref.read(homeControllerProvider);
       final keyTag = await controller.currentKeyTag();
       final storageKey = await controller.currentStorageKey();
+      final recordId = DateTime.now().microsecondsSinceEpoch.toString();
+
+      // §12.3: FS-encrypted plaintext must NOT be persisted in the database.
+      if (encResult.isFsEncrypted) {
+        final fsController = ref.read(
+          fsOpportunisticControllerProvider(recipient.identityId),
+        );
+        fsController.cachePlaintext(
+          '${recipient.identityId}|$recordId',
+          _secretCtrl.text,
+        );
+      }
+
       await ref.read(messagesRepositoryProvider).add(
             MessageRecord(
-              id: DateTime.now().microsecondsSinceEpoch.toString(),
+              id: recordId,
               senderId: 'me',
               recipientId: recipient.identityId,
               direction: 'outgoing',
               timestamp: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-              text: _secretCtrl.text,
+              text: encResult.isFsEncrypted ? null : _secretCtrl.text,
               ciphertextBase64: encrypted.ciphertextBase64,
               nonceBase64: encrypted.nonceBase64,
               rawSource: output,
               expireAfter: expireAfter,
               deleteAfterRead: _deleteAfterRead,
               keyTag: keyTag,
+              isFsEncrypted: encResult.isFsEncrypted,
             ),
             storageKey: storageKey,
           );
@@ -1932,6 +1947,55 @@ class ChatViewState extends ConsumerState<ChatView> {
 
                           if (isEncrypted && decrypted == null &&
                               snapshot.connectionState == ConnectionState.done) {
+                            // FS message whose plaintext is no longer available
+                            if (m.isFsEncrypted) {
+                              return Align(
+                                alignment: incoming
+                                    ? Alignment.centerLeft
+                                    : Alignment.centerRight,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 4, horizontal: 8),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 8),
+                                    decoration: ShapeDecoration(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .surfaceContainerHighest
+                                          .withValues(alpha: 0.5),
+                                      shape: ContinuousRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(28),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.lock_outline,
+                                            size: 14,
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .onSurfaceVariant),
+                                        const SizedBox(width: 6),
+                                        Flexible(
+                                          child: Text(
+                                            t(context, 'security.fs.message_expired_fs'),
+                                            style: TextStyle(
+                                              fontStyle: FontStyle.italic,
+                                              fontSize: 13,
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .onSurfaceVariant,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }
                             return const SizedBox.shrink();
                           }
                           if (isEncrypted && decrypted == null) {

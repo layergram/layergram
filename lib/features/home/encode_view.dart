@@ -391,7 +391,7 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
                               : (DateTime.now().millisecondsSinceEpoch ~/
                                       1000) +
                                   (expiresMinutes * 60);
-                          final encrypted = await ref
+                          final encResult = await ref
                               .read(homeControllerProvider)
                               .encryptForRecipient(
                                 secretText: _secretCtrl.text,
@@ -399,6 +399,7 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
                                 expireAfter: expireAfter,
                                 deleteAfterRead: _deleteAfterRead,
                               );
+                          final encrypted = encResult.message;
                           final output = ref.read(stegoEncoderProvider).encodeBytes(
                               _coverCtrl.text,
                               encrypted.toRawBytes(),
@@ -409,24 +410,38 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
                             final ctrl = ref.read(homeControllerProvider);
                             final keyTag = await ctrl.currentKeyTag();
                             final storageKey = await ctrl.currentStorageKey();
+                            final recordId = DateTime.now()
+                                        .microsecondsSinceEpoch
+                                        .toString();
+
+                            // §12.3: FS-encrypted plaintext must NOT be persisted
+                            if (encResult.isFsEncrypted) {
+                              final fsController = ref.read(
+                                fsOpportunisticControllerProvider(recipient.identityId),
+                              );
+                              fsController.cachePlaintext(
+                                '${recipient.identityId}|$recordId',
+                                _secretCtrl.text,
+                              );
+                            }
+
                             await ref.read(messagesRepositoryProvider).add(
                                   MessageRecord(
-                                    id: DateTime.now()
-                                        .microsecondsSinceEpoch
-                                        .toString(),
+                                    id: recordId,
                                     senderId: 'me',
                                     recipientId: recipient.identityId,
                                     direction: 'outgoing',
                                     timestamp:
                                         DateTime.now().millisecondsSinceEpoch ~/
                                             1000,
-                                    text: _secretCtrl.text,
+                                    text: encResult.isFsEncrypted ? null : _secretCtrl.text,
                                     ciphertextBase64: encrypted.ciphertextBase64,
                                     nonceBase64: encrypted.nonceBase64,
                                     rawSource: output,
                                     expireAfter: expireAfter,
                                     deleteAfterRead: _deleteAfterRead,
                                     keyTag: keyTag,
+                                    isFsEncrypted: encResult.isFsEncrypted,
                                   ),
                                   storageKey: storageKey,
                                 );

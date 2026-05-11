@@ -101,7 +101,7 @@ class HomeController {
     int? expireAfter,
     bool deleteAfterRead = false,
   }) async {
-    final encrypted = await encryptForRecipient(
+    final result = await encryptForRecipient(
       secretText: secretText,
       recipient: recipient,
       expireAfter: expireAfter,
@@ -110,10 +110,10 @@ class HomeController {
 
     return ref
         .read(stegoEncoderProvider)
-        .encodeBytes(coverText, encrypted.toRawBytes());
+        .encodeBytes(coverText, result.message.toRawBytes());
   }
 
-  Future<EncryptedMessage> encryptForRecipient({
+  Future<({EncryptedMessage message, bool isFsEncrypted})> encryptForRecipient({
     required String secretText,
     required RemoteIdentity recipient,
     int? expireAfter,
@@ -250,7 +250,7 @@ class HomeController {
       await ref.read(fsRatchetPersistenceServiceProvider).saveRatchetState(newState);
     }
 
-    return result.message;
+    return (message: result.message, isFsEncrypted: result.newRatchetState != null);
   }
 
   void clearSessionDecryptionCache() {
@@ -330,6 +330,12 @@ class HomeController {
     final cacheKey = '${contact.identityId}|${message.id}';
     final cached = fsController.getCachedPlaintext(cacheKey);
     if (cached != null) return cached;
+
+    // §12.3: FS-encrypted message whose plaintext was never persisted and is
+    // no longer in the memory cache. The ratchet has already advanced past
+    // this message, so it cannot be re-decrypted. Return null (UI will show
+    // a placeholder).
+    if (message.isFsEncrypted) return null;
 
     final privateKey = await _activePrivateKey();
     if (privateKey == null) return null;
@@ -434,6 +440,19 @@ class HomeController {
           text: message.text!,
           timestamp: message.timestamp,
         );
+      }
+
+      // Check FS plaintext cache for messages without persisted text
+      if (message.isFsEncrypted) {
+        final cacheKey = '${contact.identityId}|${message.id}';
+        final cached = fsController.getCachedPlaintext(cacheKey);
+        if (cached != null) {
+          return DecryptedMessagePreview(
+            text: cached,
+            timestamp: message.timestamp,
+          );
+        }
+        continue; // FS message not in cache → ratchet has advanced, skip
       }
 
       if (message.ciphertextBase64 == null || message.nonceBase64 == null) {
@@ -642,6 +661,7 @@ class HomeController {
           encryptedMessage: msg,
           rawSource: source,
           senderContact: contact,
+          isFsEncrypted: isFs,
         );
       }
     }
@@ -656,6 +676,7 @@ class HomeController {
     required EncryptedMessage encryptedMessage,
     required String rawSource,
     required RemoteIdentity senderContact,
+    bool isFsEncrypted = false,
   }) async {
     final nowTs = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     if (payload.expireAfter != null && payload.expireAfter! < nowTs) {
@@ -666,6 +687,17 @@ class HomeController {
     final recordId = DateTime.now().microsecondsSinceEpoch.toString();
     final keyTag = await currentKeyTag();
     final storageKey = await currentStorageKey();
+
+    // §12.3: FS-encrypted plaintext must NOT be persisted in the database.
+    // Cache it in-memory only; it will be wiped on identity reset / app kill.
+    if (isFsEncrypted) {
+      final fsController = ref.read(
+        fsOpportunisticControllerProvider(senderContact.identityId),
+      );
+      final cacheKey = '${senderContact.identityId}|$recordId';
+      fsController.cachePlaintext(cacheKey, payload.text);
+    }
+
     await ref.read(messagesRepositoryProvider).add(
           MessageRecord(
             id: recordId,
@@ -673,13 +705,14 @@ class HomeController {
             recipientId: payload.recipientId,
             direction: 'incoming',
             timestamp: recordTs,
-            text: payload.text,
+            text: isFsEncrypted ? null : payload.text,
             ciphertextBase64: encryptedMessage.ciphertextBase64,
             nonceBase64: encryptedMessage.nonceBase64,
             rawSource: rawSource,
             expireAfter: payload.expireAfter,
             deleteAfterRead: payload.deleteAfterRead,
             keyTag: keyTag,
+            isFsEncrypted: isFsEncrypted,
           ),
           storageKey: storageKey,
         );
