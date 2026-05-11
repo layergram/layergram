@@ -50,8 +50,13 @@ import '../features/contact_verification/contact_sas_service.dart';
 import '../features/identity_migration_notice/identity_migration_notice_controller.dart';
 import '../features/identity_migration_notice/identity_migration_notice_service.dart';
 import 'crypto/fs_contact_security_state.dart';
+import 'crypto/fs_dos_resistance.dart';
+import 'crypto/fs_downgrade_detector.dart';
 import 'crypto/fs_opportunistic_controller.dart';
+import 'crypto/fs_plaintext_cache.dart';
+import 'crypto/fs_replay_cache.dart';
 import 'crypto/fs_session_manager.dart';
+import 'crypto/fs_state_mutex.dart';
 import 'crypto/fs_strict_mode_controller.dart';
 
 final seedServiceProvider = Provider((_) => SeedService());
@@ -326,6 +331,27 @@ final isPassphraseActiveProvider = Provider<bool>((ref) {
   return ref.watch(passphraseProvider).isActive;
 });
 
+// ---------------------------------------------------------------------------
+// Forward Secrecy runtime singletons (§7.7, §7.6, §12.3, §20.1, §20.3)
+// ---------------------------------------------------------------------------
+
+/// Shared replay cache for FS handshake IDs and message counters (§8.7).
+final fsReplayCacheProvider = Provider<FsReplayCache>((_) => FsReplayCache());
+
+/// Shared DoS guard for handshake rate limiting (§20.3).
+final fsDoSGuardProvider = Provider<FsDoSGuard>((_) => FsDoSGuard());
+
+/// Shared mutex for serializing per-contact FS state transitions (§20.1).
+final fsStateMutexProvider = Provider<FsStateMutex>((_) => FsStateMutex());
+
+/// Shared downgrade detector for tracking highest security levels (§7.6).
+final fsDowngradeDetectorProvider =
+    Provider<FsDowngradeDetector>((_) => FsDowngradeDetector());
+
+/// In-memory plaintext cache for FS-decrypted messages (§12.3).
+final fsPlaintextCacheProvider =
+    Provider<FsPlaintextCache>((_) => FsPlaintextCache());
+
 /// Per-contact [FsSessionManager] instances, keyed by contactId.
 ///
 /// Each contact gets its own state machine. These are RAM-only; the caller
@@ -361,6 +387,11 @@ final fsOpportunisticControllerProvider =
     registry: ref.watch(fsContactSecurityRegistryProvider),
     persistenceService: ref.watch(fsStatePersistenceServiceProvider),
     ratchetPersistenceService: ref.watch(fsRatchetPersistenceServiceProvider),
+    replayCache: ref.watch(fsReplayCacheProvider),
+    dosGuard: ref.watch(fsDoSGuardProvider),
+    stateMutex: ref.watch(fsStateMutexProvider),
+    downgradeDetector: ref.watch(fsDowngradeDetectorProvider),
+    plaintextCache: ref.watch(fsPlaintextCacheProvider),
     onRatchetInitialized: (ratchetState) {
       // Update the cache when ratchet is initialized after handshake
       ref.read(fsRatchetStateCacheProvider.notifier).update((cache) => {
