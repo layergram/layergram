@@ -74,14 +74,11 @@ void main() {
 
       expect(initResult, isNotNull);
 
-      // Record init in session manager
-      final initRecordResult = sessionManagerA.recordFsInitSent(initResult);
-      expect(initRecordResult.accepted, isTrue);
-      expect(sessionManagerA.state, FsSessionState.fsInitSent);
-
-      // Build outgoing extension
+      // Build outgoing extension — this internally calls recordFsInitSent
       final initExt = await controllerA.buildOutgoingExtension(pendingInit: initResult);
       expect(initExt, isNotNull);
+      expect(initExt!.hasExtension, isTrue);
+      expect(sessionManagerA.state, FsSessionState.fsInitSent);
 
       // Step 2: Device B receives FS_INIT, generates FS_REPLY
       final initMessage = initResult.toMessage();
@@ -103,14 +100,11 @@ void main() {
       );
       expect(replyPayload, isNotNull);
 
-      // Record reply sent
-      final replyRecordResult = sessionManagerB.recordFsReplySent(replyPayload);
-      expect(replyRecordResult.accepted, isTrue);
-      expect(sessionManagerB.state, FsSessionState.fsReplySent);
-
-      // Build outgoing extension with reply
+      // Build outgoing extension — this internally calls recordFsReplySent
       final replyExt = await controllerB.buildOutgoingExtension(pendingReply: replyPayload);
       expect(replyExt, isNotNull);
+      expect(replyExt!.hasExtension, isTrue);
+      expect(sessionManagerB.state, FsSessionState.fsReplySent);
 
       // Step 3: Device A receives FS_REPLY, sends FS_CONFIRM
       final replyMessage = replyPayload.toMessage();
