@@ -106,7 +106,10 @@ void main() {
       );
       
       // Process the init
-      final processInitResult = sessionManagerB.processFsInitReceived(initMessage);
+      final processInitResult = sessionManagerB.processFsInitReceived(
+        message: initMessage,
+        localInitId: '',
+      );
       expect(processInitResult.accepted, isTrue);
       expect(sessionManagerB.state, FsSessionState.fsInitSeen);
       

@@ -90,8 +90,9 @@ class _WallClock implements FsClock {
 /// Design invariants:
 /// - State only advances; never regresses once [FsSessionState.fsConfirmed]
 ///   is reached (except to [FsSessionState.fsBroken] on auth failure).
-/// - Simultaneous FS_INIT tie-break: the party whose initId base64url value
-///   is lexicographically *smaller* becomes the initiator.
+/// - Simultaneous FS_INIT tie-break: uses the full canonical form
+///   `EncodeKey(IK) || EncodeKey(DK) || initId` (spec §8.3.4).
+///   The lexicographically *smaller* canonical value becomes the initiator.
 /// - Stale messages (createdAt too old or too far in the future) are ignored.
 /// - Duplicate messages have no effect.
 /// - Monotonic-time TTL for pending handshake state (default 7 days).
@@ -289,13 +290,19 @@ class FsSessionManager {
   ///
   /// Handles:
   /// - Normal case: transitions to [FsSessionState.fsInitSeen].
-  /// - Simultaneous FS_INIT (both parties sent FS_INIT): tie-break selects
-  ///   the lexicographically smaller initId as the authoritative initiator.
-  ///   The loser drops its own pending FS_INIT and transitions to
-  ///   [FsSessionState.fsInitSeen] (as if it had not sent anything).
+  /// - Simultaneous FS_INIT (both parties sent FS_INIT): tie-break uses
+  ///   the full canonical form `EncodeKey(IK) || EncodeKey(DK) || initId`
+  ///   (spec §8.3.4). The lexicographically smaller canonical value becomes
+  ///   the authoritative initiator.  The loser drops its own pending FS_INIT
+  ///   and transitions to [FsSessionState.fsInitSeen].
+  ///
+  /// [localCanonical] and [remoteCanonical] are the full canonical tie-break
+  /// strings per §8.3.4. When provided, they are used instead of bare initId.
   FsSessionTransitionResult<FsInitMessage> processFsInitReceived({
     required FsInitMessage message,
     required String localInitId,   // non-empty only if state == fsInitSent
+    String? localCanonical,
+    String? remoteCanonical,
   }) {
     if (_isStale(message.createdAt)) {
       return FsSessionTransitionResult.rejected(
@@ -313,13 +320,15 @@ class FsSessionManager {
     }
 
     if (_state == FsSessionState.fsInitSent) {
-      // Simultaneous FS_INIT: tie-break.
-      final winner = _tieBreak(localInitId, message.initId);
-      if (winner == localInitId) {
+      // Simultaneous FS_INIT: tie-break using canonical form (§8.3.4).
+      final localCmp = localCanonical ?? localInitId;
+      final remoteCmp = remoteCanonical ?? message.initId;
+      final localWins = _tieBreak(localCmp, remoteCmp) == localCmp;
+      if (localWins) {
         // We win the tie-break → we remain the initiator, ignore the incoming.
         return FsSessionTransitionResult.rejected(
           _state,
-          'FS_INIT tie-break: local init wins, ignoring remote FS_INIT',
+          'FS_INIT tie-break: local canonical wins, ignoring remote FS_INIT',
         );
       } else {
         // Remote wins → we become the responder.
@@ -595,9 +604,22 @@ class FsSessionManager {
     // it should survive until session activation
   }
 
-  /// Tie-break: returns the initId that wins (lexicographically smaller).
-  static String _tieBreak(String idA, String idB) {
-    return idA.compareTo(idB) <= 0 ? idA : idB;
+  /// Tie-break: returns the canonical value that wins
+  /// (lexicographically smaller per §8.3.4).
+  static String _tieBreak(String canonicalA, String canonicalB) {
+    return canonicalA.compareTo(canonicalB) <= 0 ? canonicalA : canonicalB;
+  }
+
+  /// Builds the canonical tie-break string per spec §8.3.4:
+  /// `EncodeKey(identityPublicKey) || EncodeKey(devicePublicKey) || initId`
+  ///
+  /// All keys are base64url-encoded (no padding).
+  static String buildCanonical({
+    required String identityPublicKey,
+    required String devicePublicKey,
+    required String initId,
+  }) {
+    return '$identityPublicKey$devicePublicKey$initId';
   }
 }
 

@@ -48,13 +48,17 @@ class FsOpportunisticController {
     FsStatePersistenceService? persistenceService,
     FsRatchetPersistenceService? ratchetPersistenceService,
     void Function(RatchetState)? onRatchetInitialized,
+    String? localIdentityPublicKey,
+    String? localDevicePublicKey,
   })  : _localContactId = localContactId,
         _identityContext = identityContext,
         _sessionManager = sessionManager,
         _registry = registry,
         _persistenceService = persistenceService,
         _ratchetPersistenceService = ratchetPersistenceService,
-        _onRatchetInitialized = onRatchetInitialized;
+        _onRatchetInitialized = onRatchetInitialized,
+        _localIdentityPublicKey = localIdentityPublicKey,
+        _localDevicePublicKey = localDevicePublicKey;
 
   final String _localContactId;
   final String _identityContext;
@@ -63,6 +67,8 @@ class FsOpportunisticController {
   final FsStatePersistenceService? _persistenceService;
   final FsRatchetPersistenceService? _ratchetPersistenceService;
   final void Function(RatchetState)? _onRatchetInitialized;
+  final String? _localIdentityPublicKey;
+  final String? _localDevicePublicKey;
 
   // ---------------------------------------------------------------------------
   // Outgoing message handling
@@ -255,9 +261,28 @@ class FsOpportunisticController {
       return const FsIncomingResult._(type: FsIncomingType.malformed);
     }
 
+    // Build canonical tie-break strings per §8.3.4 when keys are available.
+    String? localCanonical;
+    String? remoteCanonical;
+    final localInit = _sessionManager.pendingInitId ?? '';
+    if (_localIdentityPublicKey != null && _localDevicePublicKey != null) {
+      localCanonical = FsSessionManager.buildCanonical(
+        identityPublicKey: _localIdentityPublicKey,
+        devicePublicKey: _localDevicePublicKey,
+        initId: localInit,
+      );
+      remoteCanonical = FsSessionManager.buildCanonical(
+        identityPublicKey: msg.initiatorDevicePub, // remote IK (from FS_INIT)
+        devicePublicKey: msg.initiatorDevicePub,
+        initId: msg.initId,
+      );
+    }
+
     final result = _sessionManager.processFsInitReceived(
       message: msg,
-      localInitId: _sessionManager.pendingInitId ?? '',
+      localInitId: localInit,
+      localCanonical: localCanonical,
+      remoteCanonical: remoteCanonical,
     );
     if (result.accepted) {
       _updateRegistry(sessionId: msg.initId, state: _sessionManager.state);

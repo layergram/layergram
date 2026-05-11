@@ -95,7 +95,10 @@ void main() {
         createdAt: initResult.createdAt,
       );
       
-      sessionManagerB.processFsInitReceived(initMessage);
+      sessionManagerB.processFsInitReceived(
+        message: initMessage,
+        localInitId: '',
+      );
       expect(sessionManagerB.state, FsSessionState.fsInitSeen);
       
       final replyResult = await FsHandshake.generateFsReply(
