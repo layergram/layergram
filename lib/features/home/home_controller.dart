@@ -24,6 +24,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/crypto/fs_double_ratchet.dart';
 import '../../core/crypto/fs_handshake.dart';
 import '../../core/crypto/encryption_service.dart';
+import '../../core/crypto/fs_message_classification.dart';
 import '../../core/crypto/fs_opportunistic_controller.dart';
 import '../../core/crypto/fs_session_manager.dart';
 import '../../core/crypto/message_record_cipher.dart';
@@ -324,13 +325,18 @@ class HomeController {
       return null;
     }
 
+    // Check FS plaintext cache first (§12.3) — avoids re-decryption attempt
+    final fsController = ref.read(fsOpportunisticControllerProvider(contact.identityId));
+    final cacheKey = '${contact.identityId}|${message.id}';
+    final cached = fsController.getCachedPlaintext(cacheKey);
+    if (cached != null) return cached;
+
     final privateKey = await _activePrivateKey();
     if (privateKey == null) return null;
 
     // Get ratchet state if FS session is active for this contact
     RatchetState? ratchetState;
     // CRITICAL: Use controller's session manager to ensure consistency
-    final fsController = ref.read(fsOpportunisticControllerProvider(contact.identityId));
     final sessionManager = fsController.sessionManager;
     final activeSessionId = sessionManager.activeSessionId;
     if (activeSessionId != null) {
@@ -356,7 +362,8 @@ class HomeController {
     );
 
     // Production logging for successful decryption
-    if (result.newRatchetState != null) {
+    final isFs = result.newRatchetState != null;
+    if (isFs) {
       print('[FS-CHAT-DECRYPT] SUCCESS with FS - session=${result.newRatchetState!.sessionId}, counter=${result.newRatchetState!.recvCounter}');
     } else {
       print('[FS-CHAT-DECRYPT] SUCCESS with LEGACY (no FS)');
@@ -372,7 +379,24 @@ class HomeController {
           });
       // Persist updated state
       await ref.read(fsRatchetPersistenceServiceProvider).saveRatchetState(newState);
+
+      // Cache FS-decrypted plaintext (§12.3) — ratchet has already advanced
+      fsController.cachePlaintext(cacheKey, result.payload.text);
+
+      // Record message counter in replay cache (§8.7)
+      fsController.recordMessageProcessed(
+        sessionId: newState.sessionId,
+        counter: newState.recvCounter - 1,
+      );
     }
+
+    // Downgrade detection: record the security level (§7.6)
+    fsController.recordSecurityLevel(
+      contactId: contact.identityId,
+      level: isFs
+          ? FsMessageSecurity.fsWithFallback
+          : FsMessageSecurity.legacy,
+    );
 
     return result.payload.text;
   }
@@ -551,7 +575,11 @@ class HomeController {
         }
 
         // Update ratchet state if it changed (e.g., received new message advanced counter)
-        if (result.newRatchetState != null && activeSessionId != null) {
+        final fsCtrl = ref.read(
+          fsOpportunisticControllerProvider(contact.identityId),
+        );
+        final isFs = result.newRatchetState != null;
+        if (isFs && activeSessionId != null) {
           final newState = result.newRatchetState!;
           ref.read(fsRatchetStateCacheProvider.notifier).update((cache) => {
                 ...cache,
@@ -559,7 +587,21 @@ class HomeController {
               });
           // Persist updated state
           unawaited(ref.read(fsRatchetPersistenceServiceProvider).saveRatchetState(newState));
+
+          // Record message counter in replay cache (§8.7)
+          fsCtrl.recordMessageProcessed(
+            sessionId: newState.sessionId,
+            counter: newState.recvCounter - 1,
+          );
         }
+
+        // Downgrade detection: record the incoming message security level (§7.6)
+        fsCtrl.recordSecurityLevel(
+          contactId: contact.identityId,
+          level: isFs
+              ? FsMessageSecurity.fsWithFallback
+              : FsMessageSecurity.legacy,
+        );
 
         // Process FS extension for opportunistic Forward Secrecy handshake
         // We need to decrypt envelope separately to access FS extension
@@ -572,10 +614,7 @@ class HomeController {
           key: key,
         );
         if (envelope != null) {
-          final fsController = ref.read(
-            fsOpportunisticControllerProvider(contact.identityId),
-          );
-          final fsResult = await fsController.processIncomingEnvelope(
+          final fsResult = await fsCtrl.processIncomingEnvelope(
             envelope,
             remoteContactId: contact.identityId,
           );

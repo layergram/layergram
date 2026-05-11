@@ -15,12 +15,19 @@
 import 'dart:typed_data';
 
 import 'fs_contact_security_state.dart';
+import 'fs_control_messages.dart';
+import 'fs_dos_resistance.dart';
 import 'fs_double_ratchet.dart';
+import 'fs_downgrade_detector.dart';
 import 'fs_handshake.dart';
 import 'fs_key_codec.dart';
+import 'fs_message_classification.dart';
 import 'fs_payload_budget.dart';
+import 'fs_plaintext_cache.dart';
 import 'fs_ratchet_persistence_service.dart';
+import 'fs_replay_cache.dart';
 import 'fs_session_manager.dart';
+import 'fs_state_mutex.dart';
 import 'fs_state_persistence_service.dart';
 import 'lmf_v2_decoder.dart';
 
@@ -50,6 +57,11 @@ class FsOpportunisticController {
     void Function(RatchetState)? onRatchetInitialized,
     String? localIdentityPublicKey,
     String? localDevicePublicKey,
+    FsReplayCache? replayCache,
+    FsDoSGuard? dosGuard,
+    FsStateMutex? stateMutex,
+    FsDowngradeDetector? downgradeDetector,
+    FsPlaintextCache? plaintextCache,
   })  : _localContactId = localContactId,
         _identityContext = identityContext,
         _sessionManager = sessionManager,
@@ -58,7 +70,12 @@ class FsOpportunisticController {
         _ratchetPersistenceService = ratchetPersistenceService,
         _onRatchetInitialized = onRatchetInitialized,
         _localIdentityPublicKey = localIdentityPublicKey,
-        _localDevicePublicKey = localDevicePublicKey;
+        _localDevicePublicKey = localDevicePublicKey,
+        _replayCache = replayCache,
+        _dosGuard = dosGuard,
+        _stateMutex = stateMutex,
+        _downgradeDetector = downgradeDetector,
+        _plaintextCache = plaintextCache;
 
   final String _localContactId;
   final String _identityContext;
@@ -69,6 +86,11 @@ class FsOpportunisticController {
   final void Function(RatchetState)? _onRatchetInitialized;
   final String? _localIdentityPublicKey;
   final String? _localDevicePublicKey;
+  final FsReplayCache? _replayCache;
+  final FsDoSGuard? _dosGuard;
+  final FsStateMutex? _stateMutex;
+  final FsDowngradeDetector? _downgradeDetector;
+  final FsPlaintextCache? _plaintextCache;
 
   // ---------------------------------------------------------------------------
   // Outgoing message handling
@@ -106,6 +128,20 @@ class FsOpportunisticController {
     switch (state) {
       case FsSessionState.legacyOnly:
         if (pendingInit == null) return null;
+        // DoS guard: check rate limits before initiating handshake (§20.3)
+        if (_dosGuard != null) {
+          final dosCheck = _dosGuard.canInitiateHandshake(_localContactId);
+          if (!dosCheck.allowed) {
+            return FsOutgoingExtension._(
+              json: null,
+              droppedReason: FsExtensionDropReason.dosRateLimited,
+            );
+          }
+          _dosGuard.recordHandshakeInitiation(
+            contactId: _localContactId,
+            initId: pendingInit.initId,
+          );
+        }
         final msg = pendingInit.toMessage();
         final json = msg.toJson();
         if (!FsPayloadBudget.fitsInOpportunisticBudget(json)) {
@@ -225,8 +261,29 @@ class FsOpportunisticController {
     Map<String, dynamic> envelope, {
     required String remoteContactId,
   }) async {
+    final contactKey = '$remoteContactId|$_identityContext';
+
+    // Atomic state transitions: serialize per-contact processing (§20.1)
+    if (_stateMutex != null) {
+      return _stateMutex.withLock(contactKey, () async {
+        return _processIncomingEnvelopeInner(envelope, remoteContactId: remoteContactId);
+      });
+    }
+    return _processIncomingEnvelopeInner(envelope, remoteContactId: remoteContactId);
+  }
+
+  Future<FsIncomingResult> _processIncomingEnvelopeInner(
+    Map<String, dynamic> envelope, {
+    required String remoteContactId,
+  }) async {
     final fs = LmfV2Decoder.extractFsExtension(envelope);
     if (fs == null) {
+      // No FS extension: record as legacy for downgrade detection (§7.6)
+      _downgradeDetector?.recordSecurityLevel(
+        contactId: remoteContactId,
+        identityContext: _identityContext,
+        level: FsMessageSecurity.legacy,
+      );
       return const FsIncomingResult._(type: FsIncomingType.noExtension);
     }
 
@@ -238,6 +295,16 @@ class FsOpportunisticController {
         return _handleFsReply(fs, remoteContactId: remoteContactId);
       case 'fs_confirm':
         return await _handleFsConfirm(fs, remoteContactId: remoteContactId);
+      case 'fs_ack':
+        return _handleFsAck(fs);
+      case 'fs_suspend':
+        return _handleFsSuspend(fs, remoteContactId: remoteContactId);
+      case 'fs_reset':
+        return _handleFsReset(fs, remoteContactId: remoteContactId);
+      case 'fs_downgrade_notice':
+        return _handleFsDowngradeNotice(fs, remoteContactId: remoteContactId);
+      case 'fs_simultaneous_notice':
+        return _handleFsSimultaneousNotice(fs);
       default:
         return FsIncomingResult._(
           type: FsIncomingType.unknownType,
@@ -259,6 +326,22 @@ class FsOpportunisticController {
       msg = FsInitMessage.fromJson(fs);
     } catch (_) {
       return const FsIncomingResult._(type: FsIncomingType.malformed);
+    }
+
+    // Replay cache: reject already-seen initIds (§8.7)
+    if (_replayCache != null && _replayCache.isHandshakeIdReplay(msg.initId)) {
+      return const FsIncomingResult._(type: FsIncomingType.fsInitRejected);
+    }
+
+    // DoS guard: check pending handshake limits for remote contact (§20.3)
+    if (_dosGuard != null) {
+      final dosCheck = _dosGuard.canInitiateHandshake(remoteContactId);
+      if (!dosCheck.allowed) {
+        return FsIncomingResult._(
+          type: FsIncomingType.fsInitRejected,
+          rejectionReason: 'DoS: ${dosCheck.detail}',
+        );
+      }
     }
 
     // Build canonical tie-break strings per §8.3.4 when keys are available.
@@ -285,6 +368,11 @@ class FsOpportunisticController {
       remoteCanonical: remoteCanonical,
     );
     if (result.accepted) {
+      _replayCache?.recordHandshakeId(msg.initId);
+      _dosGuard?.recordHandshakeInitiation(
+        contactId: remoteContactId,
+        initId: msg.initId,
+      );
       _updateRegistry(sessionId: msg.initId, state: _sessionManager.state);
     }
     return FsIncomingResult._(
@@ -306,8 +394,14 @@ class FsOpportunisticController {
       return const FsIncomingResult._(type: FsIncomingType.malformed);
     }
 
+    // Replay cache: reject already-seen replyIds (§8.7)
+    if (_replayCache != null && _replayCache.isHandshakeIdReplay(msg.replyId)) {
+      return const FsIncomingResult._(type: FsIncomingType.fsReplyRejected);
+    }
+
     final result = _sessionManager.processFsReplyReceived(msg);
     if (result.accepted) {
+      _replayCache?.recordHandshakeId(msg.replyId);
       _updateRegistry(sessionId: msg.replyId, state: _sessionManager.state);
     }
     return FsIncomingResult._(
@@ -361,6 +455,11 @@ class FsOpportunisticController {
     );
 
     if (result.accepted) {
+      // Handshake complete: clear pending handshake from DoS guard
+      _dosGuard?.completeHandshake(
+        contactId: remoteContactId,
+        initId: msg.initId,
+      );
       _updateRegistry(sessionId: msg.replyId, state: _sessionManager.state);
 
       // Activate the session after successful confirm
@@ -391,6 +490,160 @@ class FsOpportunisticController {
           : FsIncomingType.fsConfirmRejected,
       rejectionReason: result.reason,
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Control message handlers (§9.2)
+  // ---------------------------------------------------------------------------
+
+  FsIncomingResult _handleFsAck(Map<String, dynamic> fs) {
+    try {
+      FsAckMessage.fromJson(fs);
+    } catch (_) {
+      return const FsIncomingResult._(type: FsIncomingType.malformed);
+    }
+    // fs_ack is informational — no state change needed.
+    // The initiator can use it as extra confirmation that B verified.
+    return const FsIncomingResult._(type: FsIncomingType.fsAckReceived);
+  }
+
+  FsIncomingResult _handleFsSuspend(
+    Map<String, dynamic> fs, {
+    required String remoteContactId,
+  }) {
+    try {
+      final msg = FsSuspendMessage.fromJson(fs);
+      final currentState = _sessionManager.state;
+      if (currentState == FsSessionState.fsActive ||
+          currentState == FsSessionState.strictFsActive) {
+        _sessionManager.suspend();
+        _updateRegistry(
+          sessionId: msg.sessionId,
+          state: _sessionManager.state,
+        );
+      }
+      return const FsIncomingResult._(type: FsIncomingType.fsSuspendReceived);
+    } catch (_) {
+      return const FsIncomingResult._(type: FsIncomingType.malformed);
+    }
+  }
+
+  FsIncomingResult _handleFsReset(
+    Map<String, dynamic> fs, {
+    required String remoteContactId,
+  }) {
+    try {
+      final msg = FsResetMessage.fromJson(fs);
+      _sessionManager.reset();
+      _dosGuard?.completeHandshake(
+        contactId: remoteContactId,
+        initId: msg.previousSessionId,
+      );
+      _updateRegistry(
+        sessionId: null,
+        state: _sessionManager.state,
+      );
+      return const FsIncomingResult._(type: FsIncomingType.fsResetReceived);
+    } catch (_) {
+      return const FsIncomingResult._(type: FsIncomingType.malformed);
+    }
+  }
+
+  FsIncomingResult _handleFsDowngradeNotice(
+    Map<String, dynamic> fs, {
+    required String remoteContactId,
+  }) {
+    try {
+      FsDowngradeNoticeMessage.fromJson(fs);
+      // The remote is informing us that they detected a downgrade.
+      // Evaluate locally and record the warning.
+      _downgradeDetector?.evaluate(
+        contactId: remoteContactId,
+        identityContext: _identityContext,
+        incomingLevel: FsMessageSecurity.legacy,
+        sessionState: _sessionManager.state,
+      );
+      return const FsIncomingResult._(type: FsIncomingType.fsDowngradeNoticeReceived);
+    } catch (_) {
+      return const FsIncomingResult._(type: FsIncomingType.malformed);
+    }
+  }
+
+  FsIncomingResult _handleFsSimultaneousNotice(Map<String, dynamic> fs) {
+    try {
+      FsSimultaneousNoticeMessage.fromJson(fs);
+      // Informational: the remote is notifying us that a tie-break occurred.
+      return const FsIncomingResult._(type: FsIncomingType.fsSimultaneousNoticeReceived);
+    } catch (_) {
+      return const FsIncomingResult._(type: FsIncomingType.malformed);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Downgrade detection (§7.6)
+  // ---------------------------------------------------------------------------
+
+  /// Evaluates the security level of a received message and checks for
+  /// downgrades from the highest confirmed level.
+  FsDowngradeResult? evaluateDowngrade({
+    required String contactId,
+    required FsMessageSecurity incomingLevel,
+  }) {
+    if (_downgradeDetector == null) return null;
+    return _downgradeDetector.evaluate(
+      contactId: contactId,
+      identityContext: _identityContext,
+      incomingLevel: incomingLevel,
+      sessionState: _sessionManager.state,
+    );
+  }
+
+  /// Records a successfully processed message's security level.
+  void recordSecurityLevel({
+    required String contactId,
+    required FsMessageSecurity level,
+  }) {
+    _downgradeDetector?.recordSecurityLevel(
+      contactId: contactId,
+      identityContext: _identityContext,
+      level: level,
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Plaintext cache (§12.3)
+  // ---------------------------------------------------------------------------
+
+  /// Returns cached FS-decrypted plaintext for the given message key, or null.
+  String? getCachedPlaintext(String messageKey) {
+    return _plaintextCache?.get(messageKey);
+  }
+
+  /// Caches FS-decrypted plaintext for the given message key.
+  void cachePlaintext(String messageKey, String plaintext) {
+    _plaintextCache?.put(messageKey, plaintext);
+  }
+
+  /// Wipes all cached plaintext (e.g., on identity reset or app background).
+  void wipePlaintextCache() {
+    _plaintextCache?.wipe();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Replay cache (§8.7)
+  // ---------------------------------------------------------------------------
+
+  /// Checks whether a message counter has been seen before.
+  bool isMessageReplay({required String sessionId, required int counter}) {
+    return _replayCache?.isMessageReplay(
+      sessionId: sessionId,
+      counter: counter,
+    ) ?? false;
+  }
+
+  /// Records a successfully processed message counter.
+  void recordMessageProcessed({required String sessionId, required int counter}) {
+    _replayCache?.recordMessage(sessionId: sessionId, counter: counter);
   }
 
   void _updateRegistry({
@@ -540,6 +793,9 @@ class FsOutgoingExtension {
 enum FsExtensionDropReason {
   /// The serialised extension exceeds [FsPayloadBudget.kMaxFsControlPayloadBytes].
   payloadTooLarge,
+
+  /// DoS guard rejected the handshake initiation (§20.3).
+  dosRateLimited,
 }
 
 /// Describes the outcome of processing an incoming `x.fs` extension.
@@ -580,4 +836,11 @@ enum FsIncomingType {
   fsReplyRejected,
   fsConfirmAccepted,
   fsConfirmRejected,
+
+  /// Control message types (§9.2)
+  fsAckReceived,
+  fsSuspendReceived,
+  fsResetReceived,
+  fsDowngradeNoticeReceived,
+  fsSimultaneousNoticeReceived,
 }
