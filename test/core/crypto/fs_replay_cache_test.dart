@@ -210,6 +210,8 @@ void main() {
     final restored = FsReplayCache.fromJson(
       json,
       clock: clock2,
+      maxReplayEntryAgeSecs: 100,
+      maxHandshakeIdAgeSecs: 100,
     );
 
     expect(restored.isMessageReplay(sessionId: 'sess-1', counter: 0), isFalse);

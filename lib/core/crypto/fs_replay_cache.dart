@@ -206,8 +206,18 @@ class FsReplayCache {
   factory FsReplayCache.fromJson(
     Map<String, dynamic> json, {
     FsClock? clock,
+    int maxReplayEntries = 256,
+    int maxReplayEntryAgeSecs = 7 * 24 * 60 * 60,
+    int maxHandshakeIds = 32,
+    int maxHandshakeIdAgeSecs = 7 * 24 * 60 * 60,
   }) {
-    final cache = FsReplayCache(clock: clock);
+    final cache = FsReplayCache(
+      clock: clock,
+      maxReplayEntries: maxReplayEntries,
+      maxReplayEntryAgeSecs: maxReplayEntryAgeSecs,
+      maxHandshakeIds: maxHandshakeIds,
+      maxHandshakeIdAgeSecs: maxHandshakeIdAgeSecs,
+    );
 
     final messages = json['messages'] as Map<String, dynamic>?;
     if (messages != null) {
