@@ -120,12 +120,12 @@ FsConfirmPayload _confirmPayload({
 
 void main() {
   // T10.1 — buildOutgoingExtension from legacyOnly produces fs_init extension.
-  test('T10.1: buildOutgoingExtension in legacyOnly attaches fs_init and advances state', () {
+  test('T10.1: buildOutgoingExtension in legacyOnly attaches fs_init and advances state', () async {
     final (ctrl, registry, _) = _buildAlice();
 
     expect(ctrl.state, equals(FsSessionState.legacyOnly));
 
-    final ext = ctrl.buildOutgoingExtension(pendingInit: _initPayload());
+    final ext = await ctrl.buildOutgoingExtension(pendingInit: _initPayload());
     expect(ext, isNotNull);
     expect(ext!.hasExtension, isTrue);
     expect(ext.json!['type'], equals('fs_init'));
@@ -281,7 +281,7 @@ void main() {
         reason: 'sanity check');
 
     // A normal-size init succeeds.
-    final ext = ctrl.buildOutgoingExtension(pendingInit: _initPayload());
+    final ext = await ctrl.buildOutgoingExtension(pendingInit: _initPayload());
     expect(ext, isNotNull);
     expect(ext!.droppedReason, isNull, reason: 'Normal init should not be dropped');
   });
@@ -292,7 +292,7 @@ void main() {
     final (alice, aliceRegistry, _) = _buildAlice(clock: clock);
 
     // Alice sends fs_init.
-    alice.buildOutgoingExtension(pendingInit: _initPayload());
+    await alice.buildOutgoingExtension(pendingInit: _initPayload());
     expect(alice.state, equals(FsSessionState.fsInitSent));
 
     // Bob sends back fs_reply (simulated).
@@ -332,7 +332,7 @@ void main() {
     expect(bob.state, equals(FsSessionState.fsInitSeen));
 
     // Bob sends fs_reply.
-    bob.buildOutgoingExtension(pendingReply: _replyPayload());
+    await bob.buildOutgoingExtension(pendingReply: _replyPayload());
     expect(bob.state, equals(FsSessionState.fsReplySent));
 
     // Set verification data needed for FS_CONFIRM verification
@@ -369,7 +369,7 @@ void main() {
     );
 
     // Step 1: Alice sends fs_init.
-    alice.buildOutgoingExtension(pendingInit: _initPayload());
+    await alice.buildOutgoingExtension(pendingInit: _initPayload());
     expect(
       aliceRegistry.forContact(contactId: 'alice', identityContext: 'primary'),
       isNotEmpty,
@@ -409,7 +409,7 @@ void main() {
     final (alice, aliceRegistry, aliceMgr) = _buildAlice(clock: clock);
 
     // Step 1: Alice sends fs_init.
-    alice.buildOutgoingExtension(pendingInit: _initPayload());
+    await alice.buildOutgoingExtension(pendingInit: _initPayload());
     expect(alice.state, equals(FsSessionState.fsInitSent));
 
     // Step 2: Alice receives fs_reply.
@@ -420,7 +420,7 @@ void main() {
     expect(alice.state, equals(FsSessionState.fsReplySeen));
 
     // Step 3: Alice sends fs_confirm.
-    alice.buildOutgoingExtension(pendingConfirm: _confirmPayload());
+    await alice.buildOutgoingExtension(pendingConfirm: _confirmPayload());
 
     // Initiator should immediately be in fsActive state.
     expect(alice.state, equals(FsSessionState.fsActive),
@@ -452,7 +452,7 @@ void main() {
     aliceMgr.requestStrict();
 
     // Step 1: Alice sends fs_init.
-    alice.buildOutgoingExtension(pendingInit: _initPayload());
+    await alice.buildOutgoingExtension(pendingInit: _initPayload());
     expect(alice.state, equals(FsSessionState.fsInitSent));
 
     // Step 2: Alice receives fs_reply.
@@ -463,7 +463,7 @@ void main() {
     expect(alice.state, equals(FsSessionState.fsReplySeen));
 
     // Step 3: Alice sends fs_confirm.
-    alice.buildOutgoingExtension(pendingConfirm: _confirmPayload());
+    await alice.buildOutgoingExtension(pendingConfirm: _confirmPayload());
 
     // Initiator should be in strictFsActive.
     expect(alice.state, equals(FsSessionState.strictFsActive),
@@ -490,7 +490,7 @@ void main() {
     );
 
     // Step 1: Alice sends fs_init.
-    alice.buildOutgoingExtension(pendingInit: _initPayload());
+    await alice.buildOutgoingExtension(pendingInit: _initPayload());
     expect(alice.state, equals(FsSessionState.fsInitSent));
 
     // Step 2: Alice receives fs_reply.
@@ -501,7 +501,7 @@ void main() {
     expect(alice.state, equals(FsSessionState.fsReplySeen));
 
     // Step 3: Alice sends fs_confirm.
-    alice.buildOutgoingExtension(pendingConfirm: _confirmPayload());
+    await alice.buildOutgoingExtension(pendingConfirm: _confirmPayload());
 
     // Initiator should be in fsActive.
     expect(alice.state, equals(FsSessionState.fsActive),
@@ -534,12 +534,12 @@ void main() {
     passphraseMgr.requestStrict();
 
     // Complete handshake.
-    alice.buildOutgoingExtension(pendingInit: _initPayload());
+    await alice.buildOutgoingExtension(pendingInit: _initPayload());
     await alice.processIncomingEnvelope(
       {'v': 2, 'senderId': 'bob', 'x': {'fs': _replyPayload().toMessage().toJson()}},
       remoteContactId: 'bob',
     );
-    alice.buildOutgoingExtension(pendingConfirm: _confirmPayload());
+    await alice.buildOutgoingExtension(pendingConfirm: _confirmPayload());
 
     expect(alice.state, equals(FsSessionState.strictFsActive),
         reason: 'Passphrase strict mode initiator must reach strictFsActive');
