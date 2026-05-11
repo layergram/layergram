@@ -196,7 +196,7 @@ void main() {
     expect(sendResult.accepted, isFalse,
         reason: 'Cannot initiate handshake from fsBroken state');
 
-    // Cannot receive FS_INIT in broken state (rejected as terminal)
+    // Incoming FS_INIT in broken state → accepted (partner reset §8.8)
     final receiveResult = sessionManager.processFsInitReceived(
       message: FsInitMessage(
         initId: 'remote_init',
@@ -207,10 +207,10 @@ void main() {
       ),
       localInitId: '',
     );
-    expect(receiveResult.accepted, isFalse,
-        reason: 'Should reject incoming FS_INIT in fsBroken state');
-    expect(sessionManager.state, equals(FsSessionState.fsBroken),
-        reason: 'State must remain fsBroken after rejecting FS_INIT');
+    expect(receiveResult.accepted, isTrue,
+        reason: 'Incoming FS_INIT in fsBroken should be accepted (partner reset)');
+    expect(sessionManager.state, equals(FsSessionState.fsInitSeen),
+        reason: 'State must transition to fsInitSeen for new handshake');
   });
 
 }

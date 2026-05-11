@@ -68,6 +68,7 @@ class FsStringsBundle {
         'Maximum Forward Secrecy is active. Messages cannot be sent without a confirmed secure channel.',
 
     // Actions
+    'security.fs.message_lost': 'This message was encrypted with a previous session and cannot be decrypted.',
     'security.fs.action.retry': 'Retry upgrade',
     'security.fs.action.reset': 'Reset session',
     'security.fs.action.request_maximum': 'Request Maximum FS',
@@ -211,6 +212,7 @@ class FsStringsBundle {
         'Se la negoziazione Forward Secrecy fallisce, questa conversazione tornerà alla crittografia standard.',
     'security.fs.warning.no_silent_downgrade':
         'Forward Secrecy massima attiva. I messaggi non possono essere inviati senza un canale sicuro confermato.',
+    'security.fs.message_lost': 'Questo messaggio era cifrato con una sessione precedente e non può essere decifrato.',
     'security.fs.action.retry': 'Riprova aggiornamento',
     'security.fs.action.reset': 'Reimposta sessione',
     'security.fs.action.request_maximum': 'Richiedi FS massima',
@@ -267,6 +269,7 @@ class FsStringsBundle {
         'Si falla la negociación de Forward Secrecy, esta conversación volverá al cifrado estándar.',
     'security.fs.warning.no_silent_downgrade':
         'Forward Secrecy máximo activo. No se pueden enviar mensajes sin un canal seguro confirmado.',
+    'security.fs.message_lost': 'Este mensaje fue cifrado con una sesión anterior y no se puede descifrar.',
     'security.fs.action.retry': 'Reintentar actualización',
     'security.fs.action.reset': 'Restablecer sesión',
     'security.fs.action.request_maximum': 'Solicitar FS máximo',
@@ -321,6 +324,7 @@ class FsStringsBundle {
         'Wenn die Forward-Secrecy-Aushandlung fehlschlägt, fällt diese Unterhaltung auf die Standardverschlüsselung zurück.',
     'security.fs.warning.no_silent_downgrade':
         'Maximale Forward Secrecy aktiv. Nachrichten können nicht ohne einen bestätigten sicheren Kanal gesendet werden.',
+    'security.fs.message_lost': 'Diese Nachricht wurde mit einer vorherigen Sitzung verschlüsselt und kann nicht entschlüsselt werden.',
     'security.fs.action.retry': 'Upgrade wiederholen',
     'security.fs.action.reset': 'Sitzung zurücksetzen',
     'security.fs.action.request_maximum': 'Maximale FS anfordern',
@@ -375,6 +379,7 @@ class FsStringsBundle {
         'En cas d\'échec de la négociation, cette conversation reviendra au chiffrement standard.',
     'security.fs.warning.no_silent_downgrade':
         'Forward Secrecy maximal actif. Les messages ne peuvent pas être envoyés sans canal sécurisé confirmé.',
+    'security.fs.message_lost': 'Ce message a été chiffré avec une session précédente et ne peut pas être déchiffré.',
     'security.fs.action.retry': 'Réessayer la mise à niveau',
     'security.fs.action.reset': 'Réinitialiser la session',
     'security.fs.action.request_maximum': 'Demander FS maximal',
@@ -429,6 +434,7 @@ class FsStringsBundle {
         'Se a negociação falhar, esta conversa voltará à criptografia padrão.',
     'security.fs.warning.no_silent_downgrade':
         'Forward Secrecy máximo ativo. Mensagens não podem ser enviadas sem um canal seguro confirmado.',
+    'security.fs.message_lost': 'Esta mensagem foi criptografada com uma sessão anterior e não pode ser descriptografada.',
     'security.fs.action.retry': 'Tentar atualização novamente',
     'security.fs.action.reset': 'Redefinir sessão',
     'security.fs.action.request_maximum': 'Solicitar FS máximo',

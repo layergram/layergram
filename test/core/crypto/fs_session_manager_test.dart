@@ -253,8 +253,10 @@ void main() {
         reason: 'State must not change on duplicate FS_CONFIRM');
   });
 
-  // T4.5 — Old FS_INIT replayed after fs_active: no downgrade.
-  test('T4.5: replayed FS_INIT after fsActive is ignored', () {
+  // T4.5 — New FS_INIT received after fsActive: accepted (partner reset §8.8).
+  // Anti-replay for old initIds is handled by the controller's replay cache,
+  // not by the session manager.
+  test('T4.5: new FS_INIT after fsActive is accepted (partner reset)', () {
     final bobMgr = FsSessionManager(clock: _FakeClock(_kNow));
     // Fast-forward to fsActive.
     bobMgr.processFsInitReceived(message: _stubInit(), localInitId: '');
@@ -263,15 +265,17 @@ void main() {
     bobMgr.activateSession('session-1');
     expect(bobMgr.state, equals(FsSessionState.fsActive));
 
-    // Replay old FS_INIT.
+    // New FS_INIT from partner who reset their identity.
     final r = bobMgr.processFsInitReceived(
-      message: _stubInit(initId: 'old-init-id'),
+      message: _stubInit(initId: 'new-init-after-reset'),
       localInitId: '',
     );
-    expect(r.accepted, isFalse,
-        reason: 'FS_INIT replay after fsActive must be rejected');
-    expect(bobMgr.state, equals(FsSessionState.fsActive),
-        reason: 'State must not downgrade on FS_INIT replay');
+    expect(r.accepted, isTrue,
+        reason: 'New FS_INIT in fsActive must be accepted (partner reset)');
+    expect(bobMgr.state, equals(FsSessionState.fsInitSeen),
+        reason: 'State must transition to fsInitSeen for new handshake');
+    expect(bobMgr.activeSessionId, isNull,
+        reason: 'Old session must be cleared');
   });
 
   // T4.6 — createdAt too far in the future: rejected.
@@ -342,8 +346,8 @@ void main() {
         reason: 'Failed CONFIRM MAC must result in fsBroken');
   });
 
-  // T4.10 — fsBroken state blocks all handshake activity.
-  test('T4.10: fsBroken blocks FS_INIT sending and rejects incoming FS_INIT', () {
+  // T4.10 — fsBroken blocks outgoing FS_INIT but accepts incoming (partner reset).
+  test('T4.10: fsBroken blocks FS_INIT sending but accepts incoming FS_INIT (partner reset)', () {
     final mgr = FsSessionManager(clock: _FakeClock(_kNow));
 
     // Force state to fsBroken using setStateForTesting
@@ -356,14 +360,32 @@ void main() {
     expect(mgr.state, equals(FsSessionState.fsBroken),
         reason: 'State must remain fsBroken after failed send attempt');
 
-    // Verify incoming FS_INIT is rejected
+    // Incoming FS_INIT triggers partner-reset detection → accepted (§8.8)
     final receiveResult = mgr.processFsInitReceived(
       message: _stubInit(),
       localInitId: '',
     );
-    expect(receiveResult.accepted, isFalse,
-        reason: 'FS_INIT must be rejected in fsBroken state');
-    expect(mgr.state, equals(FsSessionState.fsBroken),
-        reason: 'State must remain fsBroken after rejecting FS_INIT');
+    expect(receiveResult.accepted, isTrue,
+        reason: 'Incoming FS_INIT in fsBroken must be accepted (partner reset)');
+    expect(mgr.state, equals(FsSessionState.fsInitSeen),
+        reason: 'State must transition to fsInitSeen after partner reset');
+  });
+
+  // T4.11 — fsActive accepts incoming FS_INIT (partner identity reset).
+  test('T4.11: fsActive accepts incoming FS_INIT after partner identity reset', () {
+    final mgr = FsSessionManager(clock: _FakeClock(_kNow));
+
+    mgr.setStateForTesting(FsSessionState.fsActive);
+    mgr.activeSessionId = 'old-session';
+
+    final receiveResult = mgr.processFsInitReceived(
+      message: _stubInit(),
+      localInitId: '',
+    );
+    expect(receiveResult.accepted, isTrue,
+        reason: 'Incoming FS_INIT in fsActive must be accepted (partner reset)');
+    expect(mgr.state, equals(FsSessionState.fsInitSeen));
+    expect(mgr.activeSessionId, isNull,
+        reason: 'Old session must be cleared on partner reset');
   });
 }

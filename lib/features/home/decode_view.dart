@@ -119,6 +119,10 @@ class _OutcomeView extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = AppStrings.t;
 
+    if (outcome.kind == DecodeKind.fsLost) {
+      return SelectableText(t(context, 'security.fs.message_lost'));
+    }
+
     if (outcome.kind != DecodeKind.success || outcome.payload == null) {
       return SelectableText(t(context, 'noMessageFoundDesc'));
     }
