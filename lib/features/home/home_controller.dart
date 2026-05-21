@@ -473,6 +473,9 @@ class HomeController {
           ratchetState: ratchetState,
         );
 
+        // FS message whose ratchet is gone — skip to next message
+        if (result.fsDecryptFailed) continue;
+
         // Update ratchet state if it changed
         if (result.newRatchetState != null && activeSessionId != null) {
           final newState = result.newRatchetState!;

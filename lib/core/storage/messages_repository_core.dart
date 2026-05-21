@@ -391,16 +391,21 @@ class MessagesRepositoryCore {
     }
   }
 
-  /// Strips persisted plaintext from all FS-encrypted messages (§12.3).
+  /// Strips persisted plaintext from all encrypted messages (§12.3).
   ///
-  /// Called on identity reset to ensure old FS messages cannot be read after
-  /// the ratchet keys have been destroyed.
-  Future<void> stripFsPlaintext() async {
+  /// Called on identity reset to ensure FS messages cannot be read after
+  /// the ratchet keys have been destroyed.  We strip ALL encrypted messages
+  /// (not just those flagged `isFsEncrypted`) because messages exchanged
+  /// before the flag was introduced lack the marker.  After identity restore,
+  /// legacy messages will be re-decrypted on demand (same keys), while FS
+  /// messages will fail inner-layer decryption (ratchet gone) and show a
+  /// placeholder.
+  Future<void> stripEncryptedPlaintext() async {
     await _ensureLoaded();
     var changed = false;
     for (var i = 0; i < _messages.length; i++) {
       final m = _messages[i];
-      if (m.isFsEncrypted && m.text != null) {
+      if (m.text != null && m.ciphertextBase64 != null) {
         _messages[i] = m.copyWith(clearText: true);
         changed = true;
       }

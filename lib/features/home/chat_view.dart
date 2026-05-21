@@ -1947,56 +1947,55 @@ class ChatViewState extends ConsumerState<ChatView> {
 
                           if (isEncrypted && decrypted == null &&
                               snapshot.connectionState == ConnectionState.done) {
-                            // FS message whose plaintext is no longer available
-                            if (m.isFsEncrypted) {
-                              return Align(
-                                alignment: incoming
-                                    ? Alignment.centerLeft
-                                    : Alignment.centerRight,
-                                child: Padding(
+                            // Encrypted message whose plaintext could not be
+                            // recovered (FS ratchet gone, or old FS message
+                            // without the isFsEncrypted flag).
+                            return Align(
+                              alignment: incoming
+                                  ? Alignment.centerLeft
+                                  : Alignment.centerRight,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 4, horizontal: 8),
+                                child: Container(
                                   padding: const EdgeInsets.symmetric(
-                                      vertical: 4, horizontal: 8),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 12, vertical: 8),
-                                    decoration: ShapeDecoration(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .surfaceContainerHighest
-                                          .withValues(alpha: 0.5),
-                                      shape: ContinuousRectangleBorder(
-                                        borderRadius:
-                                            BorderRadius.circular(28),
-                                      ),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(Icons.lock_outline,
-                                            size: 14,
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .onSurfaceVariant),
-                                        const SizedBox(width: 6),
-                                        Flexible(
-                                          child: Text(
-                                            t(context, 'security.fs.message_expired_fs'),
-                                            style: TextStyle(
-                                              fontStyle: FontStyle.italic,
-                                              fontSize: 13,
-                                              color: Theme.of(context)
-                                                  .colorScheme
-                                                  .onSurfaceVariant,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
+                                      horizontal: 12, vertical: 8),
+                                  decoration: ShapeDecoration(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .surfaceContainerHighest
+                                        .withValues(alpha: 0.5),
+                                    shape: ContinuousRectangleBorder(
+                                      borderRadius:
+                                          BorderRadius.circular(28),
                                     ),
                                   ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.lock_outline,
+                                          size: 14,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant),
+                                      const SizedBox(width: 6),
+                                      Flexible(
+                                        child: Text(
+                                          t(context, 'security.fs.message_expired_fs'),
+                                          style: TextStyle(
+                                            fontStyle: FontStyle.italic,
+                                            fontSize: 13,
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .onSurfaceVariant,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              );
-                            }
-                            return const SizedBox.shrink();
+                              ),
+                            );
                           }
                           if (isEncrypted && decrypted == null) {
                             return const SizedBox.shrink();

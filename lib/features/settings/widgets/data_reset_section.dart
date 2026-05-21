@@ -121,11 +121,12 @@ class DataResetSection extends ConsumerWidget {
                 return true;
               }());
 
-              // §12.3: Strip persisted plaintext from FS-encrypted messages.
-              // If user kept messages but deleted identity, FS plaintext must
-              // not survive the reset — the ratchet keys are now destroyed.
+              // §12.3: Strip persisted plaintext from ALL encrypted messages.
+              // After identity restore, legacy messages will be re-decrypted
+              // on demand (same keys restored from seed), while FS messages
+              // will fail inner-layer decryption (ratchet gone) → placeholder.
               if (!second.deleteMessages) {
-                await messagesRepo.stripFsPlaintext();
+                await messagesRepo.stripEncryptedPlaintext();
               }
 
               // Increment registry version to trigger UI refresh
