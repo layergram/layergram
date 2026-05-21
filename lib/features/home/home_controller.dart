@@ -340,17 +340,17 @@ class HomeController {
     final privateKey = await _activePrivateKey();
     if (privateKey == null) return null;
 
-    // Get ratchet state if FS session is active for this contact
+    // §7.3: Get ratchet state for decryption — supports per-device sessions.
+    // Pass all known ratchets so the decrypt method can match by fs_session.
+    final allRatchets = ref.read(fsRatchetStateCacheProvider);
     RatchetState? ratchetState;
-    // CRITICAL: Use controller's session manager to ensure consistency
     final sessionManager = fsController.sessionManager;
     final activeSessionId = sessionManager.activeSessionId;
     if (activeSessionId != null) {
-      ratchetState = ref.read(fsRatchetStateCacheProvider)[activeSessionId];
+      ratchetState = allRatchets[activeSessionId];
     }
 
-    // Production logging for FS decryption tracking
-    print('[FS-CHAT-DECRYPT] contact=${contact.identityId}, sessionState=${sessionManager.state}, activeSessionId=$activeSessionId, ratchetInCache=${ratchetState != null}');
+    print('[FS-CHAT-DECRYPT] contact=${contact.identityId}, sessionState=${sessionManager.state}, activeSessionId=$activeSessionId, ratchetInCache=${ratchetState != null}, totalRatchets=${allRatchets.length}');
 
     final encMessage = EncryptedMessage(
       version: 1,
@@ -365,6 +365,7 @@ class HomeController {
       senderPublicKeyBase64: contact.publicKeyBase64,
       message: encMessage,
       ratchetState: ratchetState,
+      allRatchetStates: allRatchets,
     );
 
     // FS-encrypted but ratchet state is missing (identity reset / broken session)
@@ -382,12 +383,12 @@ class HomeController {
     }
 
     // Update ratchet state if it changed (e.g., received new message advanced counter)
-    if (result.newRatchetState != null && activeSessionId != null) {
+    if (result.newRatchetState != null) {
       final newState = result.newRatchetState!;
       print('[FS-CHAT-DECRYPT] Updating cache - session=${newState.sessionId}, send=${newState.sendCounter}, recv=${newState.recvCounter}');
       ref.read(fsRatchetStateCacheProvider.notifier).update((cache) => {
             ...cache,
-            activeSessionId: newState,
+            newState.sessionId: newState,
           });
       // Persist updated state
       await ref.read(fsRatchetPersistenceServiceProvider).saveRatchetState(newState);
@@ -420,14 +421,14 @@ class HomeController {
     final privateKey = await _activePrivateKey();
     if (privateKey == null) return null;
 
-    // Get ratchet state if FS session is active for this contact
-    // CRITICAL: Use controller's session manager to ensure consistency
+    // §7.3: Get ratchet state for decryption — supports per-device sessions.
+    final allRatchets = ref.read(fsRatchetStateCacheProvider);
     final fsController = ref.read(fsOpportunisticControllerProvider(contact.identityId));
     final sessionManager = fsController.sessionManager;
     final activeSessionId = sessionManager.activeSessionId;
     RatchetState? ratchetState;
     if (activeSessionId != null) {
-      ratchetState = ref.read(fsRatchetStateCacheProvider)[activeSessionId];
+      ratchetState = allRatchets[activeSessionId];
     }
 
     // Sort messages descending by timestamp to find the latest
@@ -471,6 +472,7 @@ class HomeController {
             ciphertextBase64: message.ciphertextBase64 ?? '',
           ),
           ratchetState: ratchetState,
+          allRatchetStates: allRatchets,
         );
 
         // FS message whose ratchet is gone — skip to next message
@@ -578,14 +580,14 @@ class HomeController {
 
       // Try each contact key.
       for (final contact in [selfRemote, ...orderedContacts]) {
-        // Get ratchet state if FS session is active for this contact
+        // §7.3: Get ratchet state for decryption — supports per-device sessions.
+        final allRatchets = ref.read(fsRatchetStateCacheProvider);
         RatchetState? ratchetState;
-        // CRITICAL: Use controller's session manager for consistency
         final fsController = ref.read(fsOpportunisticControllerProvider(contact.identityId));
         final sessionManager = fsController.sessionManager;
         final activeSessionId = sessionManager.activeSessionId;
         if (activeSessionId != null) {
-          ratchetState = ref.read(fsRatchetStateCacheProvider)[activeSessionId];
+          ratchetState = allRatchets[activeSessionId];
         }
 
         // Try full decrypt (handles both legacy and FS-encrypted messages)
@@ -596,6 +598,7 @@ class HomeController {
             senderPublicKeyBase64: contact.publicKeyBase64,
             message: msg,
             ratchetState: ratchetState,
+            allRatchetStates: allRatchets,
           );
         } catch (_) {
           // Wrong key - try next contact
@@ -649,6 +652,10 @@ class HomeController {
           // Trigger UI refresh if FS state changed
           if (fsResult.type != FsIncomingType.noExtension) {
             ref.read(fsRegistryVersionProvider.notifier).state++;
+          }
+          // §7.9: New device/session detected for this contact
+          if (fsResult.newDeviceDetected) {
+            print('[FS-MULTI-DEVICE] New device detected for ${contact.identityId}');
           }
         }
 

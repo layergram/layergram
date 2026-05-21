@@ -161,15 +161,16 @@ class EncryptionService {
 
   /// Decrypts a message using legacy decryption or FS double ratchet.
   ///
-  /// Decrypts the outer X25519+HKDF layer, then inspects the envelope:
-  /// - If it contains FS fields (`fs_v`, `fs_cipher`), decrypts the inner
-  ///   payload with the double ratchet (requires [ratchetState]).
-  /// - Otherwise, reads the plaintext `text` field directly (legacy path).
+  /// Decrypts a message. For multi-device support (§7.3), pass
+  /// [allRatchetStates] with all known ratchets for this contact — the
+  /// method selects the correct one based on the `fs_session` field in the
+  /// envelope. Falls back to [ratchetState] when no match is found.
   Future<DecryptionResult> decrypt({
     required String recipientPrivateKeyBase64,
     required String senderPublicKeyBase64,
     required EncryptedMessage message,
     RatchetState? ratchetState,
+    Map<String, RatchetState>? allRatchetStates,
   }) async {
     // Decrypt outer layer once to get the full envelope map.
     final key = await _deriveSymmetricKey(
@@ -192,9 +193,16 @@ class EncryptionService {
     }());
 
     if (isFsEncrypted) {
-      print('[FS-DECRYPT-PROD] FS msg detected - session=${map['fs_session']}, counter=${map['fs_counter']}, hasRatchet=${ratchetState != null}');
+      // §7.3: Per-device ratchet selection — match by fs_session from envelope
+      final envelopeFsSession = map['fs_session'] as String?;
+      RatchetState? effectiveRatchet = ratchetState;
+      if (envelopeFsSession != null && allRatchetStates != null) {
+        effectiveRatchet = allRatchetStates[envelopeFsSession] ?? ratchetState;
+      }
 
-      if (ratchetState == null) {
+      print('[FS-DECRYPT-PROD] FS msg detected - session=$envelopeFsSession, counter=${map['fs_counter']}, hasRatchet=${effectiveRatchet != null}');
+
+      if (effectiveRatchet == null) {
         print('[FS-DECRYPT-PROD] WARN: FS msg but ratchetState is NULL — '
             'session was reset, inner FS content unrecoverable');
         // The outer legacy layer was decrypted successfully, but the FS
@@ -215,10 +223,10 @@ class EncryptionService {
         );
       }
 
-      print('[FS-DECRYPT-PROD] Attempting FS decrypt with ratchet session=${ratchetState.sessionId}');
+      print('[FS-DECRYPT-PROD] Attempting FS decrypt with ratchet session=${effectiveRatchet.sessionId}');
       final fsCipher = base64Decode(map['fs_cipher'] as String);
       final fsNonce = base64Decode(map['fs_nonce'] as String);
-      final fsSessionId = map['fs_session'] as String? ?? ratchetState.sessionId;
+      final fsSessionId = map['fs_session'] as String? ?? effectiveRatchet.sessionId;
       final fsRatchetPub = map['fs_ratchet_pub'] as String;
       final fsCounter = map['fs_counter'] as int;
 
@@ -231,7 +239,7 @@ class EncryptionService {
       );
 
       final (:plaintext, :newState) = await FsDoubleRatchet.decrypt(
-        state: ratchetState,
+        state: effectiveRatchet,
         message: fsMessage,
       );
 

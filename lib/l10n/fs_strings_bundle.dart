@@ -67,6 +67,9 @@ class FsStringsBundle {
     'security.fs.warning.no_silent_downgrade':
         'Maximum Forward Secrecy is active. Messages cannot be sent without a confirmed secure channel.',
 
+    // Multi-device (§7.9)
+    'security.fs.new_device_detected': 'New device or session detected for this contact. A new secure session is being negotiated.',
+
     // Actions
     'security.fs.message_lost': 'This message was encrypted with a previous session and cannot be decrypted.',
     'security.fs.message_expired_fs': 'Forward Secrecy message',
@@ -214,6 +217,7 @@ class FsStringsBundle {
         'Se la negoziazione Forward Secrecy fallisce, questa conversazione tornerà alla crittografia standard.',
     'security.fs.warning.no_silent_downgrade':
         'Forward Secrecy massima attiva. I messaggi non possono essere inviati senza un canale sicuro confermato.',
+    'security.fs.new_device_detected': 'Nuovo dispositivo o sessione rilevato per questo contatto. Una nuova sessione sicura è in fase di negoziazione.',
     'security.fs.message_lost': 'Questo messaggio era cifrato con una sessione precedente e non può essere decifrato.',
     'security.fs.message_expired_fs': 'Messaggio Forward Secrecy',
     'security.fs.session_reset_done': 'Sessione sicura reimpostata. Una nuova sessione sarà negoziata automaticamente.',
@@ -273,6 +277,7 @@ class FsStringsBundle {
         'Si falla la negociación de Forward Secrecy, esta conversación volverá al cifrado estándar.',
     'security.fs.warning.no_silent_downgrade':
         'Forward Secrecy máximo activo. No se pueden enviar mensajes sin un canal seguro confirmado.',
+    'security.fs.new_device_detected': 'Nuevo dispositivo o sesión detectada para este contacto. Se está negociando una nueva sesión segura.',
     'security.fs.message_lost': 'Este mensaje fue cifrado con una sesión anterior y no se puede descifrar.',
     'security.fs.message_expired_fs': 'Mensaje Forward Secrecy',
     'security.fs.session_reset_done': 'Sesión segura restablecida. Se negociará una nueva sesión automáticamente.',
@@ -330,6 +335,7 @@ class FsStringsBundle {
         'Wenn die Forward-Secrecy-Aushandlung fehlschlägt, fällt diese Unterhaltung auf die Standardverschlüsselung zurück.',
     'security.fs.warning.no_silent_downgrade':
         'Maximale Forward Secrecy aktiv. Nachrichten können nicht ohne einen bestätigten sicheren Kanal gesendet werden.',
+    'security.fs.new_device_detected': 'Neues Gerät oder neue Sitzung für diesen Kontakt erkannt. Eine neue sichere Sitzung wird ausgehandelt.',
     'security.fs.message_lost': 'Diese Nachricht wurde mit einer vorherigen Sitzung verschlüsselt und kann nicht entschlüsselt werden.',
     'security.fs.message_expired_fs': 'Forward-Secrecy-Nachricht',
     'security.fs.session_reset_done': 'Sichere Sitzung zurückgesetzt. Eine neue Sitzung wird automatisch ausgehandelt.',
@@ -387,6 +393,7 @@ class FsStringsBundle {
         'En cas d\'échec de la négociation, cette conversation reviendra au chiffrement standard.',
     'security.fs.warning.no_silent_downgrade':
         'Forward Secrecy maximal actif. Les messages ne peuvent pas être envoyés sans canal sécurisé confirmé.',
+    'security.fs.new_device_detected': 'Nouvel appareil ou session détecté pour ce contact. Une nouvelle session sécurisée est en cours de négociation.',
     'security.fs.message_lost': 'Ce message a été chiffré avec une session précédente et ne peut pas être déchiffré.',
     'security.fs.message_expired_fs': 'Message Forward Secrecy',
     'security.fs.session_reset_done': 'Session sécurisée réinitialisée. Une nouvelle session sera négociée automatiquement.',
@@ -444,6 +451,7 @@ class FsStringsBundle {
         'Se a negociação falhar, esta conversa voltará à criptografia padrão.',
     'security.fs.warning.no_silent_downgrade':
         'Forward Secrecy máximo ativo. Mensagens não podem ser enviadas sem um canal seguro confirmado.',
+    'security.fs.new_device_detected': 'Novo dispositivo ou sessão detectado para este contato. Uma nova sessão segura está sendo negociada.',
     'security.fs.message_lost': 'Esta mensagem foi criptografada com uma sessão anterior e não pode ser descriptografada.',
     'security.fs.message_expired_fs': 'Mensagem Forward Secrecy',
     'security.fs.session_reset_done': 'Sessão segura redefinida. Uma nova sessão será negociada automaticamente.',

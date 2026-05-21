@@ -240,9 +240,9 @@ void main() {
       final result = disp2SessionManager.processFsInitReceived(
         message: FsInitMessage(
           initId: 'new-init-from-disp1b',
-          ikAPub: 'disp1-pub-key',
-          ekAPub: 'ephemeral-pub-key',
-          dkAPub: 'deniable-pub-key',
+          initiatorDevicePub: 'disp1-pub-key',
+          initiatorEphemeralPub: 'ephemeral-pub-key',
+          caps: const ['lgfs1'],
           createdAt: clock.nowSeconds(),
         ),
         localInitId: '',
@@ -366,7 +366,7 @@ void main() {
         ratchetState: originalHandshake.initiatorRatchet,
       );
 
-      // 4) disp2 tries to decrypt with NEW ratchet → must fail
+      // 4) disp2 tries to decrypt with NEW ratchet only → must fail
       //    The session IDs and chain keys are different
       expect(
         () => service.decrypt(
@@ -386,6 +386,22 @@ void main() {
         ratchetState: null,
       );
       expect(decNoRatchet.fsDecryptFailed, isTrue);
+
+      // 6) §7.3: disp2 with BOTH ratchets via allRatchetStates →
+      //    uses fs_session from envelope to find correct ratchet
+      final allRatchets = <String, RatchetState>{
+        originalHandshake.sessionId: originalHandshake.responderRatchet,
+        newHandshake.sessionId: newHandshake.responderRatchet,
+      };
+      final decWithAll = await service.decrypt(
+        recipientPrivateKeyBase64: disp2Keys.privateKeyBase64,
+        senderPublicKeyBase64: disp1Keys.publicKeyBase64,
+        message: oldEnc.message,
+        ratchetState: newHandshake.responderRatchet, // default
+        allRatchetStates: allRatchets,
+      );
+      expect(decWithAll.fsDecryptFailed, isFalse);
+      expect(decWithAll.payload.text, 'Old ratchet message from disp1');
     });
 
     test('full multi-device scenario: disp1 → disp1b → disp1 resume', () async {
@@ -469,9 +485,9 @@ void main() {
       final resetResult = disp2SessionMgr.processFsInitReceived(
         message: FsInitMessage(
           initId: 'disp1b-init',
-          ikAPub: base64Encode(disp1Pub),
-          ekAPub: 'ek-disp1b',
-          dkAPub: 'dk-disp1b',
+          initiatorDevicePub: base64Encode(disp1Pub),
+          initiatorEphemeralPub: 'ek-disp1b',
+          caps: const ['lgfs1'],
           createdAt: clock.nowSeconds(),
         ),
         localInitId: '',
@@ -553,6 +569,22 @@ void main() {
       );
       expect(msg4DecNoRatchet.fsDecryptFailed, isTrue,
           reason: 'FS message without ratchet should fail gracefully');
+
+      // §7.3: disp2 with BOTH ratchets (per-device) CAN decrypt old msg
+      final allRatchets = <String, RatchetState>{
+        originalHandshake.sessionId: disp2Ratchet, // old device ratchet
+        newHandshake.sessionId: disp2NewRatchet, // new device ratchet
+      };
+      final msg4DecPerDevice = await service.decrypt(
+        recipientPrivateKeyBase64: disp2Keys.privateKeyBase64,
+        senderPublicKeyBase64: disp1Keys.publicKeyBase64,
+        message: msg4Enc.message,
+        ratchetState: disp2NewRatchet, // default
+        allRatchetStates: allRatchets,
+      );
+      expect(msg4DecPerDevice.fsDecryptFailed, isFalse,
+          reason: 'Per-device ratchet lookup should decrypt old device msg');
+      expect(msg4DecPerDevice.payload.text, 'Msg4 from disp1 (old ratchet)');
 
       // ── Phase 5: disp2 continues with disp1b normally ──
 

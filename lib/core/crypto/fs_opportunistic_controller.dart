@@ -16,6 +16,7 @@ import 'dart:typed_data';
 
 import 'fs_contact_security_state.dart';
 import 'fs_control_messages.dart';
+import 'fs_device_session_router.dart';
 import 'fs_dos_resistance.dart';
 import 'fs_double_ratchet.dart';
 import 'fs_downgrade_detector.dart';
@@ -52,6 +53,7 @@ class FsOpportunisticController {
     required String identityContext,
     required FsSessionManager sessionManager,
     required FsContactSecurityRegistry registry,
+    FsClock? clock,
     FsStatePersistenceService? persistenceService,
     FsRatchetPersistenceService? ratchetPersistenceService,
     void Function(RatchetState)? onRatchetInitialized,
@@ -65,6 +67,7 @@ class FsOpportunisticController {
   })  : _localContactId = localContactId,
         _identityContext = identityContext,
         _sessionManager = sessionManager,
+        _deviceRouter = FsDeviceSessionRouter(clock: clock, initialSession: sessionManager),
         _registry = registry,
         _persistenceService = persistenceService,
         _ratchetPersistenceService = ratchetPersistenceService,
@@ -80,7 +83,8 @@ class FsOpportunisticController {
   final String _localContactId;
   final String _identityContext;
   String get identityContext => _identityContext;
-  final FsSessionManager _sessionManager;
+  FsSessionManager _sessionManager;
+  final FsDeviceSessionRouter _deviceRouter;
   final FsContactSecurityRegistry _registry;
   final FsStatePersistenceService? _persistenceService;
   final FsRatchetPersistenceService? _ratchetPersistenceService;
@@ -345,6 +349,26 @@ class FsOpportunisticController {
       }
     }
 
+    // §7.3/§7.9: Per-device session routing.
+    // If the current session is in a terminal state (active/broken/suspended),
+    // a new fs_init from the same identity means a new device or restored
+    // device. Instead of resetting the current session (which would destroy
+    // the old ratchet and break in-flight messages from the old device),
+    // we archive the current session and create a fresh one.
+    final currentState = _sessionManager.state;
+    final isTerminal = currentState == FsSessionState.fsActive ||
+        currentState == FsSessionState.strictFsActive ||
+        currentState == FsSessionState.fsBroken ||
+        currentState == FsSessionState.fsSuspended;
+
+    bool newDeviceDetected = false;
+    if (isTerminal) {
+      print('[FS-MULTI-DEVICE] New fs_init while current session is $currentState '
+          '— rotating to new per-device session (§7.3)');
+      _sessionManager = _deviceRouter.rotateForNewDevice();
+      newDeviceDetected = true;
+    }
+
     // Build canonical tie-break strings per §8.3.4 when keys are available.
     String? localCanonical;
     String? remoteCanonical;
@@ -374,13 +398,18 @@ class FsOpportunisticController {
         contactId: remoteContactId,
         initId: msg.initId,
       );
-      _updateRegistry(sessionId: msg.initId, state: _sessionManager.state);
+      _updateRegistry(
+        sessionId: msg.initId,
+        state: _sessionManager.state,
+        remoteDeviceId: msg.initiatorDevicePub,
+      );
     }
     return FsIncomingResult._(
       type: result.accepted
           ? FsIncomingType.fsInitAccepted
           : FsIncomingType.fsInitRejected,
       rejectionReason: result.reason,
+      newDeviceDetected: newDeviceDetected && result.accepted,
     );
   }
 
@@ -535,7 +564,10 @@ class FsOpportunisticController {
   }) {
     try {
       final msg = FsResetMessage.fromJson(fs);
-      _sessionManager.reset();
+      // Reset all sessions (current + previous devices) — explicit reset
+      // from the remote means all device sessions are invalidated.
+      _deviceRouter.resetAll();
+      _sessionManager = _deviceRouter.currentSession;
       _dosGuard?.completeHandshake(
         contactId: remoteContactId,
         initId: msg.previousSessionId,
@@ -650,12 +682,14 @@ class FsOpportunisticController {
   void _updateRegistry({
     required String? sessionId,
     required FsSessionState state,
+    String? remoteDeviceId,
   }) {
     final stateEntry = FsContactSecurityState(
       contactId: _localContactId,
       identityContext: _identityContext,
       sessionId: sessionId,
       fsState: state,
+      remoteDeviceId: remoteDeviceId,
     );
     _registry.upsert(stateEntry);
     // Persist to storage (only for primary context)
@@ -765,11 +799,29 @@ class FsOpportunisticController {
   // State access
   // ---------------------------------------------------------------------------
 
-  /// Current FS session state.
+  /// Current FS session state (from the most recently active device session).
   FsSessionState get state => _sessionManager.state;
 
+  /// The best FS state across all device sessions.
+  ///
+  /// Returns the highest-priority state: if the current device session is in
+  /// handshake but a previous device session is still active, returns fsActive.
+  FsSessionState get bestState => _deviceRouter.bestState;
+
   /// The session manager for direct access (ensures consistency with controller state).
+  ///
+  /// Returns the current (most recently active) device's session manager.
   FsSessionManager get sessionManager => _sessionManager;
+
+  /// The per-device session router.
+  ///
+  /// Used by the home controller to look up ratchets for specific session IDs
+  /// (e.g., when decrypting a message whose `fs_session` points to a previous
+  /// device's ratchet).
+  FsDeviceSessionRouter get deviceRouter => _deviceRouter;
+
+  /// Returns all active session IDs across all device sessions.
+  List<String> get allActiveSessionIds => _deviceRouter.allActiveSessionIds;
 }
 
 // ---------------------------------------------------------------------------
@@ -805,6 +857,7 @@ class FsIncomingResult {
     required this.type,
     this.rejectionReason,
     this.rawType,
+    this.newDeviceDetected = false,
   });
 
   final FsIncomingType type;
@@ -814,6 +867,11 @@ class FsIncomingResult {
 
   /// The raw `type` string if [type] is [FsIncomingType.unknownType].
   final String? rawType;
+
+  /// True if this `fs_init` was accepted because a new device/session was
+  /// detected for the same identity (§7.9). The previous device's session
+  /// has been archived (its ratchet is preserved for in-flight decryption).
+  final bool newDeviceDetected;
 
   bool get accepted =>
       type == FsIncomingType.fsInitAccepted ||
