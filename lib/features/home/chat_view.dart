@@ -1362,6 +1362,23 @@ class ChatViewState extends ConsumerState<ChatView> {
       final storageKey = await controller.currentStorageKey();
       final recordId = DateTime.now().microsecondsSinceEpoch.toString();
 
+      // §12.3: FS plaintext stored as encrypted aux record, not in DB.
+      if (encResult.isFsEncrypted && _secretCtrl.text.isNotEmpty) {
+        await ref.read(fsPlaintextPersistenceServiceProvider).savePlaintext(
+          messageId: recordId,
+          plaintext: _secretCtrl.text,
+          contactId: recipient.identityId,
+        );
+        // Warm in-memory cache for immediate display
+        final fsController = ref.read(
+          fsOpportunisticControllerProvider(recipient.identityId),
+        );
+        fsController.cachePlaintext(
+          '${recipient.identityId}|$recordId',
+          _secretCtrl.text,
+        );
+      }
+
       // Ensure outgoing timestamp is never earlier than the newest message
       // in the thread. Prevents ordering issues when device clocks differ
       // (e.g., incoming message has a future timestamp from the sender).
@@ -1378,7 +1395,7 @@ class ChatViewState extends ConsumerState<ChatView> {
               recipientId: recipient.identityId,
               direction: 'outgoing',
               timestamp: outgoingTs,
-              text: _secretCtrl.text,
+              text: encResult.isFsEncrypted ? null : _secretCtrl.text,
               ciphertextBase64: encrypted.ciphertextBase64,
               nonceBase64: encrypted.nonceBase64,
               rawSource: output,

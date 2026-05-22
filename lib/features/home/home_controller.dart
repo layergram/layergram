@@ -325,15 +325,24 @@ class HomeController {
       return null;
     }
 
-    // Check FS plaintext cache first (§12.3) — avoids re-decryption attempt
+    // §12.3: Check in-memory cache first, then aux record persistence.
     final fsController = ref.read(fsOpportunisticControllerProvider(contact.identityId));
     final cacheKey = '${contact.identityId}|${message.id}';
     final cached = fsController.getCachedPlaintext(cacheKey);
     if (cached != null) return cached;
 
-    // FS-encrypted messages have plaintext persisted in DB (encrypted with
-    // storage key). On identity reset, stripEncryptedPlaintext() removes it.
-    // No early return needed — fall through to normal decrypt path.
+    // FS messages have text=null in DB; plaintext lives in encrypted aux records.
+    if (message.isFsEncrypted) {
+      final ptService = ref.read(fsPlaintextPersistenceServiceProvider);
+      final persisted = await ptService.loadPlaintext(message.id);
+      if (persisted != null) {
+        // Warm the in-memory cache for subsequent reads
+        fsController.cachePlaintext(cacheKey, persisted);
+        return persisted;
+      }
+      // Aux record missing (identity reset wiped it) → unrecoverable
+      return null;
+    }
 
     final privateKey = await _activePrivateKey();
     if (privateKey == null) return null;
@@ -394,6 +403,13 @@ class HomeController {
       // Cache FS-decrypted plaintext (§12.3) — ratchet has already advanced
       fsController.cachePlaintext(cacheKey, result.payload.text);
 
+      // Persist to encrypted aux record for restart survival
+      await ref.read(fsPlaintextPersistenceServiceProvider).savePlaintext(
+        messageId: message.id,
+        plaintext: result.payload.text,
+        contactId: contact.identityId,
+      );
+
       // Record message counter in replay cache (§8.7)
       fsController.recordMessageProcessed(
         sessionId: newState.sessionId,
@@ -445,8 +461,16 @@ class HomeController {
         );
       }
 
-      // FS message whose plaintext was stripped (identity reset) — skip
+      // FS message: try aux record cache
       if (message.isFsEncrypted) {
+        final ptService = ref.read(fsPlaintextPersistenceServiceProvider);
+        final persisted = await ptService.loadPlaintext(message.id);
+        if (persisted != null) {
+          return DecryptedMessagePreview(
+            text: persisted,
+            timestamp: message.timestamp,
+          );
+        }
         continue;
       }
 
@@ -692,6 +716,25 @@ class HomeController {
     final keyTag = await currentKeyTag();
     final storageKey = await currentStorageKey();
 
+    // §12.3: FS plaintext must NOT be stored in MessageRecord.text.
+    // Instead, persist it as an opaque encrypted auxiliary record.
+    if (isFsEncrypted && payload.text.isNotEmpty) {
+      final ptService = ref.read(fsPlaintextPersistenceServiceProvider);
+      await ptService.savePlaintext(
+        messageId: recordId,
+        plaintext: payload.text,
+        contactId: senderContact.identityId,
+      );
+      // Also cache in memory for immediate display
+      final fsController = ref.read(
+        fsOpportunisticControllerProvider(senderContact.identityId),
+      );
+      fsController.cachePlaintext(
+        '${senderContact.identityId}|$recordId',
+        payload.text,
+      );
+    }
+
     await ref.read(messagesRepositoryProvider).add(
           MessageRecord(
             id: recordId,
@@ -699,7 +742,7 @@ class HomeController {
             recipientId: payload.recipientId,
             direction: 'incoming',
             timestamp: recordTs,
-            text: payload.text,
+            text: isFsEncrypted ? null : payload.text,
             ciphertextBase64: encryptedMessage.ciphertextBase64,
             nonceBase64: encryptedMessage.nonceBase64,
             rawSource: rawSource,
