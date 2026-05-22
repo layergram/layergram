@@ -472,18 +472,24 @@ void main() {
       final legacyResult = await encService.encrypt(
         senderPrivateKeyBase64: bob.privateKeyBase64,
         recipientPublicKeyBase64: alice.publicKeyBase64,
-        text: 'legacy hello',
-        senderId: 'bob',
-        recipientId: 'alice',
+        payload: const PlaintextPayload(
+          senderId: 'bob',
+          recipientId: 'alice',
+          text: 'legacy hello',
+          timestamp: 1700000000,
+        ),
       );
 
       // Bob encrypts an FS message to Alice
       final fsResult = await encService.encrypt(
         senderPrivateKeyBase64: bob.privateKeyBase64,
         recipientPublicKeyBase64: alice.publicKeyBase64,
-        text: 'FS secret hello',
-        senderId: 'bob',
-        recipientId: 'alice',
+        payload: const PlaintextPayload(
+          senderId: 'bob',
+          recipientId: 'alice',
+          text: 'FS secret hello',
+          timestamp: 1700000000,
+        ),
         ratchetState: aRatchet,
       );
 
@@ -698,9 +704,12 @@ void main() {
       final fsResult = await encService.encrypt(
         senderPrivateKeyBase64: bob.privateKeyBase64,
         recipientPublicKeyBase64: alice.publicKeyBase64,
-        text: 'top secret via FS',
-        senderId: 'bob',
-        recipientId: 'alice',
+        payload: const PlaintextPayload(
+          senderId: 'bob',
+          recipientId: 'alice',
+          text: 'top secret via FS',
+          timestamp: 1700000000,
+        ),
         ratchetState: aRatchet,
       );
       expect(fsResult.newRatchetState, isNotNull);
