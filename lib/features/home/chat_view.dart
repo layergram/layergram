@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' show max;
 
 import 'package:dotted_border/dotted_border.dart';
 import 'package:flutter/material.dart';
@@ -1361,13 +1362,22 @@ class ChatViewState extends ConsumerState<ChatView> {
       final storageKey = await controller.currentStorageKey();
       final recordId = DateTime.now().microsecondsSinceEpoch.toString();
 
+      // Ensure outgoing timestamp is never earlier than the newest message
+      // in the thread. Prevents ordering issues when device clocks differ
+      // (e.g., incoming message has a future timestamp from the sender).
+      final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final latestInThread = _cachedThread.isEmpty
+          ? nowSec
+          : _cachedThread.last.timestamp;
+      final outgoingTs = max(nowSec, latestInThread);
+
       await ref.read(messagesRepositoryProvider).add(
             MessageRecord(
               id: recordId,
               senderId: 'me',
               recipientId: recipient.identityId,
               direction: 'outgoing',
-              timestamp: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+              timestamp: outgoingTs,
               text: _secretCtrl.text,
               ciphertextBase64: encrypted.ciphertextBase64,
               nonceBase64: encrypted.nonceBase64,
