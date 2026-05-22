@@ -223,14 +223,14 @@ class FsContactSecurityCard extends ConsumerWidget {
                         Icon(
                           Icons.timelapse,
                           size: 14,
-                          color: Colors.amber.shade700,
+                          color: Colors.orange.shade700,
                         ),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
                             t(context, 'security.fs.warning.pending_body'),
                             style: theme.textTheme.bodySmall?.copyWith(
-                              color: Colors.amber.shade800,
+                              color: Colors.orange.shade800,
                             ),
                           ),
                         ),
@@ -303,13 +303,13 @@ class _StatusBadge extends StatelessWidget {
                       Icon(
                         Icons.sync_alt,
                         size: 12,
-                        color: Colors.amber.shade700,
+                        color: Colors.orange.shade700,
                       ),
                       const SizedBox(width: 4),
                       Text(
                         _progressText(context, fsState),
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: Colors.amber.shade800,
+                          color: Colors.orange.shade800,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -329,7 +329,7 @@ class _StatusBadge extends StatelessWidget {
       case FsSessionState.fsBroken:
         return cs.error;
       case FsSessionState.strictFsActive:
-        return Colors.indigo;
+        return Colors.green.shade700;
       case FsSessionState.fsActive:
         return Colors.green.shade700;
       case FsSessionState.strictRequested:
@@ -339,11 +339,11 @@ class _StatusBadge extends StatelessWidget {
       case FsSessionState.fsReplySeen:
       case FsSessionState.fsConfirmSent:
       case FsSessionState.fsConfirmed:
-        return Colors.amber.shade800;
-      case FsSessionState.fsSuspended:
         return Colors.orange.shade700;
+      case FsSessionState.fsSuspended:
+        return Colors.grey;
       case FsSessionState.legacyOnly:
-        return cs.onSurfaceVariant;
+        return Colors.grey;
     }
   }
 
