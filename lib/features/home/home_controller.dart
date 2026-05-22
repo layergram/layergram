@@ -331,11 +331,9 @@ class HomeController {
     final cached = fsController.getCachedPlaintext(cacheKey);
     if (cached != null) return cached;
 
-    // §12.3: FS-encrypted message whose plaintext was never persisted and is
-    // no longer in the memory cache. The ratchet has already advanced past
-    // this message, so it cannot be re-decrypted. Return null (UI will show
-    // a placeholder).
-    if (message.isFsEncrypted) return null;
+    // FS-encrypted messages have plaintext persisted in DB (encrypted with
+    // storage key). On identity reset, stripEncryptedPlaintext() removes it.
+    // No early return needed — fall through to normal decrypt path.
 
     final privateKey = await _activePrivateKey();
     if (privateKey == null) return null;
@@ -447,17 +445,9 @@ class HomeController {
         );
       }
 
-      // Check FS plaintext cache for messages without persisted text
+      // FS message whose plaintext was stripped (identity reset) — skip
       if (message.isFsEncrypted) {
-        final cacheKey = '${contact.identityId}|${message.id}';
-        final cached = fsController.getCachedPlaintext(cacheKey);
-        if (cached != null) {
-          return DecryptedMessagePreview(
-            text: cached,
-            timestamp: message.timestamp,
-          );
-        }
-        continue; // FS message not in cache → ratchet has advanced, skip
+        continue;
       }
 
       if (message.ciphertextBase64 == null || message.nonceBase64 == null) {
@@ -702,16 +692,6 @@ class HomeController {
     final keyTag = await currentKeyTag();
     final storageKey = await currentStorageKey();
 
-    // §12.3: FS-encrypted plaintext must NOT be persisted in the database.
-    // Cache it in-memory only; it will be wiped on identity reset / app kill.
-    if (isFsEncrypted) {
-      final fsController = ref.read(
-        fsOpportunisticControllerProvider(senderContact.identityId),
-      );
-      final cacheKey = '${senderContact.identityId}|$recordId';
-      fsController.cachePlaintext(cacheKey, payload.text);
-    }
-
     await ref.read(messagesRepositoryProvider).add(
           MessageRecord(
             id: recordId,
@@ -719,7 +699,7 @@ class HomeController {
             recipientId: payload.recipientId,
             direction: 'incoming',
             timestamp: recordTs,
-            text: isFsEncrypted ? null : payload.text,
+            text: payload.text,
             ciphertextBase64: encryptedMessage.ciphertextBase64,
             nonceBase64: encryptedMessage.nonceBase64,
             rawSource: rawSource,

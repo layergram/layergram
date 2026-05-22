@@ -1361,17 +1361,6 @@ class ChatViewState extends ConsumerState<ChatView> {
       final storageKey = await controller.currentStorageKey();
       final recordId = DateTime.now().microsecondsSinceEpoch.toString();
 
-      // §12.3: FS-encrypted plaintext must NOT be persisted in the database.
-      if (encResult.isFsEncrypted) {
-        final fsController = ref.read(
-          fsOpportunisticControllerProvider(recipient.identityId),
-        );
-        fsController.cachePlaintext(
-          '${recipient.identityId}|$recordId',
-          _secretCtrl.text,
-        );
-      }
-
       await ref.read(messagesRepositoryProvider).add(
             MessageRecord(
               id: recordId,
@@ -1379,7 +1368,7 @@ class ChatViewState extends ConsumerState<ChatView> {
               recipientId: recipient.identityId,
               direction: 'outgoing',
               timestamp: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-              text: encResult.isFsEncrypted ? null : _secretCtrl.text,
+              text: _secretCtrl.text,
               ciphertextBase64: encrypted.ciphertextBase64,
               nonceBase64: encrypted.nonceBase64,
               rawSource: output,
