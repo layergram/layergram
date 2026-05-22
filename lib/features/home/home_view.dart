@@ -296,7 +296,11 @@ class _HomeViewState extends ConsumerState<HomeView> {
     final allowedPeerIds = _currentAllowedPeerIds;
     final restrictToFolder = allowedPeerIds != null;
     final allMessages = List<MessageRecord>.from(await repo.getAllMessages())
-      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      ..sort((a, b) {
+        final byTs = b.timestamp.compareTo(a.timestamp);
+        if (byTs != 0) return byTs;
+        return b.id.compareTo(a.id);
+      });
     final contactsCache = <String, RemoteIdentity>{
       for (final c in _contacts) c.identityId: c,
     };

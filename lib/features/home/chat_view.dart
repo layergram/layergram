@@ -1867,7 +1867,11 @@ class ChatViewState extends ConsumerState<ChatView> {
                     if (effectiveTag == null) return true;
                     return m.keyTag == effectiveTag;
                   }).toList()
-                    ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+                    ..sort((a, b) {
+                      final byTs = a.timestamp.compareTo(b.timestamp);
+                      if (byTs != 0) return byTs;
+                      return a.id.compareTo(b.id);
+                    });
 
                   _cachedThread = thread;
 

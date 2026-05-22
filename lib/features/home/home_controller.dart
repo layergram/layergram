@@ -433,7 +433,11 @@ class HomeController {
 
     // Sort messages descending by timestamp to find the latest
     final sortedMessages = List<MessageRecord>.from(messages)
-      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      ..sort((a, b) {
+        final byTs = b.timestamp.compareTo(a.timestamp);
+        if (byTs != 0) return byTs;
+        return b.id.compareTo(a.id);
+      });
 
     for (final message in sortedMessages) {
       if (message.text != null) {
