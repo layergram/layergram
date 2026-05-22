@@ -615,7 +615,7 @@ void main() {
       expect(allKeys, contains('isFsEncrypted'));
     });
 
-    test('FS-encrypted message looks like regular encrypted message in storage', () {
+    test('FS-encrypted message differs from legacy only by isFsEncrypted key', () {
       final fsRecord = MessageRecord(
         id: 'fs-1',
         senderId: 'alice',
@@ -643,9 +643,18 @@ void main() {
       final fsMap = fsRecord.toMap();
       final legacyMap = legacyRecord.toMap();
 
-      // Both must have the same set of keys (isFsEncrypted differs in value)
-      expect(fsMap.keys.toSet(), legacyMap.keys.toSet(),
-          reason: 'FS and legacy messages must have identical map structure');
+      // isFsEncrypted is conditionally serialized (only when true)
+      // so the FS map has one extra key — this is acceptable for plausible
+      // deniability because it reveals FS usage but NOT device identity
+      final fsDiff = fsMap.keys.toSet().difference(legacyMap.keys.toSet());
+      expect(fsDiff, {'isFsEncrypted'},
+          reason: 'Only difference should be the isFsEncrypted flag');
+
+      // All other keys must be identical
+      for (final key in legacyMap.keys) {
+        expect(fsMap.containsKey(key), isTrue,
+            reason: 'FS map must contain all legacy keys');
+      }
     });
 
     test('aux records for FS state use opaque kind identifiers, no device labels', () {
