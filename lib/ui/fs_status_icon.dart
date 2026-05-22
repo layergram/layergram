@@ -19,19 +19,19 @@ import '../l10n/app_strings.dart';
 
 /// Compact Forward Secrecy status icon for in-chat display.
 ///
-/// Shows a small glyph and color that communicates the current FS state
-/// without cluttering the chat.  Wrap in a [Tooltip] by passing
-/// [showTooltip] = true (default).
+/// Shows a shield glyph whose fill color communicates the current FS state.
+/// Tap/click opens the contact security section (handled by the caller).
 ///
 /// Spec reference: §9.1 — Compact chat icon.
 ///
-/// Glyphs:
+/// Shields:
 /// ```
-/// ○  Base / legacy           — grey
-/// ◐  Upgrading in progress   — amber
-/// ●  Forward Secrecy active  — green
-/// ◆  Strict / Maximum FS     — teal
-/// ⚠  Warning / broken        — red
+/// 🛡 grey             — no FS (legacy only)
+/// 🛡 orange           — handshake / negotiation in progress
+/// 🛡 green            — Opportunistic FS active (multi-device)
+/// 🛡 green + gold rim — Strict / Maximum FS active (single device)
+/// 🛡 grey             — suspended
+/// ⚠  red              — broken / warning
 /// ```
 class FsStatusIcon extends StatelessWidget {
   const FsStatusIcon({
@@ -47,51 +47,63 @@ class FsStatusIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final icon = Icon(
-      _iconData(fsState),
-      size: size,
-      color: _color(fsState, Theme.of(context)),
-      semanticLabel: _semanticLabel(context, fsState),
+    final theme = Theme.of(context);
+
+    // Broken state keeps the warning triangle icon
+    if (fsState == FsSessionState.fsBroken) {
+      final icon = Icon(
+        Icons.warning_amber_rounded,
+        size: size,
+        color: theme.colorScheme.error,
+        semanticLabel: _semanticLabel(context, fsState),
+      );
+      if (!showTooltip) return icon;
+      return Tooltip(
+        message: _tooltipText(context, fsState),
+        child: icon,
+      );
+    }
+
+    final fillColor = _fillColor(fsState, theme);
+    final borderColor = _borderColor(fsState);
+    final hasBorder = borderColor != null;
+
+    final shield = SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(
+        painter: _ShieldPainter(
+          fillColor: fillColor,
+          borderColor: borderColor,
+          borderWidth: hasBorder ? size * 0.12 : 0,
+        ),
+        child: Center(
+          child: Semantics(
+            label: _semanticLabel(context, fsState),
+            child: const SizedBox.shrink(),
+          ),
+        ),
+      ),
     );
 
-    if (!showTooltip) return icon;
+    if (!showTooltip) return shield;
 
     return Tooltip(
       message: _tooltipText(context, fsState),
-      child: icon,
+      child: shield,
     );
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
+  // ── Color helpers ─────────────────────────────────────────────────────────
 
-  static IconData _iconData(FsSessionState state) {
+  /// Returns the fill color for the shield.
+  static Color fillColor(FsSessionState state, ThemeData theme) =>
+      _fillColor(state, theme);
+
+  static Color _fillColor(FsSessionState state, ThemeData theme) {
     switch (state) {
       case FsSessionState.legacyOnly:
-        return Icons.radio_button_unchecked;
-      case FsSessionState.fsInitSent:
-      case FsSessionState.fsInitSeen:
-      case FsSessionState.fsReplySent:
-      case FsSessionState.fsReplySeen:
-      case FsSessionState.fsConfirmSent:
-      case FsSessionState.fsConfirmed:
-        return Icons.timelapse;
-      case FsSessionState.fsActive:
-        return Icons.circle;
-      case FsSessionState.strictFsActive:
-        return Icons.diamond;
-      case FsSessionState.fsSuspended:
-        return Icons.pause_circle_outline;
-      case FsSessionState.strictRequested:
-        return Icons.timelapse;
-      case FsSessionState.fsBroken:
-        return Icons.warning_amber_rounded;
-    }
-  }
-
-  static Color _color(FsSessionState state, ThemeData theme) {
-    switch (state) {
-      case FsSessionState.legacyOnly:
-        return theme.disabledColor;
+        return Colors.grey;
       case FsSessionState.fsInitSent:
       case FsSessionState.fsInitSeen:
       case FsSessionState.fsReplySent:
@@ -99,17 +111,28 @@ class FsStatusIcon extends StatelessWidget {
       case FsSessionState.fsConfirmSent:
       case FsSessionState.fsConfirmed:
       case FsSessionState.strictRequested:
-        return Colors.amber;
+        return Colors.orange;
       case FsSessionState.fsActive:
         return Colors.green;
       case FsSessionState.strictFsActive:
-        return Colors.teal;
+        return Colors.green;
       case FsSessionState.fsSuspended:
         return Colors.grey;
       case FsSessionState.fsBroken:
         return theme.colorScheme.error;
     }
   }
+
+  /// Returns the border color for the shield, or null if no border.
+  /// Only Strict FS gets a gold border.
+  static Color? _borderColor(FsSessionState state) {
+    if (state == FsSessionState.strictFsActive) {
+      return const Color(0xFFD4A017); // gold
+    }
+    return null;
+  }
+
+  // ── Text helpers ──────────────────────────────────────────────────────────
 
   static String _tooltipText(BuildContext context, FsSessionState state) {
     final key = _statusKey(state);
@@ -142,4 +165,55 @@ class FsStatusIcon extends StatelessWidget {
         return 'security.fs.status.broken';
     }
   }
+}
+
+/// Custom painter that draws a shield shape.
+class _ShieldPainter extends CustomPainter {
+  _ShieldPainter({
+    required this.fillColor,
+    this.borderColor,
+    this.borderWidth = 0,
+  });
+
+  final Color fillColor;
+  final Color? borderColor;
+  final double borderWidth;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+
+    // Shield path: rounded top, pointed bottom
+    final path = Path()
+      ..moveTo(w * 0.5, 0)
+      ..lineTo(w * 0.85, 0)
+      ..quadraticBezierTo(w, 0, w, h * 0.15)
+      ..lineTo(w, h * 0.45)
+      ..quadraticBezierTo(w, h * 0.7, w * 0.5, h)
+      ..quadraticBezierTo(0, h * 0.7, 0, h * 0.45)
+      ..lineTo(0, h * 0.15)
+      ..quadraticBezierTo(0, 0, w * 0.15, 0)
+      ..close();
+
+    // Fill
+    canvas.drawPath(path, Paint()..color = fillColor);
+
+    // Border (only for strict FS)
+    if (borderColor != null && borderWidth > 0) {
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = borderColor!
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = borderWidth,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ShieldPainter oldDelegate) =>
+      fillColor != oldDelegate.fillColor ||
+      borderColor != oldDelegate.borderColor ||
+      borderWidth != oldDelegate.borderWidth;
 }
