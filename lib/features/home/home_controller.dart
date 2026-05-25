@@ -698,6 +698,7 @@ class HomeController {
           final fsResult = await fsCtrl.processIncomingEnvelope(
             envelope,
             remoteContactId: contact.identityId,
+            remoteIdentityPublicKey: contact.publicKeyBase64,
           );
           // Trigger UI refresh if FS state changed
           if (fsResult.type != FsIncomingType.noExtension) {

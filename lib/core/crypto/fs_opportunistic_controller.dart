@@ -274,21 +274,23 @@ class FsOpportunisticController {
   Future<FsIncomingResult> processIncomingEnvelope(
     Map<String, dynamic> envelope, {
     required String remoteContactId,
+    String? remoteIdentityPublicKey,
   }) async {
     final contactKey = '$remoteContactId|$_identityContext';
 
     // Atomic state transitions: serialize per-contact processing (§20.1)
     if (_stateMutex != null) {
       return _stateMutex.withLock(contactKey, () async {
-        return _processIncomingEnvelopeInner(envelope, remoteContactId: remoteContactId);
+        return _processIncomingEnvelopeInner(envelope, remoteContactId: remoteContactId, remoteIdentityPublicKey: remoteIdentityPublicKey);
       });
     }
-    return _processIncomingEnvelopeInner(envelope, remoteContactId: remoteContactId);
+    return _processIncomingEnvelopeInner(envelope, remoteContactId: remoteContactId, remoteIdentityPublicKey: remoteIdentityPublicKey);
   }
 
   Future<FsIncomingResult> _processIncomingEnvelopeInner(
     Map<String, dynamic> envelope, {
     required String remoteContactId,
+    String? remoteIdentityPublicKey,
   }) async {
     final fs = LmfV2Decoder.extractFsExtension(envelope);
     if (fs == null) {
@@ -309,7 +311,7 @@ class FsOpportunisticController {
     final type = LmfV2Decoder.fsMsgType(envelope);
     switch (type) {
       case 'fs_init':
-        return _handleFsInit(fs, remoteContactId: remoteContactId);
+        return _handleFsInit(fs, remoteContactId: remoteContactId, remoteIdentityPublicKey: remoteIdentityPublicKey);
       case 'fs_reply':
         return _handleFsReply(fs, remoteContactId: remoteContactId);
       case 'fs_confirm':
@@ -339,6 +341,7 @@ class FsOpportunisticController {
   FsIncomingResult _handleFsInit(
     Map<String, dynamic> fs, {
     required String remoteContactId,
+    String? remoteIdentityPublicKey,
   }) {
     late FsInitMessage msg;
     try {
@@ -393,8 +396,9 @@ class FsOpportunisticController {
         devicePublicKey: _localDevicePublicKey,
         initId: localInit,
       );
+      final remoteIK = remoteIdentityPublicKey ?? msg.initiatorDevicePub;
       remoteCanonical = FsSessionManager.buildCanonical(
-        identityPublicKey: msg.initiatorDevicePub, // remote IK (from FS_INIT)
+        identityPublicKey: remoteIK,
         devicePublicKey: msg.initiatorDevicePub,
         initId: msg.initId,
       );

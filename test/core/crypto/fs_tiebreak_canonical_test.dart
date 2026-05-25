@@ -197,4 +197,94 @@ void main() {
     expect(canonical.endsWith('INIT'), isTrue);
     expect(canonical.contains('DK'), isTrue);
   });
+
+  // T_TB_7: Identity key vs device key must be distinct in canonical form
+  test('T_TB_7: canonical uses distinct IK and DK (not same key twice)', () {
+    final withDistinct = FsSessionManager.buildCanonical(
+      identityPublicKey: 'IDENTITY_KEY_ABC',
+      devicePublicKey: 'DEVICE_KEY_XYZ',
+      initId: 'init-1',
+    );
+    final withSame = FsSessionManager.buildCanonical(
+      identityPublicKey: 'DEVICE_KEY_XYZ',
+      devicePublicKey: 'DEVICE_KEY_XYZ',
+      initId: 'init-1',
+    );
+    expect(withDistinct, isNot(equals(withSame)),
+        reason: 'Using IK=DK produces a different canonical than IK!=DK');
+  });
+
+  // T_TB_8: Realistic base64url-encoded keys produce correct canonical form
+  test('T_TB_8: realistic base64url keys produce deterministic canonical', () {
+    // Simulating real 32-byte X25519 keys as base64url
+    const aliceIK = 'AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA0';
+    const aliceDK = 'AQBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBk';
+    const bobIK = 'AQCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCs';
+    const bobDK = 'AQDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDw';
+
+    final aliceCanonical = FsSessionManager.buildCanonical(
+      identityPublicKey: aliceIK,
+      devicePublicKey: aliceDK,
+      initId: 'alice-init-001',
+    );
+    final bobCanonical = FsSessionManager.buildCanonical(
+      identityPublicKey: bobIK,
+      devicePublicKey: bobDK,
+      initId: 'bob-init-001',
+    );
+
+    // Alice's IK starts with AQA, Bob's with AQC → Alice canonical < Bob canonical
+    expect(aliceCanonical.compareTo(bobCanonical), lessThan(0));
+
+    // Verify the canonical contains all three components concatenated
+    expect(aliceCanonical, equals('$aliceIK$aliceDK' 'alice-init-001'));
+    expect(bobCanonical, equals('$bobIK$bobDK' 'bob-init-001'));
+  });
+
+  // T_TB_9: Tie-break symmetry — both parties must reach the same conclusion
+  test('T_TB_9: tie-break is symmetric (both sides agree on winner)', () {
+    const aliceIK = 'IK_ALICE';
+    const aliceDK = 'DK_ALICE';
+    const bobIK = 'IK_BOB';
+    const bobDK = 'DK_BOB';
+    const aliceInitId = 'init-A';
+    const bobInitId = 'init-B';
+
+    final aliceCanonical = FsSessionManager.buildCanonical(
+      identityPublicKey: aliceIK,
+      devicePublicKey: aliceDK,
+      initId: aliceInitId,
+    );
+    final bobCanonical = FsSessionManager.buildCanonical(
+      identityPublicKey: bobIK,
+      devicePublicKey: bobDK,
+      initId: bobInitId,
+    );
+
+    final mgr1 = FsSessionManager(clock: const _FakeClock(_kNow));
+    final mgr2 = FsSessionManager(clock: const _FakeClock(_kNow));
+
+    mgr1.recordFsInitSent(_stubInitPayload(initId: aliceInitId));
+    mgr2.recordFsInitSent(_stubInitPayload(initId: bobInitId));
+
+    // Alice receives Bob's init
+    final rAlice = mgr1.processFsInitReceived(
+      message: _stubInit(initId: bobInitId),
+      localInitId: aliceInitId,
+      localCanonical: aliceCanonical,
+      remoteCanonical: bobCanonical,
+    );
+
+    // Bob receives Alice's init
+    final rBob = mgr2.processFsInitReceived(
+      message: _stubInit(initId: aliceInitId),
+      localInitId: bobInitId,
+      localCanonical: bobCanonical,
+      remoteCanonical: aliceCanonical,
+    );
+
+    // Exactly one must accept and one must reject
+    expect(rAlice.accepted != rBob.accepted, isTrue,
+        reason: 'Tie-break must produce opposite outcomes');
+  });
 }
