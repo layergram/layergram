@@ -191,6 +191,21 @@ class FsStringsBundle {
     'security.passphrase.settings_visible_note':
         'These settings are only available while your passphrase context is active.',
 
+    // Security mode selector (§14.3)
+    'security.fs.mode.sheet_title': 'Security mode',
+    'security.fs.mode.sheet_subtitle': 'Choose the Forward Secrecy level for this contact.',
+    'security.fs.mode.base_title': 'Base',
+    'security.fs.mode.base_desc': 'Standard encryption. Maximum compatibility.',
+    'security.fs.mode.advanced_title': 'Advanced',
+    'security.fs.mode.advanced_desc': 'Automatic Forward Secrecy when supported. Legacy fallback allowed.',
+    'security.fs.mode.strict_title': 'Maximum',
+    'security.fs.mode.strict_desc': 'Strongest protection. Device-bound, no fallback.',
+    'security.fs.mode.confirm_button': 'Apply',
+    'security.fs.mode.cancel_button': 'Cancel',
+    'security.fs.mode.changed_snackbar': 'Security mode updated.',
+    'security.fs.action.change_mode': 'Change security mode',
+    'security.fs.mode.current_label': 'Current mode: {mode}',
+
     // Contact card state
     'security.contact.state.primary_context': 'Primary identity',
     'security.contact.state.passphrase_context': 'Passphrase identity',
@@ -252,6 +267,21 @@ class FsStringsBundle {
     'security.passphrase.fs_inactive': 'Contesto passphrase non attivo',
     'security.passphrase.settings_visible_note':
         'Queste impostazioni sono disponibili solo quando il contesto passphrase è attivo.',
+    // Security mode selector (§14.3)
+    'security.fs.mode.sheet_title': 'Modalità sicurezza',
+    'security.fs.mode.sheet_subtitle': 'Scegli il livello di Forward Secrecy per questo contatto.',
+    'security.fs.mode.base_title': 'Base',
+    'security.fs.mode.base_desc': 'Crittografia standard. Massima compatibilità.',
+    'security.fs.mode.advanced_title': 'Avanzata',
+    'security.fs.mode.advanced_desc': 'Forward Secrecy automatica quando supportata. Fallback legacy consentito.',
+    'security.fs.mode.strict_title': 'Massima',
+    'security.fs.mode.strict_desc': 'Protezione più forte. Legata al dispositivo, nessun fallback.',
+    'security.fs.mode.confirm_button': 'Applica',
+    'security.fs.mode.cancel_button': 'Annulla',
+    'security.fs.mode.changed_snackbar': 'Modalità sicurezza aggiornata.',
+    'security.fs.action.change_mode': 'Cambia modalità sicurezza',
+    'security.fs.mode.current_label': 'Modalità attuale: {mode}',
+
     'security.contact.state.primary_context': 'Identità principale',
     'security.contact.state.passphrase_context': 'Identità passphrase',
     'security.contact.state.session_id': 'Sessione: {sessionId}',
@@ -310,6 +340,21 @@ class FsStringsBundle {
     'security.passphrase.fs_inactive': 'Contexto de frase de contraseña no activo',
     'security.passphrase.settings_visible_note':
         'Estas configuraciones solo están disponibles mientras el contexto de frase de contraseña esté activo.',
+    // Security mode selector (§14.3)
+    'security.fs.mode.sheet_title': 'Modo de seguridad',
+    'security.fs.mode.sheet_subtitle': 'Elige el nivel de Forward Secrecy para este contacto.',
+    'security.fs.mode.base_title': 'Base',
+    'security.fs.mode.base_desc': 'Cifrado estándar. Máxima compatibilidad.',
+    'security.fs.mode.advanced_title': 'Avanzado',
+    'security.fs.mode.advanced_desc': 'Forward Secrecy automático cuando está soportado. Fallback legacy permitido.',
+    'security.fs.mode.strict_title': 'Máximo',
+    'security.fs.mode.strict_desc': 'Protección más fuerte. Vinculado al dispositivo, sin fallback.',
+    'security.fs.mode.confirm_button': 'Aplicar',
+    'security.fs.mode.cancel_button': 'Cancelar',
+    'security.fs.mode.changed_snackbar': 'Modo de seguridad actualizado.',
+    'security.fs.action.change_mode': 'Cambiar modo de seguridad',
+    'security.fs.mode.current_label': 'Modo actual: {mode}',
+
     'security.contact.state.primary_context': 'Identidad principal',
     'security.contact.state.passphrase_context': 'Identidad de frase de contraseña',
     'security.contact.state.session_id': 'Sesión: {sessionId}',
@@ -368,6 +413,21 @@ class FsStringsBundle {
     'security.passphrase.fs_inactive': 'Passphrase-Kontext nicht aktiv',
     'security.passphrase.settings_visible_note':
         'Diese Einstellungen sind nur verfügbar, wenn der Passphrase-Kontext aktiv ist.',
+    // Security mode selector (§14.3)
+    'security.fs.mode.sheet_title': 'Sicherheitsmodus',
+    'security.fs.mode.sheet_subtitle': 'Wählen Sie die Forward-Secrecy-Stufe für diesen Kontakt.',
+    'security.fs.mode.base_title': 'Basis',
+    'security.fs.mode.base_desc': 'Standardverschlüsselung. Maximale Kompatibilität.',
+    'security.fs.mode.advanced_title': 'Erweitert',
+    'security.fs.mode.advanced_desc': 'Automatische Forward Secrecy wenn unterstützt. Legacy-Fallback erlaubt.',
+    'security.fs.mode.strict_title': 'Maximum',
+    'security.fs.mode.strict_desc': 'Stärkster Schutz. Gerätegebunden, kein Fallback.',
+    'security.fs.mode.confirm_button': 'Anwenden',
+    'security.fs.mode.cancel_button': 'Abbrechen',
+    'security.fs.mode.changed_snackbar': 'Sicherheitsmodus aktualisiert.',
+    'security.fs.action.change_mode': 'Sicherheitsmodus ändern',
+    'security.fs.mode.current_label': 'Aktueller Modus: {mode}',
+
     'security.contact.state.primary_context': 'Primäre Identität',
     'security.contact.state.passphrase_context': 'Passphrase-Identität',
     'security.contact.state.session_id': 'Sitzung: {sessionId}',
@@ -426,6 +486,21 @@ class FsStringsBundle {
     'security.passphrase.fs_inactive': 'Contexte phrase secrète inactif',
     'security.passphrase.settings_visible_note':
         'Ces paramètres ne sont disponibles que lorsque le contexte phrase secrète est actif.',
+    // Security mode selector (§14.3)
+    'security.fs.mode.sheet_title': 'Mode de sécurité',
+    'security.fs.mode.sheet_subtitle': 'Choisissez le niveau de Forward Secrecy pour ce contact.',
+    'security.fs.mode.base_title': 'Base',
+    'security.fs.mode.base_desc': 'Chiffrement standard. Compatibilité maximale.',
+    'security.fs.mode.advanced_title': 'Avancé',
+    'security.fs.mode.advanced_desc': 'Forward Secrecy automatique lorsque supporté. Repli legacy autorisé.',
+    'security.fs.mode.strict_title': 'Maximum',
+    'security.fs.mode.strict_desc': 'Protection la plus forte. Lié à l\'appareil, sans repli.',
+    'security.fs.mode.confirm_button': 'Appliquer',
+    'security.fs.mode.cancel_button': 'Annuler',
+    'security.fs.mode.changed_snackbar': 'Mode de sécurité mis à jour.',
+    'security.fs.action.change_mode': 'Changer le mode de sécurité',
+    'security.fs.mode.current_label': 'Mode actuel : {mode}',
+
     'security.contact.state.primary_context': 'Identité principale',
     'security.contact.state.passphrase_context': 'Identité phrase secrète',
     'security.contact.state.session_id': 'Session : {sessionId}',
@@ -484,6 +559,21 @@ class FsStringsBundle {
     'security.passphrase.fs_inactive': 'Contexto de frase secreta inativo',
     'security.passphrase.settings_visible_note':
         'Estas configurações só estão disponíveis enquanto o contexto de frase secreta estiver ativo.',
+    // Security mode selector (§14.3)
+    'security.fs.mode.sheet_title': 'Modo de segurança',
+    'security.fs.mode.sheet_subtitle': 'Escolha o nível de Forward Secrecy para este contato.',
+    'security.fs.mode.base_title': 'Base',
+    'security.fs.mode.base_desc': 'Criptografia padrão. Máxima compatibilidade.',
+    'security.fs.mode.advanced_title': 'Avançado',
+    'security.fs.mode.advanced_desc': 'Forward Secrecy automático quando suportado. Fallback legacy permitido.',
+    'security.fs.mode.strict_title': 'Máximo',
+    'security.fs.mode.strict_desc': 'Proteção mais forte. Vinculado ao dispositivo, sem fallback.',
+    'security.fs.mode.confirm_button': 'Aplicar',
+    'security.fs.mode.cancel_button': 'Cancelar',
+    'security.fs.mode.changed_snackbar': 'Modo de segurança atualizado.',
+    'security.fs.action.change_mode': 'Alterar modo de segurança',
+    'security.fs.mode.current_label': 'Modo atual: {mode}',
+
     'security.contact.state.primary_context': 'Identidade principal',
     'security.contact.state.passphrase_context': 'Identidade de frase secreta',
     'security.contact.state.session_id': 'Sessão: {sessionId}',

@@ -55,6 +55,7 @@ import 'crypto/fs_downgrade_detector.dart';
 import 'crypto/fs_opportunistic_controller.dart';
 import 'crypto/fs_plaintext_cache.dart';
 import 'crypto/fs_plaintext_persistence_service.dart';
+import 'crypto/fs_security_mode.dart';
 import 'crypto/fs_replay_cache.dart';
 import 'crypto/fs_session_manager.dart';
 import 'crypto/fs_state_mutex.dart';
@@ -498,6 +499,16 @@ final fsRatchetStateCacheProvider = StateProvider<Map<String, RatchetState>>((_)
 /// On identity reset, [removeAll] deletes all persisted FS plaintext.
 final fsPlaintextPersistenceServiceProvider = Provider<FsPlaintextPersistenceService>((ref) {
   return FsPlaintextPersistenceService(
+    auxRepository: ref.watch(auxRecordRepositoryProvider),
+  );
+});
+
+/// Per-contact security mode service (§14.3).
+///
+/// Persists the user's choice of Base/Advanced/Strict per contact as
+/// encrypted aux records (`kind: fs_mode_v1`).
+final fsSecurityModeServiceProvider = Provider<FsSecurityModeService>((ref) {
+  return FsSecurityModeService(
     auxRepository: ref.watch(auxRecordRepositoryProvider),
   );
 });
