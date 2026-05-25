@@ -12,22 +12,126 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/// Internal classification of message security level.
+/// Internal per-message security classification (spec §14.4).
 ///
-/// Spec reference: §7.6, §9.5, §16 — Protocol checklist.
+/// Every sent/received message must have exactly one of these classifications.
+/// The chat UI may show only an icon; the message details panel must explain
+/// the classification.
 ///
-/// ```text
-/// legacy           — message encrypted with long-term identity key only
-/// fs_with_fallback — message encrypted with FS and also with legacy key
-/// fs_only          — message encrypted with FS only (not legacy-decryptable)
-/// ```
+/// The enum order intentionally groups values by security level so that
+/// [downgradeLevel] can map each classification to the 3-level hierarchy
+/// used by [FsDowngradeDetector].
+enum FsMessageClassification {
+  /// Standard identity encryption. No FS negotiation has occurred.
+  legacy,
+
+  /// Message sent/received before FS was established for this contact.
+  /// Same encryption as [legacy], but provides context that FS was not
+  /// yet available at the time.
+  preFs,
+
+  /// Control message during FS handshake (fs_init, fs_reply, fs_confirm,
+  /// fs_ack, etc.). The message may carry user content alongside the
+  /// negotiation payload.
+  fsNegotiation,
+
+  /// FS encrypted with legacy identity-key fallback allowed.
+  /// The message can be decrypted both via the FS ratchet and the
+  /// identity key.
+  fsWithFallback,
+
+  /// FS encrypted only; not decryptable by the legacy identity key.
+  fsOnly,
+
+  /// FS encrypted under strict/maximum mode — legacy fallback is
+  /// disabled by policy for this contact.
+  strictFs,
+
+  /// FS decryption failed. The message was FS-encrypted but the
+  /// ratchet state was unavailable or invalid (session reset, device
+  /// change, key loss).
+  fsFailed,
+
+  /// Classification could not be determined.
+  unknown,
+}
+
+/// Extension on [FsMessageClassification] for downgrade-level mapping
+/// and serialization helpers.
+extension FsMessageClassificationExt on FsMessageClassification {
+  /// Maps this per-message classification to the 3-level security
+  /// hierarchy used by [FsDowngradeDetector].
+  ///
+  /// Returns `null` for classifications that are not meaningful for
+  /// downgrade tracking ([fsFailed], [unknown], [fsNegotiation]).
+  FsMessageSecurity? get downgradeLevel {
+    switch (this) {
+      case FsMessageClassification.legacy:
+      case FsMessageClassification.preFs:
+        return FsMessageSecurity.legacy;
+      case FsMessageClassification.fsWithFallback:
+        return FsMessageSecurity.fsWithFallback;
+      case FsMessageClassification.fsOnly:
+      case FsMessageClassification.strictFs:
+        return FsMessageSecurity.fsOnly;
+      case FsMessageClassification.fsNegotiation:
+      case FsMessageClassification.fsFailed:
+      case FsMessageClassification.unknown:
+        return null;
+    }
+  }
+
+  /// Whether this classification represents a message whose plaintext
+  /// was protected by Forward Secrecy.
+  bool get isFsProtected {
+    switch (this) {
+      case FsMessageClassification.fsWithFallback:
+      case FsMessageClassification.fsOnly:
+      case FsMessageClassification.strictFs:
+        return true;
+      case FsMessageClassification.legacy:
+      case FsMessageClassification.preFs:
+      case FsMessageClassification.fsNegotiation:
+      case FsMessageClassification.fsFailed:
+      case FsMessageClassification.unknown:
+        return false;
+    }
+  }
+
+  /// Serialization index for opaque storage. Uses [index] directly —
+  /// the integer is as opaque as the existing [isFsEncrypted] boolean.
+  int get storageIndex => index;
+
+  /// Deserialize from storage index. Returns [unknown] for out-of-range
+  /// values (forward compatibility).
+  static FsMessageClassification fromStorageIndex(int idx) {
+    if (idx >= 0 && idx < FsMessageClassification.values.length) {
+      return FsMessageClassification.values[idx];
+    }
+    return FsMessageClassification.unknown;
+  }
+
+  /// Infers a classification from the legacy [isFsEncrypted] boolean
+  /// for backward compatibility with records that don't have an
+  /// explicit classification.
+  static FsMessageClassification fromLegacyFlag(bool isFsEncrypted) {
+    return isFsEncrypted
+        ? FsMessageClassification.fsWithFallback
+        : FsMessageClassification.legacy;
+  }
+}
+
+/// 3-level security hierarchy for downgrade detection (§7.6).
+///
+/// Kept separate from [FsMessageClassification] because downgrade
+/// tracking cares about security strength, not message context.
 enum FsMessageSecurity {
   /// Message encrypted with long-term identity key only.
   legacy,
 
-  /// Message encrypted with FS and also with legacy identity-key fallback.
+  /// Message encrypted with FS and also with legacy key.
   fsWithFallback,
 
-  /// Message encrypted with FS only; not decryptable by the legacy key.
+  /// Message encrypted with FS only; not legacy-decryptable.
   fsOnly,
 }

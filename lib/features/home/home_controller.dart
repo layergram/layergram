@@ -26,6 +26,8 @@ import '../../core/crypto/fs_handshake.dart';
 import '../../core/crypto/encryption_service.dart';
 import '../../core/crypto/fs_message_classification.dart';
 import '../../core/crypto/fs_opportunistic_controller.dart';
+import '../../core/crypto/fs_security_mode.dart';
+import '../../core/crypto/lmf_v2_decoder.dart';
 import '../../core/crypto/fs_session_manager.dart';
 import '../../core/crypto/message_record_cipher.dart';
 import '../../core/crypto/models.dart';
@@ -113,7 +115,7 @@ class HomeController {
         .encodeBytes(coverText, result.message.toRawBytes());
   }
 
-  Future<({EncryptedMessage message, bool isFsEncrypted})> encryptForRecipient({
+  Future<({EncryptedMessage message, bool isFsEncrypted, FsMessageClassification classification})> encryptForRecipient({
     required String secretText,
     required RemoteIdentity recipient,
     int? expireAfter,
@@ -250,7 +252,31 @@ class HomeController {
       await ref.read(fsRatchetPersistenceServiceProvider).saveRatchetState(newState);
     }
 
-    return (message: result.message, isFsEncrypted: result.newRatchetState != null);
+    final isFsEncrypted = result.newRatchetState != null;
+
+    // §14.4: Classify the outgoing message.
+    final FsMessageClassification classification;
+    if (selfCopy) {
+      classification = isFsEncrypted
+          ? FsMessageClassification.fsWithFallback
+          : FsMessageClassification.legacy;
+    } else {
+      final fsController = ref.read(
+        fsOpportunisticControllerProvider(recipient.identityId),
+      );
+      classification = _classifyOutgoing(
+        isFsEncrypted: isFsEncrypted,
+        hasFsExtension: fsExtension != null,
+        sessionState: fsController.sessionManager.state,
+        securityMode: fsController.securityMode,
+      );
+    }
+
+    return (
+      message: result.message,
+      isFsEncrypted: isFsEncrypted,
+      classification: classification,
+    );
   }
 
   void clearSessionDecryptionCache() {
@@ -418,12 +444,15 @@ class HomeController {
     }
 
     // Downgrade detection: record the security level (§7.6)
-    fsController.recordSecurityLevel(
-      contactId: contact.identityId,
-      level: isFs
-          ? FsMessageSecurity.fsWithFallback
-          : FsMessageSecurity.legacy,
-    );
+    final chatDecryptLevel = (isFs
+        ? FsMessageClassification.fsWithFallback
+        : FsMessageClassification.legacy).downgradeLevel;
+    if (chatDecryptLevel != null) {
+      fsController.recordSecurityLevel(
+        contactId: contact.identityId,
+        level: chatDecryptLevel,
+      );
+    }
 
     return result.payload.text;
   }
@@ -645,12 +674,15 @@ class HomeController {
         }
 
         // Downgrade detection: record the incoming message security level (§7.6)
-        fsCtrl.recordSecurityLevel(
-          contactId: contact.identityId,
-          level: isFs
-              ? FsMessageSecurity.fsWithFallback
-              : FsMessageSecurity.legacy,
-        );
+        final incomingDowngradeLevel = (isFs
+            ? FsMessageClassification.fsWithFallback
+            : FsMessageClassification.legacy).downgradeLevel;
+        if (incomingDowngradeLevel != null) {
+          fsCtrl.recordSecurityLevel(
+            contactId: contact.identityId,
+            level: incomingDowngradeLevel,
+          );
+        }
 
         // Process FS extension for opportunistic Forward Secrecy handshake
         // We need to decrypt envelope separately to access FS extension
@@ -683,6 +715,17 @@ class HomeController {
           return const DecodeOutcome.fsLost();
         }
 
+        // §14.4: Classify the incoming message.
+        final hasFsExt = envelope != null &&
+            LmfV2Decoder.extractFsExtension(envelope) != null;
+        final incomingClassification = _classifyIncoming(
+          isFsEncrypted: isFs,
+          fsDecryptFailed: false,
+          hasFsExtension: hasFsExt,
+          sessionState: fsCtrl.sessionManager.state,
+          securityMode: fsCtrl.securityMode,
+        );
+
         // Decryption succeeded!
         return _persistAndReturn(
           payload: result.payload,
@@ -690,6 +733,7 @@ class HomeController {
           rawSource: source,
           senderContact: contact,
           isFsEncrypted: isFs,
+          classification: incomingClassification,
         );
       }
     }
@@ -705,6 +749,7 @@ class HomeController {
     required String rawSource,
     required RemoteIdentity senderContact,
     bool isFsEncrypted = false,
+    FsMessageClassification? classification,
   }) async {
     final nowTs = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     if (payload.expireAfter != null && payload.expireAfter! < nowTs) {
@@ -750,6 +795,7 @@ class HomeController {
             deleteAfterRead: payload.deleteAfterRead,
             keyTag: keyTag,
             isFsEncrypted: isFsEncrypted,
+            fsClassification: classification,
           ),
           storageKey: storageKey,
         );
@@ -761,7 +807,57 @@ class HomeController {
     return DecodeOutcome.success(payload);
   }
 
-  // ── Contact priority ordering ───────────────────────────────────────────
+  // ── Message classification (§14.4) ─────────────────────────────────────────
+
+  static FsMessageClassification _classifyOutgoing({
+    required bool isFsEncrypted,
+    required bool hasFsExtension,
+    required FsSessionState sessionState,
+    required FsSecurityMode securityMode,
+  }) {
+    if (isFsEncrypted) {
+      if (securityMode == FsSecurityMode.strict &&
+          sessionState == FsSessionState.strictFsActive) {
+        return FsMessageClassification.strictFs;
+      }
+      return FsMessageClassification.fsWithFallback;
+    }
+    if (hasFsExtension) {
+      return FsMessageClassification.fsNegotiation;
+    }
+    if (sessionState == FsSessionState.legacyOnly) {
+      return FsMessageClassification.preFs;
+    }
+    return FsMessageClassification.legacy;
+  }
+
+  static FsMessageClassification _classifyIncoming({
+    required bool isFsEncrypted,
+    required bool fsDecryptFailed,
+    required bool hasFsExtension,
+    required FsSessionState sessionState,
+    required FsSecurityMode securityMode,
+  }) {
+    if (fsDecryptFailed) {
+      return FsMessageClassification.fsFailed;
+    }
+    if (isFsEncrypted) {
+      if (securityMode == FsSecurityMode.strict &&
+          sessionState == FsSessionState.strictFsActive) {
+        return FsMessageClassification.strictFs;
+      }
+      return FsMessageClassification.fsWithFallback;
+    }
+    if (hasFsExtension) {
+      return FsMessageClassification.fsNegotiation;
+    }
+    if (sessionState == FsSessionState.legacyOnly) {
+      return FsMessageClassification.preFs;
+    }
+    return FsMessageClassification.legacy;
+  }
+
+  // ── Contact priority ordering ───────────────────────────────────────────────
 
   /// Returns contacts sorted by priority for trial decryption:
   /// 1. [hintContactId] contact (if provided)

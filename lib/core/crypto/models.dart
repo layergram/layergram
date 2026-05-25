@@ -16,6 +16,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import '../domain/identity_id.dart';
+import 'fs_message_classification.dart';
 import 'seed_service.dart';
 
 class IdentityBase {
@@ -203,6 +204,7 @@ class MessageRecord {
     this.deletedAt,
     this.keyTag,
     this.isFsEncrypted = false,
+    this.fsClassification,
   });
 
   final String id;
@@ -220,6 +222,17 @@ class MessageRecord {
   final int? deletedAt;
   final String? keyTag;
   final bool isFsEncrypted;
+
+  /// Per-message security classification (§14.4).
+  ///
+  /// Nullable for backward compatibility: old records that predate this
+  /// field are classified via [effectiveClassification].
+  final FsMessageClassification? fsClassification;
+
+  /// Returns [fsClassification] if set, otherwise infers from [isFsEncrypted].
+  FsMessageClassification get effectiveClassification =>
+      fsClassification ??
+      FsMessageClassificationExt.fromLegacyFlag(isFsEncrypted);
 
   bool get isDeleted => deletedAt != null;
 
@@ -240,6 +253,7 @@ class MessageRecord {
     int? deletedAt,
     String? keyTag,
     bool? isFsEncrypted,
+    FsMessageClassification? fsClassification,
   }) {
     return MessageRecord(
       id: id ?? this.id,
@@ -257,6 +271,7 @@ class MessageRecord {
       deletedAt: deletedAt ?? this.deletedAt,
       keyTag: keyTag ?? this.keyTag,
       isFsEncrypted: isFsEncrypted ?? this.isFsEncrypted,
+      fsClassification: fsClassification ?? this.fsClassification,
     );
   }
 
@@ -277,6 +292,7 @@ class MessageRecord {
       'deletedAt': deletedAt,
       'keyTag': keyTag,
       if (isFsEncrypted) 'isFsEncrypted': true,
+      if (fsClassification != null) 'fsCls': fsClassification!.storageIndex,
     };
   }
 
@@ -297,6 +313,9 @@ class MessageRecord {
       deletedAt: map['deletedAt'] as int?,
       keyTag: map['keyTag'] as String?,
       isFsEncrypted: (map['isFsEncrypted'] as bool?) ?? false,
+      fsClassification: map['fsCls'] != null
+          ? FsMessageClassificationExt.fromStorageIndex(map['fsCls'] as int)
+          : null,
     );
   }
 }
