@@ -211,6 +211,24 @@ class FsStringsBundle {
     'security.contact.state.passphrase_context': 'Passphrase identity',
     'security.contact.state.session_id': 'Session: {sessionId}',
     'security.contact.state.no_sessions': 'No active sessions',
+
+    // Message-level security classification (§14.4)
+    'security.fs.cls.legacy': 'Standard encryption',
+    'security.fs.cls.legacy.desc': 'This message uses standard Layergram identity encryption. Forward Secrecy was not active.',
+    'security.fs.cls.pre_fs': 'Pre-FS message',
+    'security.fs.cls.pre_fs.desc': 'This message was sent before Forward Secrecy was established and is not protected by FS.',
+    'security.fs.cls.negotiation': 'FS negotiation',
+    'security.fs.cls.negotiation.desc': 'This message was part of the Forward Secrecy handshake negotiation.',
+    'security.fs.cls.fs_fallback': 'Forward Secrecy',
+    'security.fs.cls.fs_fallback.desc': 'This message is protected by Forward Secrecy with compatibility fallback allowed.',
+    'security.fs.cls.fs_only': 'FS only',
+    'security.fs.cls.fs_only.desc': 'This message is protected by Forward Secrecy only. It cannot be decrypted with the legacy key.',
+    'security.fs.cls.strict': 'Maximum FS',
+    'security.fs.cls.strict.desc': 'This message is protected by Maximum Forward Secrecy. Legacy fallback is disabled.',
+    'security.fs.cls.failed': 'FS failed',
+    'security.fs.cls.failed.desc': 'Forward Secrecy decryption failed. The session may have been reset or the device changed.',
+    'security.fs.cls.unknown': 'Unknown',
+    'security.fs.cls.unknown.desc': 'The security classification of this message could not be determined.',
   };
 
   // ── Italian ───────────────────────────────────────────────────────────────
@@ -286,6 +304,23 @@ class FsStringsBundle {
     'security.contact.state.passphrase_context': 'Identità passphrase',
     'security.contact.state.session_id': 'Sessione: {sessionId}',
     'security.contact.state.no_sessions': 'Nessuna sessione attiva',
+
+    'security.fs.cls.legacy': 'Crittografia standard',
+    'security.fs.cls.legacy.desc': 'Questo messaggio utilizza la crittografia d\'identità standard. Forward Secrecy non era attiva.',
+    'security.fs.cls.pre_fs': 'Messaggio pre-FS',
+    'security.fs.cls.pre_fs.desc': 'Questo messaggio è stato inviato prima che Forward Secrecy fosse stabilita.',
+    'security.fs.cls.negotiation': 'Negoziazione FS',
+    'security.fs.cls.negotiation.desc': 'Questo messaggio faceva parte della negoziazione dell\'handshake Forward Secrecy.',
+    'security.fs.cls.fs_fallback': 'Forward Secrecy',
+    'security.fs.cls.fs_fallback.desc': 'Questo messaggio è protetto da Forward Secrecy con fallback di compatibilità consentito.',
+    'security.fs.cls.fs_only': 'Solo FS',
+    'security.fs.cls.fs_only.desc': 'Questo messaggio è protetto solo da Forward Secrecy. Non può essere decifrato con la chiave legacy.',
+    'security.fs.cls.strict': 'FS massima',
+    'security.fs.cls.strict.desc': 'Questo messaggio è protetto dalla Forward Secrecy massima. Il fallback legacy è disabilitato.',
+    'security.fs.cls.failed': 'FS fallita',
+    'security.fs.cls.failed.desc': 'La decifratura Forward Secrecy è fallita. La sessione potrebbe essere stata reimpostata o il dispositivo cambiato.',
+    'security.fs.cls.unknown': 'Sconosciuta',
+    'security.fs.cls.unknown.desc': 'La classificazione di sicurezza di questo messaggio non è stata determinata.',
   };
 
   // ── Spanish ───────────────────────────────────────────────────────────────
@@ -359,6 +394,23 @@ class FsStringsBundle {
     'security.contact.state.passphrase_context': 'Identidad de frase de contraseña',
     'security.contact.state.session_id': 'Sesión: {sessionId}',
     'security.contact.state.no_sessions': 'Sin sesiones activas',
+
+    'security.fs.cls.legacy': 'Cifrado estándar',
+    'security.fs.cls.legacy.desc': 'Este mensaje usa cifrado de identidad estándar. Forward Secrecy no estaba activo.',
+    'security.fs.cls.pre_fs': 'Mensaje pre-FS',
+    'security.fs.cls.pre_fs.desc': 'Este mensaje fue enviado antes de que se estableciera Forward Secrecy.',
+    'security.fs.cls.negotiation': 'Negociación FS',
+    'security.fs.cls.negotiation.desc': 'Este mensaje fue parte de la negociación del handshake de Forward Secrecy.',
+    'security.fs.cls.fs_fallback': 'Forward Secrecy',
+    'security.fs.cls.fs_fallback.desc': 'Este mensaje está protegido por Forward Secrecy con compatibilidad de respaldo permitida.',
+    'security.fs.cls.fs_only': 'Solo FS',
+    'security.fs.cls.fs_only.desc': 'Este mensaje está protegido solo por Forward Secrecy. No se puede descifrar con la clave legacy.',
+    'security.fs.cls.strict': 'FS máximo',
+    'security.fs.cls.strict.desc': 'Este mensaje está protegido por Forward Secrecy máximo. El respaldo legacy está deshabilitado.',
+    'security.fs.cls.failed': 'FS fallido',
+    'security.fs.cls.failed.desc': 'La descifrado de Forward Secrecy falló. La sesión puede haber sido restablecida o el dispositivo cambiado.',
+    'security.fs.cls.unknown': 'Desconocido',
+    'security.fs.cls.unknown.desc': 'No se pudo determinar la clasificación de seguridad de este mensaje.',
   };
 
   // ── German ────────────────────────────────────────────────────────────────
@@ -432,6 +484,23 @@ class FsStringsBundle {
     'security.contact.state.passphrase_context': 'Passphrase-Identität',
     'security.contact.state.session_id': 'Sitzung: {sessionId}',
     'security.contact.state.no_sessions': 'Keine aktiven Sitzungen',
+
+    'security.fs.cls.legacy': 'Standardverschlüsselung',
+    'security.fs.cls.legacy.desc': 'Diese Nachricht verwendet Standard-Identitätsverschlüsselung. Forward Secrecy war nicht aktiv.',
+    'security.fs.cls.pre_fs': 'Vor-FS-Nachricht',
+    'security.fs.cls.pre_fs.desc': 'Diese Nachricht wurde gesendet, bevor Forward Secrecy eingerichtet wurde.',
+    'security.fs.cls.negotiation': 'FS-Aushandlung',
+    'security.fs.cls.negotiation.desc': 'Diese Nachricht war Teil der Forward Secrecy Handshake-Aushandlung.',
+    'security.fs.cls.fs_fallback': 'Forward Secrecy',
+    'security.fs.cls.fs_fallback.desc': 'Diese Nachricht ist durch Forward Secrecy mit erlaubtem Kompatibilitäts-Fallback geschützt.',
+    'security.fs.cls.fs_only': 'Nur FS',
+    'security.fs.cls.fs_only.desc': 'Diese Nachricht ist nur durch Forward Secrecy geschützt. Sie kann nicht mit dem Legacy-Schlüssel entschlüsselt werden.',
+    'security.fs.cls.strict': 'Maximale FS',
+    'security.fs.cls.strict.desc': 'Diese Nachricht ist durch maximale Forward Secrecy geschützt. Legacy-Fallback ist deaktiviert.',
+    'security.fs.cls.failed': 'FS fehlgeschlagen',
+    'security.fs.cls.failed.desc': 'Die Forward Secrecy Entschlüsselung ist fehlgeschlagen. Die Sitzung wurde möglicherweise zurückgesetzt oder das Gerät gewechselt.',
+    'security.fs.cls.unknown': 'Unbekannt',
+    'security.fs.cls.unknown.desc': 'Die Sicherheitsklassifizierung dieser Nachricht konnte nicht bestimmt werden.',
   };
 
   // ── French ────────────────────────────────────────────────────────────────
@@ -505,6 +574,23 @@ class FsStringsBundle {
     'security.contact.state.passphrase_context': 'Identité phrase secrète',
     'security.contact.state.session_id': 'Session : {sessionId}',
     'security.contact.state.no_sessions': 'Aucune session active',
+
+    'security.fs.cls.legacy': 'Chiffrement standard',
+    'security.fs.cls.legacy.desc': 'Ce message utilise le chiffrement d\'identité standard. Forward Secrecy n\'était pas actif.',
+    'security.fs.cls.pre_fs': 'Message pré-FS',
+    'security.fs.cls.pre_fs.desc': 'Ce message a été envoyé avant l\'établissement de Forward Secrecy.',
+    'security.fs.cls.negotiation': 'Négociation FS',
+    'security.fs.cls.negotiation.desc': 'Ce message faisait partie de la négociation du handshake Forward Secrecy.',
+    'security.fs.cls.fs_fallback': 'Forward Secrecy',
+    'security.fs.cls.fs_fallback.desc': 'Ce message est protégé par Forward Secrecy avec repli de compatibilité autorisé.',
+    'security.fs.cls.fs_only': 'FS uniquement',
+    'security.fs.cls.fs_only.desc': 'Ce message est protégé uniquement par Forward Secrecy. Il ne peut pas être déchiffré avec la clé legacy.',
+    'security.fs.cls.strict': 'FS maximum',
+    'security.fs.cls.strict.desc': 'Ce message est protégé par Forward Secrecy maximum. Le repli legacy est désactivé.',
+    'security.fs.cls.failed': 'FS échoué',
+    'security.fs.cls.failed.desc': 'Le déchiffrement Forward Secrecy a échoué. La session a peut-être été réinitialisée ou l\'appareil changé.',
+    'security.fs.cls.unknown': 'Inconnu',
+    'security.fs.cls.unknown.desc': 'La classification de sécurité de ce message n\'a pas pu être déterminée.',
   };
 
   // ── Portuguese ────────────────────────────────────────────────────────────
@@ -578,5 +664,22 @@ class FsStringsBundle {
     'security.contact.state.passphrase_context': 'Identidade de frase secreta',
     'security.contact.state.session_id': 'Sessão: {sessionId}',
     'security.contact.state.no_sessions': 'Nenhuma sessão ativa',
+
+    'security.fs.cls.legacy': 'Criptografia padrão',
+    'security.fs.cls.legacy.desc': 'Esta mensagem usa criptografia de identidade padrão. Forward Secrecy não estava ativo.',
+    'security.fs.cls.pre_fs': 'Mensagem pré-FS',
+    'security.fs.cls.pre_fs.desc': 'Esta mensagem foi enviada antes do Forward Secrecy ser estabelecido.',
+    'security.fs.cls.negotiation': 'Negociação FS',
+    'security.fs.cls.negotiation.desc': 'Esta mensagem fez parte da negociação do handshake Forward Secrecy.',
+    'security.fs.cls.fs_fallback': 'Forward Secrecy',
+    'security.fs.cls.fs_fallback.desc': 'Esta mensagem é protegida por Forward Secrecy com fallback de compatibilidade permitido.',
+    'security.fs.cls.fs_only': 'Apenas FS',
+    'security.fs.cls.fs_only.desc': 'Esta mensagem é protegida apenas por Forward Secrecy. Não pode ser decifrada com a chave legacy.',
+    'security.fs.cls.strict': 'FS máximo',
+    'security.fs.cls.strict.desc': 'Esta mensagem é protegida por Forward Secrecy máximo. O fallback legacy está desabilitado.',
+    'security.fs.cls.failed': 'FS falhou',
+    'security.fs.cls.failed.desc': 'A decifragem Forward Secrecy falhou. A sessão pode ter sido redefinida ou o dispositivo alterado.',
+    'security.fs.cls.unknown': 'Desconhecido',
+    'security.fs.cls.unknown.desc': 'A classificação de segurança desta mensagem não pôde ser determinada.',
   };
 }

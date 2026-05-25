@@ -447,6 +447,7 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
                                     deleteAfterRead: _deleteAfterRead,
                                     keyTag: keyTag,
                                     isFsEncrypted: encResult.isFsEncrypted,
+                                    fsClassification: encResult.classification,
                                   ),
                                   storageKey: storageKey,
                                 );

@@ -8,12 +8,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/crypto/fs_message_classification.dart';
 import '../../core/crypto/models.dart';
 import '../../core/crypto/stego_encoder.dart';
 import '../../core/providers.dart';
 import '../../core/storage/messages_repository.dart';
 import '../../l10n/app_strings.dart';
 import '../../ui/fs_info_sheet.dart';
+import '../../ui/fs_message_classification_icon.dart';
 import '../../ui/fs_status_icon.dart';
 import '../../ui/passphrase_button.dart';
 import '../../utils/app_platform.dart';
@@ -1403,6 +1405,7 @@ class ChatViewState extends ConsumerState<ChatView> {
               deleteAfterRead: _deleteAfterRead,
               keyTag: keyTag,
               isFsEncrypted: encResult.isFsEncrypted,
+              fsClassification: encResult.classification,
             ),
             storageKey: storageKey,
           );
@@ -2133,11 +2136,21 @@ class ChatViewState extends ConsumerState<ChatView> {
                                                 style: Theme.of(context).textTheme.bodyMedium,
                                               ),
                                         const SizedBox(height: 6),
-                                        Text(
-                                          '${when.hour.toString().padLeft(2, '0')}:${when.minute.toString().padLeft(2, '0')}',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodySmall,
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            FsMessageClassificationIcon(
+                                              classification: m.effectiveClassification,
+                                              size: 11,
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              '${when.hour.toString().padLeft(2, '0')}:${when.minute.toString().padLeft(2, '0')}',
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .bodySmall,
+                                            ),
+                                          ],
                                         ),
                                       ],
                                     ),
