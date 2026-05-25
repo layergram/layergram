@@ -325,17 +325,24 @@ class HomeController {
       return null;
     }
 
-    // Check FS plaintext cache first (§12.3) — avoids re-decryption attempt
+    // §12.3: Check in-memory cache first, then aux record persistence.
     final fsController = ref.read(fsOpportunisticControllerProvider(contact.identityId));
     final cacheKey = '${contact.identityId}|${message.id}';
     final cached = fsController.getCachedPlaintext(cacheKey);
     if (cached != null) return cached;
 
-    // §12.3: FS-encrypted message whose plaintext was never persisted and is
-    // no longer in the memory cache. The ratchet has already advanced past
-    // this message, so it cannot be re-decrypted. Return null (UI will show
-    // a placeholder).
-    if (message.isFsEncrypted) return null;
+    // FS messages have text=null in DB; plaintext lives in encrypted aux records.
+    if (message.isFsEncrypted) {
+      final ptService = ref.read(fsPlaintextPersistenceServiceProvider);
+      final persisted = await ptService.loadPlaintext(message.id);
+      if (persisted != null) {
+        // Warm the in-memory cache for subsequent reads
+        fsController.cachePlaintext(cacheKey, persisted);
+        return persisted;
+      }
+      // Aux record missing (identity reset wiped it) → unrecoverable
+      return null;
+    }
 
     final privateKey = await _activePrivateKey();
     if (privateKey == null) return null;
@@ -396,6 +403,13 @@ class HomeController {
       // Cache FS-decrypted plaintext (§12.3) — ratchet has already advanced
       fsController.cachePlaintext(cacheKey, result.payload.text);
 
+      // Persist to encrypted aux record for restart survival
+      await ref.read(fsPlaintextPersistenceServiceProvider).savePlaintext(
+        messageId: message.id,
+        plaintext: result.payload.text,
+        contactId: contact.identityId,
+      );
+
       // Record message counter in replay cache (§8.7)
       fsController.recordMessageProcessed(
         sessionId: newState.sessionId,
@@ -433,7 +447,11 @@ class HomeController {
 
     // Sort messages descending by timestamp to find the latest
     final sortedMessages = List<MessageRecord>.from(messages)
-      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      ..sort((a, b) {
+        final byTs = b.timestamp.compareTo(a.timestamp);
+        if (byTs != 0) return byTs;
+        return b.id.compareTo(a.id);
+      });
 
     for (final message in sortedMessages) {
       if (message.text != null) {
@@ -443,17 +461,17 @@ class HomeController {
         );
       }
 
-      // Check FS plaintext cache for messages without persisted text
+      // FS message: try aux record cache
       if (message.isFsEncrypted) {
-        final cacheKey = '${contact.identityId}|${message.id}';
-        final cached = fsController.getCachedPlaintext(cacheKey);
-        if (cached != null) {
+        final ptService = ref.read(fsPlaintextPersistenceServiceProvider);
+        final persisted = await ptService.loadPlaintext(message.id);
+        if (persisted != null) {
           return DecryptedMessagePreview(
-            text: cached,
+            text: persisted,
             timestamp: message.timestamp,
           );
         }
-        continue; // FS message not in cache → ratchet has advanced, skip
+        continue;
       }
 
       if (message.ciphertextBase64 == null || message.nonceBase64 == null) {
@@ -698,14 +716,23 @@ class HomeController {
     final keyTag = await currentKeyTag();
     final storageKey = await currentStorageKey();
 
-    // §12.3: FS-encrypted plaintext must NOT be persisted in the database.
-    // Cache it in-memory only; it will be wiped on identity reset / app kill.
-    if (isFsEncrypted) {
+    // §12.3: FS plaintext must NOT be stored in MessageRecord.text.
+    // Instead, persist it as an opaque encrypted auxiliary record.
+    if (isFsEncrypted && payload.text.isNotEmpty) {
+      final ptService = ref.read(fsPlaintextPersistenceServiceProvider);
+      await ptService.savePlaintext(
+        messageId: recordId,
+        plaintext: payload.text,
+        contactId: senderContact.identityId,
+      );
+      // Also cache in memory for immediate display
       final fsController = ref.read(
         fsOpportunisticControllerProvider(senderContact.identityId),
       );
-      final cacheKey = '${senderContact.identityId}|$recordId';
-      fsController.cachePlaintext(cacheKey, payload.text);
+      fsController.cachePlaintext(
+        '${senderContact.identityId}|$recordId',
+        payload.text,
+      );
     }
 
     await ref.read(messagesRepositoryProvider).add(

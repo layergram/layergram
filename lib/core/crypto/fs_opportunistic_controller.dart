@@ -27,6 +27,7 @@ import 'fs_payload_budget.dart';
 import 'fs_plaintext_cache.dart';
 import 'fs_ratchet_persistence_service.dart';
 import 'fs_replay_cache.dart';
+import 'fs_security_mode.dart';
 import 'fs_session_manager.dart';
 import 'fs_state_mutex.dart';
 import 'fs_state_persistence_service.dart';
@@ -97,6 +98,12 @@ class FsOpportunisticController {
   final FsDowngradeDetector? _downgradeDetector;
   final FsPlaintextCache? _plaintextCache;
 
+  /// Per-contact security mode (§14.3).
+  ///
+  /// Defaults to [FsSecurityMode.advanced]. The caller (provider layer) sets
+  /// this after reading from [FsSecurityModeService].
+  FsSecurityMode securityMode = FsSecurityMode.advanced;
+
   // ---------------------------------------------------------------------------
   // Outgoing message handling
   // ---------------------------------------------------------------------------
@@ -132,6 +139,8 @@ class FsOpportunisticController {
 
     switch (state) {
       case FsSessionState.legacyOnly:
+        // §6.1 Base mode: suppress FS negotiation entirely.
+        if (securityMode == FsSecurityMode.base) return null;
         if (pendingInit == null) return null;
         // DoS guard: check rate limits before initiating handshake (§20.3)
         if (_dosGuard != null) {
@@ -289,6 +298,11 @@ class FsOpportunisticController {
         identityContext: _identityContext,
         level: FsMessageSecurity.legacy,
       );
+      return const FsIncomingResult._(type: FsIncomingType.noExtension);
+    }
+
+    // §6.1 Base mode: ignore all incoming FS extensions.
+    if (securityMode == FsSecurityMode.base) {
       return const FsIncomingResult._(type: FsIncomingType.noExtension);
     }
 

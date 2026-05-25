@@ -16,11 +16,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/crypto/fs_contact_security_state.dart';
+import '../core/crypto/fs_security_mode.dart';
 import '../core/crypto/fs_session_manager.dart';
 import '../core/providers.dart';
 import '../l10n/app_strings.dart';
 import 'fs_info_sheet.dart';
 import 'fs_maximum_fs_dialog.dart';
+import 'fs_security_mode_sheet.dart';
 import 'fs_status_icon.dart';
 
 /// Full per-contact Forward Secrecy security section for the contact detail
@@ -103,11 +105,52 @@ class FsContactSecurityCard extends ConsumerWidget {
             ),
             const SizedBox(height: 16),
 
+            // ── Current security mode (§14.3) ──────────────────────────────
+            _SecurityModeBadge(contactId: contactId),
+            const SizedBox(height: 12),
+
             // ── Actions ────────────────────────────────────────────────────
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
+                _ActionChip(
+                  label: t(context, 'security.fs.action.change_mode'),
+                  icon: Icons.tune,
+                  onPressed: () async {
+                    final modeService =
+                        ref.read(fsSecurityModeServiceProvider);
+                    final ctrl = ref.read(
+                      fsOpportunisticControllerProvider(contactId),
+                    );
+                    final currentMode = modeService.getModeSync(
+                      contactId: contactId,
+                      identityContext: ctrl.identityContext,
+                    );
+                    final selected = await showFsSecurityModeSheet(
+                      context,
+                      currentMode: currentMode,
+                    );
+                    if (selected != null && context.mounted) {
+                      await modeService.setMode(
+                        contactId: contactId,
+                        identityContext: ctrl.identityContext,
+                        mode: selected,
+                      );
+                      ref.read(fsRegistryVersionProvider.notifier).state++;
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              t(context,
+                                  'security.fs.mode.changed_snackbar'),
+                            ),
+                          ),
+                        );
+                      }
+                    }
+                  },
+                ),
                 if (topState == FsSessionState.fsBroken ||
                     topState == FsSessionState.fsSuspended)
                   _ActionChip(
@@ -223,14 +266,14 @@ class FsContactSecurityCard extends ConsumerWidget {
                         Icon(
                           Icons.timelapse,
                           size: 14,
-                          color: Colors.amber.shade700,
+                          color: Colors.orange.shade700,
                         ),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
                             t(context, 'security.fs.warning.pending_body'),
                             style: theme.textTheme.bodySmall?.copyWith(
-                              color: Colors.amber.shade800,
+                              color: Colors.orange.shade800,
                             ),
                           ),
                         ),
@@ -243,6 +286,81 @@ class FsContactSecurityCard extends ConsumerWidget {
         ),
       ),
     );
+  }
+}
+
+// ── Security mode badge (§14.3) ───────────────────────────────────────────────
+
+class _SecurityModeBadge extends ConsumerWidget {
+  const _SecurityModeBadge({required this.contactId});
+
+  final String contactId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = AppStrings.t;
+    final theme = Theme.of(context);
+
+    ref.watch(fsRegistryVersionProvider);
+    final modeService = ref.read(fsSecurityModeServiceProvider);
+    final ctrl = ref.read(fsOpportunisticControllerProvider(contactId));
+    final mode = modeService.getModeSync(
+      contactId: contactId,
+      identityContext: ctrl.identityContext,
+    );
+
+    final modeLabel = _modeLabelKey(mode);
+
+    return Row(
+      children: [
+        Icon(
+          _modeIcon(mode),
+          size: 16,
+          color: _modeColor(mode),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          t(context, 'security.fs.mode.current_label')
+              .replaceAll('{mode}', t(context, modeLabel)),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+
+  static String _modeLabelKey(FsSecurityMode mode) {
+    switch (mode) {
+      case FsSecurityMode.base:
+        return 'security.fs.mode.base_title';
+      case FsSecurityMode.advanced:
+        return 'security.fs.mode.advanced_title';
+      case FsSecurityMode.strict:
+        return 'security.fs.mode.strict_title';
+    }
+  }
+
+  static IconData _modeIcon(FsSecurityMode mode) {
+    switch (mode) {
+      case FsSecurityMode.base:
+        return Icons.shield_outlined;
+      case FsSecurityMode.advanced:
+        return Icons.shield;
+      case FsSecurityMode.strict:
+        return Icons.shield;
+    }
+  }
+
+  static Color _modeColor(FsSecurityMode mode) {
+    switch (mode) {
+      case FsSecurityMode.base:
+        return Colors.grey;
+      case FsSecurityMode.advanced:
+        return Colors.green;
+      case FsSecurityMode.strict:
+        return Colors.green.shade800;
+    }
   }
 }
 
@@ -303,13 +421,13 @@ class _StatusBadge extends StatelessWidget {
                       Icon(
                         Icons.sync_alt,
                         size: 12,
-                        color: Colors.amber.shade700,
+                        color: Colors.orange.shade700,
                       ),
                       const SizedBox(width: 4),
                       Text(
                         _progressText(context, fsState),
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: Colors.amber.shade800,
+                          color: Colors.orange.shade800,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -329,7 +447,7 @@ class _StatusBadge extends StatelessWidget {
       case FsSessionState.fsBroken:
         return cs.error;
       case FsSessionState.strictFsActive:
-        return Colors.indigo;
+        return Colors.green.shade700;
       case FsSessionState.fsActive:
         return Colors.green.shade700;
       case FsSessionState.strictRequested:
@@ -339,11 +457,11 @@ class _StatusBadge extends StatelessWidget {
       case FsSessionState.fsReplySeen:
       case FsSessionState.fsConfirmSent:
       case FsSessionState.fsConfirmed:
-        return Colors.amber.shade800;
-      case FsSessionState.fsSuspended:
         return Colors.orange.shade700;
+      case FsSessionState.fsSuspended:
+        return Colors.grey;
       case FsSessionState.legacyOnly:
-        return cs.onSurfaceVariant;
+        return Colors.grey;
     }
   }
 

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' show max;
 
 import 'package:dotted_border/dotted_border.dart';
 import 'package:flutter/material.dart';
@@ -1361,8 +1362,14 @@ class ChatViewState extends ConsumerState<ChatView> {
       final storageKey = await controller.currentStorageKey();
       final recordId = DateTime.now().microsecondsSinceEpoch.toString();
 
-      // §12.3: FS-encrypted plaintext must NOT be persisted in the database.
-      if (encResult.isFsEncrypted) {
+      // §12.3: FS plaintext stored as encrypted aux record, not in DB.
+      if (encResult.isFsEncrypted && _secretCtrl.text.isNotEmpty) {
+        await ref.read(fsPlaintextPersistenceServiceProvider).savePlaintext(
+          messageId: recordId,
+          plaintext: _secretCtrl.text,
+          contactId: recipient.identityId,
+        );
+        // Warm in-memory cache for immediate display
         final fsController = ref.read(
           fsOpportunisticControllerProvider(recipient.identityId),
         );
@@ -1372,13 +1379,22 @@ class ChatViewState extends ConsumerState<ChatView> {
         );
       }
 
+      // Ensure outgoing timestamp is never earlier than the newest message
+      // in the thread. Prevents ordering issues when device clocks differ
+      // (e.g., incoming message has a future timestamp from the sender).
+      final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final latestInThread = _cachedThread.isEmpty
+          ? nowSec
+          : _cachedThread.last.timestamp;
+      final outgoingTs = max(nowSec, latestInThread);
+
       await ref.read(messagesRepositoryProvider).add(
             MessageRecord(
               id: recordId,
               senderId: 'me',
               recipientId: recipient.identityId,
               direction: 'outgoing',
-              timestamp: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+              timestamp: outgoingTs,
               text: encResult.isFsEncrypted ? null : _secretCtrl.text,
               ciphertextBase64: encrypted.ciphertextBase64,
               nonceBase64: encrypted.nonceBase64,
@@ -1867,7 +1883,11 @@ class ChatViewState extends ConsumerState<ChatView> {
                     if (effectiveTag == null) return true;
                     return m.keyTag == effectiveTag;
                   }).toList()
-                    ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+                    ..sort((a, b) {
+                      final byTs = a.timestamp.compareTo(b.timestamp);
+                      if (byTs != 0) return byTs;
+                      return a.id.compareTo(b.id);
+                    });
 
                   _cachedThread = thread;
 

@@ -414,8 +414,13 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
                                         .microsecondsSinceEpoch
                                         .toString();
 
-                            // §12.3: FS-encrypted plaintext must NOT be persisted
-                            if (encResult.isFsEncrypted) {
+                            // §12.3: FS plaintext → encrypted aux record
+                            if (encResult.isFsEncrypted && _secretCtrl.text.isNotEmpty) {
+                              await ref.read(fsPlaintextPersistenceServiceProvider).savePlaintext(
+                                messageId: recordId,
+                                plaintext: _secretCtrl.text,
+                                contactId: recipient.identityId,
+                              );
                               final fsController = ref.read(
                                 fsOpportunisticControllerProvider(recipient.identityId),
                               );

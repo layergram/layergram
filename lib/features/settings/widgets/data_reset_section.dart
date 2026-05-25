@@ -128,6 +128,8 @@ class DataResetSection extends ConsumerWidget {
               if (!second.deleteMessages) {
                 await messagesRepo.stripEncryptedPlaintext();
               }
+              // §12.3: Wipe FS plaintext aux records on identity reset
+              await ref.read(fsPlaintextPersistenceServiceProvider).removeAll();
 
               // Increment registry version to trigger UI refresh
               ref.read(fsRegistryVersionProvider.notifier).state++;
