@@ -55,6 +55,7 @@ import 'crypto/fs_downgrade_detector.dart';
 import 'crypto/fs_opportunistic_controller.dart';
 import 'crypto/fs_plaintext_cache.dart';
 import 'crypto/fs_plaintext_persistence_service.dart';
+import 'crypto/fs_history_mode_enforcement.dart';
 import 'crypto/fs_passphrase_preferences.dart';
 import 'crypto/fs_passphrase_timeout_controller.dart';
 import 'crypto/fs_security_mode.dart';
@@ -548,8 +549,31 @@ final fsPassphraseTimeoutControllerProvider =
     Provider<FsPassphraseTimeoutController>((ref) {
   return FsPassphraseTimeoutController(
     onExpel: () {
+      final pp = ref.read(passphraseProvider);
+      final prefs = ref.read(passphrasePreferencesProvider);
+      final keyTag = pp.keyTag;
+      if (keyTag != null) {
+        ref.read(fsHistoryModeEnforcementProvider).onPassphraseExpelled(
+              historyMode: prefs.historyMode,
+              fsPersistence: prefs.fsPersistence,
+              identityContext: keyTag,
+            );
+      }
       ref.read(passphraseProvider.notifier).deactivate();
     },
+  );
+});
+
+/// [FsHistoryModeEnforcement] singleton for enforcing history mode
+/// cleanup on passphrase expulsion (§12.2, §6.4–§6.7, §11.5).
+final fsHistoryModeEnforcementProvider =
+    Provider<FsHistoryModeEnforcement>((ref) {
+  return FsHistoryModeEnforcement(
+    plaintextCache: ref.watch(fsPlaintextCacheProvider),
+    plaintextPersistence: ref.watch(fsPlaintextPersistenceServiceProvider),
+    statePersistence: ref.watch(fsStatePersistenceServiceProvider),
+    ratchetPersistence: ref.watch(fsRatchetPersistenceServiceProvider),
+    securityRegistry: ref.watch(fsContactSecurityRegistryProvider),
   );
 });
 

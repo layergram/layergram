@@ -278,6 +278,58 @@ class AuxRecordRepository {
     }());
   }
 
+  /// Deletes all auxiliary records that cannot be decrypted with the current key.
+  ///
+  /// This covers residual data from:
+  /// - abandoned passphrase-derived contexts whose key is no longer available;
+  /// - old identity contexts after identity reset;
+  /// - corrupted records.
+  ///
+  /// Returns the number of records deleted.
+  ///
+  /// Spec reference: §13.7.
+  Future<int> cleanUndecryptableRecords() async {
+    if (!_hasScope || _auxStorageKey == null) return 0;
+
+    final keysToDelete = <String>[];
+
+    for (final key in _box.keys) {
+      if (!_isScopedKey(key)) continue;
+      if (!_isAuxRecord(key)) continue;
+
+      final raw = _box.get(key as String);
+      if (raw == null) continue;
+
+      final encryptedRecord = raw['encryptedRecord'] as String?;
+      final recordId = raw['_rid'] as String?;
+      if (encryptedRecord == null || recordId == null) {
+        keysToDelete.add(key);
+        continue;
+      }
+
+      final payload = await AuxRecordCipher.decrypt(
+        encryptedRecord: encryptedRecord,
+        recordId: recordId,
+        auxStorageKey: _auxStorageKey!,
+      );
+
+      if (payload == null) {
+        keysToDelete.add(key);
+      }
+    }
+
+    for (final key in keysToDelete) {
+      await _box.delete(key);
+    }
+
+    assert(() {
+      print('[AUX-CLEAN] Cleaned ${keysToDelete.length} undecryptable records');
+      return true;
+    }());
+
+    return keysToDelete.length;
+  }
+
   // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------

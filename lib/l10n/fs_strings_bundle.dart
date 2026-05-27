@@ -251,6 +251,24 @@ class FsStringsBundle {
     'security.pp.fs_persistent': 'Persistent',
     'security.pp.fs_ephemeral': 'Ephemeral',
     'security.pp.expel_now': 'Expel identity now',
+
+    // §14.5 Warnings
+    'security.warn.active_passphrase': 'While this identity is unlocked, its keys exist in device memory. Layergram does not protect against seizure or compromise while the identity is actively unlocked.',
+    'security.warn.passphrase_fs': 'The passphrase restores this identity. It may not restore old Forward Secure messages if the required session state was deleted or expired.',
+    'security.warn.volatile_history': 'This mode is designed to reduce future recoverability. Old messages may not be readable again, even with the correct passphrase.',
+    'security.warn.ephemeral_session': 'FS state and history are RAM-only. FS restarts after every passphrase expulsion. No messages or session state will survive.',
+    'security.warn.recoverability_title': 'Reduced recoverability',
+    'security.warn.recoverability_body': 'This mode improves protection by reducing how long old keys or readable history remain available. If you delete messages, reset sessions, expel this identity, reinstall Layergram, lose local state, or clean the encrypted archive, some older messages may not be recoverable even if you still have the original Layergram text or the correct passphrase.',
+    'security.warn.recoverability_confirm': 'I understand that some old messages may become unrecoverable.',
+
+    // §13.7 Clean undecryptable data
+    'security.cleanup.title': 'Clean undecryptable data',
+    'security.cleanup.subtitle': 'Remove residual data that cannot be decrypted.',
+    'security.cleanup.dialog_title': 'Clean undecryptable data',
+    'security.cleanup.dialog_body': 'This may permanently delete old encrypted archives, abandoned identity data, passphrase-derived records, security sessions, and other data that Layergram cannot currently decrypt.',
+    'security.cleanup.confirm_checkbox': 'I understand this action is irreversible.',
+    'security.cleanup.confirm_button': 'Clean now',
+    'security.cleanup.done': 'Undecryptable data cleaned.',
   };
 
   // ── Italian ───────────────────────────────────────────────────────────────
@@ -365,6 +383,24 @@ class FsStringsBundle {
     'security.pp.fs_persistent': 'Persistente',
     'security.pp.fs_ephemeral': 'Effimero',
     'security.pp.expel_now': 'Espelli identità ora',
+
+    // §14.5 Avvertenze
+    'security.warn.active_passphrase': 'Finché questa identità è sbloccata, le sue chiavi esistono nella memoria del dispositivo. Layergram non protegge da sequestro o compromissione mentre l\'identità è attivamente sbloccata.',
+    'security.warn.passphrase_fs': 'La passphrase ripristina questa identità. Potrebbe non ripristinare i vecchi messaggi Forward Secure se lo stato della sessione è stato eliminato o scaduto.',
+    'security.warn.volatile_history': 'Questa modalità è progettata per ridurre la recuperabilità futura. I vecchi messaggi potrebbero non essere più leggibili, anche con la passphrase corretta.',
+    'security.warn.ephemeral_session': 'Lo stato FS e la cronologia sono solo in RAM. La FS si riavvia dopo ogni espulsione della passphrase. Nessun messaggio o stato di sessione sopravviverà.',
+    'security.warn.recoverability_title': 'Recuperabilità ridotta',
+    'security.warn.recoverability_body': 'Questa modalità migliora la protezione riducendo quanto a lungo le vecchie chiavi o la cronologia leggibile rimangono disponibili. Se elimini messaggi, resetti sessioni, espelli questa identità, reinstalli Layergram, perdi lo stato locale o pulisci l\'archivio cifrato, alcuni messaggi più vecchi potrebbero non essere recuperabili anche se hai ancora il testo Layergram originale o la passphrase corretta.',
+    'security.warn.recoverability_confirm': 'Capisco che alcuni vecchi messaggi potrebbero diventare irrecuperabili.',
+
+    // §13.7 Pulizia dati indecifrabili
+    'security.cleanup.title': 'Pulisci dati indecifrabili',
+    'security.cleanup.subtitle': 'Rimuovi i dati residui che non possono essere decifrati.',
+    'security.cleanup.dialog_title': 'Pulisci dati indecifrabili',
+    'security.cleanup.dialog_body': 'Questo potrebbe eliminare permanentemente vecchi archivi cifrati, dati di identità abbandonati, record derivati da passphrase, sessioni di sicurezza e altri dati che Layergram non può attualmente decifrare.',
+    'security.cleanup.confirm_checkbox': 'Capisco che questa azione è irreversibile.',
+    'security.cleanup.confirm_button': 'Pulisci ora',
+    'security.cleanup.done': 'Dati indecifrabili puliti.',
   };
 
   // ── Spanish ───────────────────────────────────────────────────────────────
@@ -477,6 +513,24 @@ class FsStringsBundle {
     'security.pp.fs_persistent': 'Persistente',
     'security.pp.fs_ephemeral': 'Efímero',
     'security.pp.expel_now': 'Expulsar identidad ahora',
+
+    // §14.5 Advertencias
+    'security.warn.active_passphrase': 'Mientras esta identidad está desbloqueada, sus claves existen en la memoria del dispositivo. Layergram no protege contra incautación o compromiso mientras la identidad está activamente desbloqueada.',
+    'security.warn.passphrase_fs': 'La passphrase restaura esta identidad. Puede que no restaure mensajes Forward Secure antiguos si el estado de sesión requerido fue eliminado o expiró.',
+    'security.warn.volatile_history': 'Este modo está diseñado para reducir la recuperabilidad futura. Los mensajes antiguos pueden no ser legibles de nuevo, incluso con la passphrase correcta.',
+    'security.warn.ephemeral_session': 'El estado FS y el historial son solo en RAM. FS se reinicia después de cada expulsión de passphrase. Ningún mensaje o estado de sesión sobrevivirá.',
+    'security.warn.recoverability_title': 'Recuperabilidad reducida',
+    'security.warn.recoverability_body': 'Este modo mejora la protección reduciendo cuánto tiempo las claves antiguas o el historial legible permanecen disponibles. Si eliminas mensajes, restableces sesiones, expulsas esta identidad, reinstalas Layergram, pierdes el estado local o limpias el archivo cifrado, algunos mensajes más antiguos pueden no ser recuperables incluso si aún tienes el texto Layergram original o la passphrase correcta.',
+    'security.warn.recoverability_confirm': 'Entiendo que algunos mensajes antiguos pueden volverse irrecuperables.',
+
+    // §13.7 Limpiar datos indescifrables
+    'security.cleanup.title': 'Limpiar datos indescifrables',
+    'security.cleanup.subtitle': 'Eliminar datos residuales que no pueden ser descifrados.',
+    'security.cleanup.dialog_title': 'Limpiar datos indescifrables',
+    'security.cleanup.dialog_body': 'Esto puede eliminar permanentemente archivos cifrados antiguos, datos de identidad abandonados, registros derivados de passphrase, sesiones de seguridad y otros datos que Layergram no puede descifrar actualmente.',
+    'security.cleanup.confirm_checkbox': 'Entiendo que esta acción es irreversible.',
+    'security.cleanup.confirm_button': 'Limpiar ahora',
+    'security.cleanup.done': 'Datos indescifrables limpiados.',
   };
 
   // ── German ────────────────────────────────────────────────────────────────
@@ -589,6 +643,24 @@ class FsStringsBundle {
     'security.pp.fs_persistent': 'Persistent',
     'security.pp.fs_ephemeral': 'Ephemer',
     'security.pp.expel_now': 'Identität jetzt löschen',
+
+    // §14.5 Warnungen
+    'security.warn.active_passphrase': 'Solange diese Identität entsperrt ist, existieren ihre Schlüssel im Gerätespeicher. Layergram schützt nicht vor Beschlagnahme oder Kompromittierung, während die Identität aktiv entsperrt ist.',
+    'security.warn.passphrase_fs': 'Die Passphrase stellt diese Identität wieder her. Sie stellt möglicherweise keine alten Forward-Secure-Nachrichten wieder her, wenn der erforderliche Sitzungsstatus gelöscht oder abgelaufen ist.',
+    'security.warn.volatile_history': 'Dieser Modus ist darauf ausgelegt, die zukünftige Wiederherstellbarkeit zu reduzieren. Alte Nachrichten sind möglicherweise nicht mehr lesbar, auch nicht mit der richtigen Passphrase.',
+    'security.warn.ephemeral_session': 'FS-Status und Verlauf sind nur im RAM. FS startet nach jeder Passphrase-Ausweisung neu. Keine Nachrichten oder Sitzungsstatus überleben.',
+    'security.warn.recoverability_title': 'Reduzierte Wiederherstellbarkeit',
+    'security.warn.recoverability_body': 'Dieser Modus verbessert den Schutz, indem er reduziert, wie lange alte Schlüssel oder lesbarer Verlauf verfügbar bleiben. Wenn Sie Nachrichten löschen, Sitzungen zurücksetzen, diese Identität ausweisen, Layergram neu installieren, den lokalen Status verlieren oder das verschlüsselte Archiv bereinigen, sind einige ältere Nachrichten möglicherweise nicht wiederherstellbar, auch wenn Sie noch den originalen Layergram-Text oder die richtige Passphrase haben.',
+    'security.warn.recoverability_confirm': 'Ich verstehe, dass einige alte Nachrichten unwiederbringlich werden können.',
+
+    // §13.7 Unentschlüsselbare Daten bereinigen
+    'security.cleanup.title': 'Unentschlüsselbare Daten bereinigen',
+    'security.cleanup.subtitle': 'Restdaten entfernen, die nicht entschlüsselt werden können.',
+    'security.cleanup.dialog_title': 'Unentschlüsselbare Daten bereinigen',
+    'security.cleanup.dialog_body': 'Dies kann dauerhaft alte verschlüsselte Archive, aufgegebene Identitätsdaten, von Passphrase abgeleitete Datensätze, Sicherheitssitzungen und andere Daten löschen, die Layergram derzeit nicht entschlüsseln kann.',
+    'security.cleanup.confirm_checkbox': 'Ich verstehe, dass diese Aktion irreversibel ist.',
+    'security.cleanup.confirm_button': 'Jetzt bereinigen',
+    'security.cleanup.done': 'Unentschlüsselbare Daten bereinigt.',
   };
 
   // ── French ────────────────────────────────────────────────────────────────
@@ -701,6 +773,24 @@ class FsStringsBundle {
     'security.pp.fs_persistent': 'Persistant',
     'security.pp.fs_ephemeral': 'Éphémère',
     'security.pp.expel_now': 'Expulser l\'identité maintenant',
+
+    // §14.5 Avertissements
+    'security.warn.active_passphrase': 'Tant que cette identité est déverrouillée, ses clés existent dans la mémoire de l\'appareil. Layergram ne protège pas contre la saisie ou la compromission tant que l\'identité est activement déverrouillée.',
+    'security.warn.passphrase_fs': 'La passphrase restaure cette identité. Elle pourrait ne pas restaurer les anciens messages Forward Secure si l\'état de session requis a été supprimé ou a expiré.',
+    'security.warn.volatile_history': 'Ce mode est conçu pour réduire la récupérabilité future. Les anciens messages pourraient ne plus être lisibles, même avec la bonne passphrase.',
+    'security.warn.ephemeral_session': 'L\'état FS et l\'historique sont uniquement en RAM. La FS redémarre après chaque expulsion de passphrase. Aucun message ou état de session ne survivra.',
+    'security.warn.recoverability_title': 'Récupérabilité réduite',
+    'security.warn.recoverability_body': 'Ce mode améliore la protection en réduisant la durée pendant laquelle les anciennes clés ou l\'historique lisible restent disponibles. Si vous supprimez des messages, réinitialisez des sessions, expulsez cette identité, réinstallez Layergram, perdez l\'état local ou nettoyez l\'archive chiffrée, certains messages plus anciens pourraient ne pas être récupérables même si vous avez encore le texte Layergram original ou la bonne passphrase.',
+    'security.warn.recoverability_confirm': 'Je comprends que certains anciens messages pourraient devenir irrécupérables.',
+
+    // §13.7 Nettoyer les données indéchiffrables
+    'security.cleanup.title': 'Nettoyer les données indéchiffrables',
+    'security.cleanup.subtitle': 'Supprimer les données résiduelles qui ne peuvent pas être déchiffrées.',
+    'security.cleanup.dialog_title': 'Nettoyer les données indéchiffrables',
+    'security.cleanup.dialog_body': 'Cela peut supprimer définitivement d\'anciennes archives chiffrées, des données d\'identité abandonnées, des enregistrements dérivés de passphrase, des sessions de sécurité et d\'autres données que Layergram ne peut pas actuellement déchiffrer.',
+    'security.cleanup.confirm_checkbox': 'Je comprends que cette action est irréversible.',
+    'security.cleanup.confirm_button': 'Nettoyer maintenant',
+    'security.cleanup.done': 'Données indéchiffrables nettoyées.',
   };
 
   // ── Portuguese ────────────────────────────────────────────────────────────
@@ -813,5 +903,23 @@ class FsStringsBundle {
     'security.pp.fs_persistent': 'Persistente',
     'security.pp.fs_ephemeral': 'Efêmero',
     'security.pp.expel_now': 'Expulsar identidade agora',
+
+    // §14.5 Avisos
+    'security.warn.active_passphrase': 'Enquanto esta identidade estiver desbloqueada, suas chaves existem na memória do dispositivo. Layergram não protege contra apreensão ou comprometimento enquanto a identidade está ativamente desbloqueada.',
+    'security.warn.passphrase_fs': 'A passphrase restaura esta identidade. Ela pode não restaurar mensagens Forward Secure antigas se o estado de sessão necessário foi excluído ou expirou.',
+    'security.warn.volatile_history': 'Este modo é projetado para reduzir a recuperabilidade futura. Mensagens antigas podem não ser legíveis novamente, mesmo com a passphrase correta.',
+    'security.warn.ephemeral_session': 'O estado FS e o histórico são apenas em RAM. A FS reinicia após cada expulsão de passphrase. Nenhuma mensagem ou estado de sessão sobreviverá.',
+    'security.warn.recoverability_title': 'Recuperabilidade reduzida',
+    'security.warn.recoverability_body': 'Este modo melhora a proteção reduzindo quanto tempo as chaves antigas ou o histórico legível permanecem disponíveis. Se você excluir mensagens, redefinir sessões, expulsar esta identidade, reinstalar o Layergram, perder o estado local ou limpar o arquivo criptografado, algumas mensagens mais antigas podem não ser recuperáveis mesmo se você ainda tiver o texto Layergram original ou a passphrase correta.',
+    'security.warn.recoverability_confirm': 'Entendo que algumas mensagens antigas podem se tornar irrecuperáveis.',
+
+    // §13.7 Limpar dados indecifráveis
+    'security.cleanup.title': 'Limpar dados indecifráveis',
+    'security.cleanup.subtitle': 'Remover dados residuais que não podem ser decifrados.',
+    'security.cleanup.dialog_title': 'Limpar dados indecifráveis',
+    'security.cleanup.dialog_body': 'Isso pode excluir permanentemente arquivos criptografados antigos, dados de identidade abandonados, registros derivados de passphrase, sessões de segurança e outros dados que o Layergram não pode atualmente decifrar.',
+    'security.cleanup.confirm_checkbox': 'Entendo que esta ação é irreversível.',
+    'security.cleanup.confirm_button': 'Limpar agora',
+    'security.cleanup.done': 'Dados indecifráveis limpos.',
   };
 }

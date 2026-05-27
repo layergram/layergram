@@ -160,8 +160,89 @@ class DataResetSection extends ConsumerWidget {
             }
           },
         ),
+        ListTile(
+          leading: const Icon(Icons.cleaning_services_outlined, color: Colors.orange),
+          title: Text(t(context, 'security.cleanup.title')),
+          subtitle: Text(t(context, 'security.cleanup.subtitle')),
+          onTap: () => _confirmCleanUndecryptable(context, ref),
+        ),
       ],
     );
+  }
+
+  Future<void> _confirmCleanUndecryptable(BuildContext context, WidgetRef ref) async {
+    final t = AppStrings.t;
+    var confirmed = false;
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              title: Row(
+                children: [
+                  const Icon(Icons.warning_amber_outlined, color: Colors.orange),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(t(ctx, 'security.cleanup.dialog_title'))),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(t(ctx, 'security.cleanup.dialog_body')),
+                    const SizedBox(height: 16),
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      value: confirmed,
+                      onChanged: (v) =>
+                          setDialogState(() => confirmed = v ?? false),
+                      title: Text(
+                        t(ctx, 'security.cleanup.confirm_checkbox'),
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  child: Text(t(ctx, 'cancel')),
+                ),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: confirmed ? Colors.orange : Colors.grey,
+                  ),
+                  onPressed: confirmed ? () => Navigator.of(ctx).pop(true) : null,
+                  child: Text(t(ctx, 'security.cleanup.confirm_button')),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (result != true) return;
+
+    // Perform the cleanup
+    final auxRepo = ref.read(auxRecordRepositoryProvider);
+    final deletedCount = await auxRepo.cleanUndecryptableRecords();
+
+    assert(() {
+      print('[CLEANUP] Deleted $deletedCount undecryptable records');
+      return true;
+    }());
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(t(context, 'security.cleanup.done'))),
+      );
+    }
   }
 }
 
