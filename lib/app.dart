@@ -25,6 +25,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/capabilities/chat_folders_capability.dart';
 import 'core/crypto/aux_record_cipher.dart';
 import 'core/crypto/fs_double_ratchet.dart';
+import 'core/crypto/fs_passphrase_preferences.dart';
 import 'core/crypto/fs_ratchet_persistence_service.dart';
 import 'core/providers.dart';
 import 'core/security/app_lock_idle_controller.dart';
@@ -63,6 +64,7 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
   ProviderSubscription<bool>? _appLockEnabledSub;
   ProviderSubscription<int>? _appLockTimeoutSub;
   ProviderSubscription<bool>? _appNeedsUnlockSub;
+  ProviderSubscription<PassphrasePreferences>? _passphrasePreferencesSub;
   bool _checkingPendingShare = false;
   bool _identityMigrationNoticeCheckQueued = false;
   final ListQueue<bool> _recentSlowFrames = ListQueue<bool>();
@@ -120,6 +122,23 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
         } else {
           _appLockIdleController.onUnlocked();
           unawaited(ref.read(homeControllerProvider).warmSessionDisplayKeys());
+        }
+      },
+    )
+      ..read();
+    _passphrasePreferencesSub = ref.listenManual<PassphrasePreferences>(
+      passphrasePreferencesProvider,
+      (prev, next) {
+        final tc = ref.read(fsPassphraseTimeoutControllerProvider);
+        tc.configure(
+          timeout: next.timeout,
+          expelOnScreenLock: next.expelOnScreenLock,
+        );
+        final pp = ref.read(passphraseProvider);
+        if (pp.isActive && !tc.isActive) {
+          tc.start();
+        } else if (!pp.isActive && tc.isActive) {
+          tc.stop();
         }
       },
     )
@@ -552,6 +571,9 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
       ref.read(homeControllerProvider).clearSessionDecryptionCache();
     }
 
+    // Passphrase timeout controller lifecycle (§11.3)
+    ref.read(fsPassphraseTimeoutControllerProvider).onAppLifecycleChanged(state);
+
     final lockEnabled = ref.read(appLockEnabledProvider);
     if (!lockEnabled) return;
     _appLockIdleController.onAppLifecycleChanged(state);
@@ -565,6 +587,8 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
     _appLockEnabledSub?.close();
     _appLockTimeoutSub?.close();
     _appNeedsUnlockSub?.close();
+    _passphrasePreferencesSub?.close();
+    ref.read(fsPassphraseTimeoutControllerProvider).dispose();
     _appLockIdleController.dispose();
     WidgetsBinding.instance.removeTimingsCallback(_handleFrameTimings);
     WidgetsBinding.instance.removeObserver(this);
