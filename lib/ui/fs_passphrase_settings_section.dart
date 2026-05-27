@@ -87,9 +87,7 @@ class FsPassphraseSettingsSection extends ConsumerWidget {
             underline: const SizedBox.shrink(),
             onChanged: (value) {
               if (value == null) return;
-              ref
-                  .read(passphrasePreferencesProvider.notifier)
-                  .updateHistoryMode(value);
+              _confirmHistoryModeChange(context, ref, value);
             },
             items: PassphraseHistoryMode.values.map((hm) {
               return DropdownMenuItem(
@@ -129,11 +127,46 @@ class FsPassphraseSettingsSection extends ConsumerWidget {
 
         const SizedBox(height: 8),
 
+        // ── §14.5 Contextual warnings ─────────────────────────────────────
+        _buildWarningBanner(
+          context,
+          t(context, 'security.warn.active_passphrase'),
+          Icons.info_outline,
+          Colors.blue,
+        ),
+        if (prefs.historyMode == PassphraseHistoryMode.volatile_ ||
+            prefs.historyMode == PassphraseHistoryMode.ephemeral)
+          _buildWarningBanner(
+            context,
+            t(context, 'security.warn.volatile_history'),
+            Icons.warning_amber_outlined,
+            Colors.orange,
+          ),
+        _buildWarningBanner(
+          context,
+          t(context, 'security.warn.passphrase_fs'),
+          Icons.info_outline,
+          Colors.amber,
+        ),
+
+        const SizedBox(height: 8),
+
         // ── Expel now ─────────────────────────────────────────────────────
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: OutlinedButton.icon(
             onPressed: () {
+              final pp = ref.read(passphraseProvider);
+              final prefs = ref.read(passphrasePreferencesProvider);
+              final keyTag = pp.keyTag;
+              if (keyTag != null) {
+                ref.read(fsHistoryModeEnforcementProvider).onPassphraseExpelled(
+                      historyMode: prefs.historyMode,
+                      fsPersistence: prefs.fsPersistence,
+                      identityContext: keyTag,
+                    );
+              }
+              ref.read(fsPassphraseTimeoutControllerProvider).stop();
               ref.read(passphraseProvider.notifier).deactivate();
             },
             icon: const Icon(Icons.logout),
@@ -186,6 +219,110 @@ class FsPassphraseSettingsSection extends ConsumerWidget {
         return t(context, 'security.pp.fs_persistent');
       case PassphraseFsPersistence.ephemeral:
         return t(context, 'security.pp.fs_ephemeral');
+    }
+  }
+
+  Widget _buildWarningBanner(
+    BuildContext context,
+    String text,
+    IconData icon,
+    Color color,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: color,
+                  ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Confirm before enabling volatile/ephemeral history mode (§14.6.1).
+  Future<void> _confirmHistoryModeChange(
+    BuildContext context,
+    WidgetRef ref,
+    PassphraseHistoryMode mode,
+  ) async {
+    // No confirmation needed for keepEncrypted (the safe default)
+    if (mode == PassphraseHistoryMode.keepEncrypted) {
+      ref.read(passphrasePreferencesProvider.notifier).updateHistoryMode(mode);
+      return;
+    }
+
+    final t = AppStrings.t;
+    final warningKey = mode == PassphraseHistoryMode.volatile_
+        ? 'security.warn.volatile_history'
+        : 'security.warn.ephemeral_session';
+
+    var confirmed = false;
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              title: Row(
+                children: [
+                  const Icon(Icons.warning_amber_outlined, color: Colors.orange),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(t(ctx, 'security.warn.recoverability_title'))),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(t(ctx, warningKey)),
+                    const SizedBox(height: 12),
+                    Text(t(ctx, 'security.warn.recoverability_body')),
+                    const SizedBox(height: 16),
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      value: confirmed,
+                      onChanged: (v) =>
+                          setDialogState(() => confirmed = v ?? false),
+                      title: Text(
+                        t(ctx, 'security.warn.recoverability_confirm'),
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  child: Text(t(ctx, 'cancel')),
+                ),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: confirmed ? Colors.orange : Colors.grey,
+                  ),
+                  onPressed: confirmed ? () => Navigator.of(ctx).pop(true) : null,
+                  child: Text(t(ctx, 'confirm')),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (result == true) {
+      ref.read(passphrasePreferencesProvider.notifier).updateHistoryMode(mode);
     }
   }
 }

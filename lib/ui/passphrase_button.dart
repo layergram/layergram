@@ -110,6 +110,19 @@ class PassphraseButton extends ConsumerWidget {
 
     if (confirmed == true) {
       ref.read(fsPassphraseTimeoutControllerProvider).stop();
+
+      // Enforce history mode on manual deactivation (§12.2)
+      final pp = ref.read(passphraseProvider);
+      final prefs = ref.read(passphrasePreferencesProvider);
+      final keyTag = pp.keyTag;
+      if (keyTag != null) {
+        await ref.read(fsHistoryModeEnforcementProvider).onPassphraseExpelled(
+              historyMode: prefs.historyMode,
+              fsPersistence: prefs.fsPersistence,
+              identityContext: keyTag,
+            );
+      }
+
       ref.read(passphraseProvider.notifier).deactivate();
     }
   }
