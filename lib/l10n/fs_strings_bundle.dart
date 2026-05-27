@@ -229,6 +229,28 @@ class FsStringsBundle {
     'security.fs.cls.failed.desc': 'Forward Secrecy decryption failed. The session may have been reset or the device changed.',
     'security.fs.cls.unknown': 'Unknown',
     'security.fs.cls.unknown.desc': 'The security classification of this message could not be determined.',
+
+    // Passphrase settings (§11.2–§11.5, §14.2)
+    'security.pp.section_title': 'Security for this identity',
+    'security.pp.section_subtitle': 'Settings specific to this passphrase-derived identity.',
+    'security.pp.timeout_title': 'Auto-expel passphrase',
+    'security.pp.timeout_subtitle': 'Choose a shorter timeout for stronger protection.',
+    'security.pp.timeout_30s': '30 seconds',
+    'security.pp.timeout_1m': '1 minute',
+    'security.pp.timeout_2m': '2 minutes',
+    'security.pp.timeout_5m': '5 minutes',
+    'security.pp.timeout_10m': '10 minutes',
+    'security.pp.timeout_manual': 'Manual only',
+    'security.pp.screen_lock_title': 'Expel on screen lock',
+    'security.pp.screen_lock_subtitle': 'Destroy passphrase keys immediately when the screen locks.',
+    'security.pp.history_title': 'History for this identity',
+    'security.pp.history_keep': 'Keep encrypted history',
+    'security.pp.history_volatile': 'Volatile history',
+    'security.pp.history_ephemeral': 'Ephemeral session',
+    'security.pp.fs_persistence_title': 'Forward Secrecy state',
+    'security.pp.fs_persistent': 'Persistent',
+    'security.pp.fs_ephemeral': 'Ephemeral',
+    'security.pp.expel_now': 'Expel identity now',
   };
 
   // ── Italian ───────────────────────────────────────────────────────────────
@@ -321,6 +343,28 @@ class FsStringsBundle {
     'security.fs.cls.failed.desc': 'La decifratura Forward Secrecy è fallita. La sessione potrebbe essere stata reimpostata o il dispositivo cambiato.',
     'security.fs.cls.unknown': 'Sconosciuta',
     'security.fs.cls.unknown.desc': 'La classificazione di sicurezza di questo messaggio non è stata determinata.',
+
+    // Passphrase settings (§11.2–§11.5, §14.2)
+    'security.pp.section_title': 'Sicurezza per questa identità',
+    'security.pp.section_subtitle': 'Impostazioni specifiche per questa identità derivata da passphrase.',
+    'security.pp.timeout_title': 'Espulsione automatica passphrase',
+    'security.pp.timeout_subtitle': 'Scegli un timeout più breve per una protezione maggiore.',
+    'security.pp.timeout_30s': '30 secondi',
+    'security.pp.timeout_1m': '1 minuto',
+    'security.pp.timeout_2m': '2 minuti',
+    'security.pp.timeout_5m': '5 minuti',
+    'security.pp.timeout_10m': '10 minuti',
+    'security.pp.timeout_manual': 'Solo manuale',
+    'security.pp.screen_lock_title': 'Espelli al blocco schermo',
+    'security.pp.screen_lock_subtitle': 'Distrugge le chiavi passphrase immediatamente al blocco dello schermo.',
+    'security.pp.history_title': 'Cronologia per questa identità',
+    'security.pp.history_keep': 'Mantieni cronologia cifrata',
+    'security.pp.history_volatile': 'Cronologia volatile',
+    'security.pp.history_ephemeral': 'Sessione effimera',
+    'security.pp.fs_persistence_title': 'Stato Forward Secrecy',
+    'security.pp.fs_persistent': 'Persistente',
+    'security.pp.fs_ephemeral': 'Effimero',
+    'security.pp.expel_now': 'Espelli identità ora',
   };
 
   // ── Spanish ───────────────────────────────────────────────────────────────
@@ -411,6 +455,28 @@ class FsStringsBundle {
     'security.fs.cls.failed.desc': 'La descifrado de Forward Secrecy falló. La sesión puede haber sido restablecida o el dispositivo cambiado.',
     'security.fs.cls.unknown': 'Desconocido',
     'security.fs.cls.unknown.desc': 'No se pudo determinar la clasificación de seguridad de este mensaje.',
+
+    // Passphrase settings (§11.2–§11.5, §14.2)
+    'security.pp.section_title': 'Seguridad para esta identidad',
+    'security.pp.section_subtitle': 'Ajustes específicos para esta identidad derivada de passphrase.',
+    'security.pp.timeout_title': 'Expulsión automática de passphrase',
+    'security.pp.timeout_subtitle': 'Elige un tiempo más corto para mayor protección.',
+    'security.pp.timeout_30s': '30 segundos',
+    'security.pp.timeout_1m': '1 minuto',
+    'security.pp.timeout_2m': '2 minutos',
+    'security.pp.timeout_5m': '5 minutos',
+    'security.pp.timeout_10m': '10 minutos',
+    'security.pp.timeout_manual': 'Solo manual',
+    'security.pp.screen_lock_title': 'Expulsar al bloquear pantalla',
+    'security.pp.screen_lock_subtitle': 'Destruye las claves de passphrase inmediatamente al bloquear la pantalla.',
+    'security.pp.history_title': 'Historial para esta identidad',
+    'security.pp.history_keep': 'Mantener historial cifrado',
+    'security.pp.history_volatile': 'Historial volátil',
+    'security.pp.history_ephemeral': 'Sesión efímera',
+    'security.pp.fs_persistence_title': 'Estado Forward Secrecy',
+    'security.pp.fs_persistent': 'Persistente',
+    'security.pp.fs_ephemeral': 'Efímero',
+    'security.pp.expel_now': 'Expulsar identidad ahora',
   };
 
   // ── German ────────────────────────────────────────────────────────────────
@@ -501,6 +567,28 @@ class FsStringsBundle {
     'security.fs.cls.failed.desc': 'Die Forward Secrecy Entschlüsselung ist fehlgeschlagen. Die Sitzung wurde möglicherweise zurückgesetzt oder das Gerät gewechselt.',
     'security.fs.cls.unknown': 'Unbekannt',
     'security.fs.cls.unknown.desc': 'Die Sicherheitsklassifizierung dieser Nachricht konnte nicht bestimmt werden.',
+
+    // Passphrase settings (§11.2–§11.5, §14.2)
+    'security.pp.section_title': 'Sicherheit für diese Identität',
+    'security.pp.section_subtitle': 'Einstellungen für diese passphrase-abgeleitete Identität.',
+    'security.pp.timeout_title': 'Passphrase automatisch löschen',
+    'security.pp.timeout_subtitle': 'Wähle ein kürzeres Timeout für stärkeren Schutz.',
+    'security.pp.timeout_30s': '30 Sekunden',
+    'security.pp.timeout_1m': '1 Minute',
+    'security.pp.timeout_2m': '2 Minuten',
+    'security.pp.timeout_5m': '5 Minuten',
+    'security.pp.timeout_10m': '10 Minuten',
+    'security.pp.timeout_manual': 'Nur manuell',
+    'security.pp.screen_lock_title': 'Bei Bildschirmsperre löschen',
+    'security.pp.screen_lock_subtitle': 'Zerstört die Passphrase-Schlüssel sofort bei Bildschirmsperre.',
+    'security.pp.history_title': 'Verlauf für diese Identität',
+    'security.pp.history_keep': 'Verschlüsselten Verlauf behalten',
+    'security.pp.history_volatile': 'Flüchtiger Verlauf',
+    'security.pp.history_ephemeral': 'Ephemere Sitzung',
+    'security.pp.fs_persistence_title': 'Forward-Secrecy-Status',
+    'security.pp.fs_persistent': 'Persistent',
+    'security.pp.fs_ephemeral': 'Ephemer',
+    'security.pp.expel_now': 'Identität jetzt löschen',
   };
 
   // ── French ────────────────────────────────────────────────────────────────
@@ -591,6 +679,28 @@ class FsStringsBundle {
     'security.fs.cls.failed.desc': 'Le déchiffrement Forward Secrecy a échoué. La session a peut-être été réinitialisée ou l\'appareil changé.',
     'security.fs.cls.unknown': 'Inconnu',
     'security.fs.cls.unknown.desc': 'La classification de sécurité de ce message n\'a pas pu être déterminée.',
+
+    // Passphrase settings (§11.2–§11.5, §14.2)
+    'security.pp.section_title': 'Sécurité pour cette identité',
+    'security.pp.section_subtitle': 'Paramètres spécifiques à cette identité dérivée de la passphrase.',
+    'security.pp.timeout_title': 'Expulsion automatique de la passphrase',
+    'security.pp.timeout_subtitle': 'Choisissez un délai plus court pour une protection renforcée.',
+    'security.pp.timeout_30s': '30 secondes',
+    'security.pp.timeout_1m': '1 minute',
+    'security.pp.timeout_2m': '2 minutes',
+    'security.pp.timeout_5m': '5 minutes',
+    'security.pp.timeout_10m': '10 minutes',
+    'security.pp.timeout_manual': 'Manuel uniquement',
+    'security.pp.screen_lock_title': 'Expulser au verrouillage',
+    'security.pp.screen_lock_subtitle': 'Détruit les clés de passphrase immédiatement lors du verrouillage de l\'écran.',
+    'security.pp.history_title': 'Historique pour cette identité',
+    'security.pp.history_keep': 'Conserver l\'historique chiffré',
+    'security.pp.history_volatile': 'Historique volatile',
+    'security.pp.history_ephemeral': 'Session éphémère',
+    'security.pp.fs_persistence_title': 'État Forward Secrecy',
+    'security.pp.fs_persistent': 'Persistant',
+    'security.pp.fs_ephemeral': 'Éphémère',
+    'security.pp.expel_now': 'Expulser l\'identité maintenant',
   };
 
   // ── Portuguese ────────────────────────────────────────────────────────────
@@ -681,5 +791,27 @@ class FsStringsBundle {
     'security.fs.cls.failed.desc': 'A decifragem Forward Secrecy falhou. A sessão pode ter sido redefinida ou o dispositivo alterado.',
     'security.fs.cls.unknown': 'Desconhecido',
     'security.fs.cls.unknown.desc': 'A classificação de segurança desta mensagem não pôde ser determinada.',
+
+    // Passphrase settings (§11.2–§11.5, §14.2)
+    'security.pp.section_title': 'Segurança para esta identidade',
+    'security.pp.section_subtitle': 'Configurações específicas para esta identidade derivada de passphrase.',
+    'security.pp.timeout_title': 'Expulsão automática da passphrase',
+    'security.pp.timeout_subtitle': 'Escolha um tempo mais curto para maior proteção.',
+    'security.pp.timeout_30s': '30 segundos',
+    'security.pp.timeout_1m': '1 minuto',
+    'security.pp.timeout_2m': '2 minutos',
+    'security.pp.timeout_5m': '5 minutos',
+    'security.pp.timeout_10m': '10 minutos',
+    'security.pp.timeout_manual': 'Apenas manual',
+    'security.pp.screen_lock_title': 'Expulsar ao bloquear tela',
+    'security.pp.screen_lock_subtitle': 'Destrói as chaves da passphrase imediatamente ao bloquear a tela.',
+    'security.pp.history_title': 'Histórico para esta identidade',
+    'security.pp.history_keep': 'Manter histórico criptografado',
+    'security.pp.history_volatile': 'Histórico volátil',
+    'security.pp.history_ephemeral': 'Sessão efêmera',
+    'security.pp.fs_persistence_title': 'Estado Forward Secrecy',
+    'security.pp.fs_persistent': 'Persistente',
+    'security.pp.fs_ephemeral': 'Efêmero',
+    'security.pp.expel_now': 'Expulsar identidade agora',
   };
 }

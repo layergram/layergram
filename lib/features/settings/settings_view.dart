@@ -17,6 +17,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
 import '../../l10n/app_strings.dart';
+import '../../ui/fs_passphrase_settings_section.dart';
 import '../../ui/passphrase_button.dart';
 import '../../utils/app_platform.dart';
 import '../home/home_controller.dart';
@@ -79,6 +80,9 @@ class SettingsView extends ConsumerWidget {
           ),
           AppLockSettings(),
           const SizedBox(height: 8),
+
+          // §11.2/§14.2 — Passphrase settings (visible only when active)
+          const FsPassphraseSettingsSection(),
           if (showTooltipSetting) ...[
             SwitchListTile.adaptive(
               value: tooltipsEnabled,

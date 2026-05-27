@@ -55,6 +55,8 @@ import 'crypto/fs_downgrade_detector.dart';
 import 'crypto/fs_opportunistic_controller.dart';
 import 'crypto/fs_plaintext_cache.dart';
 import 'crypto/fs_plaintext_persistence_service.dart';
+import 'crypto/fs_passphrase_preferences.dart';
+import 'crypto/fs_passphrase_timeout_controller.dart';
 import 'crypto/fs_security_mode.dart';
 import 'crypto/fs_replay_cache.dart';
 import 'crypto/fs_session_manager.dart';
@@ -512,3 +514,98 @@ final fsSecurityModeServiceProvider = Provider<FsSecurityModeService>((ref) {
     auxRepository: ref.watch(auxRecordRepositoryProvider),
   );
 });
+
+// ---------------------------------------------------------------------------
+// Passphrase preferences & timeout (§11.2–§11.5, §14.2)
+// ---------------------------------------------------------------------------
+
+/// [FsPassphrasePreferencesService] singleton for persisting per-passphrase-
+/// context preferences (timeout, screen lock, history mode, FS persistence).
+final fsPassphrasePreferencesServiceProvider =
+    Provider<FsPassphrasePreferencesService>((ref) {
+  return FsPassphrasePreferencesService(
+    auxRepository: ref.watch(auxRecordRepositoryProvider),
+  );
+});
+
+/// Reactive passphrase preferences notifier.
+///
+/// Widgets watch this for the current passphrase-context preferences.
+/// Returns hardcoded defaults when no passphrase is active (§11.3.1).
+final passphrasePreferencesProvider = StateNotifierProvider<
+    PassphrasePreferencesNotifier, PassphrasePreferences>((ref) {
+  return PassphrasePreferencesNotifier(
+    preferencesService: ref.watch(fsPassphrasePreferencesServiceProvider),
+    passphraseState: ref.watch(passphraseProvider),
+  );
+});
+
+/// Passphrase timeout controller (§11.3, §11.4).
+///
+/// Manages the automatic expulsion timer. Call [start] when passphrase
+/// activates, [stop] on deactivation.
+final fsPassphraseTimeoutControllerProvider =
+    Provider<FsPassphraseTimeoutController>((ref) {
+  return FsPassphraseTimeoutController(
+    onExpel: () {
+      ref.read(passphraseProvider.notifier).deactivate();
+    },
+  );
+});
+
+/// Reactive notifier for passphrase preferences.
+///
+/// Loads preferences from [FsPassphrasePreferencesService] when a passphrase
+/// becomes active, and syncs changes back to storage.
+class PassphrasePreferencesNotifier
+    extends StateNotifier<PassphrasePreferences> {
+  PassphrasePreferencesNotifier({
+    required FsPassphrasePreferencesService preferencesService,
+    required PassphraseState passphraseState,
+  })  : _preferencesService = preferencesService,
+        _passphraseState = passphraseState,
+        super(const PassphrasePreferences()) {
+    _loadIfActive();
+  }
+
+  final FsPassphrasePreferencesService _preferencesService;
+  final PassphraseState _passphraseState;
+
+  void _loadIfActive() {
+    final tag = _passphraseState.keyTag;
+    if (tag == null || !_passphraseState.isActive) {
+      state = const PassphrasePreferences();
+      return;
+    }
+    state = _preferencesService.getPreferences(tag);
+  }
+
+  Future<void> updateTimeout(PassphraseTimeout timeout) async {
+    state = state.copyWith(timeout: timeout);
+    await _persist();
+  }
+
+  Future<void> updateExpelOnScreenLock(bool value) async {
+    state = state.copyWith(expelOnScreenLock: value);
+    await _persist();
+  }
+
+  Future<void> updateHistoryMode(PassphraseHistoryMode mode) async {
+    state = state.copyWith(historyMode: mode);
+    await _persist();
+  }
+
+  Future<void> updateFsPersistence(PassphraseFsPersistence mode) async {
+    state = state.copyWith(fsPersistence: mode);
+    await _persist();
+  }
+
+  Future<void> _persist() async {
+    final tag = _passphraseState.keyTag;
+    if (tag == null || !_passphraseState.isActive) return;
+    await _preferencesService.savePreferences(
+      contextTag: tag,
+      prefs: state,
+    );
+  }
+}
