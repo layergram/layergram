@@ -146,7 +146,7 @@ class FsInfoSheet extends StatelessWidget {
       case FsSessionState.strictFsActive:
         return 'security.fs.status.strict';
       case FsSessionState.strictRequested:
-        return 'security.fs.status.upgrading';
+        return 'security.fs.status.strict_pending';
       case FsSessionState.fsSuspended:
         return 'security.fs.status.suspended';
       case FsSessionState.fsBroken:

@@ -52,6 +52,7 @@ class FsStringsBundle {
     'security.fs.status.upgrading': 'Upgrading security…',
     'security.fs.status.active': 'Forward Secrecy active',
     'security.fs.status.strict': 'Maximum Forward Secrecy',
+    'security.fs.status.strict_pending': 'Maximum FS requested',
     'security.fs.status.suspended': 'Security paused',
     'security.fs.status.broken': 'Security warning',
 
@@ -168,6 +169,10 @@ class FsStringsBundle {
         'Maximum FS is not active yet. Layergram is waiting for a confirmed secure session. '
         'Until confirmation, this contact is not yet using Maximum Forward Secrecy.',
 
+    // Fallback warning (§14.6.4)
+    'security.fs.warning.fallback_body':
+        'Compatibility fallback is allowed for this contact. Some messages may use the previous Layergram encryption model instead of full Forward Secrecy.',
+
     // Per-device/session labels (§14.4)
     'security.fs.device.session_label': 'Session {n}',
     'security.fs.device.unknown': 'Unknown session',
@@ -278,6 +283,7 @@ class FsStringsBundle {
     'security.fs.status.upgrading': 'Aggiornamento sicurezza…',
     'security.fs.status.active': 'Forward Secrecy attiva',
     'security.fs.status.strict': 'Forward Secrecy massima',
+    'security.fs.status.strict_pending': 'FS massima richiesta',
     'security.fs.status.suspended': 'Sicurezza sospesa',
     'security.fs.status.broken': 'Avviso di sicurezza',
     'security.fs.warning.recoverability':
@@ -286,6 +292,8 @@ class FsStringsBundle {
         'La Forward Secrecy massima lega questa conversazione al tuo dispositivo attuale. Cambiare dispositivo richiederà di ristabilire la sessione.',
     'security.fs.warning.pending_activation':
         'L\'aggiornamento Forward Secrecy è in sospeso. Invia un messaggio per completare l\'handshake.',
+    'security.fs.warning.fallback_body':
+        'Il fallback di compatibilità è consentito per questo contatto. Alcuni messaggi potrebbero usare il modello di crittografia precedente di Layergram anziché la Forward Secrecy completa.',
     'security.fs.warning.fallback_allowed':
         'Se la negoziazione Forward Secrecy fallisce, questa conversazione tornerà alla crittografia standard.',
     'security.fs.warning.no_silent_downgrade':
@@ -410,6 +418,7 @@ class FsStringsBundle {
     'security.fs.status.upgrading': 'Actualizando seguridad…',
     'security.fs.status.active': 'Forward Secrecy activo',
     'security.fs.status.strict': 'Forward Secrecy máximo',
+    'security.fs.status.strict_pending': 'FS máximo solicitado',
     'security.fs.status.suspended': 'Seguridad pausada',
     'security.fs.status.broken': 'Advertencia de seguridad',
     'security.fs.warning.recoverability':
@@ -418,6 +427,8 @@ class FsStringsBundle {
         'El Forward Secrecy máximo vincula esta conversación a tu dispositivo actual.',
     'security.fs.warning.pending_activation':
         'La actualización de Forward Secrecy está pendiente. Envía un mensaje para completar el handshake.',
+    'security.fs.warning.fallback_body':
+        'Se permite la compatibilidad con versiones anteriores para este contacto. Algunos mensajes pueden usar el modelo de cifrado anterior de Layergram en lugar de Forward Secrecy completo.',
     'security.fs.warning.fallback_allowed':
         'Si falla la negociación de Forward Secrecy, esta conversación volverá al cifrado estándar.',
     'security.fs.warning.no_silent_downgrade':
@@ -540,6 +551,7 @@ class FsStringsBundle {
     'security.fs.status.upgrading': 'Sicherheit wird aktualisiert…',
     'security.fs.status.active': 'Forward Secrecy aktiv',
     'security.fs.status.strict': 'Maximale Forward Secrecy',
+    'security.fs.status.strict_pending': 'Maximale FS angefordert',
     'security.fs.status.suspended': 'Sicherheit pausiert',
     'security.fs.status.broken': 'Sicherheitswarnung',
     'security.fs.warning.recoverability':
@@ -548,6 +560,8 @@ class FsStringsBundle {
         'Maximale Forward Secrecy bindet diese Unterhaltung an Ihr aktuelles Gerät.',
     'security.fs.warning.pending_activation':
         'Das Forward-Secrecy-Upgrade steht aus. Senden Sie eine Nachricht, um den Handshake abzuschließen.',
+    'security.fs.warning.fallback_body':
+        'Für diesen Kontakt ist ein Kompatibilitäts-Fallback erlaubt. Einige Nachrichten verwenden möglicherweise das frühere Verschlüsselungsmodell von Layergram anstelle der vollständigen Forward Secrecy.',
     'security.fs.warning.fallback_allowed':
         'Wenn die Forward-Secrecy-Aushandlung fehlschlägt, fällt diese Unterhaltung auf die Standardverschlüsselung zurück.',
     'security.fs.warning.no_silent_downgrade':
@@ -670,6 +684,7 @@ class FsStringsBundle {
     'security.fs.status.upgrading': 'Mise à niveau de la sécurité…',
     'security.fs.status.active': 'Forward Secrecy actif',
     'security.fs.status.strict': 'Forward Secrecy maximal',
+    'security.fs.status.strict_pending': 'FS maximal demandé',
     'security.fs.status.suspended': 'Sécurité suspendue',
     'security.fs.status.broken': 'Avertissement de sécurité',
     'security.fs.warning.recoverability':
@@ -678,6 +693,8 @@ class FsStringsBundle {
         'Le Forward Secrecy maximal lie cette conversation à votre appareil actuel.',
     'security.fs.warning.pending_activation':
         'La mise à niveau Forward Secrecy est en attente. Envoyez un message pour finaliser la poignée de main.',
+    'security.fs.warning.fallback_body':
+        'Le repli de compatibilité est autorisé pour ce contact. Certains messages peuvent utiliser le modèle de chiffrement précédent de Layergram au lieu du Forward Secrecy complet.',
     'security.fs.warning.fallback_allowed':
         'En cas d\'échec de la négociation, cette conversation reviendra au chiffrement standard.',
     'security.fs.warning.no_silent_downgrade':
@@ -800,6 +817,7 @@ class FsStringsBundle {
     'security.fs.status.upgrading': 'Atualizando segurança…',
     'security.fs.status.active': 'Forward Secrecy ativo',
     'security.fs.status.strict': 'Forward Secrecy máximo',
+    'security.fs.status.strict_pending': 'FS máximo solicitado',
     'security.fs.status.suspended': 'Segurança pausada',
     'security.fs.status.broken': 'Aviso de segurança',
     'security.fs.warning.recoverability':
@@ -808,6 +826,8 @@ class FsStringsBundle {
         'O Forward Secrecy máximo vincula esta conversa ao seu dispositivo atual.',
     'security.fs.warning.pending_activation':
         'A atualização do Forward Secrecy está pendente. Envie uma mensagem para concluir o handshake.',
+    'security.fs.warning.fallback_body':
+        'O fallback de compatibilidade é permitido para este contato. Algumas mensagens podem usar o modelo de criptografia anterior do Layergram em vez do Forward Secrecy completo.',
     'security.fs.warning.fallback_allowed':
         'Se a negociação falhar, esta conversa voltará à criptografia padrão.',
     'security.fs.warning.no_silent_downgrade':

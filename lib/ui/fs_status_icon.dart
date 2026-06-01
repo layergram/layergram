@@ -110,6 +110,7 @@ class FsStatusIcon extends StatelessWidget {
       case FsSessionState.fsReplySeen:
       case FsSessionState.fsConfirmSent:
       case FsSessionState.fsConfirmed:
+        return Colors.orange;
       case FsSessionState.strictRequested:
         return Colors.orange;
       case FsSessionState.fsActive:
@@ -153,8 +154,9 @@ class FsStatusIcon extends StatelessWidget {
       case FsSessionState.fsReplySeen:
       case FsSessionState.fsConfirmSent:
       case FsSessionState.fsConfirmed:
-      case FsSessionState.strictRequested:
         return 'security.fs.status.upgrading';
+      case FsSessionState.strictRequested:
+        return 'security.fs.status.strict_pending';
       case FsSessionState.fsActive:
         return 'security.fs.status.active';
       case FsSessionState.strictFsActive:
