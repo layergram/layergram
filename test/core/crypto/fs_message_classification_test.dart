@@ -6,12 +6,13 @@
 ///     the 3-level FsMessageSecurity hierarchy (or null).
 ///  3. isFsProtected: only FS-encrypted classifications return true.
 ///  4. Storage round-trip: storageIndex ↔ fromStorageIndex.
-///  5. fromLegacyFlag backward compatibility: isFsEncrypted=true → fsWithFallback,
+///  5. fromLegacyFlag backward compatibility: isFsEncrypted=true → fsOnly (§9.5),
 ///     isFsEncrypted=false → legacy.
 ///  6. MessageRecord.fsClassification persistence via toMap/fromMap.
 ///  7. MessageRecord.effectiveClassification fallback when fsClassification is null.
-///  8. Outgoing classification logic: legacy, preFs, fsNegotiation, fsWithFallback,
-///     strictFs based on session state and security mode.
+///  8. Outgoing classification logic: legacy, preFs, fsNegotiation, fsOnly,
+///     strictFs based on session state and security mode (§9.5: FS-encrypted
+///     messages are FS-only on the wire, never fs_with_fallback).
 ///  9. Incoming classification logic: fsFailed on decrypt failure.
 /// 10. Plausible deniability: stored classification is an opaque integer.
 /// 11. Localization: all 8 label+desc keys exist for all 6 languages.
@@ -144,9 +145,9 @@ void main() {
   // ────────────────────────────────────────────────────────────────────────────
 
   group('fromLegacyFlag', () {
-    test('isFsEncrypted=true → fsWithFallback', () {
+    test('isFsEncrypted=true → fsOnly (§9.5)', () {
       expect(FsMessageClassificationExt.fromLegacyFlag(true),
-          equals(FsMessageClassification.fsWithFallback));
+          equals(FsMessageClassification.fsOnly));
     });
 
     test('isFsEncrypted=false → legacy', () {
@@ -184,10 +185,10 @@ void main() {
           equals(FsMessageClassification.strictFs));
     });
 
-    test('effectiveClassification falls back to isFsEncrypted=true', () {
+    test('effectiveClassification falls back to isFsEncrypted=true (§9.5 → fsOnly)', () {
       final record = _buildRecord(isFsEncrypted: true);
       expect(record.effectiveClassification,
-          equals(FsMessageClassification.fsWithFallback));
+          equals(FsMessageClassification.fsOnly));
     });
 
     test('effectiveClassification falls back to isFsEncrypted=false', () {
@@ -239,7 +240,7 @@ void main() {
       final record = MessageRecord.fromMap(map);
       expect(record.fsClassification, isNull);
       expect(record.effectiveClassification,
-          equals(FsMessageClassification.fsWithFallback));
+          equals(FsMessageClassification.fsOnly));
     });
 
     test('copyWith preserves classification', () {
@@ -334,7 +335,7 @@ void main() {
             sessionState == FsSessionState.strictFsActive) {
           return FsMessageClassification.strictFs;
         }
-        return FsMessageClassification.fsWithFallback;
+        return FsMessageClassification.fsOnly;
       }
       if (hasFsExtension) {
         return FsMessageClassification.fsNegotiation;
@@ -345,7 +346,7 @@ void main() {
       return FsMessageClassification.legacy;
     }
 
-    test('FS encrypted in advanced mode → fsWithFallback', () {
+    test('FS encrypted in advanced mode → fsOnly (§9.5)', () {
       expect(
         classifyOutgoing(
           isFsEncrypted: true,
@@ -353,7 +354,7 @@ void main() {
           sessionState: FsSessionState.fsActive,
           securityMode: FsSecurityMode.advanced,
         ),
-        equals(FsMessageClassification.fsWithFallback),
+        equals(FsMessageClassification.fsOnly),
       );
     });
 
@@ -369,7 +370,7 @@ void main() {
       );
     });
 
-    test('FS encrypted in strict mode but fsActive (not yet strict) → fsWithFallback', () {
+    test('FS encrypted in strict mode but fsActive (not yet strict) → fsOnly (§9.5)', () {
       expect(
         classifyOutgoing(
           isFsEncrypted: true,
@@ -377,7 +378,7 @@ void main() {
           sessionState: FsSessionState.fsActive,
           securityMode: FsSecurityMode.strict,
         ),
-        equals(FsMessageClassification.fsWithFallback),
+        equals(FsMessageClassification.fsOnly),
       );
     });
 
@@ -450,7 +451,7 @@ void main() {
             sessionState == FsSessionState.strictFsActive) {
           return FsMessageClassification.strictFs;
         }
-        return FsMessageClassification.fsWithFallback;
+        return FsMessageClassification.fsOnly;
       }
       if (hasFsExtension) {
         return FsMessageClassification.fsNegotiation;
@@ -500,7 +501,7 @@ void main() {
       );
     });
 
-    test('FS encrypted, advanced mode → fsWithFallback', () {
+    test('FS encrypted, advanced mode → fsOnly (§9.5)', () {
       expect(
         classifyIncoming(
           isFsEncrypted: true,
@@ -509,7 +510,7 @@ void main() {
           sessionState: FsSessionState.fsActive,
           securityMode: FsSecurityMode.advanced,
         ),
-        equals(FsMessageClassification.fsWithFallback),
+        equals(FsMessageClassification.fsOnly),
       );
     });
 
@@ -550,6 +551,72 @@ void main() {
         ),
         equals(FsMessageClassification.legacy),
       );
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // § §9.5 true FS-only semantics
+  // ────────────────────────────────────────────────────────────────────────────
+
+  group('§9.5 FS-only semantics', () {
+    // Mirror of the production classifier (see HomeController._classifyOutgoing /
+    // _classifyIncoming): an FS-encrypted message is FS-only on the wire.
+    FsMessageClassification classify({
+      required bool isFsEncrypted,
+      required FsSessionState sessionState,
+      required FsSecurityMode securityMode,
+    }) {
+      if (isFsEncrypted) {
+        if (securityMode == FsSecurityMode.strict &&
+            sessionState == FsSessionState.strictFsActive) {
+          return FsMessageClassification.strictFs;
+        }
+        return FsMessageClassification.fsOnly;
+      }
+      return FsMessageClassification.legacy;
+    }
+
+    test('an FS-encrypted message is never classified fsWithFallback', () {
+      for (final mode in FsSecurityMode.values) {
+        for (final state in FsSessionState.values) {
+          final cls = classify(
+            isFsEncrypted: true,
+            sessionState: state,
+            securityMode: mode,
+          );
+          expect(cls, isNot(equals(FsMessageClassification.fsWithFallback)),
+              reason: 'mode=$mode state=$state must not be fs_with_fallback');
+          expect(
+            cls == FsMessageClassification.fsOnly ||
+                cls == FsMessageClassification.strictFs,
+            isTrue,
+            reason: 'FS-encrypted must be fsOnly or strictFs (mode=$mode)',
+          );
+        }
+      }
+    });
+
+    test('fsOnly is true FS (not decryptable by legacy key) per §9.5', () {
+      // fs_with_fallback is the only classification the spec forbids treating as
+      // full FS; fsOnly must map to the top security level for downgrade tracking.
+      expect(FsMessageClassification.fsOnly.downgradeLevel,
+          equals(FsMessageSecurity.fsOnly));
+      expect(FsMessageClassification.fsOnly.isFsProtected, isTrue);
+    });
+
+    test('fsWithFallback remains defined (reserved for multi-envelope §9.6)', () {
+      // The value still exists for forward compatibility even though the live
+      // classifier never emits it.
+      expect(FsMessageClassification.values,
+          contains(FsMessageClassification.fsWithFallback));
+      expect(FsMessageClassification.fsWithFallback.downgradeLevel,
+          equals(FsMessageSecurity.fsWithFallback));
+    });
+
+    test('downgrade level recorded for an FS-encrypted message is fsOnly', () {
+      // Mirrors HomeController downgrade tracking: isFs ? fsOnly : legacy.
+      final level = FsMessageClassification.fsOnly.downgradeLevel;
+      expect(level, equals(FsMessageSecurity.fsOnly));
     });
   });
 
@@ -708,7 +775,7 @@ void main() {
       expect(oldFsRecord.fsClassification, isNull);
       expect(oldFsRecord.isFsEncrypted, isTrue);
       expect(oldFsRecord.effectiveClassification,
-          equals(FsMessageClassification.fsWithFallback));
+          equals(FsMessageClassification.fsOnly));
     });
   });
 }
