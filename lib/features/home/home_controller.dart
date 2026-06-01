@@ -258,7 +258,7 @@ class HomeController {
     final FsMessageClassification classification;
     if (selfCopy) {
       classification = isFsEncrypted
-          ? FsMessageClassification.fsWithFallback
+          ? FsMessageClassification.fsOnly
           : FsMessageClassification.legacy;
     } else {
       final fsController = ref.read(
@@ -445,7 +445,7 @@ class HomeController {
 
     // Downgrade detection: record the security level (§7.6)
     final chatDecryptLevel = (isFs
-        ? FsMessageClassification.fsWithFallback
+        ? FsMessageClassification.fsOnly
         : FsMessageClassification.legacy).downgradeLevel;
     if (chatDecryptLevel != null) {
       fsController.recordSecurityLevel(
@@ -675,7 +675,7 @@ class HomeController {
 
         // Downgrade detection: record the incoming message security level (§7.6)
         final incomingDowngradeLevel = (isFs
-            ? FsMessageClassification.fsWithFallback
+            ? FsMessageClassification.fsOnly
             : FsMessageClassification.legacy).downgradeLevel;
         if (incomingDowngradeLevel != null) {
           fsCtrl.recordSecurityLevel(
@@ -821,7 +821,11 @@ class HomeController {
           sessionState == FsSessionState.strictFsActive) {
         return FsMessageClassification.strictFs;
       }
-      return FsMessageClassification.fsWithFallback;
+      // §9.5: an FS-encrypted message is only ever encrypted with the ratchet
+      // (never dual-encrypted with the legacy identity key), so it is true
+      // FS-only. fs_with_fallback is reserved for the multi-envelope case (§9.6)
+      // which Layergram does not implement.
+      return FsMessageClassification.fsOnly;
     }
     if (hasFsExtension) {
       return FsMessageClassification.fsNegotiation;
@@ -847,7 +851,9 @@ class HomeController {
           sessionState == FsSessionState.strictFsActive) {
         return FsMessageClassification.strictFs;
       }
-      return FsMessageClassification.fsWithFallback;
+      // §9.5: FS-encrypted messages are FS-only on the wire (not dual-encrypted
+      // with the legacy key). See _classifyOutgoing.
+      return FsMessageClassification.fsOnly;
     }
     if (hasFsExtension) {
       return FsMessageClassification.fsNegotiation;

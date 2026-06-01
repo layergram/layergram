@@ -35,9 +35,14 @@ enum FsMessageClassification {
   /// negotiation payload.
   fsNegotiation,
 
-  /// FS encrypted with legacy identity-key fallback allowed.
-  /// The message can be decrypted both via the FS ratchet and the
-  /// identity key.
+  /// FS encrypted *and also* legacy identity-key encrypted (same content
+  /// wrapped both ways), so the message is decryptable via either the FS
+  /// ratchet or the long-term identity key.
+  ///
+  /// Per §9.5 this is the only case that must NOT be treated as full FS.
+  /// It corresponds to the optional multi-envelope format (§9.6), which
+  /// Layergram does not currently produce — so this value is reserved for
+  /// forward compatibility and is not emitted by the live classifier.
   fsWithFallback,
 
   /// FS encrypted only; not decryptable by the legacy identity key.
@@ -114,9 +119,12 @@ extension FsMessageClassificationExt on FsMessageClassification {
   /// Infers a classification from the legacy [isFsEncrypted] boolean
   /// for backward compatibility with records that don't have an
   /// explicit classification.
+  ///
+  /// §9.5: an FS-encrypted record is FS-only on the wire (Layergram never
+  /// dual-encrypts a message with the legacy key), so it maps to [fsOnly].
   static FsMessageClassification fromLegacyFlag(bool isFsEncrypted) {
     return isFsEncrypted
-        ? FsMessageClassification.fsWithFallback
+        ? FsMessageClassification.fsOnly
         : FsMessageClassification.legacy;
   }
 }
