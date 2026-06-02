@@ -40,9 +40,10 @@ enum FsMessageClassification {
   /// ratchet or the long-term identity key.
   ///
   /// Per §9.5 this is the only case that must NOT be treated as full FS.
-  /// It corresponds to the optional multi-envelope format (§9.6), which
-  /// Layergram does not currently produce — so this value is reserved for
-  /// forward compatibility and is not emitted by the live classifier.
+  /// It corresponds to a multi-envelope message (§9.6) that includes the
+  /// optional legacy fallback (`mc_fallback_key`). The live classifier does
+  /// not emit it because Layergram sends multi-envelope messages without a
+  /// legacy fallback by default (they stay `fsOnly`/`strictFs`).
   fsWithFallback,
 
   /// FS encrypted only; not decryptable by the legacy identity key.
