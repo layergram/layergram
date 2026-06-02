@@ -58,6 +58,23 @@ second device of the same identity starts a new handshake, the existing session 
 decrypting. Inbound messages are routed to the correct ratchet by the `fs_session` value in the
 envelope.
 
+## Multi-envelope messages (§9.6)
+
+When a contact has **two or more active device sessions**, a single outgoing message is encoded
+as a multi-envelope (`lib/core/crypto/encryption_service.dart`, `encryptMultiEnvelope`): the
+payload is encrypted **once** with a fresh per-message content key (`mc_cipher`), and that
+content key is then wrapped (ratchet-encrypted) once per device session (`fs_wraps[]`, each
+keyed by `fs_session`). Each of the contact's devices recovers the content key with its own
+ratchet, so one sent payload is readable in FS by all of them. Decryption picks the wrap
+matching one of the recipient's sessions, unwraps the content key (advancing only that device's
+ratchet), then decrypts the single ciphertext.
+
+A legacy fallback (`mc_fallback_key`, the content key carried in the identity-encrypted outer
+layer) is **optional and off by default**, so multi-envelope messages stay full FS
+(`fs_only`/`strict_fs`). When included, the message is classified `fs_with_fallback` and is no
+longer full FS; **Strict mode must never include it**. Conversations with a single active
+session keep using the single-envelope path unchanged.
+
 ## Security modes
 
 Each contact has a per-contact security mode (`lib/core/crypto/fs_security_mode.dart`):

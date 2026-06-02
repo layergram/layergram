@@ -162,6 +162,9 @@ class HomeController {
     Map<String, dynamic>? fsExtension;
     RatchetState? ratchetState;
     String? sessionId;
+    // §9.6: when the contact has multiple active device sessions, the content
+    // key is wrapped for all of them in a single multi-envelope message.
+    Map<String, RatchetState>? multiSessionRatchets;
 
     if (!selfCopy) {
       final fsController = ref.read(
@@ -220,39 +223,81 @@ class HomeController {
         }
       }
 
+      // §9.6: collect every active device session so a single message can be
+      // read in FS by all of the contact's devices. Strict mode never adds a
+      // legacy fallback (handled below via includeLegacyFallback: false).
+      if (ratchetState != null) {
+        final activeIds = fsController.allActiveSessionIds;
+        if (activeIds.length >= 2) {
+          final cache = ref.read(fsRatchetStateCacheProvider);
+          final persistence = ref.read(fsRatchetPersistenceServiceProvider);
+          final collected = <String, RatchetState>{};
+          for (final id in activeIds) {
+            final r = cache[id] ?? await persistence.loadRatchetState(id);
+            if (r != null) collected[id] = r;
+          }
+          if (collected.length >= 2) multiSessionRatchets = collected;
+        }
+      }
+
       // Production logging for FS encryption
-      print('[FS-SEND] recipient=${recipient.identityId}, state=${sessionManager.state}, sessionId=$sessionId, ratchetAvailable=${ratchetState != null}');
+      print('[FS-SEND] recipient=${recipient.identityId}, state=${sessionManager.state}, sessionId=$sessionId, ratchetAvailable=${ratchetState != null}, multiSessions=${multiSessionRatchets?.length ?? 0}');
 
       // Trigger UI refresh if FS state changed
       ref.read(fsRegistryVersionProvider.notifier).state++;
     }
 
-    final result = await ref.read(encryptionServiceProvider).encrypt(
-      senderPrivateKeyBase64: privateKey,
-      recipientPublicKeyBase64:
-          selfCopy ? selfPublic : recipient.publicKeyBase64,
-      payload: payload,
-      fsExtension: fsExtension,
-      ratchetState: ratchetState,
-    );
+    final EncryptedMessage outMessage;
+    final bool isFsEncrypted;
+    if (multiSessionRatchets != null) {
+      // §9.6 multi-envelope path.
+      final multi =
+          await ref.read(encryptionServiceProvider).encryptMultiEnvelope(
+                senderPrivateKeyBase64: privateKey,
+                recipientPublicKeyBase64: recipient.publicKeyBase64,
+                payload: payload,
+                sessionRatchets: multiSessionRatchets,
+                fsExtension: fsExtension,
+                includeLegacyFallback: false,
+              );
+      final cacheNotifier = ref.read(fsRatchetStateCacheProvider.notifier);
+      final persistence = ref.read(fsRatchetPersistenceServiceProvider);
+      for (final entry in multi.newRatchetStates.entries) {
+        cacheNotifier.update((cache) => {...cache, entry.key: entry.value});
+        await persistence.saveRatchetState(entry.value);
+      }
+      outMessage = multi.message;
+      isFsEncrypted = true;
+      print('[FS-SEND-RESULT] recipient=${recipient.identityId}, multiEnvelope wraps=${multi.newRatchetStates.length}');
+    } else {
+      final result = await ref.read(encryptionServiceProvider).encrypt(
+            senderPrivateKeyBase64: privateKey,
+            recipientPublicKeyBase64:
+                selfCopy ? selfPublic : recipient.publicKeyBase64,
+            payload: payload,
+            fsExtension: fsExtension,
+            ratchetState: ratchetState,
+          );
 
-    // Production logging for encryption result
-    print('[FS-SEND-RESULT] recipient=${recipient.identityId}, usedFS=${result.newRatchetState != null}');
+      // Production logging for encryption result
+      print('[FS-SEND-RESULT] recipient=${recipient.identityId}, usedFS=${result.newRatchetState != null}');
 
-    // Save updated ratchet state if FS was used
-    if (result.newRatchetState != null && sessionId != null) {
-      final newState = result.newRatchetState!;
-      final sid = sessionId; // Promote to non-nullable
-      ref.read(fsRatchetStateCacheProvider.notifier).update((cache) => {
-            ...cache,
-            sid: newState,
-          });
+      // Save updated ratchet state if FS was used
+      if (result.newRatchetState != null && sessionId != null) {
+        final newState = result.newRatchetState!;
+        final sid = sessionId; // Promote to non-nullable
+        ref.read(fsRatchetStateCacheProvider.notifier).update((cache) => {
+              ...cache,
+              sid: newState,
+            });
 
-      // Persist to storage
-      await ref.read(fsRatchetPersistenceServiceProvider).saveRatchetState(newState);
+        // Persist to storage
+        await ref.read(fsRatchetPersistenceServiceProvider).saveRatchetState(newState);
+      }
+
+      outMessage = result.message;
+      isFsEncrypted = result.newRatchetState != null;
     }
-
-    final isFsEncrypted = result.newRatchetState != null;
 
     // §14.4: Classify the outgoing message.
     final FsMessageClassification classification;
@@ -273,7 +318,7 @@ class HomeController {
     }
 
     return (
-      message: result.message,
+      message: outMessage,
       isFsEncrypted: isFsEncrypted,
       classification: classification,
     );
