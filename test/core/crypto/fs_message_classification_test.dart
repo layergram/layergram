@@ -18,6 +18,7 @@
 /// 11. Localization: all 8 label+desc keys exist for all 6 languages.
 /// 12. Downgrade detector: classifications that return null don't affect the
 ///     downgrade tracking.
+library;
 
 import 'package:flutter_test/flutter_test.dart';
 
@@ -40,16 +41,18 @@ void main() {
     });
 
     test('values in expected order', () {
-      expect(FsMessageClassification.values, equals([
-        FsMessageClassification.legacy,
-        FsMessageClassification.preFs,
-        FsMessageClassification.fsNegotiation,
-        FsMessageClassification.fsWithFallback,
-        FsMessageClassification.fsOnly,
-        FsMessageClassification.strictFs,
-        FsMessageClassification.fsFailed,
-        FsMessageClassification.unknown,
-      ]));
+      expect(
+          FsMessageClassification.values,
+          equals([
+            FsMessageClassification.legacy,
+            FsMessageClassification.preFs,
+            FsMessageClassification.fsNegotiation,
+            FsMessageClassification.fsWithFallback,
+            FsMessageClassification.fsOnly,
+            FsMessageClassification.strictFs,
+            FsMessageClassification.fsFailed,
+            FsMessageClassification.unknown,
+          ]));
     });
   });
 
@@ -161,7 +164,7 @@ void main() {
   // ────────────────────────────────────────────────────────────────────────────
 
   group('MessageRecord — fsClassification', () {
-    MessageRecord _buildRecord({
+    MessageRecord buildRecord({
       bool isFsEncrypted = false,
       FsMessageClassification? classification,
     }) {
@@ -178,28 +181,30 @@ void main() {
     }
 
     test('effectiveClassification uses fsClassification when set', () {
-      final record = _buildRecord(
+      final record = buildRecord(
         classification: FsMessageClassification.strictFs,
       );
       expect(record.effectiveClassification,
           equals(FsMessageClassification.strictFs));
     });
 
-    test('effectiveClassification falls back to isFsEncrypted=true (§9.5 → fsOnly)', () {
-      final record = _buildRecord(isFsEncrypted: true);
+    test(
+        'effectiveClassification falls back to isFsEncrypted=true (§9.5 → fsOnly)',
+        () {
+      final record = buildRecord(isFsEncrypted: true);
       expect(record.effectiveClassification,
           equals(FsMessageClassification.fsOnly));
     });
 
     test('effectiveClassification falls back to isFsEncrypted=false', () {
-      final record = _buildRecord();
+      final record = buildRecord();
       expect(record.effectiveClassification,
           equals(FsMessageClassification.legacy));
     });
 
     test('toMap/fromMap round-trips with classification', () {
       for (final cls in FsMessageClassification.values) {
-        final original = _buildRecord(classification: cls);
+        final original = buildRecord(classification: cls);
         final map = original.toMap();
         final restored = MessageRecord.fromMap(map);
         expect(restored.fsClassification, equals(cls),
@@ -208,7 +213,7 @@ void main() {
     });
 
     test('toMap omits fsCls when classification is null', () {
-      final record = _buildRecord();
+      final record = buildRecord();
       final map = record.toMap();
       expect(map.containsKey('fsCls'), isFalse);
     });
@@ -244,23 +249,21 @@ void main() {
     });
 
     test('copyWith preserves classification', () {
-      final original = _buildRecord(
+      final original = buildRecord(
         classification: FsMessageClassification.fsOnly,
       );
       final copy = original.copyWith(text: 'updated');
-      expect(copy.fsClassification,
-          equals(FsMessageClassification.fsOnly));
+      expect(copy.fsClassification, equals(FsMessageClassification.fsOnly));
     });
 
     test('copyWith can change classification', () {
-      final original = _buildRecord(
+      final original = buildRecord(
         classification: FsMessageClassification.legacy,
       );
       final copy = original.copyWith(
         fsClassification: FsMessageClassification.strictFs,
       );
-      expect(copy.fsClassification,
-          equals(FsMessageClassification.strictFs));
+      expect(copy.fsClassification, equals(FsMessageClassification.strictFs));
     });
   });
 
@@ -290,7 +293,9 @@ void main() {
       expect(values, isNot(contains('FsMessageClassification')));
     });
 
-    test('FS and legacy messages have same map keys (except fsCls/isFsEncrypted)', () {
+    test(
+        'FS and legacy messages have same map keys (except fsCls/isFsEncrypted)',
+        () {
       final legacyRecord = MessageRecord(
         id: 'msg-1',
         senderId: 'alice',
@@ -370,7 +375,9 @@ void main() {
       );
     });
 
-    test('FS encrypted in strict mode but fsActive (not yet strict) → fsOnly (§9.5)', () {
+    test(
+        'FS encrypted in strict mode but fsActive (not yet strict) → fsOnly (§9.5)',
+        () {
       expect(
         classifyOutgoing(
           isFsEncrypted: true,
@@ -604,7 +611,8 @@ void main() {
       expect(FsMessageClassification.fsOnly.isFsProtected, isTrue);
     });
 
-    test('fsWithFallback remains defined (reserved for multi-envelope §9.6)', () {
+    test('fsWithFallback remains defined (reserved for multi-envelope §9.6)',
+        () {
       // The value still exists for forward compatibility even though the live
       // classifier never emits it.
       expect(FsMessageClassification.values,
@@ -675,7 +683,8 @@ void main() {
   // ────────────────────────────────────────────────────────────────────────────
 
   group('Downgrade level integration', () {
-    test('all non-null downgrade levels are valid FsMessageSecurity values', () {
+    test('all non-null downgrade levels are valid FsMessageSecurity values',
+        () {
       for (final cls in FsMessageClassification.values) {
         final level = cls.downgradeLevel;
         if (level != null) {
@@ -685,11 +694,14 @@ void main() {
     });
 
     test('downgrade level ordering: legacy < fsWithFallback < fsOnly', () {
-      expect(FsMessageSecurity.legacy.index, lessThan(FsMessageSecurity.fsWithFallback.index));
-      expect(FsMessageSecurity.fsWithFallback.index, lessThan(FsMessageSecurity.fsOnly.index));
+      expect(FsMessageSecurity.legacy.index,
+          lessThan(FsMessageSecurity.fsWithFallback.index));
+      expect(FsMessageSecurity.fsWithFallback.index,
+          lessThan(FsMessageSecurity.fsOnly.index));
     });
 
-    test('classifications with same downgrade level have consistent ordering', () {
+    test('classifications with same downgrade level have consistent ordering',
+        () {
       // legacy and preFs both map to legacy
       expect(FsMessageClassification.legacy.downgradeLevel,
           equals(FsMessageClassification.preFs.downgradeLevel));
@@ -705,7 +717,8 @@ void main() {
   // ────────────────────────────────────────────────────────────────────────────
 
   group('Full lifecycle', () {
-    test('classification survives MessageRecord toMap/fromMap with all fields', () {
+    test('classification survives MessageRecord toMap/fromMap with all fields',
+        () {
       final record = MessageRecord(
         id: '12345',
         senderId: 'alice',
@@ -741,8 +754,8 @@ void main() {
       expect(restored.readAt, equals(record.readAt));
       expect(restored.keyTag, equals(record.keyTag));
       expect(restored.isFsEncrypted, equals(record.isFsEncrypted));
-      expect(restored.fsClassification,
-          equals(FsMessageClassification.strictFs));
+      expect(
+          restored.fsClassification, equals(FsMessageClassification.strictFs));
       expect(restored.effectiveClassification,
           equals(FsMessageClassification.strictFs));
     });

@@ -17,7 +17,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers.dart';
 import '../../../l10n/app_strings.dart';
 
-typedef _ResetResult = ({bool confirmed, bool deleteIdentities, bool deleteMessages, bool deleteContacts});
+typedef _ResetResult = ({
+  bool confirmed,
+  bool deleteIdentities,
+  bool deleteMessages,
+  bool deleteContacts
+});
 
 class DataResetSection extends ConsumerWidget {
   const DataResetSection({super.key});
@@ -29,7 +34,8 @@ class DataResetSection extends ConsumerWidget {
     return Column(
       children: [
         ListTile(
-          leading: const Icon(Icons.delete_forever_outlined, color: Colors.redAccent),
+          leading: const Icon(Icons.delete_forever_outlined,
+              color: Colors.redAccent),
           title: Text(t(context, 'resetIdentityTitle')),
           subtitle: Text(t(context, 'resetIdentitySubtitle')),
           onTap: () async {
@@ -39,7 +45,11 @@ class DataResetSection extends ConsumerWidget {
               t: t,
               titleKey: 'confirmResetTitle',
               iconColor: Colors.amber,
-              bodyKeys: ('confirmResetBody1', 'confirmResetBody2', 'confirmResetBody3'),
+              bodyKeys: (
+                'confirmResetBody1',
+                'confirmResetBody2',
+                'confirmResetBody3'
+              ),
               confirmKey: 'confirmResetYes',
               reverseActions: true,
               initialDeleteIdentities: true,
@@ -55,7 +65,11 @@ class DataResetSection extends ConsumerWidget {
               t: t,
               titleKey: 'confirmResetFinalTitle',
               iconColor: Colors.red,
-              bodyKeys: ('confirmResetFinalBody1', 'confirmResetFinalBody2', 'confirmResetFinalBody3'),
+              bodyKeys: (
+                'confirmResetFinalBody1',
+                'confirmResetFinalBody2',
+                'confirmResetFinalBody3'
+              ),
               confirmKey: 'confirmResetFinalYes',
               reverseActions: false,
               initialDeleteIdentities: first.deleteIdentities,
@@ -83,26 +97,17 @@ class DataResetSection extends ConsumerWidget {
               // ── Reset FS state per spec §8.6.3 ─────────────────────────────
               // Mark all sessions as broken, wipe ratchet keys, clear persisted state
               final registry = ref.read(fsContactSecurityRegistryProvider);
-              final beforeCount = registry.length;
               registry.markAllBroken('primary');
-              assert(() {
-                print('[FS-RESET] Marked $beforeCount registry entries as broken');
-                return true;
-              }());
 
-              await ref.read(fsStatePersistenceServiceProvider).removeAllStates('primary');
-              await ref.read(fsRatchetPersistenceServiceProvider).removeAllRatchetStates();
-              assert(() {
-                print('[FS-RESET] Removed all persisted FS and ratchet states');
-                return true;
-              }());
+              await ref
+                  .read(fsStatePersistenceServiceProvider)
+                  .removeAllStates('primary');
+              await ref
+                  .read(fsRatchetPersistenceServiceProvider)
+                  .removeAllRatchetStates();
 
               // Clear in-memory ratchet state cache
               ref.read(fsRatchetStateCacheProvider.notifier).state = {};
-              assert(() {
-                print('[FS-RESET] Cleared ratchet state cache');
-                return true;
-              }());
 
               // Invalidate ALL FS-related providers to ensure fresh state after reset
               // Note: Provider.family instances are invalidated when their parent is invalidated
@@ -116,10 +121,6 @@ class DataResetSection extends ConsumerWidget {
               ref.invalidate(fsRatchetPersistenceServiceProvider);
               // CRITICAL: Also invalidate aux repository so clearByKind has proper scope
               ref.invalidate(auxRecordRepositoryProvider);
-              assert(() {
-                print('[FS-RESET] Invalidated all FS providers');
-                return true;
-              }());
 
               // §12.3: Strip persisted plaintext from ALL encrypted messages.
               // After identity restore, legacy messages will be re-decrypted
@@ -161,7 +162,8 @@ class DataResetSection extends ConsumerWidget {
           },
         ),
         ListTile(
-          leading: const Icon(Icons.cleaning_services_outlined, color: Colors.orange),
+          leading: const Icon(Icons.cleaning_services_outlined,
+              color: Colors.orange),
           title: Text(t(context, 'security.cleanup.title')),
           subtitle: Text(t(context, 'security.cleanup.subtitle')),
           onTap: () => _confirmCleanUndecryptable(context, ref),
@@ -170,7 +172,8 @@ class DataResetSection extends ConsumerWidget {
     );
   }
 
-  Future<void> _confirmCleanUndecryptable(BuildContext context, WidgetRef ref) async {
+  Future<void> _confirmCleanUndecryptable(
+      BuildContext context, WidgetRef ref) async {
     final t = AppStrings.t;
     var confirmed = false;
 
@@ -182,9 +185,11 @@ class DataResetSection extends ConsumerWidget {
             return AlertDialog(
               title: Row(
                 children: [
-                  const Icon(Icons.warning_amber_outlined, color: Colors.orange),
+                  const Icon(Icons.warning_amber_outlined,
+                      color: Colors.orange),
                   const SizedBox(width: 8),
-                  Expanded(child: Text(t(ctx, 'security.cleanup.dialog_title'))),
+                  Expanded(
+                      child: Text(t(ctx, 'security.cleanup.dialog_title'))),
                 ],
               ),
               content: SingleChildScrollView(
@@ -217,7 +222,8 @@ class DataResetSection extends ConsumerWidget {
                   style: FilledButton.styleFrom(
                     backgroundColor: confirmed ? Colors.orange : Colors.grey,
                   ),
-                  onPressed: confirmed ? () => Navigator.of(ctx).pop(true) : null,
+                  onPressed:
+                      confirmed ? () => Navigator.of(ctx).pop(true) : null,
                   child: Text(t(ctx, 'security.cleanup.confirm_button')),
                 ),
               ],
@@ -231,12 +237,7 @@ class DataResetSection extends ConsumerWidget {
 
     // Perform the cleanup
     final auxRepo = ref.read(auxRecordRepositoryProvider);
-    final deletedCount = await auxRepo.cleanUndecryptableRecords();
-
-    assert(() {
-      print('[CLEANUP] Deleted $deletedCount undecryptable records');
-      return true;
-    }());
+    await auxRepo.cleanUndecryptableRecords();
 
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -331,7 +332,8 @@ Future<_ResetResult?> _showResetDialog({
                       child: Text(t(ctx, 'cancel')),
                     ),
                     FilledButton(
-                      style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+                      style: FilledButton.styleFrom(
+                          backgroundColor: Colors.redAccent),
                       onPressed: () => Navigator.of(ctx).pop((
                         confirmed: true,
                         deleteIdentities: deleteIdentities,
@@ -343,7 +345,8 @@ Future<_ResetResult?> _showResetDialog({
                   ]
                 : [
                     FilledButton(
-                      style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+                      style: FilledButton.styleFrom(
+                          backgroundColor: Colors.redAccent),
                       onPressed: () => Navigator.of(ctx).pop((
                         confirmed: true,
                         deleteIdentities: deleteIdentities,

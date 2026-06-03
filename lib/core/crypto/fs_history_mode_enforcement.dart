@@ -91,11 +91,6 @@ class FsHistoryModeEnforcement {
     _securityRegistry.markAllBroken(identityContext);
     await _statePersistence.removeAllStates(identityContext);
     await _ratchetPersistence.removeAllRatchetStates();
-
-    assert(() {
-      print('[FS-HISTORY] Wiped ephemeral FS state for context=$identityContext');
-      return true;
-    }());
   }
 
   /// Whether messages should be persisted for the given history mode.

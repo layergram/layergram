@@ -12,10 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import 'dart:convert';
-import 'dart:math';
-import 'dart:typed_data';
-
 import '../storage/aux_record_repository.dart';
 import 'fs_contact_security_state.dart';
 import 'fs_session_manager.dart';
@@ -142,7 +138,8 @@ class FsStatePersistenceService {
   /// Uses clearByKind to find and delete all records from the database,
   /// filtering by identityContext, not just those in the in-memory cache.
   Future<void> removeAllStates(String identityContext) async {
-    await _auxRepository.clearByKind(_kRecordKind, identityContext: identityContext);
+    await _auxRepository.clearByKind(_kRecordKind,
+        identityContext: identityContext);
 
     // Clear in-memory cache. We can't easily filter by identityContext
     // from cache keys (they are contactId:sessionId), so clear all.
@@ -158,7 +155,6 @@ class FsStatePersistenceService {
     return {
       'kind': _kRecordKind,
       'v': 1,
-      '_rid': _generateRecordId(),
       'contactId': state.contactId,
       'identityContext': state.identityContext,
       'sessionId': state.sessionId,
@@ -191,14 +187,5 @@ class FsStatePersistenceService {
     } catch (_) {
       return null;
     }
-  }
-
-  String _generateRecordId() {
-    final bytes = Uint8List(16);
-    final random = Random.secure();
-    for (var i = 0; i < 16; i++) {
-      bytes[i] = random.nextInt(256);
-    }
-    return base64Url.encode(bytes).replaceAll('=', '');
   }
 }

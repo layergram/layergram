@@ -12,21 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/// Additional FS control message types beyond the core handshake.
-///
-/// Spec reference: §9.2 — FS extension types.
-///
-/// Recommended extension types:
-/// ```text
-/// fs_init                — core handshake (in fs_handshake.dart)
-/// fs_reply               — core handshake (in fs_handshake.dart)
-/// fs_confirm             — core handshake (in fs_handshake.dart)
-/// fs_ack                 — optional confirmation from responder
-/// fs_simultaneous_notice — tie-break notification
-/// fs_suspend             — session suspension signaling
-/// fs_reset               — session reset signaling
-/// fs_downgrade_notice    — downgrade notification
-/// ```
+// Additional FS control message types beyond the core handshake.
+//
+// Spec reference: §9.2 — FS extension types.
+//
+// Recommended extension types:
+// ```text
+// fs_init                — core handshake (in fs_handshake.dart)
+// fs_reply               — core handshake (in fs_handshake.dart)
+// fs_confirm             — core handshake (in fs_handshake.dart)
+// fs_ack                 — optional confirmation from responder
+// fs_simultaneous_notice — tie-break notification
+// fs_suspend             — session suspension signaling
+// fs_reset               — session reset signaling
+// fs_downgrade_notice    — downgrade notification
+// ```
 
 import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
@@ -52,18 +52,18 @@ class FsAckMessage {
   final String ackTag;
 
   Map<String, dynamic> toJson() => {
-    'v': 1,
-    'type': 'fs_ack',
-    'initId': initId,
-    'replyId': replyId,
-    'ackTag': ackTag,
-  };
+        'v': 1,
+        'type': 'fs_ack',
+        'initId': initId,
+        'replyId': replyId,
+        'ackTag': ackTag,
+      };
 
   factory FsAckMessage.fromJson(Map<String, dynamic> j) => FsAckMessage(
-    initId: j['initId'] as String,
-    replyId: j['replyId'] as String,
-    ackTag: j['ackTag'] as String,
-  );
+        initId: j['initId'] as String,
+        replyId: j['replyId'] as String,
+        ackTag: j['ackTag'] as String,
+      );
 
   /// Computes the ack tag using the confirm key and transcript hash.
   static Future<Uint8List> computeAckTag(
@@ -104,11 +104,11 @@ class FsSimultaneousNoticeMessage {
   final String losingInitId;
 
   Map<String, dynamic> toJson() => {
-    'v': 1,
-    'type': 'fs_simultaneous_notice',
-    'winningInitId': winningInitId,
-    'losingInitId': losingInitId,
-  };
+        'v': 1,
+        'type': 'fs_simultaneous_notice',
+        'winningInitId': winningInitId,
+        'losingInitId': losingInitId,
+      };
 
   factory FsSimultaneousNoticeMessage.fromJson(Map<String, dynamic> j) =>
       FsSimultaneousNoticeMessage(
@@ -136,14 +136,13 @@ class FsSuspendMessage {
   final String reason;
 
   Map<String, dynamic> toJson() => {
-    'v': 1,
-    'type': 'fs_suspend',
-    'sessionId': sessionId,
-    'reason': reason,
-  };
+        'v': 1,
+        'type': 'fs_suspend',
+        'sessionId': sessionId,
+        'reason': reason,
+      };
 
-  factory FsSuspendMessage.fromJson(Map<String, dynamic> j) =>
-      FsSuspendMessage(
+  factory FsSuspendMessage.fromJson(Map<String, dynamic> j) => FsSuspendMessage(
         sessionId: j['sessionId'] as String,
         reason: j['reason'] as String,
       );
@@ -169,14 +168,13 @@ class FsResetMessage {
   final String reason;
 
   Map<String, dynamic> toJson() => {
-    'v': 1,
-    'type': 'fs_reset',
-    'previousSessionId': previousSessionId,
-    'reason': reason,
-  };
+        'v': 1,
+        'type': 'fs_reset',
+        'previousSessionId': previousSessionId,
+        'reason': reason,
+      };
 
-  factory FsResetMessage.fromJson(Map<String, dynamic> j) =>
-      FsResetMessage(
+  factory FsResetMessage.fromJson(Map<String, dynamic> j) => FsResetMessage(
         previousSessionId: j['previousSessionId'] as String,
         reason: j['reason'] as String,
       );
@@ -202,11 +200,11 @@ class FsDowngradeNoticeMessage {
   final String previousLevel;
 
   Map<String, dynamic> toJson() => {
-    'v': 1,
-    'type': 'fs_downgrade_notice',
-    'previousSessionId': previousSessionId,
-    'previousLevel': previousLevel,
-  };
+        'v': 1,
+        'type': 'fs_downgrade_notice',
+        'previousSessionId': previousSessionId,
+        'previousLevel': previousLevel,
+      };
 
   factory FsDowngradeNoticeMessage.fromJson(Map<String, dynamic> j) =>
       FsDowngradeNoticeMessage(

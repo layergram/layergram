@@ -38,6 +38,7 @@ For transport channels that do not support invisible Unicode characters (or when
 
 ### Security
 - **End-to-end encryption** — X25519 key agreement + AES-GCM-256
+- **Forward Secrecy branch** — opportunistic in-band FS negotiation and Double Ratchet message keys, without a Layergram server or public-key redistribution
 - **Steganographic encoding** — encrypted payloads hidden inside zero-width Unicode characters (with deep link fallback for transports that don't support invisible characters)
 - **App lock** — biometric unlock with PIN fallback support
 - **Secure local storage** — sensitive state protected at rest
@@ -62,6 +63,7 @@ For transport channels that do not support invisible Unicode characters (or when
 
 - The public Layergram Flutter application
 - The open **Layergram Message Format (LMF)** specification
+- The Forward Secrecy branch specification and implementation notes
 - Local identity, encryption, steganography, and secure storage logic
 - No-op capability implementations for features that are intentionally outside the public repository scope
 
@@ -139,7 +141,16 @@ dart doc
 ## Specifications
 
 - [Layergram Message Format (LMF)](specs/LAYERGRAM_MESSAGE_FORMAT.md)
+- [Forward Secrecy](specs/FORWARD_SECRECY.md)
 - [Cryptography Export Compliance Notes](specs/CRYPTOGRAPHY_EXPORT_COMPLIANCE.md)
+
+### Forward Secrecy Status
+
+Forward Secrecy is implemented in the dedicated FS branch and is not described in `llms.txt`
+until it is part of the official public release. The branch preserves Layergram's core model:
+no Layergram server, no accounts, no key directory, and no contact public-key redistribution.
+FS control messages are carried inside ordinary encrypted Layergram messages and older clients
+can ignore them while continuing to use the base identity-key encryption model.
 
 ## Contributing
 

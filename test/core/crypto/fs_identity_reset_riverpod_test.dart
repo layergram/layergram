@@ -30,11 +30,8 @@ import 'package:hive/hive.dart';
 import 'package:layergram/core/crypto/aux_record_cipher.dart';
 import 'package:layergram/core/crypto/fs_contact_security_state.dart';
 import 'package:layergram/core/crypto/fs_double_ratchet.dart';
-import 'package:layergram/core/crypto/fs_ratchet_persistence_service.dart';
 import 'package:layergram/core/crypto/fs_session_manager.dart';
-import 'package:layergram/core/crypto/fs_state_persistence_service.dart';
 import 'package:layergram/core/providers.dart';
-import 'package:layergram/core/storage/aux_record_repository.dart';
 import 'package:layergram/core/storage/local_database.dart';
 
 void main() {
@@ -67,7 +64,8 @@ void main() {
   // ---------------------------------------------------------------------------
   // T_RIVERPOD_1: Full provider-based identity reset simulation
   // ---------------------------------------------------------------------------
-  test('T_RIVERPOD_1: Identity reset clears all FS state using real providers', () async {
+  test('T_RIVERPOD_1: Identity reset clears all FS state using real providers',
+      () async {
     const contactId = 'bob_device';
     const sessionId = 'test_session_123';
     const identityContext = 'primary';
@@ -102,7 +100,8 @@ void main() {
       skippedKeys: const {},
     );
 
-    await container.read(fsRatchetPersistenceServiceProvider)
+    await container
+        .read(fsRatchetPersistenceServiceProvider)
         .saveRatchetState(ratchetState);
 
     // Create and persist FS contact state
@@ -121,13 +120,15 @@ void main() {
         reason: 'Setup: should have 2 aux records (ratchet + state)');
 
     // Load ratchet states into cache (simulates _loadPersistedFsState)
-    final ratchetStatesBefore = await container.read(fsRatchetPersistenceServiceProvider)
+    final ratchetStatesBefore = await container
+        .read(fsRatchetPersistenceServiceProvider)
         .loadAllRatchetStates();
     container.read(fsRatchetStateCacheProvider.notifier).state = {
       for (final s in ratchetStatesBefore) s.sessionId: s,
     };
 
-    expect(container.read(fsRatchetStateCacheProvider).containsKey(sessionId), isTrue,
+    expect(container.read(fsRatchetStateCacheProvider).containsKey(sessionId),
+        isTrue,
         reason: 'Setup: ratchet state should be in cache');
 
     // ========================================================================
@@ -135,13 +136,19 @@ void main() {
     // ========================================================================
 
     // 1. Mark all sessions as broken
-    container.read(fsContactSecurityRegistryProvider).markAllBroken(identityContext);
+    container
+        .read(fsContactSecurityRegistryProvider)
+        .markAllBroken(identityContext);
 
     // 2. Remove all persisted FS states
-    await container.read(fsStatePersistenceServiceProvider).removeAllStates(identityContext);
+    await container
+        .read(fsStatePersistenceServiceProvider)
+        .removeAllStates(identityContext);
 
     // 3. Remove all persisted ratchet states
-    await container.read(fsRatchetPersistenceServiceProvider).removeAllRatchetStates();
+    await container
+        .read(fsRatchetPersistenceServiceProvider)
+        .removeAllRatchetStates();
 
     // 4. Clear in-memory ratchet state cache
     container.read(fsRatchetStateCacheProvider.notifier).state = {};
@@ -174,7 +181,8 @@ void main() {
         reason: 'After reset, all aux records should be deleted');
 
     // Verify: No ratchet states loaded
-    final ratchetStatesAfter = await container.read(fsRatchetPersistenceServiceProvider)
+    final ratchetStatesAfter = await container
+        .read(fsRatchetPersistenceServiceProvider)
         .loadAllRatchetStates();
     expect(ratchetStatesAfter, isEmpty,
         reason: 'After reset, no ratchet states should exist');
@@ -193,10 +201,13 @@ void main() {
     );
 
     // 2. Load persisted FS states (simulates _loadPersistedFsState)
-    await container.read(fsStatePersistenceServiceProvider).loadPersistedState();
+    await container
+        .read(fsStatePersistenceServiceProvider)
+        .loadPersistedState();
 
     // 3. Load ratchet states into cache (simulates _loadPersistedFsState)
-    final restoredRatchets = await container.read(fsRatchetPersistenceServiceProvider)
+    final restoredRatchets = await container
+        .read(fsRatchetPersistenceServiceProvider)
         .loadAllRatchetStates();
 
     // ========================================================================
@@ -206,8 +217,9 @@ void main() {
     // After restore with SAME key, if clearByKind worked correctly,
     // there should be NO ratchet states loaded because they were deleted.
     expect(restoredRatchets, isEmpty,
-        reason: 'CRITICAL: After reset+restore, NO ratchet states should exist. '
-                 'If this fails, clearByKind is not working correctly!');
+        reason:
+            'CRITICAL: After reset+restore, NO ratchet states should exist. '
+            'If this fails, clearByKind is not working correctly!');
 
     // Verify cache is empty
     final cacheAfter = <String, RatchetState>{};
@@ -216,11 +228,16 @@ void main() {
     }
 
     expect(cacheAfter.containsKey(sessionId), isFalse,
-        reason: 'CRITICAL: Old session ratchet should NOT be in cache after restore');
+        reason:
+            'CRITICAL: Old session ratchet should NOT be in cache after restore');
 
     // Verify registry state
-    final registryState = container.read(fsContactSecurityRegistryProvider)
-        .lookup(contactId: contactId, identityContext: identityContext, sessionId: sessionId);
+    final registryState = container
+        .read(fsContactSecurityRegistryProvider)
+        .lookup(
+            contactId: contactId,
+            identityContext: identityContext,
+            sessionId: sessionId);
 
     // After invalidate + load, registry should be empty (or have broken state from persistence)
     // But since we called markAllBroken BEFORE removeAllStates, the broken state was also deleted

@@ -34,19 +34,20 @@ final _x25519 = X25519();
 Future<(Uint8List priv, Uint8List pub)> _genKeyPair() async {
   final pair = await _x25519.newKeyPair();
   final priv = Uint8List.fromList(await pair.extractPrivateKeyBytes());
-  final pubKey = await pair.extractPublicKey() as SimplePublicKey;
+  final pubKey = await pair.extractPublicKey();
   final pub = Uint8List.fromList(pubKey.bytes);
   return (priv, pub);
 }
 
 /// Runs the full Alice-initiator / Bob-responder handshake and returns
 /// the two [FsHandshakePartialState]s plus both payloads ready for ratchet init.
-Future<(
-  FsHandshakePartialState aState,
-  FsHandshakePartialState bState,
-  FsConfirmPayload confirmPayload,
-  FsReplyPayload replyPayload,
-)> _fullHandshake({
+Future<
+    (
+      FsHandshakePartialState aState,
+      FsHandshakePartialState bState,
+      FsConfirmPayload confirmPayload,
+      FsReplyPayload replyPayload,
+    )> _fullHandshake({
   required Uint8List ikAPriv,
   required Uint8List ikAPub,
   required Uint8List dkAPriv,
@@ -90,7 +91,12 @@ Future<(
   expect(ok, isTrue, reason: 'FS_CONFIRM verification must succeed');
   replyPayload.partialState.wipeRawRootSecret();
 
-  return (confirmPayload.partialState, replyPayload.partialState, confirmPayload, replyPayload);
+  return (
+    confirmPayload.partialState,
+    replyPayload.partialState,
+    confirmPayload,
+    replyPayload
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -123,7 +129,9 @@ void main() {
     test('T3.4c: unsupported curve identifier rejected', () {
       final bytes = Uint8List(33);
       bytes[0] = 0x02; // Not 0x01 (X25519).
-      for (var i = 1; i < 33; i++) bytes[i] = i;
+      for (var i = 1; i < 33; i++) {
+        bytes[i] = i;
+      }
       final encoded = base64Url.encode(bytes).replaceAll('=', '');
       expect(
         () => FsKeyCodec.decodeKey(encoded),
@@ -153,10 +161,38 @@ void main() {
     test('T3.12: low-order X25519 point (order-8) rejected', () {
       // The order-8 point from FsKeyCodec._lowOrderPoints.
       const raw = [
-        0x5f,0x9c,0x95,0xbc,0xa3,0x50,0x8c,0x24,
-        0xb1,0xd0,0xb1,0x55,0x9c,0x83,0xef,0x5b,
-        0x04,0x44,0x5c,0xc4,0x58,0x1c,0x8e,0x86,
-        0xd8,0x22,0x4e,0xdd,0xd0,0x9f,0x11,0x57,
+        0x5f,
+        0x9c,
+        0x95,
+        0xbc,
+        0xa3,
+        0x50,
+        0x8c,
+        0x24,
+        0xb1,
+        0xd0,
+        0xb1,
+        0x55,
+        0x9c,
+        0x83,
+        0xef,
+        0x5b,
+        0x04,
+        0x44,
+        0x5c,
+        0xc4,
+        0x58,
+        0x1c,
+        0x8e,
+        0x86,
+        0xd8,
+        0x22,
+        0x4e,
+        0xdd,
+        0xd0,
+        0x9f,
+        0x11,
+        0x57,
       ];
       final encoded = FsKeyCodec.encodeKey(Uint8List.fromList(raw));
       // encodeKey does not validate; decodeKey does.
@@ -174,7 +210,8 @@ void main() {
       );
     });
 
-    test('encodeKey round-trip: encode then decode returns original bytes', () async {
+    test('encodeKey round-trip: encode then decode returns original bytes',
+        () async {
       final (_, pub) = await _genKeyPair();
       final encoded = FsKeyCodec.encodeKey(pub);
       final decoded = FsKeyCodec.decodeKey(encoded);
@@ -197,9 +234,13 @@ void main() {
 
     // T3.10 — Full handshake flow.
     test('T3.10: full FS_INIT → FS_REPLY → FS_CONFIRM → session', () async {
-      final (aState, bState, _, __) = await _fullHandshake(
-        ikAPriv: ikAPriv, ikAPub: ikAPub, dkAPriv: dkAPriv,
-        ikBPriv: ikBPriv, ikBPub: ikBPub, dkBPriv: dkBPriv,
+      final (aState, bState, _, _) = await _fullHandshake(
+        ikAPriv: ikAPriv,
+        ikAPub: ikAPub,
+        dkAPriv: dkAPriv,
+        ikBPriv: ikBPriv,
+        ikBPub: ikBPub,
+        dkBPriv: dkBPriv,
       );
 
       // Both sides derive the same rootKey0.
@@ -217,9 +258,13 @@ void main() {
 
     // T3.1 — Same session state derived.
     test('T3.1: Alice and Bob derive matching initial session keys', () async {
-      final (aState, bState, _, __) = await _fullHandshake(
-        ikAPriv: ikAPriv, ikAPub: ikAPub, dkAPriv: dkAPriv,
-        ikBPriv: ikBPriv, ikBPub: ikBPub, dkBPriv: dkBPriv,
+      final (aState, bState, _, _) = await _fullHandshake(
+        ikAPriv: ikAPriv,
+        ikAPub: ikAPub,
+        dkAPriv: dkAPriv,
+        ikBPriv: ikBPriv,
+        ikBPub: ikBPub,
+        dkBPriv: dkBPriv,
       );
 
       expect(aState.rootKey0, equals(bState.rootKey0));
@@ -228,17 +273,24 @@ void main() {
     });
 
     // T3.7 — chainSeed_0 is not re-derivable from sendingChainKey0 and receivingChainKey0.
-    test('T3.7: sendingChainKey and receivingChainKey differ from each other', () async {
-      final (aState, _, __, ___) = await _fullHandshake(
-        ikAPriv: ikAPriv, ikAPub: ikAPub, dkAPriv: dkAPriv,
-        ikBPriv: ikBPriv, ikBPub: ikBPub, dkBPriv: dkBPriv,
+    test('T3.7: sendingChainKey and receivingChainKey differ from each other',
+        () async {
+      final (aState, _, _, _) = await _fullHandshake(
+        ikAPriv: ikAPriv,
+        ikAPub: ikAPub,
+        dkAPriv: dkAPriv,
+        ikBPriv: ikBPriv,
+        ikBPub: ikBPub,
+        dkBPriv: dkBPriv,
       );
       expect(aState.sendingChainKey0, isNot(equals(aState.receivingChainKey0)),
           reason: 'Sending and receiving chain keys must differ');
     });
 
     // T3.2 — Reordered transcript (swap A/B keys) → FS_CONFIRM fails.
-    test('T3.2: swapped A/B identities in transcript → FS_CONFIRM verification fails', () async {
+    test(
+        'T3.2: swapped A/B identities in transcript → FS_CONFIRM verification fails',
+        () async {
       final initPayload = await FsHandshake.generateFsInit(
         ikAPriv: ikAPriv,
         dkAPriv: dkAPriv,
@@ -284,14 +336,18 @@ void main() {
     // T3.3 — Modified confirmTag → fails.
     test('T3.3: modified confirmTag rejected', () async {
       final initPayload = await FsHandshake.generateFsInit(
-        ikAPriv: ikAPriv, dkAPriv: dkAPriv,
+        ikAPriv: ikAPriv,
+        dkAPriv: dkAPriv,
       );
       final replyPayload = await FsHandshake.processFsInitAsResponder(
-        ikBPriv: ikBPriv, dkBPriv: dkBPriv, ikAPub: ikAPub,
+        ikBPriv: ikBPriv,
+        dkBPriv: dkBPriv,
+        ikAPub: ikAPub,
         init: initPayload.toMessage(),
       );
       final confirmPayload = await FsHandshake.processFsReplyAsInitiator(
-        ikAPriv: ikAPriv, dkAPriv: dkAPriv,
+        ikAPriv: ikAPriv,
+        dkAPriv: dkAPriv,
         ekAPrivBytes: initPayload.ekAPrivBytes,
         ikBPub: ikBPub,
         sentInit: initPayload.toMessage(),
@@ -321,17 +377,65 @@ void main() {
       expect(result, isFalse);
     });
 
-    // T3.9 — Replayed FS_CONFIRM: second verification with wiped secret fails.
-    test('T3.9: FS_CONFIRM cannot be verified twice (rawRootSecret wiped)', () async {
+    test('T3.3b: modified transcriptHash field is rejected', () async {
       final initPayload = await FsHandshake.generateFsInit(
-        ikAPriv: ikAPriv, dkAPriv: dkAPriv,
+        ikAPriv: ikAPriv,
+        dkAPriv: dkAPriv,
       );
       final replyPayload = await FsHandshake.processFsInitAsResponder(
-        ikBPriv: ikBPriv, dkBPriv: dkBPriv, ikAPub: ikAPub,
+        ikBPriv: ikBPriv,
+        dkBPriv: dkBPriv,
+        ikAPub: ikAPub,
         init: initPayload.toMessage(),
       );
       final confirmPayload = await FsHandshake.processFsReplyAsInitiator(
-        ikAPriv: ikAPriv, dkAPriv: dkAPriv,
+        ikAPriv: ikAPriv,
+        dkAPriv: dkAPriv,
+        ekAPrivBytes: initPayload.ekAPrivBytes,
+        ikBPub: ikBPub,
+        sentInit: initPayload.toMessage(),
+        reply: replyPayload.toMessage(),
+      );
+
+      final originalTranscript = base64Url.decode(
+        _padBase64(confirmPayload.transcriptHash),
+      );
+      originalTranscript[0] ^= 0x01;
+      final tamperedTranscript =
+          base64Url.encode(originalTranscript).replaceAll('=', '');
+
+      final tamperedConfirm = FsConfirmMessage(
+        initId: confirmPayload.initId,
+        replyId: confirmPayload.replyId,
+        transcriptHash: tamperedTranscript,
+        confirmTag: confirmPayload.confirmTag,
+        initiatorInitialRatchetPub: confirmPayload.initiatorInitialRatchetPub,
+      );
+
+      final result = await FsHandshake.verifyFsConfirmAsResponder(
+        confirm: tamperedConfirm,
+        bState: replyPayload.partialState,
+        ikAPub: ikAPub,
+      );
+      expect(result, isFalse);
+    });
+
+    // T3.9 — Replayed FS_CONFIRM: second verification with wiped secret fails.
+    test('T3.9: FS_CONFIRM cannot be verified twice (rawRootSecret wiped)',
+        () async {
+      final initPayload = await FsHandshake.generateFsInit(
+        ikAPriv: ikAPriv,
+        dkAPriv: dkAPriv,
+      );
+      final replyPayload = await FsHandshake.processFsInitAsResponder(
+        ikBPriv: ikBPriv,
+        dkBPriv: dkBPriv,
+        ikAPub: ikAPub,
+        init: initPayload.toMessage(),
+      );
+      final confirmPayload = await FsHandshake.processFsReplyAsInitiator(
+        ikAPriv: ikAPriv,
+        dkAPriv: dkAPriv,
         ekAPrivBytes: initPayload.ekAPrivBytes,
         ikBPub: ikBPub,
         sentInit: initPayload.toMessage(),
@@ -373,19 +477,27 @@ void main() {
       (dkBPriv, _) = await _genKeyPair();
     });
 
-    Future<(RatchetState aRatchet, RatchetState bRatchet)> _buildRatchets() async {
-      final (aState, bState, confirmPayload, replyPayload) = await _fullHandshake(
-        ikAPriv: ikAPriv, ikAPub: ikAPub, dkAPriv: dkAPriv,
-        ikBPriv: ikBPriv, ikBPub: ikBPub, dkBPriv: dkBPriv,
+    Future<(RatchetState aRatchet, RatchetState bRatchet)>
+        buildRatchets() async {
+      final (aState, bState, confirmPayload, replyPayload) =
+          await _fullHandshake(
+        ikAPriv: ikAPriv,
+        ikAPub: ikAPub,
+        dkAPriv: dkAPriv,
+        ikBPriv: ikBPriv,
+        ikBPub: ikBPub,
+        dkBPriv: dkBPriv,
       );
 
       // Alice's initial ratchet key pair was generated in processFsReplyAsInitiator.
       final ratchetAPriv = confirmPayload.initiatorInitialRatchetPriv;
-      final ratchetAPub = FsKeyCodec.decodeKey(confirmPayload.initiatorInitialRatchetPub);
+      final ratchetAPub =
+          FsKeyCodec.decodeKey(confirmPayload.initiatorInitialRatchetPub);
 
       // Bob's initial ratchet key pair was generated in processFsInitAsResponder.
       final ratchetBPriv = replyPayload.responderInitialRatchetPriv;
-      final ratchetBPub = FsKeyCodec.decodeKey(replyPayload.responderInitialRatchetPub);
+      final ratchetBPub =
+          FsKeyCodec.decodeKey(replyPayload.responderInitialRatchetPub);
 
       // Alice knows B's initial ratchet pub (from FS_REPLY) → lastRemoteRatchetPub.
       // Bob knows A's initial ratchet pub (from FS_CONFIRM) → lastRemoteRatchetPub.
@@ -415,7 +527,7 @@ void main() {
 
     // T3.13 — Alice encrypts 3 messages, Bob decrypts all 3 in order.
     test('T3.13: Alice encrypts 3 msgs, Bob decrypts in order', () async {
-      var (aRatchet, bRatchet) = await _buildRatchets();
+      var (aRatchet, bRatchet) = await buildRatchets();
 
       final messages = ['Hello, Bob!', 'Are you there?', 'Third message.'];
       final ciphertexts = <FsEncryptedMessage>[];
@@ -442,7 +554,7 @@ void main() {
 
     // T3.6 — Nonce uniqueness: 1000 consecutive FS messages.
     test('T3.6: 1000 consecutive messages produce unique nonces', () async {
-      var (aRatchet, _) = await _buildRatchets();
+      var (aRatchet, _) = await buildRatchets();
       final nonces = <String>{};
 
       for (var i = 0; i < 1000; i++) {
@@ -463,8 +575,9 @@ void main() {
     });
 
     // T3.14 — Out-of-order: Bob receives msg 3, then msg 1.
-    test('T3.14: Bob handles out-of-order messages using skipped key map', () async {
-      var (aRatchet, bRatchet) = await _buildRatchets();
+    test('T3.14: Bob handles out-of-order messages using skipped key map',
+        () async {
+      var (aRatchet, bRatchet) = await buildRatchets();
 
       // Alice sends 3 messages.
       final ciphertexts = <FsEncryptedMessage>[];
@@ -503,8 +616,9 @@ void main() {
     });
 
     // Wrong-key decrypt must throw.
-    test('decrypt with tampered ciphertext throws FsDecryptException', () async {
-      var (aRatchet, bRatchet) = await _buildRatchets();
+    test('decrypt with tampered ciphertext throws FsDecryptException',
+        () async {
+      var (aRatchet, bRatchet) = await buildRatchets();
 
       final result = await FsDoubleRatchet.encrypt(
         state: aRatchet,

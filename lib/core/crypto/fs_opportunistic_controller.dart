@@ -68,7 +68,8 @@ class FsOpportunisticController {
   })  : _localContactId = localContactId,
         _identityContext = identityContext,
         _sessionManager = sessionManager,
-        _deviceRouter = FsDeviceSessionRouter(clock: clock, initialSession: sessionManager),
+        _deviceRouter =
+            FsDeviceSessionRouter(clock: clock, initialSession: sessionManager),
         _registry = registry,
         _persistenceService = persistenceService,
         _ratchetPersistenceService = ratchetPersistenceService,
@@ -211,7 +212,8 @@ class FsOpportunisticController {
         final json = pendingConfirm.toMessage().toJson();
 
         // Record that we are sending FS_CONFIRM
-        final confirmResult = _sessionManager.recordFsConfirmSent(pendingConfirm);
+        final confirmResult =
+            _sessionManager.recordFsConfirmSent(pendingConfirm);
         if (!confirmResult.accepted) {
           return const FsOutgoingExtension._(json: null);
         }
@@ -231,11 +233,8 @@ class FsOpportunisticController {
         // CRITICAL: Only activate session if ratchet was successfully initialized
         // If ratchet initialization failed (e.g., after identity reset), mark broken
         if (ratchetInitialized) {
-          print('[FS-INITIATOR] Activating session with replyId=${pendingConfirm.replyId}, currentState=${_sessionManager.state}');
-          final result = _sessionManager.activateSession(pendingConfirm.replyId);
-          print('[FS-INITIATOR] activateSession result: accepted=${result.accepted}, newState=${_sessionManager.state}, activeSessionId=${_sessionManager.activeSessionId}');
+          _sessionManager.activateSession(pendingConfirm.replyId);
         } else {
-          print('[FS-INITIATOR] CRITICAL: Ratchet initialization failed - marking session broken');
           _sessionManager.markBroken();
         }
 
@@ -281,10 +280,14 @@ class FsOpportunisticController {
     // Atomic state transitions: serialize per-contact processing (§20.1)
     if (_stateMutex != null) {
       return _stateMutex.withLock(contactKey, () async {
-        return _processIncomingEnvelopeInner(envelope, remoteContactId: remoteContactId, remoteIdentityPublicKey: remoteIdentityPublicKey);
+        return _processIncomingEnvelopeInner(envelope,
+            remoteContactId: remoteContactId,
+            remoteIdentityPublicKey: remoteIdentityPublicKey);
       });
     }
-    return _processIncomingEnvelopeInner(envelope, remoteContactId: remoteContactId, remoteIdentityPublicKey: remoteIdentityPublicKey);
+    return _processIncomingEnvelopeInner(envelope,
+        remoteContactId: remoteContactId,
+        remoteIdentityPublicKey: remoteIdentityPublicKey);
   }
 
   Future<FsIncomingResult> _processIncomingEnvelopeInner(
@@ -311,7 +314,9 @@ class FsOpportunisticController {
     final type = LmfV2Decoder.fsMsgType(envelope);
     switch (type) {
       case 'fs_init':
-        return _handleFsInit(fs, remoteContactId: remoteContactId, remoteIdentityPublicKey: remoteIdentityPublicKey);
+        return _handleFsInit(fs,
+            remoteContactId: remoteContactId,
+            remoteIdentityPublicKey: remoteIdentityPublicKey);
       case 'fs_reply':
         return _handleFsReply(fs, remoteContactId: remoteContactId);
       case 'fs_confirm':
@@ -380,8 +385,6 @@ class FsOpportunisticController {
 
     bool newDeviceDetected = false;
     if (isTerminal) {
-      print('[FS-MULTI-DEVICE] New fs_init while current session is $currentState '
-          '— rotating to new per-device session (§7.3)');
       _sessionManager = _deviceRouter.rotateForNewDevice();
       newDeviceDetected = true;
     }
@@ -521,11 +524,8 @@ class FsOpportunisticController {
 
         // CRITICAL: Only activate session if ratchet was successfully initialized
         if (ratchetInitialized) {
-          print('[FS-RESPONDER] Activating session with replyId=${msg.replyId}, currentState=${_sessionManager.state}');
-          final result = _sessionManager.activateSession(msg.replyId);
-          print('[FS-RESPONDER] activateSession result: accepted=${result.accepted}, newState=${_sessionManager.state}, activeSessionId=${_sessionManager.activeSessionId}');
+          _sessionManager.activateSession(msg.replyId);
         } else {
-          print('[FS-RESPONDER] CRITICAL: Ratchet initialization failed - marking session broken');
           _sessionManager.markBroken();
         }
         _updateRegistry(sessionId: msg.replyId, state: _sessionManager.state);
@@ -614,7 +614,8 @@ class FsOpportunisticController {
         incomingLevel: FsMessageSecurity.legacy,
         sessionState: _sessionManager.state,
       );
-      return const FsIncomingResult._(type: FsIncomingType.fsDowngradeNoticeReceived);
+      return const FsIncomingResult._(
+          type: FsIncomingType.fsDowngradeNoticeReceived);
     } catch (_) {
       return const FsIncomingResult._(type: FsIncomingType.malformed);
     }
@@ -624,7 +625,8 @@ class FsOpportunisticController {
     try {
       FsSimultaneousNoticeMessage.fromJson(fs);
       // Informational: the remote is notifying us that a tie-break occurred.
-      return const FsIncomingResult._(type: FsIncomingType.fsSimultaneousNoticeReceived);
+      return const FsIncomingResult._(
+          type: FsIncomingType.fsSimultaneousNoticeReceived);
     } catch (_) {
       return const FsIncomingResult._(type: FsIncomingType.malformed);
     }
@@ -687,13 +689,15 @@ class FsOpportunisticController {
   /// Checks whether a message counter has been seen before.
   bool isMessageReplay({required String sessionId, required int counter}) {
     return _replayCache?.isMessageReplay(
-      sessionId: sessionId,
-      counter: counter,
-    ) ?? false;
+          sessionId: sessionId,
+          counter: counter,
+        ) ??
+        false;
   }
 
   /// Records a successfully processed message counter.
-  void recordMessageProcessed({required String sessionId, required int counter}) {
+  void recordMessageProcessed(
+      {required String sessionId, required int counter}) {
     _replayCache?.recordMessage(sessionId: sessionId, counter: counter);
   }
 
@@ -731,7 +735,6 @@ class FsOpportunisticController {
           ? _sessionManager.initiatorPartialState
           : _sessionManager.responderPartialState;
       if (partialState == null) {
-        print('[FS-RATCHET-INIT] No partial state available');
         return false;
       }
 
@@ -757,10 +760,9 @@ class FsOpportunisticController {
 
       // Also persist via service if available
       await _ratchetPersistenceService?.saveRatchetState(ratchetState);
-      
+
       return true;
-    } catch (e) {
-      print('[FS-RATCHET-INIT] Failed to initialize ratchet: $e');
+    } catch (_) {
       return false;
     }
   }
@@ -785,12 +787,9 @@ class FsOpportunisticController {
       final localRatchetPriv = confirmPayload.initiatorInitialRatchetPriv;
 
       // Decode initiator's ratchet public key (it's encoded as string)
-      Uint8List? localRatchetPub;
-      if (confirmPayload.initiatorInitialRatchetPub != null) {
-        localRatchetPub = FsKeyCodec.decodeKey(confirmPayload.initiatorInitialRatchetPub);
-      }
-
-      if (localRatchetPub == null) return false;
+      final localRatchetPub = FsKeyCodec.decodeKey(
+        confirmPayload.initiatorInitialRatchetPub,
+      );
 
       // Initialize the ratchet
       final ratchetState = await FsDoubleRatchet.initRatchet(
@@ -807,8 +806,7 @@ class FsOpportunisticController {
       _onRatchetInitialized?.call(ratchetState);
       await _ratchetPersistenceService?.saveRatchetState(ratchetState);
       return true;
-    } catch (e) {
-      print('[FS-RATCHET-INIT-INITIATOR] Failed to initialize ratchet: $e');
+    } catch (_) {
       return false;
     }
   }

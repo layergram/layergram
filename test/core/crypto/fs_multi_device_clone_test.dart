@@ -13,6 +13,7 @@
 /// 4. disp2's FS-encrypted messages (with old ratchet) can't be decrypted by disp1b
 /// 5. After disp1b↔disp2 complete new handshake → new FS session works
 /// 6. disp1 tries to resume with old ratchet → disp2 has reset → old FS fails
+library;
 
 import 'dart:convert';
 import 'dart:typed_data';
@@ -57,11 +58,12 @@ void main() {
   }
 
   /// Performs a full FS handshake and returns ratchet states for both parties.
-  Future<({
-    RatchetState initiatorRatchet,
-    RatchetState responderRatchet,
-    String sessionId,
-  })> performHandshake({
+  Future<
+      ({
+        RatchetState initiatorRatchet,
+        RatchetState responderRatchet,
+        String sessionId,
+      })> performHandshake({
     required Uint8List ikAPriv,
     required Uint8List ikAPub,
     required Uint8List ikBPriv,
@@ -142,7 +144,9 @@ void main() {
   }
 
   group('Multi-device clone scenario', () {
-    test('disp1b (same identity, no ratchet) sends legacy message that disp2 can decrypt', () async {
+    test(
+        'disp1b (same identity, no ratchet) sends legacy message that disp2 can decrypt',
+        () async {
       // Setup: disp1 and disp2 have FS green
       final service = EncryptionService();
       final disp1Keys = await _keyMaterial(await x25519.newKeyPair());
@@ -181,7 +185,9 @@ void main() {
       expect(decResult.payload.text, 'Ciao da disp1b!');
     });
 
-    test('disp2 FS-encrypted messages cannot be decrypted by disp1b (no ratchet)', () async {
+    test(
+        'disp2 FS-encrypted messages cannot be decrypted by disp1b (no ratchet)',
+        () async {
       final service = EncryptionService();
       final disp1Pair = await x25519.newKeyPair();
       final disp1Keys = await _keyMaterial(disp1Pair);
@@ -189,10 +195,14 @@ void main() {
       final disp2Keys = await _keyMaterial(disp2Pair);
 
       // Build FS session between disp1 and disp2
-      final disp1Priv = Uint8List.fromList(await disp1Pair.extractPrivateKeyBytes());
-      final disp1Pub = Uint8List.fromList((await disp1Pair.extractPublicKey()).bytes);
-      final disp2Priv = Uint8List.fromList(await disp2Pair.extractPrivateKeyBytes());
-      final disp2Pub = Uint8List.fromList((await disp2Pair.extractPublicKey()).bytes);
+      final disp1Priv =
+          Uint8List.fromList(await disp1Pair.extractPrivateKeyBytes());
+      final disp1Pub =
+          Uint8List.fromList((await disp1Pair.extractPublicKey()).bytes);
+      final disp2Priv =
+          Uint8List.fromList(await disp2Pair.extractPrivateKeyBytes());
+      final disp2Pub =
+          Uint8List.fromList((await disp2Pair.extractPublicKey()).bytes);
 
       final handshake = await performHandshake(
         ikAPriv: disp1Priv,
@@ -228,7 +238,9 @@ void main() {
       expect(decResult.fsDecryptFailed, isTrue);
     });
 
-    test('disp2 session manager accepts new fs_init from disp1b (partner reset detection)', () {
+    test(
+        'disp2 session manager accepts new fs_init from disp1b (partner reset detection)',
+        () {
       final clock = _TestClock();
       final disp2SessionManager = FsSessionManager(clock: clock);
 
@@ -251,7 +263,8 @@ void main() {
       // disp2 should accept (partner reset detected)
       expect(result.accepted, isTrue);
       expect(disp2SessionManager.state, FsSessionState.fsInitSeen);
-      expect(disp2SessionManager.activeSessionId, isNull); // old session cleared
+      expect(
+          disp2SessionManager.activeSessionId, isNull); // old session cleared
     });
 
     test('after disp1b↔disp2 complete new handshake, messages work', () async {
@@ -261,10 +274,14 @@ void main() {
       final disp2Pair = await x25519.newKeyPair();
       final disp2Keys = await _keyMaterial(disp2Pair);
 
-      final disp1Priv = Uint8List.fromList(await disp1Pair.extractPrivateKeyBytes());
-      final disp1Pub = Uint8List.fromList((await disp1Pair.extractPublicKey()).bytes);
-      final disp2Priv = Uint8List.fromList(await disp2Pair.extractPrivateKeyBytes());
-      final disp2Pub = Uint8List.fromList((await disp2Pair.extractPublicKey()).bytes);
+      final disp1Priv =
+          Uint8List.fromList(await disp1Pair.extractPrivateKeyBytes());
+      final disp1Pub =
+          Uint8List.fromList((await disp1Pair.extractPublicKey()).bytes);
+      final disp2Priv =
+          Uint8List.fromList(await disp2Pair.extractPrivateKeyBytes());
+      final disp2Pub =
+          Uint8List.fromList((await disp2Pair.extractPublicKey()).bytes);
 
       // 1) Original FS session between disp1 and disp2
       final originalHandshake = await performHandshake(
@@ -325,17 +342,22 @@ void main() {
       expect(newDec.payload.text, 'New FS from disp1b!');
     });
 
-    test('disp1 resumes with old ratchet after disp2 reset → decrypt fails', () async {
+    test('disp1 resumes with old ratchet after disp2 reset → decrypt fails',
+        () async {
       final service = EncryptionService();
       final disp1Pair = await x25519.newKeyPair();
       final disp1Keys = await _keyMaterial(disp1Pair);
       final disp2Pair = await x25519.newKeyPair();
       final disp2Keys = await _keyMaterial(disp2Pair);
 
-      final disp1Priv = Uint8List.fromList(await disp1Pair.extractPrivateKeyBytes());
-      final disp1Pub = Uint8List.fromList((await disp1Pair.extractPublicKey()).bytes);
-      final disp2Priv = Uint8List.fromList(await disp2Pair.extractPrivateKeyBytes());
-      final disp2Pub = Uint8List.fromList((await disp2Pair.extractPublicKey()).bytes);
+      final disp1Priv =
+          Uint8List.fromList(await disp1Pair.extractPrivateKeyBytes());
+      final disp1Pub =
+          Uint8List.fromList((await disp1Pair.extractPublicKey()).bytes);
+      final disp2Priv =
+          Uint8List.fromList(await disp2Pair.extractPrivateKeyBytes());
+      final disp2Pub =
+          Uint8List.fromList((await disp2Pair.extractPublicKey()).bytes);
 
       // 1) Original FS session between disp1 and disp2
       final originalHandshake = await performHandshake(
@@ -412,10 +434,14 @@ void main() {
       final disp2Pair = await x25519.newKeyPair();
       final disp2Keys = await _keyMaterial(disp2Pair);
 
-      final disp1Priv = Uint8List.fromList(await disp1Pair.extractPrivateKeyBytes());
-      final disp1Pub = Uint8List.fromList((await disp1Pair.extractPublicKey()).bytes);
-      final disp2Priv = Uint8List.fromList(await disp2Pair.extractPrivateKeyBytes());
-      final disp2Pub = Uint8List.fromList((await disp2Pair.extractPublicKey()).bytes);
+      final disp1Priv =
+          Uint8List.fromList(await disp1Pair.extractPrivateKeyBytes());
+      final disp1Pub =
+          Uint8List.fromList((await disp1Pair.extractPublicKey()).bytes);
+      final disp2Priv =
+          Uint8List.fromList(await disp2Pair.extractPrivateKeyBytes());
+      final disp2Pub =
+          Uint8List.fromList((await disp2Pair.extractPublicKey()).bytes);
 
       // ── Phase 1: disp1 ↔ disp2 communicate with FS green ──
 

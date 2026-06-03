@@ -1,16 +1,20 @@
 # Layergram Message Format (LMF) Specification
 
-**Version:** 2.0  
-**Status:** Stable  
+**Version:** 2.1
+**Status:** Forward Secrecy branch draft; LMF v2 base format stable
 
 This document defines the **Layergram Message Format (LMF)**, the protocol used by Layergram to embed end-to-end encrypted messages within standard, visually innocuous text messages.
 
 ## Version History
 
-- **LMF v2.0 (Current)**: Introduces structured inner container, gzip compression, hardened Unicode alphabet. Always encode with v2; decode supports v2 then v1 fallback.
+- **LMF v2.1 (Forward Secrecy branch draft)**: Adds optional Forward Secrecy envelope fields and `x.fs` control extensions while preserving the raw-binary outer transport.
+- **LMF v2.0 (Stable base)**: Introduces structured inner container, gzip compression, hardened Unicode alphabet. Always encode with v2; decode supports v2 then v1 fallback.
 - **LMF v1.1 (Legacy)**: Original format with raw JSON encryption. Decode-only support for backward compatibility.
 
-The specification in this document is implemented by the public Layergram application and by official Layergram builds released through the project's official channels.
+The stable LMF v2.0 base format is implemented by the public Layergram application and by
+official Layergram builds released through the project's official channels. The v2.1 Forward
+Secrecy additions are implemented in the FS branch until they are promoted into an official
+release.
 
 ---
 
@@ -67,6 +71,61 @@ The JSON serialization is encoded as UTF-8 before encryption. Any valid Unicode 
 | `senderDisplayName` | string? | Optional sender display name |
 | `expireAfter` | int? | Optional TTL in seconds |
 | `deleteAfterRead` | bool | Whether the message self-destructs after reading |
+
+### 2.1.1 Forward Secrecy Envelope Fields
+
+When a confirmed FS session is available, the JSON envelope remains encrypted inside the same
+LMF v2 raw binary payload, but the secret message text is not stored directly in `text`.
+Instead, the envelope carries FS metadata and an inner ratchet ciphertext:
+
+| Field | Type | Description |
+|---|---|---|
+| `fs_v` | int | FS envelope version (`1`) |
+| `fs_session` | string | Opaque FS session identifier used to select the ratchet state |
+| `fs_ratchet_pub` | string | Sender ratchet public key, canonical FS key encoding |
+| `fs_counter` | int | Message counter within the sender ratchet chain |
+| `fs_cipher` | string | Base64-encoded FS ciphertext plus MAC |
+| `fs_nonce` | string | Base64-encoded derived AES-GCM nonce |
+
+The FS ciphertext decrypts to the message `text`. The identity-encrypted outer LMF envelope is
+still authenticated first; then the receiver checks replay state for `(fs_session, fs_counter)`
+before advancing the Double Ratchet.
+
+FS control negotiation messages are carried in an optional extension:
+
+```json
+{
+  "x": {
+    "fs": {
+      "type": "fs_init | fs_reply | fs_confirm | fs_ack | fs_suspend | fs_reset",
+      "...": "type-specific fields"
+    }
+  }
+}
+```
+
+Older clients that do not understand `x.fs` ignore it and keep using the base model.
+
+### 2.1.2 Multi-Envelope FS
+
+When a contact has more than one active device session, the sender may encrypt the plaintext
+once with a fresh content key and wrap that key separately for each device ratchet:
+
+| Field | Type | Description |
+|---|---|---|
+| `fs_multi` | int | Multi-envelope marker (`1`) |
+| `mc_cipher` | string | Base64-encoded content ciphertext plus MAC |
+| `mc_nonce` | string | Base64-encoded content nonce |
+| `fs_wraps` | array | Per-session FS wraps for the content key |
+| `mc_fallback_key` | string? | Optional legacy fallback content key; forbidden in Strict/Maximum FS |
+
+Each `fs_wraps[]` entry uses the same FS fields as a single-envelope message
+(`fs_session`, `fs_ratchet_pub`, `fs_counter`, `fs_cipher`, `fs_nonce`), but its plaintext is
+the content key rather than the user message. The receiver selects the wrap matching one of its
+known sessions and advances only that ratchet.
+
+`mc_fallback_key` is off by default because it weakens Forward Secrecy. If present, the message
+classification is `fs_with_fallback`; Strict/Maximum FS messages must not include it.
 
 ### 2.2 Raw Binary Ciphertext
 

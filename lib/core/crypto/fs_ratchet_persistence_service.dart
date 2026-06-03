@@ -13,8 +13,6 @@
 // limitations under the License.
 
 import 'dart:convert';
-import 'dart:math';
-import 'dart:typed_data';
 
 import '../storage/aux_record_repository.dart';
 import 'fs_double_ratchet.dart';
@@ -78,11 +76,6 @@ class FsRatchetPersistenceService {
   Future<List<RatchetState>> loadAllRatchetStates() async {
     final allIds = _auxRepository.getAllAuxRecordIds();
 
-    assert(() {
-      print('[FS-RATCHET-LOAD] Found ${allIds.length} aux records to scan');
-      return true;
-    }());
-
     final states = <RatchetState>[];
 
     for (final entry in allIds.entries) {
@@ -100,17 +93,13 @@ class FsRatchetPersistenceService {
         states.add(state);
 
         // Cache storage info for later updates
-        _storageInfo[state.sessionId] = (storageId: entry.key, recordId: entry.value);
+        _storageInfo[state.sessionId] =
+            (storageId: entry.key, recordId: entry.value);
       } catch (_) {
         // Skip corrupted entries
         continue;
       }
     }
-
-    assert(() {
-      print('[FS-RATCHET-LOAD] Loaded ${states.length} ratchet states: ${states.map((s) => s.sessionId).toList()}');
-      return true;
-    }());
 
     return states;
   }
@@ -167,7 +156,6 @@ class FsRatchetPersistenceService {
     return {
       'kind': _kRecordKind,
       'v': 1,
-      '_rid': _generateRecordId(),
       'sessionId': state.sessionId,
       'rootKey': base64Encode(state.rootKey),
       'sendingChainKey': base64Encode(state.sendingChainKey),
@@ -191,10 +179,10 @@ class FsRatchetPersistenceService {
       final receivingChainKeyB64 = payload['receivingChainKey'] as String?;
       final localRatchetPrivB64 = payload['localRatchetPriv'] as String?;
       final localRatchetPubB64 = payload['localRatchetPub'] as String?;
-      final lastRemoteRatchetPubB64 = payload['lastRemoteRatchetPub'] as String?;
+      final lastRemoteRatchetPubB64 =
+          payload['lastRemoteRatchetPub'] as String?;
       final sendCounter = payload['sendCounter'] as int?;
       final recvCounter = payload['recvCounter'] as int?;
-      final skippedKeysRaw = payload['skippedKeys'] as List<dynamic>?;
 
       if (sessionId == null ||
           rootKeyB64 == null ||
@@ -219,32 +207,18 @@ class FsRatchetPersistenceService {
             : null,
         sendCounter: sendCounter,
         recvCounter: recvCounter,
-        skippedKeys: <dynamic, dynamic>{} as Map<dynamic, dynamic>,
+        skippedKeys: <dynamic, dynamic>{},
       );
     } catch (_) {
       return null;
     }
   }
 
-  List<Map<String, dynamic>> _encodeSkippedKeys(Map<dynamic, dynamic> skippedKeys) {
+  List<Map<String, dynamic>> _encodeSkippedKeys(
+      Map<dynamic, dynamic> skippedKeys) {
     // Note: skippedKeys uses _SkippedKeyId as key which is private to fs_double_ratchet.dart
     // For now, we don't persist skipped keys - they will be re-derived on first message
     // This is acceptable as skipped keys are ephemeral
     return [];
-  }
-
-  Map<dynamic, dynamic> _decodeSkippedKeys(List<dynamic>? raw) {
-    // Return empty map - skipped keys will be re-derived
-    // ignore: avoid_dynamic_maps
-    return <dynamic, dynamic>{};
-  }
-
-  String _generateRecordId() {
-    final bytes = Uint8List(16);
-    final random = Random.secure();
-    for (var i = 0; i < 16; i++) {
-      bytes[i] = random.nextInt(256);
-    }
-    return base64Url.encode(bytes).replaceAll('=', '');
   }
 }

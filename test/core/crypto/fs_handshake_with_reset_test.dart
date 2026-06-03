@@ -31,14 +31,14 @@ void main() {
       // Device A (initiator) keys
       final ikA = await algo.newKeyPair();
       final ikAPriv = Uint8List.fromList(await ikA.extractPrivateKeyBytes());
-      final ikAPub = (await ikA.extractPublicKey()) as SimplePublicKey;
+      final ikAPub = (await ikA.extractPublicKey());
       final dkA = await algo.newKeyPair();
       final dkAPriv = Uint8List.fromList(await dkA.extractPrivateKeyBytes());
 
       // Device B (responder) keys
       final ikB = await algo.newKeyPair();
       final ikBPriv = Uint8List.fromList(await ikB.extractPrivateKeyBytes());
-      final ikBPub = (await ikB.extractPublicKey()) as SimplePublicKey;
+      final ikBPub = (await ikB.extractPublicKey());
       final dkB = await algo.newKeyPair();
       final dkBPriv = Uint8List.fromList(await dkB.extractPrivateKeyBytes());
 
@@ -80,7 +80,8 @@ void main() {
       expect(initResult, isNotNull);
 
       // Build outgoing extension — this internally calls recordFsInitSent
-      final initExt = await controllerA.buildOutgoingExtension(pendingInit: initResult);
+      final initExt =
+          await controllerA.buildOutgoingExtension(pendingInit: initResult);
       expect(initExt?.json, isNotNull);
       expect(sessionManagerA.state, FsSessionState.fsInitSent);
 
@@ -101,7 +102,8 @@ void main() {
       );
 
       // Build outgoing extension — this internally calls recordFsReplySent
-      final replyExt = await controllerB.buildOutgoingExtension(pendingReply: replyPayload);
+      final replyExt =
+          await controllerB.buildOutgoingExtension(pendingReply: replyPayload);
       expect(replyExt?.json, isNotNull);
       expect(sessionManagerB.state, FsSessionState.fsReplySent);
 
@@ -119,12 +121,14 @@ void main() {
         reply: replyMessage,
       );
 
-      final confirmExt = await controllerA.buildOutgoingExtension(pendingConfirm: confirmPayload);
+      final confirmExt = await controllerA.buildOutgoingExtension(
+          pendingConfirm: confirmPayload);
       expect(confirmExt?.json, isNotNull);
 
       // CRITICAL CHECK: Device A should have activeSessionId set
       expect(sessionManagerA.activeSessionId, isNotNull,
-          reason: 'CRITICAL: After sending CONFIRM, Device A should have activeSessionId set');
+          reason:
+              'CRITICAL: After sending CONFIRM, Device A should have activeSessionId set');
       expect(sessionManagerA.state, FsSessionState.fsActive,
           reason: 'Device A should be fsActive');
       expect(ratchetStateA, isNotNull,
@@ -144,7 +148,8 @@ void main() {
       );
 
       expect(sessionManagerB.activeSessionId, isNotNull,
-          reason: 'CRITICAL: After receiving CONFIRM, Device B should have activeSessionId set');
+          reason:
+              'CRITICAL: After receiving CONFIRM, Device B should have activeSessionId set');
       expect(sessionManagerB.state, FsSessionState.fsActive,
           reason: 'Device B should be fsActive');
 

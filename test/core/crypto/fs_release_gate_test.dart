@@ -17,6 +17,7 @@
 //  G.10 Strict FS cannot activate directly from legacyOnly.
 
 import 'package:flutter_test/flutter_test.dart';
+import 'dart:io';
 import 'package:layergram/core/crypto/fs_contact_security_state.dart';
 import 'package:layergram/core/crypto/fs_opportunistic_controller.dart';
 import 'package:layergram/core/crypto/fs_passphrase_context.dart';
@@ -53,7 +54,8 @@ void main() {
     });
 
     // G.3 — FsContactSecurityRegistry is per-context, no hidden global list.
-    test('G.3: registry clearContext removes all entries for that context only', () {
+    test('G.3: registry clearContext removes all entries for that context only',
+        () {
       final registry = FsContactSecurityRegistry();
       registry.upsert(const FsContactSecurityState(
         contactId: 'bob',
@@ -93,7 +95,9 @@ void main() {
     });
 
     // G.5 — No silent downgrade: canSendMessage = false in strict + broken.
-    test('G.5: FsStrictModeController blocks sending in broken state (no silent downgrade)', () {
+    test(
+        'G.5: FsStrictModeController blocks sending in broken state (no silent downgrade)',
+        () {
       final registry = FsContactSecurityRegistry();
       final mgr = FsSessionManager();
       final ctrl = FsStrictModeController(
@@ -112,7 +116,9 @@ void main() {
     });
 
     // G.6 — Opportunistic mode drops oversized payloads.
-    test('G.6: fitsInOpportunisticBudget returns false for truly oversized payloads', () {
+    test(
+        'G.6: fitsInOpportunisticBudget returns false for truly oversized payloads',
+        () {
       final oversize = {'type': 'fs_init', 'data': 'X' * 1500};
       expect(FsPayloadBudget.fitsInOpportunisticBudget(oversize), isFalse);
     });
@@ -180,7 +186,8 @@ void main() {
     });
 
     // G.11 — FsOpportunisticController does not expose strict bypass.
-    test('G.11: FsOpportunisticController.state reflects session manager state', () {
+    test('G.11: FsOpportunisticController.state reflects session manager state',
+        () {
       final registry = FsContactSecurityRegistry();
       final mgr = FsSessionManager();
       final ctrl = FsOpportunisticController(
@@ -202,6 +209,13 @@ void main() {
           reason: 'Value equals key (untranslated passthrough): ${entry.key}',
         );
       }
+    });
+
+    test('G.13: skipped message keys are wiped before removal', () {
+      final source =
+          File('lib/core/crypto/fs_double_ratchet.dart').readAsStringSync();
+      expect(source, contains('_wipeSkippedEntry'));
+      expect(source, contains('_removeExpiredSkippedKeys'));
     });
   });
 }

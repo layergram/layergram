@@ -8,6 +8,7 @@
 /// 4. Old FS messages without `isFsEncrypted` flag are also stripped
 /// 5. `isFsEncrypted` flag round-trips through serialization
 /// 6. `clearText` in copyWith explicitly nulls text
+library;
 
 import 'dart:convert';
 import 'dart:io';
@@ -369,7 +370,8 @@ void main() {
   // ── End-to-end: encrypt → strip → re-decrypt ────────────────────────────
 
   group('§12.3 end-to-end: identity reset strips plaintext', () {
-    test('legacy message can be re-decrypted after plaintext is stripped', () async {
+    test('legacy message can be re-decrypted after plaintext is stripped',
+        () async {
       final service = EncryptionService();
       final alice = await _keyMaterial(await x25519.newKeyPair());
       final bob = await _keyMaterial(await x25519.newKeyPair());
@@ -420,7 +422,8 @@ void main() {
       expect(decResult.fsDecryptFailed, isFalse);
     });
 
-    test('FS message cannot be re-decrypted after strip — ratchet gone', () async {
+    test('FS message cannot be re-decrypted after strip — ratchet gone',
+        () async {
       final service = EncryptionService();
       final alice = await _keyMaterial(await x25519.newKeyPair());
       final bob = await _keyMaterial(await x25519.newKeyPair());
@@ -455,7 +458,9 @@ void main() {
       expect(decResult.payload.text, isEmpty);
     });
 
-    test('old FS message without isFsEncrypted flag: outer decrypts but inner fails', () async {
+    test(
+        'old FS message without isFsEncrypted flag: outer decrypts but inner fails',
+        () async {
       final service = EncryptionService();
       final alice = await _keyMaterial(await x25519.newKeyPair());
       final bob = await _keyMaterial(await x25519.newKeyPair());
@@ -509,7 +514,9 @@ void main() {
   // ── Full flow simulation ────────────────────────────────────────────────
 
   group('§12.3 full flow: encrypt → persist → reset → restore → verify', () {
-    test('after identity reset, FS messages show placeholder, legacy re-decrypt', () async {
+    test(
+        'after identity reset, FS messages show placeholder, legacy re-decrypt',
+        () async {
       final service = EncryptionService();
       final alice = await _keyMaterial(await x25519.newKeyPair());
       final bob = await _keyMaterial(await x25519.newKeyPair());

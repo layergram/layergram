@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:layergram/core/crypto/models.dart';
@@ -79,7 +77,8 @@ void main() {
       expect(await service.shouldShowForIdentity(_identityV1()), isTrue);
     });
 
-    test('notice is not shown multiple times during the same session', () async {
+    test('notice is not shown multiple times during the same session',
+        () async {
       var shown = 0;
 
       Future<IdentityMigrationNoticeAction?> present() async {
@@ -100,7 +99,9 @@ void main() {
       expect(await service.isAcknowledged(), isFalse);
     });
 
-    test('remind later does not re-show after a subsequent same-session identity reload', () async {
+    test(
+        'remind later does not re-show after a subsequent same-session identity reload',
+        () async {
       var shown = 0;
 
       Future<IdentityMigrationNoticeAction?> present() async {
@@ -144,7 +145,8 @@ void main() {
       expect(await service.isAcknowledged(), isTrue);
     });
 
-    test('null action (dialog dismissed without action) does not acknowledge', () async {
+    test('null action (dialog dismissed without action) does not acknowledge',
+        () async {
       // Simulates: user closes the dialog programmatically without pressing
       // either button (action == null).
       var shown = 0;
@@ -170,7 +172,8 @@ void main() {
       controller2.toString();
     });
 
-    test('_showing flag is reset to false even when presentNotice throws', () async {
+    test('_showing flag is reset to false even when presentNotice throws',
+        () async {
       // Verifies the finally block in processIdentityIfNeeded resets _showing.
       var callCount = 0;
       final faultyController = IdentityMigrationNoticeController(
@@ -201,7 +204,8 @@ void main() {
       // No exception thrown = _showing was properly reset.
     });
 
-    test('second sequential call after _handledThisSession is set is a no-op', () async {
+    test('second sequential call after _handledThisSession is set is a no-op',
+        () async {
       // After processIdentityIfNeeded completes, _handledThisSession == true.
       // Any subsequent call on the same controller instance must be a no-op.
       var shown = 0;
@@ -229,10 +233,12 @@ void main() {
       );
 
       expect(shown, 1,
-          reason: '_handledThisSession set to true after first call prevents any repeat in same session');
+          reason:
+              '_handledThisSession set to true after first call prevents any repeat in same session');
     });
 
-    testWidgets('checkAndShowIfNeeded invokes processIdentityIfNeeded via BuildContext',
+    testWidgets(
+        'checkAndShowIfNeeded invokes processIdentityIfNeeded via BuildContext',
         (tester) async {
       // Uses WidgetTester to provide a real BuildContext.
       late IdentityMigrationNoticeController ctrlWithContext;

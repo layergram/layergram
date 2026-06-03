@@ -175,11 +175,6 @@ class FsSecurityModeService {
         continue;
       }
     }
-
-    assert(() {
-      print('[FS-MODE] Rebuilt index: ${_index.length} entries');
-      return true;
-    }());
   }
 
   /// Removes the mode record for a specific contact+context.

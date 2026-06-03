@@ -109,7 +109,7 @@ void main() {
     });
 
     test('decompress recovers original data', () {
-      final original = utf8.encode('Hello, World! This is a test message.') as Uint8List;
+      final original = utf8.encode('Hello, World! This is a test message.');
       final compressed = CompressionZstd.compressRaw(original);
       if (compressed != null) {
         final recovered = CompressionZstd.decompress(compressed);
@@ -156,10 +156,12 @@ void main() {
 
       // Verify encoded text is not empty and contains visible characters
       expect(encoded.isNotEmpty, isTrue);
-      expect(encoded.length > coverText.length, isTrue); // Should have hidden runes
+      expect(encoded.length > coverText.length,
+          isTrue); // Should have hidden runes
 
       // Decode
-      final decoded = await LmfV2Decoder.decode(stegoText: encoded, key: testKey);
+      final decoded =
+          await LmfV2Decoder.decode(stegoText: encoded, key: testKey);
 
       expect(decoded, isNotNull);
       expect(decoded!['v'], 2);
@@ -192,7 +194,8 @@ void main() {
         coverText: coverText,
       );
 
-      final decoded = await LmfV2Decoder.decode(stegoText: encoded, key: testKey);
+      final decoded =
+          await LmfV2Decoder.decode(stegoText: encoded, key: testKey);
 
       expect(decoded, isNotNull);
       expect(decoded!['v'], 2);
@@ -219,7 +222,8 @@ void main() {
 
       // Try to decode with a different key
       final wrongKey = await AesGcm.with256bits().newSecretKey();
-      final decoded = await LmfV2Decoder.decode(stegoText: encoded, key: wrongKey);
+      final decoded =
+          await LmfV2Decoder.decode(stegoText: encoded, key: wrongKey);
 
       expect(decoded, isNull);
     });
@@ -256,12 +260,14 @@ void main() {
         expect(
           StegoAlphabetV2.isForbiddenRune(rune),
           isFalse,
-          reason: 'Forbidden rune U+${rune.toRadixString(16).toUpperCase().padLeft(4, '0')} found in output',
+          reason:
+              'Forbidden rune U+${rune.toRadixString(16).toUpperCase().padLeft(4, '0')} found in output',
         );
       }
     });
 
-    test('LMF v2 capacity calculations include 4-byte inner container overhead', () {
+    test('LMF v2 capacity calculations include 4-byte inner container overhead',
+        () {
       // The estimatedEncryptedPayloadBytes should now include +4 bytes for LMFv2Inner header
       // Verify by checking the calculation includes the expected overhead
 
@@ -273,21 +279,29 @@ void main() {
       expect(emptySecretBytes, equals(12 + 4 + 256 + 0 + 16)); // 288
 
       // With a secret text, the calculation should include the secret JSON bytes
-      final withSecretBytes = StegoEncoder.estimatedEncryptedPayloadBytes('Hello');
-      final encodedSecret = jsonEncode('Hello'); // "Hello" -> 7 bytes including quotes
-      final expectedSecretJsonBytes = utf8.encode(encodedSecret).length - 2; // -2 for quotes
+      final withSecretBytes =
+          StegoEncoder.estimatedEncryptedPayloadBytes('Hello');
+      final encodedSecret =
+          jsonEncode('Hello'); // "Hello" -> 7 bytes including quotes
+      final expectedSecretJsonBytes =
+          utf8.encode(encodedSecret).length - 2; // -2 for quotes
 
-      expect(withSecretBytes, equals(12 + 4 + 256 + expectedSecretJsonBytes + 16));
+      expect(
+          withSecretBytes, equals(12 + 4 + 256 + expectedSecretJsonBytes + 16));
     });
 
-    test('hiddenRuneCount calculation is consistent with estimatedEncryptedPayloadBytes', () {
+    test(
+        'hiddenRuneCount calculation is consistent with estimatedEncryptedPayloadBytes',
+        () {
       final secretText = 'Test message for capacity calculation';
-      final estimatedBytes = StegoEncoder.estimatedEncryptedPayloadBytes(secretText);
+      final estimatedBytes =
+          StegoEncoder.estimatedEncryptedPayloadBytes(secretText);
       final runeCount = StegoEncoder.hiddenRuneCount(estimatedBytes);
 
       // Verify the rune count is positive and proportional to byte count
       expect(runeCount, greaterThan(0));
-      expect(runeCount, equals(estimatedBytes * 4)); // 4 runes per byte (2 bits per rune)
+      expect(runeCount,
+          equals(estimatedBytes * 4)); // 4 runes per byte (2 bits per rune)
     });
   });
 
@@ -297,14 +311,16 @@ void main() {
 
   group('LMF v2 x.fs extension (Phase 5)', () {
     late SecretKey testKey;
-    const _coverText = 'Hello from Layergram. This is a moderately long cover text for testing purposes, ensuring there is enough capacity for the hidden payload with the FS extension attached to the message.';
+    const coverText0 =
+        'Hello from Layergram. This is a moderately long cover text for testing purposes, ensuring there is enough capacity for the hidden payload with the FS extension attached to the message.';
 
     setUp(() async {
       testKey = SecretKey(Uint8List(32)..fillRange(0, 32, 0x42));
     });
 
     // T5.1 — envelope with no x.fs round-trips correctly.
-    test('T5.1: envelope without x.fs round-trips (baseline compatibility)', () async {
+    test('T5.1: envelope without x.fs round-trips (baseline compatibility)',
+        () async {
       final env = LmfV2Encoder.buildJsonEnvelope(
         senderId: 'alice',
         recipientId: 'bob',
@@ -316,7 +332,7 @@ void main() {
       final stego = await LmfV2Encoder.encode(
         jsonEnvelope: env,
         key: testKey,
-        coverText: _coverText,
+        coverText: coverText0,
       );
       final decoded = await LmfV2Decoder.decode(stegoText: stego, key: testKey);
       expect(decoded, isNotNull);
@@ -330,8 +346,8 @@ void main() {
         'v': 1,
         'type': 'fs_init',
         'initId': 'abc123',
-        'initiatorDevicePub': 'AQ' + 'A' * 42,
-        'initiatorEphemeralPub': 'AQ' + 'A' * 42,
+        'initiatorDevicePub': 'AQ${'A' * 42}',
+        'initiatorEphemeralPub': 'AQ${'A' * 42}',
         'caps': ['lgfs1', 'dr1'],
         'createdAt': 1700000000,
       };
@@ -348,12 +364,13 @@ void main() {
       final stego = await LmfV2Encoder.encode(
         jsonEnvelope: env,
         key: testKey,
-        coverText: _coverText,
+        coverText: coverText0,
       );
       final decoded = await LmfV2Decoder.decode(stegoText: stego, key: testKey);
       expect(decoded, isNotNull);
       final fs = LmfV2Decoder.extractFsExtension(decoded!);
-      expect(fs, isNotNull, reason: 'x.fs must survive encrypt→decrypt round-trip');
+      expect(fs, isNotNull,
+          reason: 'x.fs must survive encrypt→decrypt round-trip');
       expect(fs!['type'], equals('fs_init'));
       expect(fs['initId'], equals('abc123'));
       expect(LmfV2Decoder.fsMsgType(decoded), equals('fs_init'));
@@ -366,9 +383,9 @@ void main() {
         'type': 'fs_reply',
         'initId': 'abc123',
         'replyId': 'reply456',
-        'responderDevicePub': 'AQ' + 'B' * 42,
-        'responderEphemeralPub': 'AQ' + 'C' * 42,
-        'responderInitialRatchetPub': 'AQ' + 'D' * 42,
+        'responderDevicePub': 'AQ${'B' * 42}',
+        'responderEphemeralPub': 'AQ${'C' * 42}',
+        'responderInitialRatchetPub': 'AQ${'D' * 42}',
         'caps': ['lgfs1'],
         'createdAt': 1700000001,
       };
@@ -383,7 +400,7 @@ void main() {
       final stego = await LmfV2Encoder.encode(
         jsonEnvelope: env,
         key: testKey,
-        coverText: _coverText,
+        coverText: coverText0,
       );
       final decoded = await LmfV2Decoder.decode(stegoText: stego, key: testKey);
       expect(decoded, isNotNull);
@@ -402,7 +419,7 @@ void main() {
         'replyId': 'reply456',
         'transcriptHash': 'A' * 43,
         'confirmTag': 'B' * 43,
-        'initiatorInitialRatchetPub': 'AQ' + 'E' * 42,
+        'initiatorInitialRatchetPub': 'AQ${'E' * 42}',
       };
       final env = LmfV2Encoder.buildJsonEnvelope(
         senderId: 'alice',
@@ -415,7 +432,7 @@ void main() {
       final stego = await LmfV2Encoder.encode(
         jsonEnvelope: env,
         key: testKey,
-        coverText: _coverText,
+        coverText: coverText0,
       );
       final decoded = await LmfV2Decoder.decode(stegoText: stego, key: testKey);
       expect(decoded, isNotNull);
@@ -426,21 +443,30 @@ void main() {
     });
 
     // T5.5 — legacy decoder ignores unknown x field.
-    test('T5.5: envelope with x.fs is still a valid v=2 message (legacy compatible)', () async {
+    test(
+        'T5.5: envelope with x.fs is still a valid v=2 message (legacy compatible)',
+        () async {
       final env = LmfV2Encoder.buildJsonEnvelope(
         senderId: 'alice',
         recipientId: 'bob',
         timestampMillis: 1700000000000,
         text: 'Legacy compatible',
-        fsExtension: {'v': 1, 'type': 'fs_init', 'initId': 'x', 'caps': ['lgfs1'], 'createdAt': 1700000000},
+        fsExtension: {
+          'v': 1,
+          'type': 'fs_init',
+          'initId': 'x',
+          'caps': ['lgfs1'],
+          'createdAt': 1700000000
+        },
       );
       final stego = await LmfV2Encoder.encode(
         jsonEnvelope: env,
         key: testKey,
-        coverText: _coverText,
+        coverText: coverText0,
       );
       final decoded = await LmfV2Decoder.decode(stegoText: stego, key: testKey);
-      expect(decoded, isNotNull, reason: 'Message with x.fs must still decode successfully');
+      expect(decoded, isNotNull,
+          reason: 'Message with x.fs must still decode successfully');
       expect(decoded!['v'], equals(2));
       expect(decoded['senderId'], equals('alice'));
       expect(decoded['text'], equals('Legacy compatible'));

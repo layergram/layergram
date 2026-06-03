@@ -26,7 +26,6 @@ import 'core/capabilities/chat_folders_capability.dart';
 import 'core/crypto/aux_record_cipher.dart';
 import 'core/crypto/fs_double_ratchet.dart';
 import 'core/crypto/fs_passphrase_preferences.dart';
-import 'core/crypto/fs_ratchet_persistence_service.dart';
 import 'core/providers.dart';
 import 'core/security/app_lock_idle_controller.dart';
 import 'features/identities/add_identity_view.dart';
@@ -92,8 +91,7 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
         _reloadIdentity();
         setState(() {});
       },
-    )
-      ..read();
+    )..read();
     _appLockEnabledSub = ref.listenManual<bool>(
       appLockEnabledProvider,
       (prev, next) {
@@ -102,8 +100,7 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
           timeoutSeconds: ref.read(appLockTimeoutProvider),
         );
       },
-    )
-      ..read();
+    )..read();
     _appLockTimeoutSub = ref.listenManual<int>(
       appLockTimeoutProvider,
       (prev, next) {
@@ -112,8 +109,7 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
           timeoutSeconds: next,
         );
       },
-    )
-      ..read();
+    )..read();
     _appNeedsUnlockSub = ref.listenManual<bool>(
       appNeedsUnlockProvider,
       (prev, next) {
@@ -124,8 +120,7 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
           unawaited(ref.read(homeControllerProvider).warmSessionDisplayKeys());
         }
       },
-    )
-      ..read();
+    )..read();
     _passphrasePreferencesSub = ref.listenManual<PassphrasePreferences>(
       passphrasePreferencesProvider,
       (prev, next) {
@@ -141,8 +136,7 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
           tc.stop();
         }
       },
-    )
-      ..read();
+    )..read();
     _loadLockState();
     _loadScreenProtectionState();
     _loadTooltipState();
@@ -251,7 +245,8 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
   }
 
   Future<void> _loadPendingSharedText() async {
-    if ((!AppPlatform.isAndroid && !AppPlatform.isIOS) || _checkingPendingShare) {
+    if ((!AppPlatform.isAndroid && !AppPlatform.isIOS) ||
+        _checkingPendingShare) {
       return;
     }
 
@@ -411,7 +406,9 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
         final senderId = outcome.payload?.senderId;
         final sender = senderId == null
             ? null
-            : await ref.read(identitiesRepositoryProvider).getRemoteById(senderId);
+            : await ref
+                .read(identitiesRepositoryProvider)
+                .getRemoteById(senderId);
         if (!mounted) return;
 
         final ctx = _navKey.currentContext;
@@ -503,12 +500,9 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
   Future<void> _loadPersistedFsState() async {
     try {
       // Get the private key (identity or passphrase-derived)
-      final privateKeyB64 = await ref.read(identityManagerProvider).getLocalPrivateKeyBase64();
+      final privateKeyB64 =
+          await ref.read(identityManagerProvider).getLocalPrivateKeyBase64();
       if (privateKeyB64 == null) {
-        assert(() {
-          print('[FS-LOAD] No private key, skipping FS state load');
-          return true;
-        }());
         return;
       }
 
@@ -527,26 +521,16 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
       await ref.read(fsStatePersistenceServiceProvider).loadPersistedState();
 
       // Load persisted ratchet states into cache
-      final ratchetStates = await ref.read(fsRatchetPersistenceServiceProvider).loadAllRatchetStates();
+      final ratchetStates = await ref
+          .read(fsRatchetPersistenceServiceProvider)
+          .loadAllRatchetStates();
       final cache = <String, RatchetState>{};
       for (final state in ratchetStates) {
         cache[state.sessionId] = state;
       }
       ref.read(fsRatchetStateCacheProvider.notifier).state = cache;
-
-      assert(() {
-        print('[FS-LOAD] Loaded ${ratchetStates.length} ratchet states');
-        for (final s in ratchetStates) {
-          print('[FS-LOAD]   - Session ${s.sessionId}: send=${s.sendCounter}, recv=${s.recvCounter}');
-        }
-        return true;
-      }());
     } catch (_) {
       // Silently fail - FS state will start fresh (legacyOnly)
-      assert(() {
-        print('[FS-LOAD] Error loading FS state: $_');
-        return true;
-      }());
     }
   }
 
@@ -572,7 +556,9 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
     }
 
     // Passphrase timeout controller lifecycle (§11.3)
-    ref.read(fsPassphraseTimeoutControllerProvider).onAppLifecycleChanged(state);
+    ref
+        .read(fsPassphraseTimeoutControllerProvider)
+        .onAppLifecycleChanged(state);
 
     final lockEnabled = ref.read(appLockEnabledProvider);
     if (!lockEnabled) return;
@@ -602,7 +588,8 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
     final screenProtectionEnabled = ref.watch(screenProtectionEnabledProvider);
     final privacyShieldVisible = ref.watch(privacyShieldVisibleProvider);
     final reducedEffects = ref.watch(reducedEffectsProvider);
-    final backgroundAnimationPaused = ref.watch(backgroundAnimationPausedProvider);
+    final backgroundAnimationPaused =
+        ref.watch(backgroundAnimationPausedProvider);
     final tooltipsEnabled = ref.watch(tooltipsEnabledProvider);
     final tooltipsVisible =
         AppPlatform.supportsHoverTooltips && tooltipsEnabled;
@@ -659,7 +646,8 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
           behavior: HitTestBehavior.translucent,
           onPointerDown: (_) => _appLockIdleController.onUserInteraction(),
           onPointerSignal: (_) => _appLockIdleController.onUserInteraction(),
-          onPointerPanZoomStart: (_) => _appLockIdleController.onUserInteraction(),
+          onPointerPanZoomStart: (_) =>
+              _appLockIdleController.onUserInteraction(),
           child: TooltipVisibility(
             visible: tooltipsVisible,
             child: Stack(
@@ -701,7 +689,8 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
                       ? (ref.read(chatFoldersProvider).valueOrNull ?? const [])
                       : const <ChatFolder>[];
                   final myIdentityIndex = 1 + extraFolders.length + 1;
-                  ref.read(appShellInitialIndexProvider.notifier).state = myIdentityIndex;
+                  ref.read(appShellInitialIndexProvider.notifier).state =
+                      myIdentityIndex;
                 }
                 setState(() {});
               },

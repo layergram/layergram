@@ -20,20 +20,21 @@ import 'package:layergram/core/crypto/fs_session_manager.dart';
 /// Expected: Both devices end up with fsActive state, NOT fsBroken
 void main() {
   group('FS Handshake Flow Tests', () {
-    test('T_HANDSHAKE_FLOW_1: Complete handshake initiator->responder flow', () async {
+    test('T_HANDSHAKE_FLOW_1: Complete handshake initiator->responder flow',
+        () async {
       final algo = X25519();
 
       // Device A (initiator) keys
       final ikA = await algo.newKeyPair();
       final ikAPriv = Uint8List.fromList(await ikA.extractPrivateKeyBytes());
-      final ikAPub = (await ikA.extractPublicKey()) as SimplePublicKey;
+      final ikAPub = (await ikA.extractPublicKey());
       final dkA = await algo.newKeyPair();
       final dkAPriv = Uint8List.fromList(await dkA.extractPrivateKeyBytes());
 
       // Device B (responder) keys
       final ikB = await algo.newKeyPair();
       final ikBPriv = Uint8List.fromList(await ikB.extractPrivateKeyBytes());
-      final ikBPub = (await ikB.extractPublicKey()) as SimplePublicKey;
+      final ikBPub = (await ikB.extractPublicKey());
       final dkB = await algo.newKeyPair();
       final dkBPriv = Uint8List.fromList(await dkB.extractPrivateKeyBytes());
 
@@ -75,7 +76,8 @@ void main() {
       expect(initResult, isNotNull);
 
       // Build outgoing extension — this internally calls recordFsInitSent
-      final initExt = await controllerA.buildOutgoingExtension(pendingInit: initResult);
+      final initExt =
+          await controllerA.buildOutgoingExtension(pendingInit: initResult);
       expect(initExt, isNotNull);
       expect(initExt!.hasExtension, isTrue);
       expect(sessionManagerA.state, FsSessionState.fsInitSent);
@@ -101,7 +103,8 @@ void main() {
       expect(replyPayload, isNotNull);
 
       // Build outgoing extension — this internally calls recordFsReplySent
-      final replyExt = await controllerB.buildOutgoingExtension(pendingReply: replyPayload);
+      final replyExt =
+          await controllerB.buildOutgoingExtension(pendingReply: replyPayload);
       expect(replyExt, isNotNull);
       expect(replyExt!.hasExtension, isTrue);
       expect(sessionManagerB.state, FsSessionState.fsReplySent);
@@ -110,7 +113,8 @@ void main() {
       final replyMessage = replyPayload.toMessage();
 
       // Process reply
-      final processReplyResult = sessionManagerA.processFsReplyReceived(replyMessage);
+      final processReplyResult =
+          sessionManagerA.processFsReplyReceived(replyMessage);
       expect(processReplyResult.accepted, isTrue);
       expect(sessionManagerA.state, FsSessionState.fsReplySeen);
 
@@ -126,12 +130,14 @@ void main() {
       expect(confirmPayload, isNotNull);
 
       // Build outgoing extension with confirm
-      final confirmExt = await controllerA.buildOutgoingExtension(pendingConfirm: confirmPayload);
+      final confirmExt = await controllerA.buildOutgoingExtension(
+          pendingConfirm: confirmPayload);
       expect(confirmExt, isNotNull);
 
       // CRITICAL: Session should be ACTIVE, not BROKEN
       expect(sessionManagerA.state, FsSessionState.fsActive,
-          reason: 'Initiator should have fsActive state after successful handshake, not fsBroken');
+          reason:
+              'Initiator should have fsActive state after successful handshake, not fsBroken');
       expect(ratchetStateA, isNotNull,
           reason: 'Initiator should have ratchet state initialized');
 
@@ -158,7 +164,8 @@ void main() {
       );
 
       expect(sessionManagerB.state, FsSessionState.fsActive,
-          reason: 'Responder should have fsActive state after successful handshake');
+          reason:
+              'Responder should have fsActive state after successful handshake');
 
       // Step 5: Verify both ratchets can encrypt/decrypt
       if (ratchetStateA != null && ratchetStateB != null) {

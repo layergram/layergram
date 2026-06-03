@@ -46,7 +46,8 @@ void main() {
     final (aliceCtrl, aliceMgr, aliceRegistry) = _build(contactId: 'alice');
 
     // Drive Bob's session to fsActive.
-    bobMgr.setStateForTesting(FsSessionState.fsActive, sessionId: 'session-bob');
+    bobMgr.setStateForTesting(FsSessionState.fsActive,
+        sessionId: 'session-bob');
 
     bobCtrl.requestMaximum('session-bob');
     expect(bobMgr.state, equals(FsSessionState.strictRequested));
@@ -127,6 +128,35 @@ void main() {
         reason: 'Known device must allow sending');
   });
 
+  test('T11.5b: existing strict consent blocks sending after session rotation',
+      () {
+    final (ctrl, mgr, registry) = _build();
+    mgr.setStateForTesting(FsSessionState.fsActive, sessionId: 'session-old');
+    ctrl.requestMaximum('session-old');
+    ctrl.activateStrict('session-old');
+
+    expect(mgr.state, equals(FsSessionState.strictFsActive));
+    expect(
+      registry
+          .lookup(
+            contactId: 'bob',
+            identityContext: 'primary',
+            sessionId: 'session-old',
+          )
+          ?.fsState,
+      equals(FsSessionState.strictFsActive),
+    );
+
+    mgr.setStateForTesting(FsSessionState.fsInitSeen, sessionId: 'session-new');
+
+    expect(
+      ctrl.canSendMessage(),
+      isFalse,
+      reason: 'A new pending session must not silently bypass Maximum FS',
+    );
+    expect(ctrl.sendBlockReason(), contains('Maximum Forward Secrecy'));
+  });
+
   // T11.6 — Disable Maximum FS → fsActive, fallback allowed.
   test('T11.6: disableStrict reverts to fsActive; legacy fallback allowed', () {
     final (ctrl, mgr, registry) = _build();
@@ -175,7 +205,8 @@ void main() {
       registry: sharedRegistry,
     );
 
-    primaryMgr.setStateForTesting(FsSessionState.fsActive, sessionId: 'primary-session');
+    primaryMgr.setStateForTesting(FsSessionState.fsActive,
+        sessionId: 'primary-session');
     primaryCtrl.requestMaximum('primary-session');
     primaryCtrl.activateStrict('primary-session');
     expect(primaryMgr.state, equals(FsSessionState.strictFsActive));
@@ -205,7 +236,8 @@ void main() {
   });
 
   // T11.9 — canSendMessage in strictFsActive without device change → true.
-  test('T11.9: canSendMessage is true in strictFsActive with no device change', () {
+  test('T11.9: canSendMessage is true in strictFsActive with no device change',
+      () {
     final (ctrl, mgr, _) = _build();
     mgr.setStateForTesting(FsSessionState.fsActive, sessionId: 'session-1');
     ctrl.requestMaximum('session-1');

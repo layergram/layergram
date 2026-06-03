@@ -20,6 +20,11 @@ import 'package:cryptography/cryptography.dart';
 import 'fs_double_ratchet.dart';
 import 'models.dart';
 
+typedef FsReplayCheck = bool Function({
+  required String sessionId,
+  required int counter,
+});
+
 /// Result of an encryption operation with optional FS double ratchet.
 class EncryptionResult {
   const EncryptionResult({
@@ -53,6 +58,7 @@ class DecryptionResult {
     required this.payload,
     this.newRatchetState,
     this.fsDecryptFailed = false,
+    this.fsReplayDetected = false,
   });
 
   final PlaintextPayload payload;
@@ -63,6 +69,9 @@ class DecryptionResult {
   /// was decrypted but the inner FS content is unrecoverable.
   /// [payload.text] will be empty in this case.
   final bool fsDecryptFailed;
+
+  /// `true` when an FS counter has already been processed for this session.
+  final bool fsReplayDetected;
 }
 
 class EncryptionService {
@@ -199,8 +208,7 @@ class EncryptionService {
 
     // Per-message content key: encrypt the payload text exactly once.
     final contentKey = await _algo.newSecretKey();
-    final contentKeyBytes =
-        Uint8List.fromList(await contentKey.extractBytes());
+    final contentKeyBytes = Uint8List.fromList(await contentKey.extractBytes());
     final mcNonce = _algo.newNonce();
     final mcBox = await _algo.encrypt(
       utf8.encode(payload.text),
@@ -234,8 +242,7 @@ class EncryptionService {
       'timestamp': payload.timestamp,
       'fs_v': 1,
       'fs_multi': 1,
-      'mc_cipher':
-          base64Encode([...mcBox.cipherText, ...mcBox.mac.bytes]),
+      'mc_cipher': base64Encode([...mcBox.cipherText, ...mcBox.mac.bytes]),
       'mc_nonce': base64Encode(mcNonce),
       'fs_wraps': wraps,
       if (includeLegacyFallback)
@@ -284,14 +291,17 @@ class EncryptionService {
     required EncryptedMessage message,
     RatchetState? ratchetState,
     Map<String, RatchetState>? allRatchetStates,
+    FsReplayCheck? isFsReplay,
   }) async {
     // Decrypt outer layer once to get the full envelope map.
     final key = await _deriveSymmetricKey(
       localPrivateKeyBase64: recipientPrivateKeyBase64,
       remotePublicKeyBase64: senderPublicKeyBase64,
     );
-    final allBytes = base64Decode(_fixBase64(_sanitizeBase64(message.ciphertextBase64)));
-    final nonce = base64Decode(_fixBase64(_sanitizeBase64(message.nonceBase64)));
+    final allBytes =
+        base64Decode(_fixBase64(_sanitizeBase64(message.ciphertextBase64)));
+    final nonce =
+        base64Decode(_fixBase64(_sanitizeBase64(message.nonceBase64)));
     final mac = Mac(allBytes.sublist(allBytes.length - 16));
     final cipherText = allBytes.sublist(0, allBytes.length - 16);
     final box = SecretBox(cipherText, nonce: nonce, mac: mac);
@@ -304,15 +314,11 @@ class EncryptionService {
         map: map,
         ratchetState: ratchetState,
         allRatchetStates: allRatchetStates,
+        isFsReplay: isFsReplay,
       );
     }
 
     final bool isFsEncrypted = map['fs_v'] != null && map['fs_cipher'] != null;
-
-    assert(() {
-      print('[ENC-DECRYPT] isFsEncrypted=$isFsEncrypted, hasRatchetState=${ratchetState != null}, fs_session=${map['fs_session']}, fs_counter=${map['fs_counter']}');
-      return true;
-    }());
 
     if (isFsEncrypted) {
       // §7.3: Per-device ratchet selection — match by fs_session from envelope
@@ -322,11 +328,7 @@ class EncryptionService {
         effectiveRatchet = allRatchetStates[envelopeFsSession] ?? ratchetState;
       }
 
-      print('[FS-DECRYPT-PROD] FS msg detected - session=$envelopeFsSession, counter=${map['fs_counter']}, hasRatchet=${effectiveRatchet != null}');
-
       if (effectiveRatchet == null) {
-        print('[FS-DECRYPT-PROD] WARN: FS msg but ratchetState is NULL — '
-            'session was reset, inner FS content unrecoverable');
         // The outer legacy layer was decrypted successfully, but the FS
         // inner payload requires the ratchet state which is gone (identity
         // reset, app reinstall, etc.).  Return metadata-only result so the
@@ -345,12 +347,28 @@ class EncryptionService {
         );
       }
 
-      print('[FS-DECRYPT-PROD] Attempting FS decrypt with ratchet session=${effectiveRatchet.sessionId}');
       final fsCipher = base64Decode(map['fs_cipher'] as String);
       final fsNonce = base64Decode(map['fs_nonce'] as String);
-      final fsSessionId = map['fs_session'] as String? ?? effectiveRatchet.sessionId;
+      final fsSessionId =
+          map['fs_session'] as String? ?? effectiveRatchet.sessionId;
       final fsRatchetPub = map['fs_ratchet_pub'] as String;
       final fsCounter = map['fs_counter'] as int;
+
+      if (isFsReplay?.call(sessionId: fsSessionId, counter: fsCounter) ??
+          false) {
+        return DecryptionResult(
+          payload: PlaintextPayload(
+            senderId: map['senderId'] as String,
+            recipientId: map['recipientId'] as String,
+            text: '',
+            timestamp: map['timestamp'] as int,
+            senderDisplayName: map['senderDisplayName'] as String?,
+            expireAfter: map['expireAfter'] as int?,
+            deleteAfterRead: (map['deleteAfterRead'] as bool?) ?? false,
+          ),
+          fsReplayDetected: true,
+        );
+      }
 
       final fsMessage = FsEncryptedMessage(
         sessionId: fsSessionId,
@@ -365,7 +383,6 @@ class EncryptionService {
         message: fsMessage,
       );
 
-      print('[FS-DECRYPT-PROD] FS decrypt SUCCESS - session=${newState.sessionId}, newCounter=${newState.recvCounter}');
       return DecryptionResult(
         payload: PlaintextPayload(
           senderId: map['senderId'] as String,
@@ -405,6 +422,7 @@ class EncryptionService {
     required Map<String, dynamic> map,
     RatchetState? ratchetState,
     Map<String, RatchetState>? allRatchetStates,
+    FsReplayCheck? isFsReplay,
   }) async {
     PlaintextPayload buildPayload(String text) => PlaintextPayload(
           senderId: map['senderId'] as String,
@@ -437,10 +455,19 @@ class EncryptionService {
     Uint8List? contentKeyBytes;
     RatchetState? newState;
     if (matchedWrap != null && effectiveRatchet != null) {
+      final fsSessionId = matchedWrap['fs_session'] as String;
+      final fsCounter = matchedWrap['fs_counter'] as int;
+      if (isFsReplay?.call(sessionId: fsSessionId, counter: fsCounter) ??
+          false) {
+        return DecryptionResult(
+          payload: buildPayload(''),
+          fsReplayDetected: true,
+        );
+      }
       final fsMessage = FsEncryptedMessage(
-        sessionId: matchedWrap['fs_session'] as String,
+        sessionId: fsSessionId,
         localRatchetPub: matchedWrap['fs_ratchet_pub'] as String,
-        counter: matchedWrap['fs_counter'] as int,
+        counter: fsCounter,
         ciphertext: base64Decode(matchedWrap['fs_cipher'] as String),
         nonce: base64Decode(matchedWrap['fs_nonce'] as String),
       );
@@ -487,8 +514,10 @@ class EncryptionService {
     required SecretKey key,
   }) async {
     try {
-      final allBytes = base64Decode(_fixBase64(_sanitizeBase64(message.ciphertextBase64)));
-      final nonce = base64Decode(_fixBase64(_sanitizeBase64(message.nonceBase64)));
+      final allBytes =
+          base64Decode(_fixBase64(_sanitizeBase64(message.ciphertextBase64)));
+      final nonce =
+          base64Decode(_fixBase64(_sanitizeBase64(message.nonceBase64)));
       if (allBytes.length < 16) return null;
 
       final mac = Mac(allBytes.sublist(allBytes.length - 16));
@@ -519,8 +548,10 @@ class EncryptionService {
     required SecretKey key,
   }) async {
     try {
-      final allBytes = base64Decode(_fixBase64(_sanitizeBase64(message.ciphertextBase64)));
-      final nonce = base64Decode(_fixBase64(_sanitizeBase64(message.nonceBase64)));
+      final allBytes =
+          base64Decode(_fixBase64(_sanitizeBase64(message.ciphertextBase64)));
+      final nonce =
+          base64Decode(_fixBase64(_sanitizeBase64(message.nonceBase64)));
       if (allBytes.length < 16) return null;
 
       final mac = Mac(allBytes.sublist(allBytes.length - 16));

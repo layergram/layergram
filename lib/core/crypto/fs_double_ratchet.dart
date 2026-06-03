@@ -129,7 +129,8 @@ class FsDoubleRatchet {
         secretKey: SecretKey(messageKey),
         nonce: const [0],
         info: utf8.encode('Layergram-FS-v1 nonce'),
-      )).extractBytes(),
+      ))
+          .extractBytes(),
     );
 
     final box = await _aesGcm.encrypt(
@@ -175,9 +176,7 @@ class FsDoubleRatchet {
     required FsEncryptedMessage message,
   }) async {
     // Prune expired skipped keys first.
-    final now = _nowSeconds();
-    final prunedSkipped = Map<_SkippedKeyId, _SkippedEntry>.from(state.skippedKeys)
-      ..removeWhere((_, v) => v.expiresAt < now);
+    final prunedSkipped = _removeExpiredSkippedKeys(state.skippedKeys);
 
     // Check if this is a skipped key.
     final skippedKey = _SkippedKeyId(
@@ -188,8 +187,15 @@ class FsDoubleRatchet {
     if (skippedEntry != null) {
       // Decrypt with stored skipped message key.
       prunedSkipped.remove(skippedKey);
-      final plain = await _decryptWithMessageKey(skippedEntry.messageKey, message);
-      return (plaintext: plain, newState: state.copyWith(skippedKeys: prunedSkipped));
+      final plain = await _decryptWithMessageKey(
+        skippedEntry.messageKey,
+        message,
+      );
+      _wipeSkippedEntry(skippedEntry);
+      return (
+        plaintext: plain,
+        newState: state.copyWith(skippedKeys: prunedSkipped)
+      );
     }
 
     // Decode the new ratchet pub from the message header.
@@ -208,7 +214,8 @@ class FsDoubleRatchet {
       );
 
       // Perform DH ratchet step (advance receiving chain).
-      final dhOut = await _dhRaw(workingState.localRatchetPriv, remoteRatchetPubBytes);
+      final dhOut =
+          await _dhRaw(workingState.localRatchetPriv, remoteRatchetPubBytes);
       FsKeyCodec.validateDhOutput(dhOut);
 
       final derived = await _rootKdf(dhOut, workingState.rootKey);
@@ -218,8 +225,9 @@ class FsDoubleRatchet {
 
       // Generate a new local ratchet key pair.
       final newLocalPair = await _generateRatchetKeyPair();
-      final newLocalPriv = Uint8List.fromList(await newLocalPair.extractPrivateKeyBytes());
-      final newLocalPubKey = await newLocalPair.extractPublicKey() as SimplePublicKey;
+      final newLocalPriv =
+          Uint8List.fromList(await newLocalPair.extractPrivateKeyBytes());
+      final newLocalPubKey = await newLocalPair.extractPublicKey();
       final newLocalPub = Uint8List.fromList(newLocalPubKey.bytes);
 
       // DH ratchet step again with the new local key → advance sending chain.
@@ -286,7 +294,8 @@ class FsDoubleRatchet {
     final expiresAt = _nowSeconds() + kSkippedKeyTtlSeconds;
 
     while (counter < upToCounter) {
-      final (:messageKey, :nextChainKey) = await _symmetricRatchetStep(chainKey);
+      final (:messageKey, :nextChainKey) =
+          await _symmetricRatchetStep(chainKey);
       skipped[_SkippedKeyId(ratchetPub: remoteRatchetPub, counter: counter)] =
           _SkippedEntry(messageKey: messageKey, expiresAt: expiresAt);
       chainKey = nextChainKey;
@@ -300,6 +309,24 @@ class FsDoubleRatchet {
     );
   }
 
+  static Map<_SkippedKeyId, _SkippedEntry> _removeExpiredSkippedKeys(
+    Map<dynamic, dynamic> skippedKeys,
+  ) {
+    final now = _nowSeconds();
+    final retained = <_SkippedKeyId, _SkippedEntry>{};
+    for (final entry in skippedKeys.entries) {
+      final key = entry.key;
+      final skipped = entry.value;
+      if (key is! _SkippedKeyId || skipped is! _SkippedEntry) continue;
+      if (skipped.expiresAt < now) {
+        _wipeSkippedEntry(skipped);
+      } else {
+        retained[key] = skipped;
+      }
+    }
+    return retained;
+  }
+
   /// One symmetric ratchet step: derive message key and next chain key.
   static Future<({Uint8List messageKey, Uint8List nextChainKey})>
       _symmetricRatchetStep(Uint8List chainKey) async {
@@ -307,13 +334,15 @@ class FsDoubleRatchet {
       secretKey: SecretKey(chainKey),
       nonce: const [0x00],
       info: utf8.encode('Layergram-FS-v1 message key'),
-    )).extractBytes());
+    ))
+        .extractBytes());
 
     final nextKey = Uint8List.fromList(await (await _hkdf32.deriveKey(
       secretKey: SecretKey(chainKey),
       nonce: const [0x01],
       info: utf8.encode('Layergram-FS-v1 chain key'),
-    )).extractBytes());
+    ))
+        .extractBytes());
 
     return (messageKey: msgKey, nextChainKey: nextKey);
   }
@@ -341,7 +370,8 @@ class FsDoubleRatchet {
       info: utf8.encode('Layergram-FS-v1 message key'),
     );
     final nonceBytes = message.nonce;
-    final ciphertext = message.ciphertext.sublist(0, message.ciphertext.length - 16);
+    final ciphertext =
+        message.ciphertext.sublist(0, message.ciphertext.length - 16);
     final mac = Mac(message.ciphertext.sublist(message.ciphertext.length - 16));
     final box = SecretBox(ciphertext, nonce: nonceBytes, mac: mac);
     try {
@@ -352,7 +382,8 @@ class FsDoubleRatchet {
     }
   }
 
-  static Future<Uint8List> _dhRaw(Uint8List localPriv, Uint8List remotePub) async {
+  static Future<Uint8List> _dhRaw(
+      Uint8List localPriv, Uint8List remotePub) async {
     final localPublic = await _x25519
         .newKeyPairFromSeed(localPriv)
         .then((p) => p.extractPublicKey());
@@ -369,7 +400,8 @@ class FsDoubleRatchet {
     return Uint8List.fromList(await shared.extractBytes());
   }
 
-  static Future<SimpleKeyPair> _generateRatchetKeyPair() => _x25519.newKeyPair();
+  static Future<SimpleKeyPair> _generateRatchetKeyPair() =>
+      _x25519.newKeyPair();
 
   static bool _bytesEqual(Uint8List a, Uint8List b) {
     if (a.length != b.length) return false;
@@ -381,12 +413,17 @@ class FsDoubleRatchet {
 
   static void _wipe(List<int> bytes) {
     if (bytes is Uint8List) {
-      for (var i = 0; i < bytes.length; i++) bytes[i] = 0;
+      for (var i = 0; i < bytes.length; i++) {
+        bytes[i] = 0;
+      }
     }
   }
 
-  static int _nowSeconds() =>
-      DateTime.now().millisecondsSinceEpoch ~/ 1000;
+  static void _wipeSkippedEntry(_SkippedEntry entry) {
+    _wipe(entry.messageKey);
+  }
+
+  static int _nowSeconds() => DateTime.now().millisecondsSinceEpoch ~/ 1000;
 }
 
 // ---------------------------------------------------------------------------

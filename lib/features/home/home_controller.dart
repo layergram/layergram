@@ -115,7 +115,12 @@ class HomeController {
         .encodeBytes(coverText, result.message.toRawBytes());
   }
 
-  Future<({EncryptedMessage message, bool isFsEncrypted, FsMessageClassification classification})> encryptForRecipient({
+  Future<
+      ({
+        EncryptedMessage message,
+        bool isFsEncrypted,
+        FsMessageClassification classification
+      })> encryptForRecipient({
     required String secretText,
     required RemoteIdentity recipient,
     int? expireAfter,
@@ -136,8 +141,8 @@ class HomeController {
       );
       // TODO: Track device changes for strict mode - currently assumes known device
       if (!strictController.canSendMessage(deviceChanged: false)) {
-        final reason = strictController.sendBlockReason(deviceChanged: false)
-            ?? 'Maximum Forward Secrecy prevents sending in current state';
+        final reason = strictController.sendBlockReason(deviceChanged: false) ??
+            'Maximum Forward Secrecy prevents sending in current state';
         throw StateError(reason);
       }
     }
@@ -196,8 +201,8 @@ class HomeController {
           ratchetState = ref.read(fsRatchetStateCacheProvider)[sessionId];
           // If not in cache but session is active, try to load from persistence
           if (ratchetState == null) {
-            print('[FS-SEND] Ratchet not in cache, attempting to load from persistence - sessionId=$sessionId');
-            ratchetState = await ref.read(fsRatchetPersistenceServiceProvider)
+            ratchetState = await ref
+                .read(fsRatchetPersistenceServiceProvider)
                 .loadRatchetState(sessionId);
             if (ratchetState != null) {
               // Put it back in cache for future use
@@ -205,12 +210,10 @@ class HomeController {
                     ...cache,
                     sessionId!: ratchetState!,
                   });
-              print('[FS-SEND] Ratchet loaded from persistence and added to cache');
             } else {
               // CRITICAL: Ratchet state is missing from both cache and persistence.
               // This should never happen in normal operation - the session is inconsistent.
               // Mark session as broken and fall back to legacy encryption (safe default).
-              print('[FS-SEND] CRITICAL: Ratchet missing from both cache and persistence - marking session broken');
               sessionManager.markBroken();
             }
           }
@@ -218,7 +221,6 @@ class HomeController {
           // CRITICAL: State is fsActive but activeSessionId is null.
           // This is an inconsistent state - the session activation failed or was lost.
           // Mark session as broken to recover gracefully.
-          print('[FS-SEND] CRITICAL: State is $state but activeSessionId is null - session inconsistent, marking broken');
           sessionManager.markBroken();
         }
       }
@@ -239,9 +241,6 @@ class HomeController {
           if (collected.length >= 2) multiSessionRatchets = collected;
         }
       }
-
-      // Production logging for FS encryption
-      print('[FS-SEND] recipient=${recipient.identityId}, state=${sessionManager.state}, sessionId=$sessionId, ratchetAvailable=${ratchetState != null}, multiSessions=${multiSessionRatchets?.length ?? 0}');
 
       // Trigger UI refresh if FS state changed
       ref.read(fsRegistryVersionProvider.notifier).state++;
@@ -268,7 +267,6 @@ class HomeController {
       }
       outMessage = multi.message;
       isFsEncrypted = true;
-      print('[FS-SEND-RESULT] recipient=${recipient.identityId}, multiEnvelope wraps=${multi.newRatchetStates.length}');
     } else {
       final result = await ref.read(encryptionServiceProvider).encrypt(
             senderPrivateKeyBase64: privateKey,
@@ -278,9 +276,6 @@ class HomeController {
             fsExtension: fsExtension,
             ratchetState: ratchetState,
           );
-
-      // Production logging for encryption result
-      print('[FS-SEND-RESULT] recipient=${recipient.identityId}, usedFS=${result.newRatchetState != null}');
 
       // Save updated ratchet state if FS was used
       if (result.newRatchetState != null && sessionId != null) {
@@ -292,7 +287,9 @@ class HomeController {
             });
 
         // Persist to storage
-        await ref.read(fsRatchetPersistenceServiceProvider).saveRatchetState(newState);
+        await ref
+            .read(fsRatchetPersistenceServiceProvider)
+            .saveRatchetState(newState);
       }
 
       outMessage = result.message;
@@ -397,7 +394,8 @@ class HomeController {
     }
 
     // §12.3: Check in-memory cache first, then aux record persistence.
-    final fsController = ref.read(fsOpportunisticControllerProvider(contact.identityId));
+    final fsController =
+        ref.read(fsOpportunisticControllerProvider(contact.identityId));
     final cacheKey = '${contact.identityId}|${message.id}';
     final cached = fsController.getCachedPlaintext(cacheKey);
     if (cached != null) return cached;
@@ -428,8 +426,6 @@ class HomeController {
       ratchetState = allRatchets[activeSessionId];
     }
 
-    print('[FS-CHAT-DECRYPT] contact=${contact.identityId}, sessionState=${sessionManager.state}, activeSessionId=$activeSessionId, ratchetInCache=${ratchetState != null}, totalRatchets=${allRatchets.length}');
-
     final encMessage = EncryptedMessage(
       version: 1,
       senderId: message.senderId,
@@ -439,47 +435,44 @@ class HomeController {
     );
 
     final result = await ref.read(encryptionServiceProvider).decrypt(
-      recipientPrivateKeyBase64: privateKey,
-      senderPublicKeyBase64: contact.publicKeyBase64,
-      message: encMessage,
-      ratchetState: ratchetState,
-      allRatchetStates: allRatchets,
-    );
+          recipientPrivateKeyBase64: privateKey,
+          senderPublicKeyBase64: contact.publicKeyBase64,
+          message: encMessage,
+          ratchetState: ratchetState,
+          allRatchetStates: allRatchets,
+          isFsReplay: fsController.isMessageReplay,
+        );
+
+    if (result.fsReplayDetected) return null;
 
     // FS-encrypted but ratchet state is missing (identity reset / broken session)
     if (result.fsDecryptFailed) {
-      print('[FS-CHAT-DECRYPT] FS decrypt failed — ratchet lost, inner content unrecoverable');
       return null;
     }
 
-    // Production logging for successful decryption
     final isFs = result.newRatchetState != null;
-    if (isFs) {
-      print('[FS-CHAT-DECRYPT] SUCCESS with FS - session=${result.newRatchetState!.sessionId}, counter=${result.newRatchetState!.recvCounter}');
-    } else {
-      print('[FS-CHAT-DECRYPT] SUCCESS with LEGACY (no FS)');
-    }
 
     // Update ratchet state if it changed (e.g., received new message advanced counter)
     if (result.newRatchetState != null) {
       final newState = result.newRatchetState!;
-      print('[FS-CHAT-DECRYPT] Updating cache - session=${newState.sessionId}, send=${newState.sendCounter}, recv=${newState.recvCounter}');
       ref.read(fsRatchetStateCacheProvider.notifier).update((cache) => {
             ...cache,
             newState.sessionId: newState,
           });
       // Persist updated state
-      await ref.read(fsRatchetPersistenceServiceProvider).saveRatchetState(newState);
+      await ref
+          .read(fsRatchetPersistenceServiceProvider)
+          .saveRatchetState(newState);
 
       // Cache FS-decrypted plaintext (§12.3) — ratchet has already advanced
       fsController.cachePlaintext(cacheKey, result.payload.text);
 
       // Persist to encrypted aux record for restart survival
       await ref.read(fsPlaintextPersistenceServiceProvider).savePlaintext(
-        messageId: message.id,
-        plaintext: result.payload.text,
-        contactId: contact.identityId,
-      );
+            messageId: message.id,
+            plaintext: result.payload.text,
+            contactId: contact.identityId,
+          );
 
       // Record message counter in replay cache (§8.7)
       fsController.recordMessageProcessed(
@@ -489,9 +482,9 @@ class HomeController {
     }
 
     // Downgrade detection: record the security level (§7.6)
-    final chatDecryptLevel = (isFs
-        ? FsMessageClassification.fsOnly
-        : FsMessageClassification.legacy).downgradeLevel;
+    final chatDecryptLevel =
+        (isFs ? FsMessageClassification.fsOnly : FsMessageClassification.legacy)
+            .downgradeLevel;
     if (chatDecryptLevel != null) {
       fsController.recordSecurityLevel(
         contactId: contact.identityId,
@@ -511,7 +504,8 @@ class HomeController {
 
     // §7.3: Get ratchet state for decryption — supports per-device sessions.
     final allRatchets = ref.read(fsRatchetStateCacheProvider);
-    final fsController = ref.read(fsOpportunisticControllerProvider(contact.identityId));
+    final fsController =
+        ref.read(fsOpportunisticControllerProvider(contact.identityId));
     final sessionManager = fsController.sessionManager;
     final activeSessionId = sessionManager.activeSessionId;
     RatchetState? ratchetState;
@@ -554,18 +548,21 @@ class HomeController {
 
       try {
         final result = await ref.read(encryptionServiceProvider).decrypt(
-          recipientPrivateKeyBase64: privateKey,
-          senderPublicKeyBase64: contact.publicKeyBase64,
-          message: EncryptedMessage(
-            version: 1,
-            senderId: message.senderId,
-            recipientId: message.recipientId,
-            nonceBase64: message.nonceBase64 ?? '',
-            ciphertextBase64: message.ciphertextBase64 ?? '',
-          ),
-          ratchetState: ratchetState,
-          allRatchetStates: allRatchets,
-        );
+              recipientPrivateKeyBase64: privateKey,
+              senderPublicKeyBase64: contact.publicKeyBase64,
+              message: EncryptedMessage(
+                version: 1,
+                senderId: message.senderId,
+                recipientId: message.recipientId,
+                nonceBase64: message.nonceBase64 ?? '',
+                ciphertextBase64: message.ciphertextBase64 ?? '',
+              ),
+              ratchetState: ratchetState,
+              allRatchetStates: allRatchets,
+              isFsReplay: fsController.isMessageReplay,
+            );
+
+        if (result.fsReplayDetected) continue;
 
         // FS message whose ratchet is gone — skip to next message
         if (result.fsDecryptFailed) continue;
@@ -579,7 +576,9 @@ class HomeController {
                 activeSessionId: newState,
               });
           // Persist updated state (don't await in loop)
-          unawaited(ref.read(fsRatchetPersistenceServiceProvider).saveRatchetState(newState));
+          unawaited(ref
+              .read(fsRatchetPersistenceServiceProvider)
+              .saveRatchetState(newState));
         }
 
         return DecryptedMessagePreview(
@@ -645,9 +644,7 @@ class HomeController {
         return null;
       }
     } else {
-      candidates = ref
-          .read(stegoDecoderProvider)
-          .decodeByteCandidates(source);
+      candidates = ref.read(stegoDecoderProvider).decodeByteCandidates(source);
       if (candidates.isEmpty) return null;
     }
 
@@ -675,7 +672,8 @@ class HomeController {
         // §7.3: Get ratchet state for decryption — supports per-device sessions.
         final allRatchets = ref.read(fsRatchetStateCacheProvider);
         RatchetState? ratchetState;
-        final fsController = ref.read(fsOpportunisticControllerProvider(contact.identityId));
+        final fsController =
+            ref.read(fsOpportunisticControllerProvider(contact.identityId));
         final sessionManager = fsController.sessionManager;
         final activeSessionId = sessionManager.activeSessionId;
         if (activeSessionId != null) {
@@ -691,9 +689,14 @@ class HomeController {
             message: msg,
             ratchetState: ratchetState,
             allRatchetStates: allRatchets,
+            isFsReplay: fsController.isMessageReplay,
           );
         } catch (_) {
           // Wrong key - try next contact
+          continue;
+        }
+
+        if (result.fsReplayDetected) {
           continue;
         }
 
@@ -709,7 +712,9 @@ class HomeController {
                 activeSessionId: newState,
               });
           // Persist updated state
-          unawaited(ref.read(fsRatchetPersistenceServiceProvider).saveRatchetState(newState));
+          unawaited(ref
+              .read(fsRatchetPersistenceServiceProvider)
+              .saveRatchetState(newState));
 
           // Record message counter in replay cache (§8.7)
           fsCtrl.recordMessageProcessed(
@@ -720,8 +725,9 @@ class HomeController {
 
         // Downgrade detection: record the incoming message security level (§7.6)
         final incomingDowngradeLevel = (isFs
-            ? FsMessageClassification.fsOnly
-            : FsMessageClassification.legacy).downgradeLevel;
+                ? FsMessageClassification.fsOnly
+                : FsMessageClassification.legacy)
+            .downgradeLevel;
         if (incomingDowngradeLevel != null) {
           fsCtrl.recordSecurityLevel(
             contactId: contact.identityId,
@@ -749,15 +755,10 @@ class HomeController {
           if (fsResult.type != FsIncomingType.noExtension) {
             ref.read(fsRegistryVersionProvider.notifier).state++;
           }
-          // §7.9: New device/session detected for this contact
-          if (fsResult.newDeviceDetected) {
-            print('[FS-MULTI-DEVICE] New device detected for ${contact.identityId}');
-          }
         }
 
         // FS-encrypted but ratchet state is missing (identity reset)
         if (result.fsDecryptFailed) {
-          print('[FS-DECODE] FS content unrecoverable — handshake re-started via envelope');
           return const DecodeOutcome.fsLost();
         }
 
@@ -958,7 +959,6 @@ class HomeController {
     return input.padRight(input.length + (4 - rem), '=');
   }
 
-
   RemoteIdentity parseIdentityBlock(String text) {
     final scoped = _withinIdentityBlock(text);
     final name = _extract(scoped, 'Name:') ?? 'Unknown';
@@ -1027,7 +1027,8 @@ class HomeController {
 
         // Derive device key from identity key (simplified: use identity key as device key)
         final ikPrivBytes = base64Decode(privateKey);
-        final dkPrivBytes = ikPrivBytes; // In production, derive separate device key
+        final dkPrivBytes =
+            ikPrivBytes; // In production, derive separate device key
 
         final initPayload = await FsHandshake.generateFsInit(
           ikAPriv: ikPrivBytes,
@@ -1037,7 +1038,8 @@ class HomeController {
         // Store the ephemeral key for later use in FS_CONFIRM
         sessionManager.setPendingInitEphemeralPriv(initPayload.ekAPrivBytes);
 
-        return await fsController.buildOutgoingExtension(pendingInit: initPayload);
+        return await fsController.buildOutgoingExtension(
+            pendingInit: initPayload);
 
       case FsSessionState.fsInitSeen:
         // Generate FS_REPLY in response to received FS_INIT
@@ -1051,7 +1053,8 @@ class HomeController {
 
         // Use local identity keys (simplified: derive device key from identity key)
         final ikPrivBytes = base64Decode(privateKey);
-        final dkPrivBytes = ikPrivBytes; // In production, derive separate device key
+        final dkPrivBytes =
+            ikPrivBytes; // In production, derive separate device key
 
         try {
           final replyPayload = await FsHandshake.processFsInitAsResponder(
@@ -1075,7 +1078,8 @@ class HomeController {
             replyPayload.partialState.transcriptHash,
           );
 
-          return await fsController.buildOutgoingExtension(pendingReply: replyPayload);
+          return await fsController.buildOutgoingExtension(
+              pendingReply: replyPayload);
         } catch (e) {
           // Failed to generate reply, skip FS extension this message
           return await fsController.buildOutgoingExtension();
@@ -1094,7 +1098,8 @@ class HomeController {
 
         // Use local identity and device keys
         final ikPrivBytes = base64Decode(privateKey);
-        final dkPrivBytes = ikPrivBytes; // In production, derive separate device key
+        final dkPrivBytes =
+            ikPrivBytes; // In production, derive separate device key
 
         // Retrieve the init message we originally sent
         final sentInit = sessionManager.storedSentInitMessage;
@@ -1113,7 +1118,8 @@ class HomeController {
             reply: replyMessage,
           );
 
-          return await fsController.buildOutgoingExtension(pendingConfirm: confirmPayload);
+          return await fsController.buildOutgoingExtension(
+              pendingConfirm: confirmPayload);
         } catch (e) {
           // Failed to generate confirm, skip FS extension this message
           return await fsController.buildOutgoingExtension();
@@ -1154,7 +1160,15 @@ class DecodeOutcome {
   final String? errorCode;
 }
 
-enum DecodeKind { success, noData, notForMe, unknownSender, expired, fsLost, error }
+enum DecodeKind {
+  success,
+  noData,
+  notForMe,
+  unknownSender,
+  expired,
+  fsLost,
+  error
+}
 
 final homeControllerProvider = Provider<HomeController>((ref) {
   final controller = HomeController(ref);
@@ -1181,6 +1195,8 @@ final homeControllerProvider = Provider<HomeController>((ref) {
   return controller;
 });
 final encodeRecipientProvider = StateProvider<RemoteIdentity?>((_) => null);
+
 /// Stores composer handoff state during narrow↔wide layout transitions.
 /// Survives HomeView State disposal/recreation.
-final pendingComposerStateProvider = StateProvider<Map<String, dynamic>?>((_) => null);
+final pendingComposerStateProvider =
+    StateProvider<Map<String, dynamic>?>((_) => null);

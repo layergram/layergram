@@ -43,8 +43,8 @@ FsInitMessage _stubInit({
 }) =>
     FsInitMessage(
       initId: initId,
-      initiatorDevicePub: 'AQ' + 'A' * 42,
-      initiatorEphemeralPub: 'AQ' + 'A' * 42,
+      initiatorDevicePub: 'AQ${'A' * 42}',
+      initiatorEphemeralPub: 'AQ${'A' * 42}',
       caps: const ['lgfs1'],
       createdAt: createdAt ?? _kNow,
     );
@@ -57,9 +57,9 @@ FsReplyMessage _stubReply({
     FsReplyMessage(
       initId: initId,
       replyId: replyId,
-      responderDevicePub: 'AQ' + 'A' * 42,
-      responderEphemeralPub: 'AQ' + 'A' * 42,
-      responderInitialRatchetPub: 'AQ' + 'A' * 42,
+      responderDevicePub: 'AQ${'A' * 42}',
+      responderEphemeralPub: 'AQ${'A' * 42}',
+      responderInitialRatchetPub: 'AQ${'A' * 42}',
       caps: const ['lgfs1'],
       createdAt: createdAt ?? _kNow,
     );
@@ -73,14 +73,14 @@ FsConfirmMessage _stubConfirm({
       replyId: replyId,
       transcriptHash: 'A' * 43,
       confirmTag: 'A' * 43,
-      initiatorInitialRatchetPub: 'AQ' + 'A' * 42,
+      initiatorInitialRatchetPub: 'AQ${'A' * 42}',
     );
 
 FsInitPayload _stubInitPayload({String initId = 'initAAA', int? createdAt}) =>
     FsInitPayload(
       initId: initId,
-      initiatorDevicePub: 'AQ' + 'A' * 42,
-      initiatorEphemeralPub: 'AQ' + 'A' * 42,
+      initiatorDevicePub: 'AQ${'A' * 42}',
+      initiatorEphemeralPub: 'AQ${'A' * 42}',
       caps: const ['lgfs1'],
       createdAt: createdAt ?? _kNow,
       ekAPrivBytes: Uint8List(32),
@@ -94,9 +94,9 @@ FsReplyPayload _stubReplyPayload({
     FsReplyPayload(
       initId: initId,
       replyId: replyId,
-      responderDevicePub: 'AQ' + 'A' * 42,
-      responderEphemeralPub: 'AQ' + 'A' * 42,
-      responderInitialRatchetPub: 'AQ' + 'A' * 42,
+      responderDevicePub: 'AQ${'A' * 42}',
+      responderEphemeralPub: 'AQ${'A' * 42}',
+      responderInitialRatchetPub: 'AQ${'A' * 42}',
       responderInitialRatchetPriv: Uint8List(32),
       caps: const ['lgfs1'],
       createdAt: createdAt ?? _kNow,
@@ -118,7 +118,7 @@ FsConfirmPayload _stubConfirmPayload({
       replyId: replyId,
       transcriptHash: 'A' * 43,
       confirmTag: 'A' * 43,
-      initiatorInitialRatchetPub: 'AQ' + 'A' * 42,
+      initiatorInitialRatchetPub: 'AQ${'A' * 42}',
       initiatorInitialRatchetPriv: Uint8List(32),
       partialState: FsHandshakePartialState(
         transcriptHash: Uint8List(32),
@@ -137,7 +137,9 @@ const int _kNow = 1700000000;
 
 void main() {
   // T4.1 — Full happy path.
-  test('T4.1: Alice → fs_init_sent; Bob → fs_init_seen → fs_reply_sent → fs_reply_seen; Alice → fs_confirm_sent; Bob → fs_confirmed; both → fs_active', () {
+  test(
+      'T4.1: Alice → fs_init_sent; Bob → fs_init_seen → fs_reply_sent → fs_reply_seen; Alice → fs_confirm_sent; Bob → fs_confirmed; both → fs_active',
+      () {
     final aliceMgr = FsSessionManager(clock: _FakeClock(_kNow));
     final bobMgr = FsSessionManager(clock: _FakeClock(_kNow));
 
@@ -193,7 +195,7 @@ void main() {
     final aliceMgr = FsSessionManager(clock: _FakeClock(_kNow));
     final bobMgr = FsSessionManager(clock: _FakeClock(_kNow));
 
-    const aliceInitId = 'aaaaaaa';  // lexicographically smaller → Alice wins
+    const aliceInitId = 'aaaaaaa'; // lexicographically smaller → Alice wins
     const bobInitId = 'zzzzzzz';
 
     // Both send their FS_INIT.
@@ -246,7 +248,8 @@ void main() {
     expect(bobMgr.state, equals(FsSessionState.fsActive));
 
     // Duplicate CONFIRM.
-    final r = bobMgr.processFsConfirmReceived(message: _stubConfirm(), verified: true);
+    final r = bobMgr.processFsConfirmReceived(
+        message: _stubConfirm(), verified: true);
     expect(r.accepted, isFalse,
         reason: 'Duplicate FS_CONFIRM must be rejected in fsActive state');
     expect(bobMgr.state, equals(FsSessionState.fsActive),
@@ -310,7 +313,9 @@ void main() {
   });
 
   // T4.8 — Handshake TTL expired: local reset.
-  test('T4.8: FS_REPLY rejected and state reset when local handshake TTL expires', () {
+  test(
+      'T4.8: FS_REPLY rejected and state reset when local handshake TTL expires',
+      () {
     final clock = _FakeClock(_kNow);
     final mgr = FsSessionManager(
       clock: clock,
@@ -347,7 +352,9 @@ void main() {
   });
 
   // T4.10 — fsBroken blocks outgoing FS_INIT but accepts incoming (partner reset).
-  test('T4.10: fsBroken blocks FS_INIT sending but accepts incoming FS_INIT (partner reset)', () {
+  test(
+      'T4.10: fsBroken blocks FS_INIT sending but accepts incoming FS_INIT (partner reset)',
+      () {
     final mgr = FsSessionManager(clock: _FakeClock(_kNow));
 
     // Force state to fsBroken using setStateForTesting
@@ -366,13 +373,15 @@ void main() {
       localInitId: '',
     );
     expect(receiveResult.accepted, isTrue,
-        reason: 'Incoming FS_INIT in fsBroken must be accepted (partner reset)');
+        reason:
+            'Incoming FS_INIT in fsBroken must be accepted (partner reset)');
     expect(mgr.state, equals(FsSessionState.fsInitSeen),
         reason: 'State must transition to fsInitSeen after partner reset');
   });
 
   // T4.11 — fsActive accepts incoming FS_INIT (partner identity reset).
-  test('T4.11: fsActive accepts incoming FS_INIT after partner identity reset', () {
+  test('T4.11: fsActive accepts incoming FS_INIT after partner identity reset',
+      () {
     final mgr = FsSessionManager(clock: _FakeClock(_kNow));
 
     mgr.setStateForTesting(FsSessionState.fsActive);
@@ -383,7 +392,8 @@ void main() {
       localInitId: '',
     );
     expect(receiveResult.accepted, isTrue,
-        reason: 'Incoming FS_INIT in fsActive must be accepted (partner reset)');
+        reason:
+            'Incoming FS_INIT in fsActive must be accepted (partner reset)');
     expect(mgr.state, equals(FsSessionState.fsInitSeen));
     expect(mgr.activeSessionId, isNull,
         reason: 'Old session must be cleared on partner reset');

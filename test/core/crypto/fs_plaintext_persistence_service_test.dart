@@ -10,6 +10,7 @@
 ///  7. Records are opaque — kind is only visible after decryption.
 ///  8. Plausible deniability: FS plaintext records are indistinguishable from
 ///     other aux records in the Hive box.
+library;
 
 import 'dart:io';
 import 'dart:typed_data';
@@ -58,7 +59,8 @@ void main() {
 
   // ── Round-trip ──────────────────────────────────────────────────────────
 
-  test('savePlaintext + loadPlaintext round-trips through aux records', () async {
+  test('savePlaintext + loadPlaintext round-trips through aux records',
+      () async {
     final auxRepo = await buildAuxRepo();
     final service = FsPlaintextPersistenceService(auxRepository: auxRepo);
 
@@ -246,7 +248,9 @@ void main() {
 
   // ── Plausible deniability ──────────────────────────────────────────────
 
-  test('FS plaintext records are externally indistinguishable from other aux records', () async {
+  test(
+      'FS plaintext records are externally indistinguishable from other aux records',
+      () async {
     final auxRepo = await buildAuxRepo();
     final service = FsPlaintextPersistenceService(auxRepository: auxRepo);
 
@@ -268,14 +272,15 @@ void main() {
         .toList();
     expect(allKeys.length, greaterThanOrEqualTo(2));
 
-    // Each record should have the same external structure
+    // Each record should have the same external structure as ordinary sealed
+    // archive records: no cleartext aux marker and no cleartext record ID.
     for (final key in allKeys) {
       final raw = box.get(key)!;
-      // All aux records have 'a' flag and encrypted payload
       expect(raw.containsKey('encryptedRecord'), isTrue);
-      expect(raw.containsKey('a'), isTrue);
-      expect(raw['a'], isTrue);
-      // No 'kind', 'msgId', or 'pt' visible externally
+      expect(raw.keys, containsAll(['encryptedRecord']));
+      expect(raw.keys.length, equals(1));
+      expect(raw.containsKey('a'), isFalse);
+      expect(raw.containsKey('_rid'), isFalse);
       expect(raw.containsKey('kind'), isFalse);
       expect(raw.containsKey('msgId'), isFalse);
       expect(raw.containsKey('pt'), isFalse);

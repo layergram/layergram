@@ -102,8 +102,8 @@ class FsSessionManager {
   FsSessionManager({
     FsClock? clock,
     this.maxHandshakeTtlSeconds = 7 * 24 * 60 * 60, // 7 days
-    this.maxCreatedAtSkewSeconds = 5 * 60,           // 5 min tolerance
-    this.maxCreatedAtAgeSeconds = 7 * 24 * 60 * 60,  // 7 days
+    this.maxCreatedAtSkewSeconds = 5 * 60, // 5 min tolerance
+    this.maxCreatedAtAgeSeconds = 7 * 24 * 60 * 60, // 7 days
   }) : _clock = clock ?? const _WallClock();
 
   final FsClock _clock;
@@ -302,7 +302,7 @@ class FsSessionManager {
   /// strings per §8.3.4. When provided, they are used instead of bare initId.
   FsSessionTransitionResult<FsInitMessage> processFsInitReceived({
     required FsInitMessage message,
-    required String localInitId,   // non-empty only if state == fsInitSent
+    required String localInitId, // non-empty only if state == fsInitSent
     String? localCanonical,
     String? remoteCanonical,
   }) {
@@ -317,8 +317,6 @@ class FsSessionManager {
     // means the remote partner has reset their FS state (e.g., identity
     // restore).  Accept by resetting local state first (§8.8 recovery).
     if (_isTerminal()) {
-      print('[FS-PARTNER-RESET] Received fs_init while in $_state — '
-          'partner likely reset.  Clearing local FS state and accepting.');
       reset();
       // Fall through to the normal acceptance path below.
     }
@@ -510,10 +508,10 @@ class FsSessionManager {
     if (_state == FsSessionState.fsActive) {
       _state = FsSessionState.strictRequested;
     } else if (_state == FsSessionState.legacyOnly ||
-               _state == FsSessionState.fsInitSent ||
-               _state == FsSessionState.fsInitSeen ||
-               _state == FsSessionState.fsReplySent ||
-               _state == FsSessionState.fsReplySeen) {
+        _state == FsSessionState.fsInitSent ||
+        _state == FsSessionState.fsInitSeen ||
+        _state == FsSessionState.fsReplySent ||
+        _state == FsSessionState.fsReplySeen) {
       // Set flag to activate strict mode after handshake completes
       _strictRequestedBeforeHandshake = true;
     }
@@ -646,10 +644,13 @@ class FsSessionTransitionResult<T> {
   });
 
   factory FsSessionTransitionResult.ok(FsSessionState newState, T? value) =>
-      FsSessionTransitionResult._(accepted: true, newState: newState, value: value);
+      FsSessionTransitionResult._(
+          accepted: true, newState: newState, value: value);
 
-  factory FsSessionTransitionResult.rejected(FsSessionState newState, String reason) =>
-      FsSessionTransitionResult._(accepted: false, newState: newState, reason: reason);
+  factory FsSessionTransitionResult.rejected(
+          FsSessionState newState, String reason) =>
+      FsSessionTransitionResult._(
+          accepted: false, newState: newState, reason: reason);
 
   final bool accepted;
   final FsSessionState newState;

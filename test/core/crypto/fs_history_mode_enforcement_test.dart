@@ -7,6 +7,7 @@
 ///   3. shouldPersistFsState — combined mode/persistence checks.
 ///   4. AuxRecordRepository.cleanUndecryptableRecords — §13.7.
 ///   5. Localization key coverage for §14.5 warnings + §13.7 cleanup.
+library;
 
 import 'dart:io';
 import 'dart:typed_data';
@@ -93,7 +94,8 @@ void main() {
       );
     });
 
-    test('keepEncrypted: wipes memory cache but preserves aux records', () async {
+    test('keepEncrypted: wipes memory cache but preserves aux records',
+        () async {
       cache.put('msg-1', 'hello from cache');
       await ptPersistence.savePlaintext(
         messageId: 'msg-1',
@@ -160,7 +162,8 @@ void main() {
       expect(state!.fsState, FsSessionState.fsActive);
     });
 
-    test('ephemeral: wipes cache, plaintext, AND marks registry broken', () async {
+    test('ephemeral: wipes cache, plaintext, AND marks registry broken',
+        () async {
       cache.put('msg-1', 'hello from cache');
       await ptPersistence.savePlaintext(
         messageId: 'msg-1',
@@ -194,7 +197,9 @@ void main() {
       expect(state!.fsState, FsSessionState.fsBroken);
     });
 
-    test('ephemeral FS persistence: marks registry broken even in keepEncrypted history', () async {
+    test(
+        'ephemeral FS persistence: marks registry broken even in keepEncrypted history',
+        () async {
       registry.upsert(const FsContactSecurityState(
         contactId: 'c1',
         identityContext: 'ctx-1',
@@ -216,7 +221,8 @@ void main() {
       expect(state!.fsState, FsSessionState.fsBroken);
     });
 
-    test('volatile + ephemeral FS: wipes plaintext AND marks registry broken', () async {
+    test('volatile + ephemeral FS: wipes plaintext AND marks registry broken',
+        () async {
       cache.put('msg-1', 'secret');
       await ptPersistence.savePlaintext(
         messageId: 'msg-1',
@@ -269,8 +275,10 @@ void main() {
       );
 
       // ctx-1 broken, ctx-2 still active
-      final s1 = registry.lookup(contactId: 'c1', identityContext: 'ctx-1', sessionId: 's1');
-      final s2 = registry.lookup(contactId: 'c1', identityContext: 'ctx-2', sessionId: 's2');
+      final s1 = registry.lookup(
+          contactId: 'c1', identityContext: 'ctx-1', sessionId: 's1');
+      final s2 = registry.lookup(
+          contactId: 'c1', identityContext: 'ctx-2', sessionId: 's2');
       expect(s1!.fsState, FsSessionState.fsBroken);
       expect(s2!.fsState, FsSessionState.fsActive);
     });
@@ -299,7 +307,8 @@ void main() {
       );
     });
 
-    test('shouldPersistFsState: false for ephemeral history or ephemeral FS', () {
+    test('shouldPersistFsState: false for ephemeral history or ephemeral FS',
+        () {
       expect(
         FsHistoryModeEnforcement.shouldPersistFsState(
           historyMode: PassphraseHistoryMode.keepEncrypted,
@@ -396,7 +405,7 @@ void main() {
       expect(repo.getAllAuxRecordIds().length, 3);
     });
 
-    test('records from different key context are undecryptable', () async {
+    test('modern records from different key context are preserved', () async {
       // Write with key A
       final keyA = await AuxRecordCipher.deriveAuxStorageKey(
         Uint8List(32)..fillRange(0, 32, 0x11),
@@ -412,9 +421,11 @@ void main() {
       final repoB = AuxRecordRepository();
       repoB.setActiveContext(scopeToken: 'test-scope', auxStorageKey: keyB);
 
-      // Clean with key B — should delete key A's record
+      // Clean with key B. Modern aux records intentionally have no cleartext
+      // marker, so an undecryptable record is preserved unless it is a legacy
+      // marked aux record.
       final deleted = await repoB.cleanUndecryptableRecords();
-      expect(deleted, 1);
+      expect(deleted, 0);
     });
 
     test('returns 0 when no scope is set', () async {

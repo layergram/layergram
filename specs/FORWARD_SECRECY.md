@@ -38,6 +38,11 @@ FS is negotiated with three control messages carried as opaque extensions inside
 encrypted messages: `fs_init` → `fs_reply` → `fs_confirm`
 (see `lib/core/crypto/fs_control_messages.dart`).
 
+The `fs_confirm` message is verified against both the locally stored transcript hash and the
+wire `transcriptHash` field. A confirm whose MAC is valid for the stored transcript but whose
+declared transcript differs is rejected, so the final handshake message cannot carry an
+inconsistent transcript.
+
 The per-contact handshake is driven by `FsOpportunisticController`
 (`lib/core/crypto/fs_opportunistic_controller.dart`), which tracks the session state
 (`legacyOnly`, `fsInitSent/Seen`, `fsReplySent/Seen`, `fsConfirmSent`, `fsConfirmed`,
@@ -86,6 +91,9 @@ Each contact has a per-contact security mode (`lib/core/crypto/fs_security_mode.
 - **Strict (Maximum FS)** — single confirmed device per side, no legacy fallback. Requires
   explicit mutual consent; while requested but not yet confirmed the UI shows a distinct
   "Maximum FS requested" pending state, not active Strict (spec §14.6.3).
+  If a new device/session appears after Strict is active, sending is paused until the session
+  is repaired or Maximum FS is explicitly disabled; the implementation must not silently fall
+  back to legacy encryption in this state.
 
 ## Per-message classification
 
@@ -107,6 +115,23 @@ record; their semantic `kind` is only visible after decryption in the correct id
 | `fs_mode_v1` | per-contact security mode | `fs_security_mode.dart` |
 | `fs_pp_v1` | passphrase-context security preferences | `fs_passphrase_preferences.dart` |
 
+Modern auxiliary records are stored as:
+
+```text
+m|{scopeToken}|{randomStorageId} -> { encryptedRecord: "<base64url blob>" }
+```
+
+The blob embeds a random 128-bit record identifier before the derived nonce, ciphertext, and
+authentication tag. That record identifier is random-looking and is used only to rederive the
+per-record key/nonce pair; it is not stored as separate cleartext metadata. Legacy development
+records that still contain `_rid` or an aux marker are accepted for migration, but new writes
+must not emit those fields.
+
+Cleanup of undecryptable local records is conservative: legacy records that carry the old
+cleartext aux marker can be deleted when malformed or undecryptable, while modern unmarked
+records are preserved unless they decrypt successfully and match the intended record kind.
+This avoids deleting ordinary message records or future opaque archive formats by mistake.
+
 Decrypted plaintext for display lives in an in-memory cache
 (`fs_plaintext_cache.dart`) and is cleared on lock, timeout, passphrase expulsion, and app
 lifecycle events (`fs_passphrase_timeout_controller.dart`). On identity reset, all auxiliary
@@ -126,6 +151,11 @@ corrupting state or exhausting storage (`lib/core/crypto/fs_dos_resistance.dart`
 - max orphan auxiliary control records: **16** (spec recommended: 8 — see "Divergences").
 
 Corrupted handshakes cannot block future valid handshakes after cleanup.
+
+Message replay checks happen after the identity-encrypted outer envelope is authenticated and
+parsed, but before the FS ratchet is advanced. A replayed `(fs_session, fs_counter)` is rejected
+without consuming skipped keys, persisting plaintext, or mutating ratchet state. Skipped message
+keys are bounded, TTL-pruned, and wiped best-effort before removal or after successful use.
 
 ## Secure memory handling limitations (§20.2)
 
@@ -171,19 +201,23 @@ Before enabling FS for normal users, the implementation must pass a security rev
 items below. This checklist is the release gate; any divergence from the specification must be
 documented (see "Divergences") before release.
 
-- [ ] handshake transcript construction;
-- [ ] DH computation order;
-- [ ] public-key validation;
-- [ ] AES-GCM nonce uniqueness;
-- [ ] Double Ratchet initialization;
-- [ ] skipped-key and replay-cache pruning;
-- [ ] auxiliary record opacity and padding;
-- [ ] passphrase-context UI invisibility when passphrase is not active;
-- [ ] manual-transport assumptions;
-- [ ] Maximum FS consent and pending/active state separation;
-- [ ] atomic state transitions;
-- [ ] memory-wipe best effort and documented limitations;
-- [ ] local DoS behavior.
+- [x] handshake transcript construction;
+- [x] DH computation order;
+- [x] public-key validation;
+- [x] AES-GCM nonce uniqueness;
+- [x] Double Ratchet initialization;
+- [x] skipped-key and replay-cache pruning;
+- [x] auxiliary record opacity and padding;
+- [x] passphrase-context UI invisibility when passphrase is not active;
+- [x] manual-transport assumptions;
+- [x] Maximum FS consent and pending/active state separation;
+- [x] atomic state transitions;
+- [x] memory-wipe best effort and documented limitations;
+- [x] local DoS behavior.
+
+The checklist above reflects the dedicated review performed on this branch. It does not imply
+that FS is already present in public store builds or in the official `llms.txt` release
+description.
 
 ## Divergences from the specification
 

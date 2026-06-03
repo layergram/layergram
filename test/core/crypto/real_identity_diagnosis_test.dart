@@ -5,7 +5,6 @@
 // Sofia link: layergram://i/eyJ2IjoxLCJpZCI6IlhFVTQyTFFXTzNDWEkyTVRJNFRMSFdZS0RMUTJERjNPVFpUN1ZEUlRLRUk2MkNGSklZS0EiLCJwayI6IjFsb2gxYnhPQllxUXVqaGUwMkM0Q1ZzWmNFK005KzZsa0pRY3Zmc1ZTRTg9IiwiZnAiOiJCOS0yOS1DRC0yRS0xNi03Ni1DNS03NCIsIm4iOiJTb2ZpYSJ9.AYtqi696
 
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -26,8 +25,10 @@ import 'package:layergram/features/contact_verification/contact_sas_service.dart
 // Alex:  id=SJ4566BT3OZTURRTZ7IM5QZKBRN4JYGKYEA2HZINVP7DXANTIJOA  pk=YaI6sOitsGi5lEHxiLlKuBtQSESdKghc19MmimTZ6gY=
 // Sofia: id=XEU42LQWO3CXI2MTI4TLHWYKDLQ2DF3OTZT7VDRTKEI62CFJIYKA   pk=1loh1bxOBYqQujhe02C4CVsZcE+M9+6lkJQcvfsVSE8=
 
-const _alexLink  = 'layergram://i/eyJ2IjoxLCJpZCI6IlNKNDU2NkJUM09aVFVSUlRaN0lNNVFaS0JSTjRKWUdLWUVBMkhaSU5WUDdEWEFOVElKT0EiLCJwayI6IllhSTZzT2l0c0dpNWxFSHhpTGxLdUJ0UVNFU2RLZ2hjMTlNbWltVFo2Z1k9IiwiZnAiOiI5Mi03OS1ERi03OC0zMy1EQi1CMy0zQSIsIm4iOiJBbGV4In0.z3O9g58_';
-const _sofiaLink = 'layergram://i/eyJ2IjoxLCJpZCI6IlhFVTQyTFFXTzNDWEkyTVRJNFRMSFdZS0RMUTJERjNPVFpUN1ZEUlRLRUk2MkNGSklZS0EiLCJwayI6IjFsb2gxYnhPQllxUXVqaGUwMkM0Q1ZzWmNFK005KzZsa0pRY3Zmc1ZTRTg9IiwiZnAiOiJCOS0yOS1DRC0yRS0xNi03Ni1DNS03NCIsIm4iOiJTb2ZpYSJ9.AYtqi696';
+const _alexLink =
+    'layergram://i/eyJ2IjoxLCJpZCI6IlNKNDU2NkJUM09aVFVSUlRaN0lNNVFaS0JSTjRKWUdLWUVBMkhaSU5WUDdEWEFOVElKT0EiLCJwayI6IllhSTZzT2l0c0dpNWxFSHhpTGxLdUJ0UVNFU2RLZ2hjMTlNbWltVFo2Z1k9IiwiZnAiOiI5Mi03OS1ERi03OC0zMy1EQi1CMy0zQSIsIm4iOiJBbGV4In0.z3O9g58_';
+const _sofiaLink =
+    'layergram://i/eyJ2IjoxLCJpZCI6IlhFVTQyTFFXTzNDWEkyTVRJNFRMSFdZS0RMUTJERjNPVFpUN1ZEUlRLRUk2MkNGSklZS0EiLCJwayI6IjFsb2gxYnhPQllxUXVqaGUwMkM0Q1ZzWmNFK005KzZsa0pRY3Zmc1ZTRTg9IiwiZnAiOiJCOS0yOS1DRC0yRS0xNi03Ni1DNS03NCIsIm4iOiJTb2ZpYSJ9.AYtqi696';
 
 // The cover + secret message provided by the user
 const _cover =
@@ -38,16 +39,20 @@ const _secret = 'user: admin\npassword: jusg-Yets!gJdh@GTfJ';
 
 class _MemStorage extends SecureStorageService {
   final _s = <String, String>{};
-  @override Future<void> write(String k, String v) async => _s[k] = v;
-  @override Future<String?> read(String k) async => _s[k];
-  @override Future<void> delete(String k) async => _s.remove(k);
-  @override Future<void> deleteAll() async => _s.clear();
+  @override
+  Future<void> write(String k, String v) async => _s[k] = v;
+  @override
+  Future<String?> read(String k) async => _s[k];
+  @override
+  Future<void> delete(String k) async => _s.remove(k);
+  @override
+  Future<void> deleteAll() async => _s.clear();
 }
 
 IdentityManager _mgr() => IdentityManager(
-  seedService: SeedService(),
-  localIdentityVault: LocalIdentityVault(secureStorage: _MemStorage()),
-);
+      seedService: SeedService(),
+      localIdentityVault: LocalIdentityVault(secureStorage: _MemStorage()),
+    );
 
 void main() {
   // ── 1. Parse the identity links ──────────────────────────────────────────
@@ -55,7 +60,8 @@ void main() {
   group('Identity link parsing', () {
     test('Alex link parses to the expected public key and fingerprint', () {
       final alex = IdentityLinkCodec.decode(_alexLink);
-      expect(alex.publicKeyBase64, equals('YaI6sOitsGi5lEHxiLlKuBtQSESdKghc19MmimTZ6gY='));
+      expect(alex.publicKeyBase64,
+          equals('YaI6sOitsGi5lEHxiLlKuBtQSESdKghc19MmimTZ6gY='));
       expect(alex.fingerprint, equals('92-79-DF-78-33-DB-B3-3A'));
       expect(alex.displayName, equals('Alex'));
       expect(alex.publicKeyBase64.length, greaterThan(30));
@@ -63,21 +69,22 @@ void main() {
 
     test('Sofia link parses to the expected public key and fingerprint', () {
       final sofia = IdentityLinkCodec.decode(_sofiaLink);
-      expect(sofia.publicKeyBase64, equals('1loh1bxOBYqQujhe02C4CVsZcE+M9+6lkJQcvfsVSE8='));
+      expect(sofia.publicKeyBase64,
+          equals('1loh1bxOBYqQujhe02C4CVsZcE+M9+6lkJQcvfsVSE8='));
       expect(sofia.fingerprint, equals('B9-29-CD-2E-16-76-C5-74'));
       expect(sofia.displayName, equals('Sofia'));
     });
 
     test('Alex and Sofia have different public keys', () {
-      final alex  = IdentityLinkCodec.decode(_alexLink);
+      final alex = IdentityLinkCodec.decode(_alexLink);
       final sofia = IdentityLinkCodec.decode(_sofiaLink);
       expect(alex.publicKeyBase64, isNot(equals(sofia.publicKeyBase64)));
     });
 
     test('Both public keys are valid 32-byte X25519 points', () {
-      final alex  = IdentityLinkCodec.decode(_alexLink);
+      final alex = IdentityLinkCodec.decode(_alexLink);
       final sofia = IdentityLinkCodec.decode(_sofiaLink);
-      expect(base64Decode(alex.publicKeyBase64).length,  equals(32));
+      expect(base64Decode(alex.publicKeyBase64).length, equals(32));
       expect(base64Decode(sofia.publicKeyBase64).length, equals(32));
     });
   });
@@ -86,20 +93,33 @@ void main() {
 
   group('SAS ceremony – time independence', () {
     const sas = ContactSasService();
-    final alex  = IdentityLinkCodec.decode(_alexLink);
+    final alex = IdentityLinkCodec.decode(_alexLink);
     final sofia = IdentityLinkCodec.decode(_sofiaLink);
 
-    test('SAS digits derived from real keys are the same on every call (not time-based)', () async {
-      final r1 = await sas.derive(localPublicKeyBase64: alex.publicKeyBase64, peerPublicKeyBase64: sofia.publicKeyBase64);
-      final r2 = await sas.derive(localPublicKeyBase64: alex.publicKeyBase64, peerPublicKeyBase64: sofia.publicKeyBase64);
-      final r3 = await sas.derive(localPublicKeyBase64: alex.publicKeyBase64, peerPublicKeyBase64: sofia.publicKeyBase64);
+    test(
+        'SAS digits derived from real keys are the same on every call (not time-based)',
+        () async {
+      final r1 = await sas.derive(
+          localPublicKeyBase64: alex.publicKeyBase64,
+          peerPublicKeyBase64: sofia.publicKeyBase64);
+      final r2 = await sas.derive(
+          localPublicKeyBase64: alex.publicKeyBase64,
+          peerPublicKeyBase64: sofia.publicKeyBase64);
+      final r3 = await sas.derive(
+          localPublicKeyBase64: alex.publicKeyBase64,
+          peerPublicKeyBase64: sofia.publicKeyBase64);
       expect(r1.digits, equals(r2.digits));
       expect(r2.digits, equals(r3.digits));
     });
 
-    test('SAS is symmetric: Alex viewing Sofia == Sofia viewing Alex', () async {
-      final alexView  = await sas.derive(localPublicKeyBase64: alex.publicKeyBase64,  peerPublicKeyBase64: sofia.publicKeyBase64);
-      final sofiaView = await sas.derive(localPublicKeyBase64: sofia.publicKeyBase64, peerPublicKeyBase64: alex.publicKeyBase64);
+    test('SAS is symmetric: Alex viewing Sofia == Sofia viewing Alex',
+        () async {
+      final alexView = await sas.derive(
+          localPublicKeyBase64: alex.publicKeyBase64,
+          peerPublicKeyBase64: sofia.publicKeyBase64);
+      final sofiaView = await sas.derive(
+          localPublicKeyBase64: sofia.publicKeyBase64,
+          peerPublicKeyBase64: alex.publicKeyBase64);
       expect(alexView.digits, equals(sofiaView.digits),
           reason: 'Both must see identical SAS digits');
       expect(alexView.emojiIndices, equals(sofiaView.emojiIndices),
@@ -127,7 +147,9 @@ void main() {
   // ── 3. Diagnose why one identity's public key in the contact list might
   //      differ from the one in the link (v1 vs v2 derivation mismatch) ──────
 
-  group('v1 vs v2 derivation: does the identity link embed the right public key?', () {
+  group(
+      'v1 vs v2 derivation: does the identity link embed the right public key?',
+      () {
     // We don't have the private keys, but we CAN verify that:
     // if an identity is RE-DERIVED from the same mnemonic with v1 vs v2,
     // the resulting public key differs — and ONLY ONE of these will match
@@ -142,7 +164,9 @@ void main() {
         'abandon abandon abandon abandon abandon abandon abandon abandon '
         'abandon abandon abandon abandon abandon abandon abandon art';
 
-    test('v1 and v2 restoration produce different public keys from the same mnemonic', () async {
+    test(
+        'v1 and v2 restoration produce different public keys from the same mnemonic',
+        () async {
       final mgrV1 = _mgr();
       final mgrV2 = _mgr();
 
@@ -161,11 +185,14 @@ void main() {
       print('>>> v2 pk: ${v2.publicKeyBase64}');
     });
 
-    test('If Sofia uses v2 key in app but shares v1 link, Alex encrypts to WRONG key', () async {
+    test(
+        'If Sofia uses v2 key in app but shares v1 link, Alex encrypts to WRONG key',
+        () async {
       // Simulate: Sofia has v2 identity on device, but accidentally shared a v1 link.
       final sofiaMgrV1 = _mgr();
       final sofiaMgrV2 = _mgr();
-      const mn = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+      const mn =
+          'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 
       final sofiaV1 = await sofiaMgrV1.restoreIdentityFromMnemonic(mn,
           derivationVersion: IdentityDerivationVersion.v1);
@@ -177,7 +204,7 @@ void main() {
       // Alex uses a random key pair.
       final alexPair = await X25519().newKeyPair();
       final alexPriv = base64Encode(await alexPair.extractPrivateKeyBytes());
-      final alexPub  = base64Encode((await alexPair.extractPublicKey()).bytes);
+      final alexPub = base64Encode((await alexPair.extractPublicKey()).bytes);
 
       final enc = EncryptionService();
 
@@ -204,7 +231,8 @@ void main() {
         ),
       );
       expect(correctDecrypt, isNotNull,
-          reason: 'Alex must decrypt when using Sofia\'s correct v2 public key');
+          reason:
+              'Alex must decrypt when using Sofia\'s correct v2 public key');
       expect(correctDecrypt!.text, equals(_secret));
 
       // Alex decrypts with Sofia's V1 public key → FAIL (wrong key, different ECDH).
@@ -225,7 +253,8 @@ void main() {
 
   group('Stego roundtrip: Sofia cover message to Alex', () {
     test('cover text is long enough to embed a typical secret payload', () {
-      final estimatedBytes = StegoEncoder.estimatedEncryptedPayloadBytes(_secret);
+      final estimatedBytes =
+          StegoEncoder.estimatedEncryptedPayloadBytes(_secret);
       final minCover = StegoEncoder.minCoverLengthForBytes(estimatedBytes);
       final coverLen = StegoEncoder.visibleCharacterCount(_cover);
 
@@ -242,16 +271,21 @@ void main() {
           reason: 'Cover text must be long enough to embed the secret');
     });
 
-    test('full stego+encryption roundtrip with the provided cover and secret', () async {
+    test('full stego+encryption roundtrip with the provided cover and secret',
+        () async {
       // We don't have Sofia's private key, so we use a fresh key pair whose
       // PUBLIC key we will tell "Alex" to expect (simulating the protocol).
       final sofiaSimPair = await X25519().newKeyPair();
-      final sofiaSimPriv = base64Encode(await sofiaSimPair.extractPrivateKeyBytes());
-      final sofiaSimPub  = base64Encode((await sofiaSimPair.extractPublicKey()).bytes);
+      final sofiaSimPriv =
+          base64Encode(await sofiaSimPair.extractPrivateKeyBytes());
+      final sofiaSimPub =
+          base64Encode((await sofiaSimPair.extractPublicKey()).bytes);
 
       final alexSimPair = await X25519().newKeyPair();
-      final alexSimPriv = base64Encode(await alexSimPair.extractPrivateKeyBytes());
-      final alexSimPub  = base64Encode((await alexSimPair.extractPublicKey()).bytes);
+      final alexSimPriv =
+          base64Encode(await alexSimPair.extractPrivateKeyBytes());
+      final alexSimPub =
+          base64Encode((await alexSimPair.extractPublicKey()).bytes);
 
       final enc = EncryptionService();
       final encoder = StegoEncoder();
@@ -276,12 +310,17 @@ void main() {
 
       // Alex decodes and decrypts.
       final candidates = decoder.decodeByteCandidates(hiddenMsg);
-      expect(candidates, isNotEmpty, reason: 'Stego decode must find candidates');
+      expect(candidates, isNotEmpty,
+          reason: 'Stego decode must find candidates');
 
       PlaintextPayload? decrypted;
       for (final raw in candidates) {
         EncryptedMessage msg;
-        try { msg = EncryptedMessage.fromRawBytes(raw); } catch (_) { continue; }
+        try {
+          msg = EncryptedMessage.fromRawBytes(raw);
+        } catch (_) {
+          continue;
+        }
         final key = await enc.deriveSymmetricKey(
           localPrivateKeyBase64: alexSimPriv,
           remotePublicKeyBase64: sofiaSimPub,
@@ -290,24 +329,27 @@ void main() {
         if (decrypted != null) break;
       }
 
-      expect(decrypted, isNotNull, reason: 'Alex must be able to decrypt Sofia\'s message');
+      expect(decrypted, isNotNull,
+          reason: 'Alex must be able to decrypt Sofia\'s message');
       expect(decrypted!.text, equals(_secret));
     });
 
-    test('wrong key (v1 public key mismatch) cannot decrypt stego message', () async {
+    test('wrong key (v1 public key mismatch) cannot decrypt stego message',
+        () async {
       // This reproduces the exact reported failure:
       // Sofia uses v2, Alex imported a v1 link → decryption fails silently.
       final sofiaV2Pair = await X25519().newKeyPair();
-      final sofiaV2Priv = base64Encode(await sofiaV2Pair.extractPrivateKeyBytes());
-      final sofiaV2Pub  = base64Encode((await sofiaV2Pair.extractPublicKey()).bytes);
+      final sofiaV2Priv =
+          base64Encode(await sofiaV2Pair.extractPrivateKeyBytes());
 
       // Simulate: Alex has a DIFFERENT public key for Sofia (e.g. v1 mismatch).
       final sofiaFakeV1Pair = await X25519().newKeyPair();
-      final sofiaFakeV1Pub  = base64Encode((await sofiaFakeV1Pair.extractPublicKey()).bytes);
+      final sofiaFakeV1Pub =
+          base64Encode((await sofiaFakeV1Pair.extractPublicKey()).bytes);
 
       final alexPair = await X25519().newKeyPair();
       final alexPriv = base64Encode(await alexPair.extractPrivateKeyBytes());
-      final alexPub  = base64Encode((await alexPair.extractPublicKey()).bytes);
+      final alexPub = base64Encode((await alexPair.extractPublicKey()).bytes);
 
       final enc = EncryptionService();
       final encoder = StegoEncoder();
@@ -324,7 +366,8 @@ void main() {
         ),
       );
 
-      final hiddenMsg = encoder.encodeBytes(_cover, encResult.message.toRawBytes());
+      final hiddenMsg =
+          encoder.encodeBytes(_cover, encResult.message.toRawBytes());
       final candidates = decoder.decodeByteCandidates(hiddenMsg);
       expect(candidates, isNotEmpty);
 
@@ -332,7 +375,11 @@ void main() {
       PlaintextPayload? wrongDecrypt;
       for (final raw in candidates) {
         EncryptedMessage msg;
-        try { msg = EncryptedMessage.fromRawBytes(raw); } catch (_) { continue; }
+        try {
+          msg = EncryptedMessage.fromRawBytes(raw);
+        } catch (_) {
+          continue;
+        }
         final wrongKey = await enc.deriveSymmetricKey(
           localPrivateKeyBase64: alexPriv,
           remotePublicKeyBase64: sofiaFakeV1Pub, // ← WRONG key
@@ -342,7 +389,8 @@ void main() {
       }
 
       expect(wrongDecrypt, isNull,
-          reason: 'With wrong public key for Sofia, decryption must silently fail — '
+          reason:
+              'With wrong public key for Sofia, decryption must silently fail — '
               'this is exactly what the user experiences');
     });
   });
@@ -350,20 +398,24 @@ void main() {
   // ── 5. Verify the identity link encode→decode roundtrip is lossless ───────
 
   group('Identity link codec roundtrip', () {
-    test('encode then decode preserves all fields including public key', () async {
+    test('encode then decode preserves all fields including public key',
+        () async {
       final mgr = _mgr();
       final identity = await mgr.createNewIdentity(displayName: 'Test');
       final link = IdentityLinkCodec.encode(identity);
       final decoded = IdentityLinkCodec.decode(link);
 
       expect(decoded.publicKeyBase64, equals(identity.publicKeyBase64),
-          reason: 'Public key in link must exactly match the identity\'s public key');
+          reason:
+              'Public key in link must exactly match the identity\'s public key');
       expect(decoded.identityId, equals(identity.identityId));
       expect(decoded.fingerprint, equals(identity.fingerprint));
     });
 
-    test('link generated by v2 identity contains v2 public key, not v1', () async {
-      const mn = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+    test('link generated by v2 identity contains v2 public key, not v1',
+        () async {
+      const mn =
+          'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 
       final mgrV1 = _mgr();
       final mgrV2 = _mgr();
@@ -377,14 +429,16 @@ void main() {
       final linkV2 = IdentityLinkCodec.encode(v2);
 
       expect(linkV1, isNot(equals(linkV2)),
-          reason: 'v1 and v2 identities from same mnemonic must produce DIFFERENT links');
+          reason:
+              'v1 and v2 identities from same mnemonic must produce DIFFERENT links');
 
       final decodedV1 = IdentityLinkCodec.decode(linkV1);
       final decodedV2 = IdentityLinkCodec.decode(linkV2);
 
       expect(decodedV1.publicKeyBase64, equals(v1.publicKeyBase64));
       expect(decodedV2.publicKeyBase64, equals(v2.publicKeyBase64));
-      expect(decodedV1.publicKeyBase64, isNot(equals(decodedV2.publicKeyBase64)),
+      expect(
+          decodedV1.publicKeyBase64, isNot(equals(decodedV2.publicKeyBase64)),
           reason: 'If Alex imports link v1 but Sofia\'s device uses v2, '
               'ECDH shared secret differs → encryption/decryption fails');
     });

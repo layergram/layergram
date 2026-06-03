@@ -22,7 +22,8 @@ Future<({String privateKeyBase64, String publicKeyBase64})> _keyMaterial(
 
 void main() {
   group('EncryptionService', () {
-    test('deriveSymmetricKey is symmetric between sender and recipient', () async {
+    test('deriveSymmetricKey is symmetric between sender and recipient',
+        () async {
       final service = EncryptionService();
       final x25519 = X25519();
       final alice = await _keyMaterial(await x25519.newKeyPair());
@@ -43,7 +44,9 @@ void main() {
       );
     });
 
-    test('tryDecryptWithKey returns payload for the correct key and null otherwise', () async {
+    test(
+        'tryDecryptWithKey returns payload for the correct key and null otherwise',
+        () async {
       final service = EncryptionService();
       final x25519 = X25519();
       final alice = await _keyMaterial(await x25519.newKeyPair());
@@ -91,7 +94,8 @@ void main() {
       expect(failed, isNull);
     });
 
-    test('encrypt and decrypt preserve accented and emoji secret text', () async {
+    test('encrypt and decrypt preserve accented and emoji secret text',
+        () async {
       final service = EncryptionService();
       final x25519 = X25519();
       final alice = await _keyMaterial(await x25519.newKeyPair());
@@ -120,7 +124,8 @@ void main() {
       expect(decResult.payload.senderDisplayName, payload.senderDisplayName);
     });
 
-    test('encrypted message raw bytes roundtrip preserves nonce and ciphertext', () async {
+    test('encrypted message raw bytes roundtrip preserves nonce and ciphertext',
+        () async {
       final service = EncryptionService();
       final x25519 = X25519();
       final alice = await _keyMaterial(await x25519.newKeyPair());
@@ -151,20 +156,20 @@ void main() {
   });
 
   group('EncryptionService – FS encrypt/decrypt', () {
-    final _x25519 = X25519();
+    final x255190 = X25519();
 
-    Future<(Uint8List, Uint8List)> _genDhPair() async {
-      final pair = await _x25519.newKeyPair();
+    Future<(Uint8List, Uint8List)> genDhPair() async {
+      final pair = await x255190.newKeyPair();
       final priv = Uint8List.fromList(await pair.extractPrivateKeyBytes());
       final pub = Uint8List.fromList((await pair.extractPublicKey()).bytes);
       return (priv, pub);
     }
 
-    Future<(RatchetState, RatchetState)> _buildRatchets() async {
-      final (ikAPriv, ikAPub) = await _genDhPair();
-      final (dkAPriv, _) = await _genDhPair();
-      final (ikBPriv, ikBPub) = await _genDhPair();
-      final (dkBPriv, _) = await _genDhPair();
+    Future<(RatchetState, RatchetState)> buildRatchets() async {
+      final (ikAPriv, ikAPub) = await genDhPair();
+      final (dkAPriv, _) = await genDhPair();
+      final (ikBPriv, ikBPub) = await genDhPair();
+      final (dkBPriv, _) = await genDhPair();
 
       final initPayload = await FsHandshake.generateFsInit(
         ikAPriv: ikAPriv,
@@ -202,9 +207,11 @@ void main() {
       final bState = replyPayload.partialState;
 
       final ratchetAPriv = confirmPayload.initiatorInitialRatchetPriv;
-      final ratchetAPub = FsKeyCodec.decodeKey(confirmPayload.initiatorInitialRatchetPub);
+      final ratchetAPub =
+          FsKeyCodec.decodeKey(confirmPayload.initiatorInitialRatchetPub);
       final ratchetBPriv = replyPayload.responderInitialRatchetPriv;
-      final ratchetBPub = FsKeyCodec.decodeKey(replyPayload.responderInitialRatchetPub);
+      final ratchetBPub =
+          FsKeyCodec.decodeKey(replyPayload.responderInitialRatchetPub);
 
       final aRatchet = await FsDoubleRatchet.initRatchet(
         rootKey0: aState.rootKey0,
@@ -231,9 +238,9 @@ void main() {
 
     test('FS-encrypted message can be decrypted by recipient', () async {
       final service = EncryptionService();
-      final alice = await _keyMaterial(await _x25519.newKeyPair());
-      final bob = await _keyMaterial(await _x25519.newKeyPair());
-      var (aRatchet, bRatchet) = await _buildRatchets();
+      final alice = await _keyMaterial(await x255190.newKeyPair());
+      final bob = await _keyMaterial(await x255190.newKeyPair());
+      var (aRatchet, bRatchet) = await buildRatchets();
 
       const secretText = 'Messaggio con Forward Secrecy';
       final encResult = await service.encrypt(
@@ -264,9 +271,9 @@ void main() {
 
     test('FS message cannot be re-decrypted after ratchet advances', () async {
       final service = EncryptionService();
-      final alice = await _keyMaterial(await _x25519.newKeyPair());
-      final bob = await _keyMaterial(await _x25519.newKeyPair());
-      var (aRatchet, bRatchet) = await _buildRatchets();
+      final alice = await _keyMaterial(await x255190.newKeyPair());
+      final bob = await _keyMaterial(await x255190.newKeyPair());
+      var (aRatchet, bRatchet) = await buildRatchets();
 
       final encResult = await service.encrypt(
         senderPrivateKeyBase64: alice.privateKeyBase64,
@@ -304,9 +311,9 @@ void main() {
 
     test('sender cannot re-decrypt own FS-encrypted message', () async {
       final service = EncryptionService();
-      final alice = await _keyMaterial(await _x25519.newKeyPair());
-      final bob = await _keyMaterial(await _x25519.newKeyPair());
-      var (aRatchet, bRatchet) = await _buildRatchets();
+      final alice = await _keyMaterial(await x255190.newKeyPair());
+      final bob = await _keyMaterial(await x255190.newKeyPair());
+      var (aRatchet, bRatchet) = await buildRatchets();
 
       final encResult = await service.encrypt(
         senderPrivateKeyBase64: alice.privateKeyBase64,

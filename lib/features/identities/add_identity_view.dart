@@ -83,7 +83,7 @@ class _AddIdentityViewState extends ConsumerState<AddIdentityView> {
 
   Future<void> _pasteFromClipboard(BuildContext context) async {
     final text = await _readClipboardImportText();
-    if (!mounted || text.isEmpty) return;
+    if (!context.mounted || text.isEmpty) return;
 
     FocusScope.of(context).requestFocus(_inputFocusNode);
     setState(() {
@@ -132,10 +132,15 @@ class _AddIdentityViewState extends ConsumerState<AddIdentityView> {
             TabBar(
               dividerColor: Colors.transparent,
               indicatorSize: TabBarIndicatorSize.tab,
-              labelPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+              labelPadding:
+                  const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
               indicator: ShapeDecoration(
-                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.22),
-                shape: ContinuousRectangleBorder(borderRadius: BorderRadius.circular(48)),
+                color: Theme.of(context)
+                    .colorScheme
+                    .primary
+                    .withValues(alpha: 0.22),
+                shape: ContinuousRectangleBorder(
+                    borderRadius: BorderRadius.circular(48)),
               ),
               tabs: [
                 Tab(text: t(context, 'pasteLinkTab')),
@@ -167,7 +172,8 @@ class _AddIdentityViewState extends ConsumerState<AddIdentityView> {
                               alignment: Alignment.centerLeft,
                               child: Text(
                                 t(context, 'pasteLinkHint'),
-                                style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                style: const TextStyle(
+                                    fontSize: 12, color: Colors.grey),
                               ),
                             ),
                             if (_error != null) ...[
@@ -180,7 +186,8 @@ class _AddIdentityViewState extends ConsumerState<AddIdentityView> {
                               children: [
                                 Expanded(
                                   child: FilledButton.tonal(
-                                    onPressed: () => _pasteFromClipboard(context),
+                                    onPressed: () =>
+                                        _pasteFromClipboard(context),
                                     child:
                                         Text(t(context, 'pasteFromClipboard')),
                                   ),
@@ -263,7 +270,8 @@ class _AddIdentityViewState extends ConsumerState<AddIdentityView> {
                                     _error = null;
                                   });
                                 } catch (e) {
-                                  setState(() => _error = AppStrings.t(context, 'invalidQrCode'));
+                                  setState(() => _error =
+                                      AppStrings.t(context, 'invalidQrCode'));
                                   _qrImported = false;
                                 }
                               },

@@ -57,7 +57,9 @@ void main() {
   // ---------------------------------------------------------------------------
   // T_RESET_1: Full identity reset clears all FS state
   // ---------------------------------------------------------------------------
-  test('T_RESET_1: Identity reset clears all FS persisted state and marks sessions broken', () async {
+  test(
+      'T_RESET_1: Identity reset clears all FS persisted state and marks sessions broken',
+      () async {
     const contactId = 'bob_device_b';
     const sessionId = 'fs_session_abc123';
     const identityContext = 'primary';
@@ -65,7 +67,8 @@ void main() {
     // ── PHASE 1: Setup active FS session ─────────────────────────────────────
     final auxKey = await buildAuxKey();
     final auxRepo = AuxRecordRepository();
-    auxRepo.setActiveContext(scopeToken: identityContext, auxStorageKey: auxKey);
+    auxRepo.setActiveContext(
+        scopeToken: identityContext, auxStorageKey: auxKey);
 
     final registry = FsContactSecurityRegistry();
     final persistenceService = FsStatePersistenceService(
@@ -105,10 +108,12 @@ void main() {
 
     // Verify setup: both records exist
     final ratchetBefore = await ratchetService.loadRatchetState(sessionId);
-    expect(ratchetBefore, isNotNull, reason: 'Ratchet state should exist before reset');
+    expect(ratchetBefore, isNotNull,
+        reason: 'Ratchet state should exist before reset');
 
     final allRecordsBefore = auxRepo.getAllAuxRecordIds();
-    expect(allRecordsBefore.length, equals(2), reason: 'Should have 2 aux records (state + ratchet)');
+    expect(allRecordsBefore.length, equals(2),
+        reason: 'Should have 2 aux records (state + ratchet)');
 
     // ── PHASE 2: Simulate identity reset ────────────────────────────────────
     // This mirrors the code in data_reset_section.dart
@@ -136,7 +141,8 @@ void main() {
 
     // Ratchet state should be gone
     final ratchetAfter = await ratchetService.loadRatchetState(sessionId);
-    expect(ratchetAfter, isNull, reason: 'Ratchet state should be null after reset');
+    expect(ratchetAfter, isNull,
+        reason: 'Ratchet state should be null after reset');
 
     // All aux records should be gone
     final allRecordsAfter = auxRepo.getAllAuxRecordIds();
@@ -163,7 +169,8 @@ void main() {
     );
 
     // Try to load persisted state (should find nothing)
-    final recoveredStates = await recoveredRatchetService.loadAllRatchetStates();
+    final recoveredStates =
+        await recoveredRatchetService.loadAllRatchetStates();
     expect(recoveredStates, isEmpty,
         reason: 'After recovery, no ratchet states should exist');
 
@@ -177,7 +184,8 @@ void main() {
     // registry + loadPersistedState, there would be no entry at all.
     // For this test, we verify the entry is still broken.
     expect(recoveredRegistryState?.fsState, equals(FsSessionState.fsBroken),
-        reason: 'After recovery, session should still be broken (or not exist)');
+        reason:
+            'After recovery, session should still be broken (or not exist)');
 
     // ── PHASE 5: Verify handshake is blocked ──────────────────────────────────
     final sessionManager = FsSessionManager();
@@ -187,8 +195,8 @@ void main() {
     // Cannot send FS_INIT from broken state
     final sendResult = sessionManager.recordFsInitSent(FsInitPayload(
       initId: 'new_init_attempt',
-      initiatorDevicePub: 'AQ' + 'A' * 42,
-      initiatorEphemeralPub: 'AQ' + 'D' * 42,
+      initiatorDevicePub: 'AQ${'A' * 42}',
+      initiatorEphemeralPub: 'AQ${'D' * 42}',
       caps: const ['fs_v1'],
       createdAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
       ekAPrivBytes: Uint8List(32)..fillRange(0, 32, 0x99),
@@ -200,17 +208,17 @@ void main() {
     final receiveResult = sessionManager.processFsInitReceived(
       message: FsInitMessage(
         initId: 'remote_init',
-        initiatorDevicePub: 'AQ' + 'B' * 42,
-        initiatorEphemeralPub: 'AQ' + 'C' * 42,
+        initiatorDevicePub: 'AQ${'B' * 42}',
+        initiatorEphemeralPub: 'AQ${'C' * 42}',
         caps: const ['fs_v1'],
         createdAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
       ),
       localInitId: '',
     );
     expect(receiveResult.accepted, isTrue,
-        reason: 'Incoming FS_INIT in fsBroken should be accepted (partner reset)');
+        reason:
+            'Incoming FS_INIT in fsBroken should be accepted (partner reset)');
     expect(sessionManager.state, equals(FsSessionState.fsInitSeen),
         reason: 'State must transition to fsInitSeen for new handshake');
   });
-
 }

@@ -6,6 +6,7 @@
 /// 3. Ratchets from both old and new devices can be used simultaneously
 /// 4. Registry tracks per-device entries
 /// 5. Plausible deniability is maintained (no device labels leak)
+library;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:layergram/core/crypto/fs_contact_security_state.dart';
@@ -40,7 +41,8 @@ void main() {
       expect(router.currentSession.state, FsSessionState.legacyOnly);
     });
 
-    test('rotateForNewDevice archives current session and creates fresh one', () {
+    test('rotateForNewDevice archives current session and creates fresh one',
+        () {
       // Simulate current session reaching fsActive
       final original = router.currentSession;
       original.setStateForTesting(FsSessionState.fsActive,
@@ -62,13 +64,13 @@ void main() {
 
     test('multiple device rotations preserve all previous sessions', () {
       // Device A reaches active
-      router.currentSession.setStateForTesting(FsSessionState.fsActive,
-          sessionId: 'session-A');
+      router.currentSession
+          .setStateForTesting(FsSessionState.fsActive, sessionId: 'session-A');
       router.rotateForNewDevice();
 
       // Device B reaches active
-      router.currentSession.setStateForTesting(FsSessionState.fsActive,
-          sessionId: 'session-B');
+      router.currentSession
+          .setStateForTesting(FsSessionState.fsActive, sessionId: 'session-B');
       router.rotateForNewDevice();
 
       // Device C is current (handshaking)
@@ -92,12 +94,13 @@ void main() {
     });
 
     test('bestState returns fsActive when current is active', () {
-      router.currentSession.setStateForTesting(FsSessionState.fsActive,
-          sessionId: 's1');
+      router.currentSession
+          .setStateForTesting(FsSessionState.fsActive, sessionId: 's1');
       expect(router.bestState, FsSessionState.fsActive);
     });
 
-    test('bestState returns fsActive from previous when current is handshaking', () {
+    test('bestState returns fsActive from previous when current is handshaking',
+        () {
       // Previous device still active
       router.currentSession.setStateForTesting(FsSessionState.fsActive,
           sessionId: 'old-session');
@@ -108,11 +111,11 @@ void main() {
     });
 
     test('allActiveSessionIds returns IDs from current and previous', () {
-      router.currentSession.setStateForTesting(FsSessionState.fsActive,
-          sessionId: 'session-A');
+      router.currentSession
+          .setStateForTesting(FsSessionState.fsActive, sessionId: 'session-A');
       router.rotateForNewDevice();
-      router.currentSession.setStateForTesting(FsSessionState.fsActive,
-          sessionId: 'session-B');
+      router.currentSession
+          .setStateForTesting(FsSessionState.fsActive, sessionId: 'session-B');
 
       final ids = router.allActiveSessionIds;
       expect(ids, containsAll(['session-A', 'session-B']));
@@ -120,11 +123,11 @@ void main() {
     });
 
     test('resetAll clears current and previous sessions', () {
-      router.currentSession.setStateForTesting(FsSessionState.fsActive,
-          sessionId: 'session-A');
+      router.currentSession
+          .setStateForTesting(FsSessionState.fsActive, sessionId: 'session-A');
       router.rotateForNewDevice();
-      router.currentSession.setStateForTesting(FsSessionState.fsActive,
-          sessionId: 'session-B');
+      router.currentSession
+          .setStateForTesting(FsSessionState.fsActive, sessionId: 'session-B');
 
       router.resetAll();
 
@@ -133,11 +136,11 @@ void main() {
     });
 
     test('markAllBroken marks current and all previous as broken', () {
-      router.currentSession.setStateForTesting(FsSessionState.fsActive,
-          sessionId: 'session-A');
+      router.currentSession
+          .setStateForTesting(FsSessionState.fsActive, sessionId: 'session-A');
       router.rotateForNewDevice();
-      router.currentSession.setStateForTesting(FsSessionState.fsActive,
-          sessionId: 'session-B');
+      router.currentSession
+          .setStateForTesting(FsSessionState.fsActive, sessionId: 'session-B');
 
       router.markAllBroken();
 
@@ -147,16 +150,16 @@ void main() {
 
     test('cleanupStaleSessions removes broken/legacy previous sessions', () {
       // Device A → active
-      router.currentSession.setStateForTesting(FsSessionState.fsActive,
-          sessionId: 'session-A');
+      router.currentSession
+          .setStateForTesting(FsSessionState.fsActive, sessionId: 'session-A');
       router.rotateForNewDevice();
       // Device B → broken
-      router.currentSession.setStateForTesting(FsSessionState.fsBroken,
-          sessionId: 'session-B');
+      router.currentSession
+          .setStateForTesting(FsSessionState.fsBroken, sessionId: 'session-B');
       router.rotateForNewDevice();
       // Device C → active
-      router.currentSession.setStateForTesting(FsSessionState.fsActive,
-          sessionId: 'session-C');
+      router.currentSession
+          .setStateForTesting(FsSessionState.fsActive, sessionId: 'session-C');
 
       // session-A is active (kept), session-B is broken (cleaned up)
       router.cleanupStaleSessions();
@@ -212,7 +215,8 @@ void main() {
 
       // The router should have archived the old session
       expect(controller.deviceRouter.previousSessionCount, 1);
-      expect(controller.deviceRouter.sessionForId('session-deviceA'), isNotNull);
+      expect(
+          controller.deviceRouter.sessionForId('session-deviceA'), isNotNull);
       expect(
         controller.deviceRouter.sessionForId('session-deviceA')!.state,
         FsSessionState.fsActive,
@@ -296,8 +300,8 @@ void main() {
       );
 
       // Device A reaches active
-      controller.sessionManager.setStateForTesting(FsSessionState.fsActive,
-          sessionId: 'session-A');
+      controller.sessionManager
+          .setStateForTesting(FsSessionState.fsActive, sessionId: 'session-A');
       // Manually update registry for Device A
       registry.upsert(FsContactSecurityState(
         contactId: 'contact-1',
@@ -347,8 +351,8 @@ void main() {
         clock: clock,
       );
 
-      controller.sessionManager.setStateForTesting(FsSessionState.fsActive,
-          sessionId: 'session-A');
+      controller.sessionManager
+          .setStateForTesting(FsSessionState.fsActive, sessionId: 'session-A');
 
       // Before rotation: only session-A
       expect(controller.allActiveSessionIds, ['session-A']);

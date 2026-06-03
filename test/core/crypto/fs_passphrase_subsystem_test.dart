@@ -11,6 +11,7 @@
 ///   6. FsPassphraseTimeoutController — timer expulsion, manual expulsion,
 ///      app lifecycle (background/resume), screen lock expulsion, manual-only
 ///      mode, configure while active.
+library;
 
 import 'dart:io';
 import 'dart:typed_data';
@@ -570,6 +571,7 @@ void main() {
         expelOnScreenLock: false,
       );
       expect(controller.timeout, PassphraseTimeout.minutes1);
+      expect(expelled, isFalse);
 
       controller.dispose();
     });
@@ -830,8 +832,7 @@ void main() {
       expect(prefs.fsPersistence, PassphraseFsPersistence.persistent);
     });
 
-    test('§6.6 Passphrase+FS+Volatile History: volatile + persistent FS',
-        () {
+    test('§6.6 Passphrase+FS+Volatile History: volatile + persistent FS', () {
       const prefs = PassphrasePreferences(
         historyMode: PassphraseHistoryMode.volatile_,
         fsPersistence: PassphraseFsPersistence.persistent,

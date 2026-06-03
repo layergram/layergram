@@ -14,6 +14,7 @@
 /// 10. Strict mode triggers strict FS policy enforcement.
 /// 11. Mode overwrite: setMode replaces previous value.
 /// 12. Plausible deniability: mode records are opaque encrypted aux records.
+library;
 
 import 'dart:io';
 import 'dart:typed_data';
@@ -373,7 +374,7 @@ void main() {
   // ──────────────────────────────────────────────────────────────────────────
 
   group('FsOpportunisticController — mode enforcement', () {
-    FsOpportunisticController _buildController({
+    FsOpportunisticController buildController({
       FsSecurityMode mode = FsSecurityMode.advanced,
     }) {
       final sm = FsSessionManager();
@@ -388,7 +389,7 @@ void main() {
       return ctrl;
     }
 
-    FsInitPayload _buildInitPayload(String initId) => FsInitPayload(
+    FsInitPayload buildInitPayload(String initId) => FsInitPayload(
           initId: initId,
           initiatorDevicePub: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
           initiatorEphemeralPub: 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=',
@@ -399,20 +400,20 @@ void main() {
 
     test('Base mode: buildOutgoingExtension returns null (no FS init)',
         () async {
-      final ctrl = _buildController(mode: FsSecurityMode.base);
+      final ctrl = buildController(mode: FsSecurityMode.base);
 
       final ext = await ctrl.buildOutgoingExtension(
-        pendingInit: _buildInitPayload('test-init-id'),
+        pendingInit: buildInitPayload('test-init-id'),
       );
 
       expect(ext, isNull);
     });
 
     test('Advanced mode: buildOutgoingExtension attaches FS init', () async {
-      final ctrl = _buildController(mode: FsSecurityMode.advanced);
+      final ctrl = buildController(mode: FsSecurityMode.advanced);
 
       final ext = await ctrl.buildOutgoingExtension(
-        pendingInit: _buildInitPayload('test-init-id'),
+        pendingInit: buildInitPayload('test-init-id'),
       );
 
       expect(ext, isNotNull);
@@ -420,7 +421,7 @@ void main() {
     });
 
     test('Base mode: processIncomingEnvelope ignores FS extension', () async {
-      final ctrl = _buildController(mode: FsSecurityMode.base);
+      final ctrl = buildController(mode: FsSecurityMode.base);
 
       final result = await ctrl.processIncomingEnvelope(
         {
@@ -440,7 +441,7 @@ void main() {
     });
 
     test('Advanced mode: processIncomingEnvelope processes FS init', () async {
-      final ctrl = _buildController(mode: FsSecurityMode.advanced);
+      final ctrl = buildController(mode: FsSecurityMode.advanced);
 
       final result = await ctrl.processIncomingEnvelope(
         {
@@ -462,10 +463,10 @@ void main() {
 
     test('Strict mode: buildOutgoingExtension attaches FS init (like Advanced)',
         () async {
-      final ctrl = _buildController(mode: FsSecurityMode.strict);
+      final ctrl = buildController(mode: FsSecurityMode.strict);
 
       final ext = await ctrl.buildOutgoingExtension(
-        pendingInit: _buildInitPayload('test-init-strict'),
+        pendingInit: buildInitPayload('test-init-strict'),
       );
 
       expect(ext, isNotNull);
@@ -473,7 +474,7 @@ void main() {
     });
 
     test('Strict mode: processIncomingEnvelope processes FS init', () async {
-      final ctrl = _buildController(mode: FsSecurityMode.strict);
+      final ctrl = buildController(mode: FsSecurityMode.strict);
 
       final result = await ctrl.processIncomingEnvelope(
         {

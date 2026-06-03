@@ -37,8 +37,8 @@ class _FakeClock implements FsClock {
 
 FsInitPayload _initPayload({String initId = 'init-111'}) => FsInitPayload(
       initId: initId,
-      initiatorDevicePub: 'AQ' + 'A' * 42,
-      initiatorEphemeralPub: 'AQ' + 'B' * 42,
+      initiatorDevicePub: 'AQ${'A' * 42}',
+      initiatorEphemeralPub: 'AQ${'B' * 42}',
       caps: ['lgfs1'],
       createdAt: _kNow,
       ekAPrivBytes: Uint8List(32),
@@ -51,9 +51,9 @@ FsReplyPayload _replyPayload({
     FsReplyPayload(
       initId: initId,
       replyId: replyId,
-      responderDevicePub: 'AQ' + 'C' * 42,
-      responderEphemeralPub: 'AQ' + 'D' * 42,
-      responderInitialRatchetPub: 'AQ' + 'E' * 42,
+      responderDevicePub: 'AQ${'C' * 42}',
+      responderEphemeralPub: 'AQ${'D' * 42}',
+      responderInitialRatchetPub: 'AQ${'E' * 42}',
       responderInitialRatchetPriv: Uint8List(32),
       caps: ['lgfs1'],
       createdAt: _kNow,
@@ -75,7 +75,7 @@ FsConfirmPayload _confirmPayload({
       replyId: replyId,
       transcriptHash: 'A' * 43,
       confirmTag: 'B' * 43,
-      initiatorInitialRatchetPub: 'AQ' + 'F' * 42,
+      initiatorInitialRatchetPub: 'AQ${'F' * 42}',
       initiatorInitialRatchetPriv: Uint8List(32),
       partialState: FsHandshakePartialState(
         transcriptHash: Uint8List(32),
@@ -120,7 +120,9 @@ FsConfirmPayload _confirmPayload({
 
 void main() {
   // T10.1 — buildOutgoingExtension from legacyOnly produces fs_init extension.
-  test('T10.1: buildOutgoingExtension in legacyOnly attaches fs_init and advances state', () async {
+  test(
+      'T10.1: buildOutgoingExtension in legacyOnly attaches fs_init and advances state',
+      () async {
     final (ctrl, registry, _) = _buildAlice();
 
     expect(ctrl.state, equals(FsSessionState.legacyOnly));
@@ -171,7 +173,8 @@ void main() {
   });
 
   // T10.3 — No x.fs → noExtension (legacy-compatible).
-  test('T10.3: incoming envelope without x.fs treated as legacy (noExtension)', () async {
+  test('T10.3: incoming envelope without x.fs treated as legacy (noExtension)',
+      () async {
     final (ctrl, _, _) = _buildBob();
 
     final envelope = {
@@ -197,8 +200,8 @@ void main() {
 
     final staleInit = FsInitPayload(
       initId: 'stale-init',
-      initiatorDevicePub: 'AQ' + 'A' * 42,
-      initiatorEphemeralPub: 'AQ' + 'B' * 42,
+      initiatorDevicePub: 'AQ${'A' * 42}',
+      initiatorEphemeralPub: 'AQ${'B' * 42}',
       caps: ['lgfs1'],
       createdAt: _kNow - (8 * 24 * 60 * 60), // 8 days ago
       ekAPrivBytes: Uint8List(32),
@@ -234,7 +237,8 @@ void main() {
     expect(ctrl.state, equals(FsSessionState.fsInitSeen));
 
     // A second replayed fs_init arrives.
-    final result = await ctrl.processIncomingEnvelope(envelope, remoteContactId: 'alice');
+    final result =
+        await ctrl.processIncomingEnvelope(envelope, remoteContactId: 'alice');
     expect(result.type, equals(FsIncomingType.fsInitRejected),
         reason: 'Duplicate/replayed fs_init must be rejected');
     expect(ctrl.state, equals(FsSessionState.fsInitSeen),
@@ -253,19 +257,21 @@ void main() {
       },
     };
 
-    final result = await ctrl.processIncomingEnvelope(envelope, remoteContactId: 'alice');
+    final result =
+        await ctrl.processIncomingEnvelope(envelope, remoteContactId: 'alice');
     expect(result.type, equals(FsIncomingType.malformed));
     expect(ctrl.state, equals(FsSessionState.legacyOnly));
   });
 
   // T10.7 — Payload too large → dropped with payloadTooLarge reason.
-  test('T10.7: oversized pendingInit → FsExtensionDropReason.payloadTooLarge', () async {
+  test('T10.7: oversized pendingInit → FsExtensionDropReason.payloadTooLarge',
+      () async {
     final (ctrl, _, _) = _buildAlice();
 
     final oversized = FsInitPayload(
       initId: 'x' * 22,
-      initiatorDevicePub: 'AQ' + 'X' * 42,
-      initiatorEphemeralPub: 'AQ' + 'X' * 42,
+      initiatorDevicePub: 'AQ${'X' * 42}',
+      initiatorEphemeralPub: 'AQ${'X' * 42}',
       caps: ['lgfs1'],
       createdAt: _kNow,
       ekAPrivBytes: Uint8List(32),
@@ -283,7 +289,8 @@ void main() {
     // A normal-size init succeeds.
     final ext = await ctrl.buildOutgoingExtension(pendingInit: _initPayload());
     expect(ext, isNotNull);
-    expect(ext!.droppedReason, isNull, reason: 'Normal init should not be dropped');
+    expect(ext!.droppedReason, isNull,
+        reason: 'Normal init should not be dropped');
   });
 
   // T10.8 — processIncomingEnvelope with fs_reply updates state and registry.
@@ -303,7 +310,8 @@ void main() {
       'x': {'fs': replyMsg},
     };
 
-    final result = await alice.processIncomingEnvelope(envelope, remoteContactId: 'bob');
+    final result =
+        await alice.processIncomingEnvelope(envelope, remoteContactId: 'bob');
 
     expect(result.type, equals(FsIncomingType.fsReplyAccepted));
     expect(alice.state, equals(FsSessionState.fsReplySeen));
@@ -319,7 +327,8 @@ void main() {
   });
 
   // T10.9 — fs_confirm accepted by Bob after he sent fs_reply.
-  test('T10.9: incoming fs_confirm accepted by Bob after fsReplySent', () async {
+  test('T10.9: incoming fs_confirm accepted by Bob after fsReplySent',
+      () async {
     final clock = _FakeClock(_kNow);
     final (bob, _, bobMgr) = _buildBob(clock: clock);
 
@@ -343,17 +352,23 @@ void main() {
     // Alice sends fs_confirm (simulated).
     final confirmMsg = _confirmPayload().toMessage().toJson();
     final result = await bob.processIncomingEnvelope(
-      {'v': 2, 'senderId': 'alice', 'x': {'fs': confirmMsg}},
+      {
+        'v': 2,
+        'senderId': 'alice',
+        'x': {'fs': confirmMsg}
+      },
       remoteContactId: 'alice',
     );
 
     // Note: confirm will be rejected because we used dummy verification data
     // but the test verifies the flow works. For a fully valid test,
     // we would need to use real handshake data.
-    expect(result.type, anyOf(
-      equals(FsIncomingType.fsConfirmAccepted),
-      equals(FsIncomingType.fsConfirmRejected),
-    ));
+    expect(
+        result.type,
+        anyOf(
+          equals(FsIncomingType.fsConfirmAccepted),
+          equals(FsIncomingType.fsConfirmRejected),
+        ));
   });
 
   // T10.10 — Registry updated on every state transition through the handshake.
@@ -377,7 +392,11 @@ void main() {
 
     // Step 2: Alice receives fs_reply.
     await alice.processIncomingEnvelope(
-      {'v': 2, 'senderId': 'bob', 'x': {'fs': _replyPayload().toMessage().toJson()}},
+      {
+        'v': 2,
+        'senderId': 'bob',
+        'x': {'fs': _replyPayload().toMessage().toJson()}
+      },
       remoteContactId: 'bob',
     );
     final afterReply = aliceRegistry.lookup(
@@ -390,21 +409,27 @@ void main() {
   });
 
   // T10.11 — unknown x.fs type → FsIncomingType.unknownType.
-  test('T10.11: unknown x.fs type returns unknownType without changing state', () async {
+  test('T10.11: unknown x.fs type returns unknownType without changing state',
+      () async {
     final (ctrl, _, _) = _buildBob();
     final envelope = {
       'v': 2,
       'senderId': 'alice',
-      'x': {'fs': {'type': 'fs_future_extension', 'data': 'abc'}},
+      'x': {
+        'fs': {'type': 'fs_future_extension', 'data': 'abc'}
+      },
     };
-    final result = await ctrl.processIncomingEnvelope(envelope, remoteContactId: 'alice');
+    final result =
+        await ctrl.processIncomingEnvelope(envelope, remoteContactId: 'alice');
     expect(result.type, equals(FsIncomingType.unknownType));
     expect(result.rawType, equals('fs_future_extension'));
     expect(ctrl.state, equals(FsSessionState.legacyOnly));
   });
 
   // T10.12 — Initiator activates session immediately after sending fs_confirm.
-  test('T10.12: initiator reaches fsActive immediately after sending fs_confirm', () async {
+  test(
+      'T10.12: initiator reaches fsActive immediately after sending fs_confirm',
+      () async {
     final clock = _FakeClock(_kNow);
     final (alice, aliceRegistry, aliceMgr) = _buildAlice(clock: clock);
 
@@ -414,7 +439,11 @@ void main() {
 
     // Step 2: Alice receives fs_reply.
     await alice.processIncomingEnvelope(
-      {'v': 2, 'senderId': 'bob', 'x': {'fs': _replyPayload().toMessage().toJson()}},
+      {
+        'v': 2,
+        'senderId': 'bob',
+        'x': {'fs': _replyPayload().toMessage().toJson()}
+      },
       remoteContactId: 'bob',
     );
     expect(alice.state, equals(FsSessionState.fsReplySeen));
@@ -424,7 +453,8 @@ void main() {
 
     // Initiator should immediately be in fsActive state.
     expect(alice.state, equals(FsSessionState.fsActive),
-        reason: 'Initiator must activate session immediately after sending fs_confirm');
+        reason:
+            'Initiator must activate session immediately after sending fs_confirm');
 
     // Registry should reflect fsActive.
     final regState = aliceRegistry.lookup(
@@ -437,7 +467,9 @@ void main() {
   });
 
   // T10.13 — Strict mode: initiator reaches strictFsActive after confirm.
-  test('T10.13: strict mode initiator reaches strictFsActive after sending fs_confirm', () async {
+  test(
+      'T10.13: strict mode initiator reaches strictFsActive after sending fs_confirm',
+      () async {
     final clock = _FakeClock(_kNow);
     final aliceRegistry = FsContactSecurityRegistry();
     final aliceMgr = FsSessionManager(clock: clock);
@@ -457,7 +489,11 @@ void main() {
 
     // Step 2: Alice receives fs_reply.
     await alice.processIncomingEnvelope(
-      {'v': 2, 'senderId': 'bob', 'x': {'fs': _replyPayload().toMessage().toJson()}},
+      {
+        'v': 2,
+        'senderId': 'bob',
+        'x': {'fs': _replyPayload().toMessage().toJson()}
+      },
       remoteContactId: 'bob',
     );
     expect(alice.state, equals(FsSessionState.fsReplySeen));
@@ -467,7 +503,8 @@ void main() {
 
     // Initiator should be in strictFsActive.
     expect(alice.state, equals(FsSessionState.strictFsActive),
-        reason: 'Strict mode initiator must reach strictFsActive after sending fs_confirm');
+        reason:
+            'Strict mode initiator must reach strictFsActive after sending fs_confirm');
 
     final regState = aliceRegistry.lookup(
       contactId: 'alice',
@@ -478,7 +515,9 @@ void main() {
   });
 
   // T10.14 — Passphrase context: initiator reaches fsActive after confirm.
-  test('T10.14: passphrase context initiator reaches fsActive after sending fs_confirm', () async {
+  test(
+      'T10.14: passphrase context initiator reaches fsActive after sending fs_confirm',
+      () async {
     final clock = _FakeClock(_kNow);
     final passphraseRegistry = FsContactSecurityRegistry();
     final passphraseMgr = FsSessionManager(clock: clock);
@@ -495,7 +534,11 @@ void main() {
 
     // Step 2: Alice receives fs_reply.
     await alice.processIncomingEnvelope(
-      {'v': 2, 'senderId': 'bob', 'x': {'fs': _replyPayload().toMessage().toJson()}},
+      {
+        'v': 2,
+        'senderId': 'bob',
+        'x': {'fs': _replyPayload().toMessage().toJson()}
+      },
       remoteContactId: 'bob',
     );
     expect(alice.state, equals(FsSessionState.fsReplySeen));
@@ -505,7 +548,8 @@ void main() {
 
     // Initiator should be in fsActive.
     expect(alice.state, equals(FsSessionState.fsActive),
-        reason: 'Passphrase context initiator must reach fsActive after sending fs_confirm');
+        reason:
+            'Passphrase context initiator must reach fsActive after sending fs_confirm');
 
     // Registry lookup in passphrase context.
     final regState = passphraseRegistry.lookup(
@@ -519,7 +563,9 @@ void main() {
   });
 
   // T10.15 — Passphrase context strict mode: initiator reaches strictFsActive.
-  test('T10.15: passphrase strict mode initiator reaches strictFsActive after confirm', () async {
+  test(
+      'T10.15: passphrase strict mode initiator reaches strictFsActive after confirm',
+      () async {
     final clock = _FakeClock(_kNow);
     final passphraseRegistry = FsContactSecurityRegistry();
     final passphraseMgr = FsSessionManager(clock: clock);
@@ -536,7 +582,11 @@ void main() {
     // Complete handshake.
     await alice.buildOutgoingExtension(pendingInit: _initPayload());
     await alice.processIncomingEnvelope(
-      {'v': 2, 'senderId': 'bob', 'x': {'fs': _replyPayload().toMessage().toJson()}},
+      {
+        'v': 2,
+        'senderId': 'bob',
+        'x': {'fs': _replyPayload().toMessage().toJson()}
+      },
       remoteContactId: 'bob',
     );
     await alice.buildOutgoingExtension(pendingConfirm: _confirmPayload());

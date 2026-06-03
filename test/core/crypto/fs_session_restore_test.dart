@@ -7,6 +7,7 @@
 /// 4. Multi-device session rotation preserves archived sessions through restart
 /// 5. After identity reset + restore, partner can initiate fresh handshake
 /// 6. Plausible deniability: persisted FS state contains no device labels
+library;
 
 import 'dart:io';
 import 'dart:typed_data';
@@ -36,7 +37,8 @@ void main() {
 
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
-    tmpDir = await Directory.systemTemp.createTemp('layergram_session_restore_');
+    tmpDir =
+        await Directory.systemTemp.createTemp('layergram_session_restore_');
     Hive.init(tmpDir.path);
     await Hive.openBox<Map>(LocalDatabase.messagesBoxName);
     box = Hive.box<Map>(LocalDatabase.messagesBoxName);
@@ -54,7 +56,8 @@ void main() {
   // ── 1. FS session state survives app restart ──────────────────────────────
 
   group('Session state persistence through restart', () {
-    test('active FS session state is restored from aux records after restart', () async {
+    test('active FS session state is restored from aux records after restart',
+        () async {
       const contactId = 'contact-alice';
       const sessionId = 'session-xyz';
       const identityContext = 'primary';
@@ -62,7 +65,8 @@ void main() {
 
       // --- Session 1: save state ---
       final auxRepo1 = AuxRecordRepository();
-      auxRepo1.setActiveContext(scopeToken: identityContext, auxStorageKey: auxKey);
+      auxRepo1.setActiveContext(
+          scopeToken: identityContext, auxStorageKey: auxKey);
       final registry1 = FsContactSecurityRegistry();
       final persistence1 = FsStatePersistenceService(
         auxRepository: auxRepo1,
@@ -79,15 +83,20 @@ void main() {
       await persistence1.saveState(activeState);
 
       // Verify saved
-      expect(registry1.lookup(
-        contactId: contactId,
-        identityContext: identityContext,
-        sessionId: sessionId,
-      )?.fsState, FsSessionState.fsActive);
+      expect(
+          registry1
+              .lookup(
+                contactId: contactId,
+                identityContext: identityContext,
+                sessionId: sessionId,
+              )
+              ?.fsState,
+          FsSessionState.fsActive);
 
       // --- "Restart": new registry + persistence, same aux box ---
       final auxRepo2 = AuxRecordRepository();
-      auxRepo2.setActiveContext(scopeToken: identityContext, auxStorageKey: auxKey);
+      auxRepo2.setActiveContext(
+          scopeToken: identityContext, auxStorageKey: auxKey);
       final registry2 = FsContactSecurityRegistry();
       final persistence2 = FsStatePersistenceService(
         auxRepository: auxRepo2,
@@ -119,7 +128,8 @@ void main() {
       final auxKey = await buildAuxKey();
 
       final auxRepo = AuxRecordRepository();
-      auxRepo.setActiveContext(scopeToken: identityContext, auxStorageKey: auxKey);
+      auxRepo.setActiveContext(
+          scopeToken: identityContext, auxStorageKey: auxKey);
       final registry = FsContactSecurityRegistry();
       final persistence = FsStatePersistenceService(
         auxRepository: auxRepo,
@@ -161,8 +171,10 @@ void main() {
       final auxKey = await buildAuxKey();
 
       final auxRepo = AuxRecordRepository();
-      auxRepo.setActiveContext(scopeToken: identityContext, auxStorageKey: auxKey);
-      final ratchetService = FsRatchetPersistenceService(auxRepository: auxRepo);
+      auxRepo.setActiveContext(
+          scopeToken: identityContext, auxStorageKey: auxKey);
+      final ratchetService =
+          FsRatchetPersistenceService(auxRepository: auxRepo);
 
       final ratchet = RatchetState(
         sessionId: sessionId,
@@ -180,7 +192,8 @@ void main() {
       await ratchetService.saveRatchetState(ratchet);
 
       // "Restart": new service, same storage
-      final ratchetService2 = FsRatchetPersistenceService(auxRepository: auxRepo);
+      final ratchetService2 =
+          FsRatchetPersistenceService(auxRepository: auxRepo);
       final restored = await ratchetService2.loadRatchetState(sessionId);
 
       expect(restored, isNotNull, reason: 'Ratchet state must survive restart');
@@ -194,8 +207,10 @@ void main() {
       final auxKey = await buildAuxKey();
 
       final auxRepo = AuxRecordRepository();
-      auxRepo.setActiveContext(scopeToken: identityContext, auxStorageKey: auxKey);
-      final ratchetService = FsRatchetPersistenceService(auxRepository: auxRepo);
+      auxRepo.setActiveContext(
+          scopeToken: identityContext, auxStorageKey: auxKey);
+      final ratchetService =
+          FsRatchetPersistenceService(auxRepository: auxRepo);
 
       // Save ratchets for two different devices/sessions
       for (final sid in ['device-a-session', 'device-b-session']) {
@@ -214,7 +229,8 @@ void main() {
       }
 
       // Restart: load all
-      final ratchetService2 = FsRatchetPersistenceService(auxRepository: auxRepo);
+      final ratchetService2 =
+          FsRatchetPersistenceService(auxRepository: auxRepo);
       final all = await ratchetService2.loadAllRatchetStates();
 
       expect(all.length, 2);
@@ -228,7 +244,8 @@ void main() {
   group('Partner reset recovery (new fs_init from terminal state)', () {
     test('fs_init received in fsActive triggers partner reset recovery', () {
       final session = FsSessionManager();
-      session.setStateForTesting(FsSessionState.fsActive, sessionId: 'old-session');
+      session.setStateForTesting(FsSessionState.fsActive,
+          sessionId: 'old-session');
 
       final newInit = FsInitPayload(
         initId: 'partner-new-init',
@@ -276,7 +293,8 @@ void main() {
   // ── 4. Multi-device session rotation ──────────────────────────────────────
 
   group('Multi-device session rotation', () {
-    test('router archives current session and creates new one on device change', () {
+    test('router archives current session and creates new one on device change',
+        () {
       final router = FsDeviceSessionRouter();
 
       // Simulate active session with device A
@@ -353,7 +371,9 @@ void main() {
   // ── 5. Identity reset → restore → fresh handshake ────────────────────────
 
   group('Identity reset → restore → fresh handshake', () {
-    test('after identity reset and restore, all FS state is gone, fresh handshake succeeds', () async {
+    test(
+        'after identity reset and restore, all FS state is gone, fresh handshake succeeds',
+        () async {
       const contactId = 'contact-carol';
       const sessionId = 'session-old';
       const identityContext = 'primary';
@@ -361,13 +381,15 @@ void main() {
 
       // --- Phase 1: active FS session ---
       final auxRepo = AuxRecordRepository();
-      auxRepo.setActiveContext(scopeToken: identityContext, auxStorageKey: auxKey);
+      auxRepo.setActiveContext(
+          scopeToken: identityContext, auxStorageKey: auxKey);
       final registry = FsContactSecurityRegistry();
       final persistence = FsStatePersistenceService(
         auxRepository: auxRepo,
         registry: registry,
       );
-      final ratchetService = FsRatchetPersistenceService(auxRepository: auxRepo);
+      final ratchetService =
+          FsRatchetPersistenceService(auxRepository: auxRepo);
 
       // Save active state + ratchet
       final state = FsContactSecurityState(
@@ -402,7 +424,8 @@ void main() {
         auxRepository: auxRepo,
         registry: restoredRegistry,
       );
-      final restoredRatchet = FsRatchetPersistenceService(auxRepository: auxRepo);
+      final restoredRatchet =
+          FsRatchetPersistenceService(auxRepository: auxRepo);
 
       await restoredPersistence.loadPersistedState();
       final allRatchets = await restoredRatchet.loadAllRatchetStates();
@@ -438,12 +461,15 @@ void main() {
   // ── 6. Plausible deniability in persisted FS state ────────────────────────
 
   group('Plausible deniability in persisted state', () {
-    test('persisted aux records contain no device labels or platform identifiers', () async {
+    test(
+        'persisted aux records contain no device labels or platform identifiers',
+        () async {
       const identityContext = 'primary';
       final auxKey = await buildAuxKey();
 
       final auxRepo = AuxRecordRepository();
-      auxRepo.setActiveContext(scopeToken: identityContext, auxStorageKey: auxKey);
+      auxRepo.setActiveContext(
+          scopeToken: identityContext, auxStorageKey: auxKey);
       final registry = FsContactSecurityRegistry();
       final persistence = FsStatePersistenceService(
         auxRepository: auxRepo,
@@ -477,9 +503,18 @@ void main() {
         // doesn't contain forbidden fields
         final keys = payload.keys.toSet();
         for (final forbidden in [
-          'deviceName', 'device_name', 'deviceLabel', 'device_label',
-          'platform', 'os', 'model', 'manufacturer',
-          'android', 'ios', 'phone', 'tablet',
+          'deviceName',
+          'device_name',
+          'deviceLabel',
+          'device_label',
+          'platform',
+          'os',
+          'model',
+          'manufacturer',
+          'android',
+          'ios',
+          'phone',
+          'tablet',
         ]) {
           expect(keys, isNot(contains(forbidden)),
               reason: 'Aux payload must not contain "$forbidden"');
@@ -498,7 +533,8 @@ void main() {
       final auxKey = await buildAuxKey();
 
       final auxRepo = AuxRecordRepository();
-      auxRepo.setActiveContext(scopeToken: identityContext, auxStorageKey: auxKey);
+      auxRepo.setActiveContext(
+          scopeToken: identityContext, auxStorageKey: auxKey);
       final registry = FsContactSecurityRegistry();
       final persistence = FsStatePersistenceService(
         auxRepository: auxRepo,
@@ -533,17 +569,23 @@ void main() {
       );
       await persistence2.loadPersistedState();
 
-      expect(registry2.lookup(
-        contactId: 'contact-eve',
-        identityContext: identityContext,
-        sessionId: 'primary-session',
-      ), isNotNull, reason: 'Primary context must survive restart');
+      expect(
+          registry2.lookup(
+            contactId: 'contact-eve',
+            identityContext: identityContext,
+            sessionId: 'primary-session',
+          ),
+          isNotNull,
+          reason: 'Primary context must survive restart');
 
-      expect(registry2.lookup(
-        contactId: 'contact-eve',
-        identityContext: passphraseContext,
-        sessionId: 'passphrase-session',
-      ), isNull, reason: 'Passphrase context must NOT survive restart');
+      expect(
+          registry2.lookup(
+            contactId: 'contact-eve',
+            identityContext: passphraseContext,
+            sessionId: 'passphrase-session',
+          ),
+          isNull,
+          reason: 'Passphrase context must NOT survive restart');
     });
   });
 }

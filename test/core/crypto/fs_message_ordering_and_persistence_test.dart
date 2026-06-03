@@ -7,6 +7,7 @@
 /// 4. After strip: legacy messages re-decrypt, FS messages show placeholder
 /// 5. Message ordering tiebreaker produces deterministic order for same-timestamp
 /// 6. Plausible deniability: no FS device labels leak in storage
+library;
 
 import 'dart:convert';
 import 'dart:io';
@@ -150,36 +151,43 @@ void main() {
   // ── 1. Message ordering with tiebreaker ──────────────────────────────────
 
   group('Message ordering tiebreaker', () {
-    test('same-timestamp messages are ordered deterministically by id', () async {
+    test('same-timestamp messages are ordered deterministically by id',
+        () async {
       final storageKey = await deriveStorageKey('tag-order');
       final repo = await openRepo(storageKey);
 
       // Add 3 messages with same timestamp but different IDs (microseconds)
       final baseTs = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-      await repo.add(MessageRecord(
-        id: '1000000000000003', // latest microsecond
-        senderId: 'me',
-        recipientId: 'bob',
-        direction: 'outgoing',
-        timestamp: baseTs,
-        text: 'third',
-      ), storageKey: storageKey);
-      await repo.add(MessageRecord(
-        id: '1000000000000001', // earliest microsecond
-        senderId: 'bob',
-        recipientId: 'me',
-        direction: 'incoming',
-        timestamp: baseTs,
-        text: 'first',
-      ), storageKey: storageKey);
-      await repo.add(MessageRecord(
-        id: '1000000000000002', // middle microsecond
-        senderId: 'me',
-        recipientId: 'bob',
-        direction: 'outgoing',
-        timestamp: baseTs,
-        text: 'second',
-      ), storageKey: storageKey);
+      await repo.add(
+          MessageRecord(
+            id: '1000000000000003', // latest microsecond
+            senderId: 'me',
+            recipientId: 'bob',
+            direction: 'outgoing',
+            timestamp: baseTs,
+            text: 'third',
+          ),
+          storageKey: storageKey);
+      await repo.add(
+          MessageRecord(
+            id: '1000000000000001', // earliest microsecond
+            senderId: 'bob',
+            recipientId: 'me',
+            direction: 'incoming',
+            timestamp: baseTs,
+            text: 'first',
+          ),
+          storageKey: storageKey);
+      await repo.add(
+          MessageRecord(
+            id: '1000000000000002', // middle microsecond
+            senderId: 'me',
+            recipientId: 'bob',
+            direction: 'outgoing',
+            timestamp: baseTs,
+            text: 'second',
+          ),
+          storageKey: storageKey);
 
       final all = await repo.getAllMessages();
       // Repository sorts newest-first (descending), tiebreaker is b.id > a.id
@@ -199,27 +207,33 @@ void main() {
       expect(chatOrder[2].text, 'third');
     });
 
-    test('messages with different timestamps sort by timestamp regardless of id', () async {
+    test(
+        'messages with different timestamps sort by timestamp regardless of id',
+        () async {
       final storageKey = await deriveStorageKey('tag-order2');
       final repo = await openRepo(storageKey);
 
       final baseTs = 1700000000;
-      await repo.add(MessageRecord(
-        id: '9999999999999999', // large id
-        senderId: 'bob',
-        recipientId: 'me',
-        direction: 'incoming',
-        timestamp: baseTs,
-        text: 'earlier',
-      ), storageKey: storageKey);
-      await repo.add(MessageRecord(
-        id: '0000000000000001', // small id
-        senderId: 'me',
-        recipientId: 'bob',
-        direction: 'outgoing',
-        timestamp: baseTs + 1,
-        text: 'later',
-      ), storageKey: storageKey);
+      await repo.add(
+          MessageRecord(
+            id: '9999999999999999', // large id
+            senderId: 'bob',
+            recipientId: 'me',
+            direction: 'incoming',
+            timestamp: baseTs,
+            text: 'earlier',
+          ),
+          storageKey: storageKey);
+      await repo.add(
+          MessageRecord(
+            id: '0000000000000001', // small id
+            senderId: 'me',
+            recipientId: 'bob',
+            direction: 'outgoing',
+            timestamp: baseTs + 1,
+            text: 'later',
+          ),
+          storageKey: storageKey);
 
       final chatOrder = List<MessageRecord>.from(await repo.getAllMessages())
         ..sort((a, b) {
@@ -236,7 +250,9 @@ void main() {
   // ── 2. Clock skew: outgoing timestamp must not precede latest ────────────
 
   group('Outgoing timestamp clock skew protection', () {
-    test('outgoing timestamp uses max(now, latestInThread) — simulated clock behind', () {
+    test(
+        'outgoing timestamp uses max(now, latestInThread) — simulated clock behind',
+        () {
       // Simulate: received message has timestamp from sender's faster clock
       final senderTs = 1700000060; // sender's clock: 60s ahead
       final localNow = 1700000050; // local clock: 10s behind
@@ -269,32 +285,38 @@ void main() {
       expect(outgoingTs, localNow);
     });
 
-    test('multiple rapid sends preserve insertion order with same-second timestamp', () async {
+    test(
+        'multiple rapid sends preserve insertion order with same-second timestamp',
+        () async {
       final storageKey = await deriveStorageKey('tag-rapid');
       final repo = await openRepo(storageKey);
 
       // Simulate incoming message from sender with faster clock
       final senderTs = 1700000060;
-      await repo.add(MessageRecord(
-        id: '1000000000000001',
-        senderId: 'bob',
-        recipientId: 'me',
-        direction: 'incoming',
-        timestamp: senderTs,
-        text: 'received first',
-      ), storageKey: storageKey);
+      await repo.add(
+          MessageRecord(
+            id: '1000000000000001',
+            senderId: 'bob',
+            recipientId: 'me',
+            direction: 'incoming',
+            timestamp: senderTs,
+            text: 'received first',
+          ),
+          storageKey: storageKey);
 
       // Simulate outgoing message with clock-skew protection
       final localNow = 1700000055; // local clock 5s behind
       final outgoingTs = localNow > senderTs ? localNow : senderTs;
-      await repo.add(MessageRecord(
-        id: '1000000000000002', // later microsecond
-        senderId: 'me',
-        recipientId: 'bob',
-        direction: 'outgoing',
-        timestamp: outgoingTs,
-        text: 'sent after',
-      ), storageKey: storageKey);
+      await repo.add(
+          MessageRecord(
+            id: '1000000000000002', // later microsecond
+            senderId: 'me',
+            recipientId: 'bob',
+            direction: 'outgoing',
+            timestamp: outgoingTs,
+            text: 'sent after',
+          ),
+          storageKey: storageKey);
 
       final chatOrder = List<MessageRecord>.from(await repo.getAllMessages())
         ..sort((a, b) {
@@ -311,22 +333,26 @@ void main() {
   // ── 3. FS plaintext persistence in DB ────────────────────────────────────
 
   group('FS plaintext persistence', () {
-    test('FS message with plaintext survives repository reopen (simulated restart)', () async {
+    test(
+        'FS message with plaintext survives repository reopen (simulated restart)',
+        () async {
       final storageKey = await deriveStorageKey('tag-persist');
 
       // First "session": persist FS message with plaintext
       final repo1 = await openRepo(storageKey);
-      await repo1.add(MessageRecord(
-        id: 'fs-msg-1',
-        senderId: 'bob',
-        recipientId: 'me',
-        direction: 'incoming',
-        timestamp: 1700000000,
-        text: 'secret FS message',
-        ciphertextBase64: base64Encode([1, 2, 3]),
-        nonceBase64: base64Encode([4, 5, 6]),
-        isFsEncrypted: true,
-      ), storageKey: storageKey);
+      await repo1.add(
+          MessageRecord(
+            id: 'fs-msg-1',
+            senderId: 'bob',
+            recipientId: 'me',
+            direction: 'incoming',
+            timestamp: 1700000000,
+            text: 'secret FS message',
+            ciphertextBase64: base64Encode([1, 2, 3]),
+            nonceBase64: base64Encode([4, 5, 6]),
+            isFsEncrypted: true,
+          ),
+          storageKey: storageKey);
 
       final before = await repo1.getAllMessages();
       expect(before.length, 1);
@@ -347,17 +373,19 @@ void main() {
       final storageKey = await deriveStorageKey('tag-legacy');
 
       final repo1 = await openRepo(storageKey);
-      await repo1.add(MessageRecord(
-        id: 'legacy-msg-1',
-        senderId: 'bob',
-        recipientId: 'me',
-        direction: 'incoming',
-        timestamp: 1700000000,
-        text: 'legacy message',
-        ciphertextBase64: base64Encode([7, 8, 9]),
-        nonceBase64: base64Encode([10, 11, 12]),
-        isFsEncrypted: false,
-      ), storageKey: storageKey);
+      await repo1.add(
+          MessageRecord(
+            id: 'legacy-msg-1',
+            senderId: 'bob',
+            recipientId: 'me',
+            direction: 'incoming',
+            timestamp: 1700000000,
+            text: 'legacy message',
+            ciphertextBase64: base64Encode([7, 8, 9]),
+            nonceBase64: base64Encode([10, 11, 12]),
+            isFsEncrypted: false,
+          ),
+          storageKey: storageKey);
 
       final repo2 = await openRepo(storageKey);
       final after = await repo2.getAllMessages();
@@ -375,29 +403,33 @@ void main() {
       final storageKey = await deriveStorageKey('tag-strip');
       final repo = await openRepo(storageKey);
 
-      await repo.add(MessageRecord(
-        id: 'fs-1',
-        senderId: 'bob',
-        recipientId: 'me',
-        direction: 'incoming',
-        timestamp: 1700000000,
-        text: 'FS secret',
-        ciphertextBase64: base64Encode([1, 2]),
-        nonceBase64: base64Encode([3, 4]),
-        isFsEncrypted: true,
-      ), storageKey: storageKey);
+      await repo.add(
+          MessageRecord(
+            id: 'fs-1',
+            senderId: 'bob',
+            recipientId: 'me',
+            direction: 'incoming',
+            timestamp: 1700000000,
+            text: 'FS secret',
+            ciphertextBase64: base64Encode([1, 2]),
+            nonceBase64: base64Encode([3, 4]),
+            isFsEncrypted: true,
+          ),
+          storageKey: storageKey);
 
-      await repo.add(MessageRecord(
-        id: 'legacy-1',
-        senderId: 'bob',
-        recipientId: 'me',
-        direction: 'incoming',
-        timestamp: 1700000001,
-        text: 'legacy secret',
-        ciphertextBase64: base64Encode([5, 6]),
-        nonceBase64: base64Encode([7, 8]),
-        isFsEncrypted: false,
-      ), storageKey: storageKey);
+      await repo.add(
+          MessageRecord(
+            id: 'legacy-1',
+            senderId: 'bob',
+            recipientId: 'me',
+            direction: 'incoming',
+            timestamp: 1700000001,
+            text: 'legacy secret',
+            ciphertextBase64: base64Encode([5, 6]),
+            nonceBase64: base64Encode([7, 8]),
+            isFsEncrypted: false,
+          ),
+          storageKey: storageKey);
 
       // Both have text before strip
       var all = await repo.getAllMessages();
@@ -417,17 +449,19 @@ void main() {
       final storageKey = await deriveStorageKey('tag-idem');
       final repo = await openRepo(storageKey);
 
-      await repo.add(MessageRecord(
-        id: 'msg-1',
-        senderId: 'bob',
-        recipientId: 'me',
-        direction: 'incoming',
-        timestamp: 1700000000,
-        text: 'will be stripped',
-        ciphertextBase64: base64Encode([1]),
-        nonceBase64: base64Encode([2]),
-        isFsEncrypted: true,
-      ), storageKey: storageKey);
+      await repo.add(
+          MessageRecord(
+            id: 'msg-1',
+            senderId: 'bob',
+            recipientId: 'me',
+            direction: 'incoming',
+            timestamp: 1700000000,
+            text: 'will be stripped',
+            ciphertextBase64: base64Encode([1]),
+            nonceBase64: base64Encode([2]),
+            isFsEncrypted: true,
+          ),
+          storageKey: storageKey);
 
       await repo.stripEncryptedPlaintext();
       await repo.stripEncryptedPlaintext(); // second call
@@ -441,17 +475,19 @@ void main() {
       final storageKey = await deriveStorageKey('tag-strip-persist');
       final repo1 = await openRepo(storageKey);
 
-      await repo1.add(MessageRecord(
-        id: 'msg-1',
-        senderId: 'bob',
-        recipientId: 'me',
-        direction: 'incoming',
-        timestamp: 1700000000,
-        text: 'secret',
-        ciphertextBase64: base64Encode([1]),
-        nonceBase64: base64Encode([2]),
-        isFsEncrypted: true,
-      ), storageKey: storageKey);
+      await repo1.add(
+          MessageRecord(
+            id: 'msg-1',
+            senderId: 'bob',
+            recipientId: 'me',
+            direction: 'incoming',
+            timestamp: 1700000000,
+            text: 'secret',
+            ciphertextBase64: base64Encode([1]),
+            nonceBase64: base64Encode([2]),
+            isFsEncrypted: true,
+          ),
+          storageKey: storageKey);
 
       await repo1.stripEncryptedPlaintext();
 
@@ -497,29 +533,33 @@ void main() {
       final repo = await openRepo(storageKey);
 
       // Store both with plaintext (normal operation)
-      await repo.add(MessageRecord(
-        id: 'legacy-msg',
-        senderId: 'bob',
-        recipientId: 'alice',
-        direction: 'incoming',
-        timestamp: 1700000000,
-        text: 'legacy hello',
-        ciphertextBase64: legacyResult.message.ciphertextBase64,
-        nonceBase64: legacyResult.message.nonceBase64,
-        isFsEncrypted: false,
-      ), storageKey: storageKey);
+      await repo.add(
+          MessageRecord(
+            id: 'legacy-msg',
+            senderId: 'bob',
+            recipientId: 'alice',
+            direction: 'incoming',
+            timestamp: 1700000000,
+            text: 'legacy hello',
+            ciphertextBase64: legacyResult.message.ciphertextBase64,
+            nonceBase64: legacyResult.message.nonceBase64,
+            isFsEncrypted: false,
+          ),
+          storageKey: storageKey);
 
-      await repo.add(MessageRecord(
-        id: 'fs-msg',
-        senderId: 'bob',
-        recipientId: 'alice',
-        direction: 'incoming',
-        timestamp: 1700000001,
-        text: 'FS secret hello',
-        ciphertextBase64: fsResult.message.ciphertextBase64,
-        nonceBase64: fsResult.message.nonceBase64,
-        isFsEncrypted: true,
-      ), storageKey: storageKey);
+      await repo.add(
+          MessageRecord(
+            id: 'fs-msg',
+            senderId: 'bob',
+            recipientId: 'alice',
+            direction: 'incoming',
+            timestamp: 1700000001,
+            text: 'FS secret hello',
+            ciphertextBase64: fsResult.message.ciphertextBase64,
+            nonceBase64: fsResult.message.nonceBase64,
+            isFsEncrypted: true,
+          ),
+          storageKey: storageKey);
 
       // Identity reset: strip all plaintext
       await repo.stripEncryptedPlaintext();
@@ -563,15 +603,17 @@ void main() {
       final storageKey = await deriveStorageKey('tag-unenc');
       final repo = await openRepo(storageKey);
 
-      await repo.add(MessageRecord(
-        id: 'plain-msg',
-        senderId: 'me',
-        recipientId: 'bob',
-        direction: 'outgoing',
-        timestamp: 1700000000,
-        text: 'plain message',
-        // no ciphertextBase64/nonceBase64 → not encrypted
-      ), storageKey: storageKey);
+      await repo.add(
+          MessageRecord(
+            id: 'plain-msg',
+            senderId: 'me',
+            recipientId: 'bob',
+            direction: 'outgoing',
+            timestamp: 1700000000,
+            text: 'plain message',
+            // no ciphertextBase64/nonceBase64 → not encrypted
+          ),
+          storageKey: storageKey);
 
       await repo.stripEncryptedPlaintext();
 
@@ -599,13 +641,19 @@ void main() {
 
       final map = record.toMap();
       final allKeys = map.keys.toSet();
-      final allValues = map.values.whereType<String>().toSet();
 
       // Ensure no device-specific fields leak
       for (final forbidden in [
-        'deviceId', 'device_id', 'deviceLabel', 'device_label',
-        'devicePub', 'device_pub', 'deviceName', 'device_name',
-        'initiatorDevicePub', 'initiator_device_pub',
+        'deviceId',
+        'device_id',
+        'deviceLabel',
+        'device_label',
+        'devicePub',
+        'device_pub',
+        'deviceName',
+        'device_name',
+        'initiatorDevicePub',
+        'initiator_device_pub',
       ]) {
         expect(allKeys, isNot(contains(forbidden)),
             reason: 'Map key "$forbidden" would leak device identity');
@@ -615,7 +663,8 @@ void main() {
       expect(allKeys, contains('isFsEncrypted'));
     });
 
-    test('FS-encrypted message differs from legacy only by isFsEncrypted key', () {
+    test('FS-encrypted message differs from legacy only by isFsEncrypted key',
+        () {
       final fsRecord = MessageRecord(
         id: 'fs-1',
         senderId: 'alice',
@@ -657,7 +706,9 @@ void main() {
       }
     });
 
-    test('aux records for FS state use opaque kind identifiers, no device labels', () {
+    test(
+        'aux records for FS state use opaque kind identifiers, no device labels',
+        () {
       // The aux record kinds used for FS state
       const fsKinds = ['fs_state_v1', 'fs_ratchet_v1'];
 
@@ -672,21 +723,24 @@ void main() {
       }
     });
 
-    test('stripped FS message retains isFsEncrypted flag but no plaintext', () async {
+    test('stripped FS message retains isFsEncrypted flag but no plaintext',
+        () async {
       final storageKey = await deriveStorageKey('tag-flag');
       final repo = await openRepo(storageKey);
 
-      await repo.add(MessageRecord(
-        id: 'fs-strip',
-        senderId: 'bob',
-        recipientId: 'me',
-        direction: 'incoming',
-        timestamp: 1700000000,
-        text: 'will vanish',
-        ciphertextBase64: base64Encode([1]),
-        nonceBase64: base64Encode([2]),
-        isFsEncrypted: true,
-      ), storageKey: storageKey);
+      await repo.add(
+          MessageRecord(
+            id: 'fs-strip',
+            senderId: 'bob',
+            recipientId: 'me',
+            direction: 'incoming',
+            timestamp: 1700000000,
+            text: 'will vanish',
+            ciphertextBase64: base64Encode([1]),
+            nonceBase64: base64Encode([2]),
+            isFsEncrypted: true,
+          ),
+          storageKey: storageKey);
 
       await repo.stripEncryptedPlaintext();
 
@@ -703,7 +757,8 @@ void main() {
   // ── 6. Full E2E: encrypt FS → persist → restart → strip → verify ───────
 
   group('Full E2E: FS lifecycle', () {
-    test('FS message readable after restart, unreadable after identity reset', () async {
+    test('FS message readable after restart, unreadable after identity reset',
+        () async {
       final alice = await _keyMaterial(await x25519.newKeyPair());
       final bob = await _keyMaterial(await x25519.newKeyPair());
       final encService = EncryptionService();
@@ -727,17 +782,19 @@ void main() {
 
       // Phase 1: Persist message with plaintext (normal operation)
       final repo1 = await openRepo(storageKey);
-      await repo1.add(MessageRecord(
-        id: 'e2e-fs-msg',
-        senderId: 'bob',
-        recipientId: 'alice',
-        direction: 'incoming',
-        timestamp: 1700000000,
-        text: 'top secret via FS', // plaintext persisted in DB
-        ciphertextBase64: fsResult.message.ciphertextBase64,
-        nonceBase64: fsResult.message.nonceBase64,
-        isFsEncrypted: true,
-      ), storageKey: storageKey);
+      await repo1.add(
+          MessageRecord(
+            id: 'e2e-fs-msg',
+            senderId: 'bob',
+            recipientId: 'alice',
+            direction: 'incoming',
+            timestamp: 1700000000,
+            text: 'top secret via FS', // plaintext persisted in DB
+            ciphertextBase64: fsResult.message.ciphertextBase64,
+            nonceBase64: fsResult.message.nonceBase64,
+            isFsEncrypted: true,
+          ),
+          storageKey: storageKey);
 
       // Phase 2: "App restart" — reopen repo, plaintext must survive
       final repo2 = await openRepo(storageKey);

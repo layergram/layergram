@@ -37,6 +37,7 @@ class AuxRecordCipher {
   static final _hkdf = Hkdf(hmac: Hmac.sha256(), outputLength: 32);
   static final _hkdf12 = Hkdf(hmac: Hmac.sha256(), outputLength: 12);
   static final Random _rng = Random.secure();
+  static const int _recordIdLength = 16;
 
   /// HKDF info string used to derive the auxiliary storage key.
   /// Distinct from "layergram-message-records-v1" used for ordinary messages.
@@ -46,7 +47,8 @@ class AuxRecordCipher {
   ///
   /// [effectiveSecret] is the raw bytes of the master secret for the current
   /// effective identity context (primary or passphrase-derived).
-  static Future<SecretKey> deriveAuxStorageKey(Uint8List effectiveSecret) async {
+  static Future<SecretKey> deriveAuxStorageKey(
+      Uint8List effectiveSecret) async {
     return _hkdf.deriveKey(
       secretKey: SecretKey(effectiveSecret),
       nonce: utf8.encode('aux-key'),
@@ -81,6 +83,7 @@ class AuxRecordCipher {
     );
 
     final blob = Uint8List.fromList([
+      ...recordIdBytes,
       ...nonce,
       ...box.cipherText,
       ...box.mac.bytes,
@@ -98,37 +101,87 @@ class AuxRecordCipher {
   /// (wrong key, corrupted data, or a record belonging to a different context).
   static Future<Map<String, dynamic>?> decrypt({
     required String encryptedRecord,
-    required String recordId,
+    String? recordId,
     required SecretKey auxStorageKey,
   }) async {
     try {
-      final recordIdBytes = base64Url.decode(_padBase64Url(recordId));
-      final encKey = await _deriveRecordKey(auxStorageKey, recordIdBytes);
-      final nonce = await _deriveRecordNonce(auxStorageKey, recordIdBytes);
-
       final blob = Uint8List.fromList(
         base64Url.decode(_padBase64Url(encryptedRecord)),
       );
       if (blob.length < 28) return null;
 
-      final storedNonce = blob.sublist(0, 12);
-      final mac = Mac(blob.sublist(blob.length - 16));
-      final cipher = blob.sublist(12, blob.length - 16);
+      final embeddedRecordId = extractRecordId(encryptedRecord);
+      if (embeddedRecordId != null) {
+        final payload = await _decryptWithRecordIdBytes(
+          blob: blob,
+          recordIdBytes: base64Url.decode(_padBase64Url(embeddedRecordId)),
+          auxStorageKey: auxStorageKey,
+          embeddedRecordId: true,
+        );
+        if (payload != null) {
+          if (recordId != null && recordId != embeddedRecordId) return null;
+          return payload;
+        }
+      }
 
-      // The nonce in the blob is redundant (it's derived from recordId) but
-      // we include it for forward compatibility and verify it matches.
-      if (!_listEquals(storedNonce, nonce)) return null;
-
-      final box = SecretBox(cipher, nonce: storedNonce, mac: mac);
-      final clear = await _algo.decrypt(box, secretKey: encKey);
-
-      final unpaddedJson = _stripPadding(clear);
-      final decoded = jsonDecode(utf8.decode(unpaddedJson));
-      if (decoded is! Map) return null;
-      return decoded.cast<String, dynamic>();
+      if (recordId == null) return null;
+      return _decryptWithRecordIdBytes(
+        blob: blob,
+        recordIdBytes: base64Url.decode(_padBase64Url(recordId)),
+        auxStorageKey: auxStorageKey,
+        embeddedRecordId: false,
+      );
     } catch (_) {
       return null;
     }
+  }
+
+  /// Extracts the embedded record ID from modern aux records.
+  ///
+  /// Legacy records stored the record ID in a separate cleartext field; for
+  /// those records this may return a random-looking candidate that will fail
+  /// nonce verification during decrypt.
+  static String? extractRecordId(String encryptedRecord) {
+    try {
+      final blob = Uint8List.fromList(
+        base64Url.decode(_padBase64Url(encryptedRecord)),
+      );
+      if (blob.length < _recordIdLength + 28) return null;
+      return base64Url
+          .encode(blob.sublist(0, _recordIdLength))
+          .replaceAll('=', '');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<Map<String, dynamic>?> _decryptWithRecordIdBytes({
+    required Uint8List blob,
+    required Uint8List recordIdBytes,
+    required SecretKey auxStorageKey,
+    required bool embeddedRecordId,
+  }) async {
+    final encKey = await _deriveRecordKey(auxStorageKey, recordIdBytes);
+    final nonce = await _deriveRecordNonce(auxStorageKey, recordIdBytes);
+
+    final offset = embeddedRecordId ? _recordIdLength : 0;
+    if (blob.length < offset + 28) return null;
+
+    final storedNonce = blob.sublist(offset, offset + 12);
+    final mac = Mac(blob.sublist(blob.length - 16));
+    final cipher = blob.sublist(offset + 12, blob.length - 16);
+
+    // The nonce in the blob is redundant (it's derived from recordId) but
+    // we include it for forward compatibility and verify it matches.
+    if (!_listEquals(storedNonce, nonce)) return null;
+
+    final box = SecretBox(cipher, nonce: storedNonce, mac: mac);
+    final clear = await _algo.decrypt(box, secretKey: encKey);
+
+    final unpaddedJson = _stripPadding(clear);
+    final decoded = jsonDecode(utf8.decode(unpaddedJson));
+    if (decoded is! Map) return null;
+    return decoded.cast<String, dynamic>();
   }
 
   // ---------------------------------------------------------------------------
@@ -166,7 +219,8 @@ class AuxRecordCipher {
   static Uint8List _padPayload(String json) {
     final jsonBytes = utf8.encode(json);
     final targetSize = _pickPaddingTarget(jsonBytes.length);
-    final paddingSize = targetSize - jsonBytes.length - 1; // 1 byte for delimiter
+    final paddingSize =
+        targetSize - jsonBytes.length - 1; // 1 byte for delimiter
     final padding = Uint8List(paddingSize > 0 ? paddingSize : 0);
     for (var i = 0; i < padding.length; i++) {
       padding[i] = _rng.nextInt(256);
@@ -200,9 +254,7 @@ class AuxRecordCipher {
     ];
 
     // Pick a random bucket that is large enough for the payload.
-    final eligible = buckets
-        .where((b) => b.$2 > payloadSize)
-        .toList();
+    final eligible = buckets.where((b) => b.$2 > payloadSize).toList();
 
     if (eligible.isEmpty) {
       // Payload is > 96 KB — pad to next 32 KB boundary above it.

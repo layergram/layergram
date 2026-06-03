@@ -82,11 +82,14 @@ Future<ShareResult> shareTextExternally(
   // Deeplinks should always use standard share even if they contain zero-width chars
   // (they shouldn't, but if there's a bug we don't want to block link sharing)
   final isDeeplink = text.startsWith('layergram://');
-  final shouldUseCustomSelector = !isDeeplink && (forceStegoCover || hasSteganography);
-  
+  final shouldUseCustomSelector =
+      !isDeeplink && (forceStegoCover || hasSteganography);
+
   // Debug logging to investigate link sharing issues
-  debugPrint('shareTextExternally: forceStegoCover=$forceStegoCover, hasSteganography=$hasSteganography, isDeeplink=$isDeeplink, shouldUseCustomSelector=$shouldUseCustomSelector');
-  debugPrint('shareTextExternally: text length=${text.length}, startsWith=${text.substring(0, text.length > 50 ? 50 : text.length)}');
+  debugPrint(
+      'shareTextExternally: forceStegoCover=$forceStegoCover, hasSteganography=$hasSteganography, isDeeplink=$isDeeplink, shouldUseCustomSelector=$shouldUseCustomSelector');
+  debugPrint(
+      'shareTextExternally: text length=${text.length}, startsWith=${text.substring(0, text.length > 50 ? 50 : text.length)}');
 
   // On Android, use custom share flow only for steganographic messages.
   // For deeplinks, use the standard share sheet.
@@ -126,6 +129,9 @@ Future<ShareResult> shareTextExternally(
 Future<ShareResult> _shareTextAndroid(BuildContext context, String text) async {
   // Copy text to clipboard in case user wants to paste it
   await Clipboard.setData(ClipboardData(text: text));
+  if (!context.mounted) {
+    return const ShareResult('', ShareResultStatus.unavailable);
+  }
 
   // Show app selector dialog
   final selectedApp = await showDialog<AndroidShareApp>(
@@ -161,21 +167,25 @@ Future<ShareResult> _shareTextAndroid(BuildContext context, String text) async {
 
 Future<void> _showWhatsAppAndroidDialog(BuildContext context) async {
   if (!context.mounted) return;
-  
+
   final openWhatsApp = await showDialog<bool>(
     context: context,
     barrierDismissible: false,
     builder: (dialogContext) => AlertDialog(
-      title: Text(AppStrings.t(dialogContext, 'shareAndroidWhatsAppDialogTitle')),
-      content: Text(AppStrings.t(dialogContext, 'shareAndroidWhatsAppDialogContent')),
+      title:
+          Text(AppStrings.t(dialogContext, 'shareAndroidWhatsAppDialogTitle')),
+      content: Text(
+          AppStrings.t(dialogContext, 'shareAndroidWhatsAppDialogContent')),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(dialogContext).pop(false),
-          child: Text(AppStrings.t(dialogContext, 'shareAndroidWhatsAppDialogCancel')),
+          child: Text(
+              AppStrings.t(dialogContext, 'shareAndroidWhatsAppDialogCancel')),
         ),
         TextButton(
           onPressed: () => Navigator.of(dialogContext).pop(true),
-          child: Text(AppStrings.t(dialogContext, 'shareAndroidWhatsAppDialogOpen')),
+          child: Text(
+              AppStrings.t(dialogContext, 'shareAndroidWhatsAppDialogOpen')),
         ),
       ],
     ),

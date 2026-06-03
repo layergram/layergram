@@ -11,6 +11,7 @@
 ///     6 supported languages.
 ///  4. The pending status text is distinct from the upgrading text per
 ///     language (so the icon clearly communicates pending vs negotiating).
+library;
 
 import 'package:flutter_test/flutter_test.dart';
 

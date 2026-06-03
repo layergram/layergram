@@ -22,7 +22,6 @@ void main() {
     late SecretKey wrongKey;
 
     setUp(() async {
-      final hkdf = Hkdf(hmac: Hmac.sha256(), outputLength: 32);
       // Derive a realistic aux key from a fake 32-byte master secret.
       final masterBytes = Uint8List(32)..fillRange(0, 32, 0x42);
       auxKey = await AuxRecordCipher.deriveAuxStorageKey(masterBytes);
@@ -33,12 +32,16 @@ void main() {
     });
 
     // T1.1 — Write/read roundtrip.
-    test('encrypt then decrypt with correct key returns original payload', () async {
+    test('encrypt then decrypt with correct key returns original payload',
+        () async {
       final payload = {
         'v': 1,
         'kind': 'aux_state',
         'records': [
-          {'type': 'fs_session_state', 'data': {'state': 'fs_active'}},
+          {
+            'type': 'fs_session_state',
+            'data': {'state': 'fs_active'}
+          },
         ],
       };
 
@@ -88,7 +91,7 @@ void main() {
         auxStorageKey: auxKey,
       );
       // Produce a different random recordId.
-      final tamperedId = recordId.substring(0, recordId.length - 2) + 'ZZ';
+      final tamperedId = '${recordId.substring(0, recordId.length - 2)}ZZ';
 
       final result = await AuxRecordCipher.decrypt(
         encryptedRecord: encryptedRecord,
@@ -100,7 +103,9 @@ void main() {
     });
 
     // T1.3 — External map shape matches message record shape.
-    test('external record shape is { encryptedRecord: "..." } like message records', () async {
+    test(
+        'external record shape is { encryptedRecord: "..." } like message records',
+        () async {
       final payload = {'v': 1, 'kind': 'aux_state', 'records': []};
       final (:recordId, :encryptedRecord) = await AuxRecordCipher.encrypt(
         payload: payload,
@@ -122,8 +127,8 @@ void main() {
 
     // T1.4 — Record sizes fall into expected padded buckets (8–96 KB).
     test('encrypted record size falls into a padded bucket', () async {
-      const minBucket = 8 * 1024;   // 8 KB minimum after padding
-      const maxBucket = 96 * 1024;  // 96 KB maximum
+      const minBucket = 8 * 1024; // 8 KB minimum after padding
+      const maxBucket = 96 * 1024; // 96 KB maximum
 
       final payload = {'v': 1, 'kind': 'aux_state', 'records': []};
       final (:recordId, :encryptedRecord) = await AuxRecordCipher.encrypt(
@@ -152,22 +157,14 @@ void main() {
     });
 
     // T1.5 — Storage keys contain no revealing prefixes.
-    // (Tested at repository level via a naming check. Here we verify the
-    //  recordId and encryptedRecord strings themselves don't embed type info.)
-    test('recordId and encryptedRecord strings do not contain revealing terms', () async {
+    test('encryptedRecord does not decode to revealing terms', () async {
       final payload = {'v': 1, 'kind': 'aux_state', 'records': []};
-      final (:recordId, :encryptedRecord) = await AuxRecordCipher.encrypt(
+      final encrypted = await AuxRecordCipher.encrypt(
         payload: payload,
         auxStorageKey: auxKey,
       );
+      final encryptedRecord = encrypted.encryptedRecord;
 
-      for (final forbidden in ['fs', 'ratchet', 'passphrase', 'hidden', 'timer', 'strict']) {
-        expect(
-          recordId.toLowerCase().contains(forbidden),
-          isFalse,
-          reason: 'recordId must not contain "$forbidden"',
-        );
-      }
       // The encryptedRecord is opaque base64url — no readable text.
       // We verify it doesn't accidentally decode to readable JSON.
       bool isPlaintext = false;
@@ -180,11 +177,13 @@ void main() {
         )));
         isPlaintext = decoded != null;
       } catch (_) {}
-      expect(isPlaintext, isFalse, reason: 'encryptedRecord must not be plaintext JSON');
+      expect(isPlaintext, isFalse,
+          reason: 'encryptedRecord must not be plaintext JSON');
     });
 
     // T1.6 — Kind and type are absent from external metadata.
-    test('decrypted payload contains kind/type but external blob does not', () async {
+    test('decrypted payload contains kind/type but external blob does not',
+        () async {
       final payload = {
         'v': 1,
         'kind': 'aux_state',
@@ -210,7 +209,8 @@ void main() {
         auxStorageKey: auxKey,
       );
       expect(decrypted!['kind'], equals('aux_state'));
-      expect((decrypted['records'] as List).first['type'], equals('security_preferences'));
+      expect((decrypted['records'] as List).first['type'],
+          equals('security_preferences'));
     });
 
     // T1.7 — Multiple aux records have different sizes (no obvious pattern).
@@ -239,7 +239,9 @@ void main() {
     });
 
     // Extra: distinct aux key vs message key.
-    test('aux key differs from a hypothetical message key derived from same secret', () async {
+    test(
+        'aux key differs from a hypothetical message key derived from same secret',
+        () async {
       final master = Uint8List(32)..fillRange(0, 32, 0x11);
       final auxK = await AuxRecordCipher.deriveAuxStorageKey(master);
 

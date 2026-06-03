@@ -10,7 +10,8 @@ import '../crypto/sealed_map_cipher.dart';
 import 'local_database.dart';
 
 class MessagesRepositoryCore {
-  MessagesRepositoryCore() : _box = Hive.box<Map>(LocalDatabase.messagesBoxName) {
+  MessagesRepositoryCore()
+      : _box = Hive.box<Map>(LocalDatabase.messagesBoxName) {
     _loadFuture = _reloadFromBox();
   }
 
@@ -103,8 +104,7 @@ class MessagesRepositoryCore {
   }
 
   Future<Map<String, dynamic>?> _decryptPersistedRecord(
-    Map<dynamic, dynamic> persisted,
-    {
+    Map<dynamic, dynamic> persisted, {
     required SecretKey? storageKey,
   }) async {
     final encryptedRecord = persisted['encryptedRecord'] as String?;
@@ -138,7 +138,8 @@ class MessagesRepositoryCore {
 
   void _sortAndPrune() {
     _messages.removeWhere((m) => m.deletedAt != null);
-    _messages.removeWhere((m) => m.expireAfter != null && m.expireAfter! < _now);
+    _messages
+        .removeWhere((m) => m.expireAfter != null && m.expireAfter! < _now);
     _messages.sort(_compareNewestFirst);
   }
 
@@ -150,11 +151,14 @@ class MessagesRepositoryCore {
 
   bool _hasPrunableMessages() {
     return _messages.any(
-      (m) => m.deletedAt != null || (m.expireAfter != null && m.expireAfter! < _now),
+      (m) =>
+          m.deletedAt != null ||
+          (m.expireAfter != null && m.expireAfter! < _now),
     );
   }
 
-  bool _isDuplicateIncomingMessage(MessageRecord existing, MessageRecord candidate) {
+  bool _isDuplicateIncomingMessage(
+      MessageRecord existing, MessageRecord candidate) {
     if (existing.direction != 'incoming' || candidate.direction != 'incoming') {
       return false;
     }
@@ -187,19 +191,11 @@ class MessagesRepositoryCore {
     await _ensureLoaded();
     if (!_hasScope) return;
 
-    // Delete all scoped message/hidden records, but leave any record that
-    // carries the aux-record marker ('a': true) — those belong to
-    // AuxRecordRepository and must not be touched by the message persist cycle.
-    final keysToDelete = _box.keys
-        .where(_isScopedKey)
-        .where((k) {
-          final raw = _box.get(k);
-          if (raw == null) return true;
-          return raw['a'] != true;
-        })
-        .toList();
-    for (final key in keysToDelete) {
-      await _box.delete(key);
+    // Rewrite only the visible message aggregate. Opaque encrypted residual
+    // records in the same scope may be aux records or future archive formats;
+    // normal message operations must preserve them.
+    if (_visibleRecordKey != null) {
+      await _box.delete(_visibleRecordKey);
     }
     for (final entry in _hiddenPersistedRecords.entries) {
       await _box.put(entry.key, entry.value);
@@ -284,8 +280,8 @@ class MessagesRepositoryCore {
 
   Future<void> deleteAllForContact(String contactId) async {
     await _ensureLoaded();
-    _messages.removeWhere((m) =>
-        m.senderId == contactId || m.recipientId == contactId);
+    _messages.removeWhere(
+        (m) => m.senderId == contactId || m.recipientId == contactId);
     _sortAndPrune();
     await _persistAll();
     _controller.add(List.unmodifiable(_messages));
@@ -365,7 +361,8 @@ class MessagesRepositoryCore {
     return List.unmodifiable(_messages);
   }
 
-  Stream<List<MessageRecord>> watchThread(String contactId, {int limit = 50}) async* {
+  Stream<List<MessageRecord>> watchThread(String contactId,
+      {int limit = 50}) async* {
     await _ensureLoaded();
     final hadPrunableMessages = _hasPrunableMessages();
     _sortAndPrune();

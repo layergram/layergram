@@ -47,8 +47,7 @@ import 'local_database.dart';
 /// random recordId is written first, then the old record is deleted.
 /// This guarantees a fresh per-record AES-GCM key/nonce pair every time.
 class AuxRecordRepository {
-  AuxRecordRepository()
-      : _box = Hive.box<Map>(LocalDatabase.messagesBoxName);
+  AuxRecordRepository() : _box = Hive.box<Map>(LocalDatabase.messagesBoxName);
 
   final Box<Map> _box;
 
@@ -83,10 +82,6 @@ class AuxRecordRepository {
   /// [recordId] is a 128-bit random value embedded in the encrypted blob and
   /// used for per-record key/nonce derivation. [storageId] is an additional
   /// opaque Hive key used to locate the record in storage.
-  ///
-  /// The [recordId] must be stored by the caller alongside the [storageId] so
-  /// that the record can later be decrypted (the recordId is required to
-  /// re-derive the per-record encryption key).
   Future<({String storageId, String recordId})> write({
     required Map<String, dynamic> payload,
   }) async {
@@ -96,11 +91,8 @@ class AuxRecordRepository {
       auxStorageKey: _auxStorageKey!,
     );
     final storageId = _newOpaqueStorageId();
-    // Store recordId in cleartext (_rid) so we can retrieve it without decryption
     await _box.put(_scopedKey(storageId), {
       'encryptedRecord': encryptedRecord,
-      'a': true,
-      '_rid': recordId,
     });
     return (storageId: storageId, recordId: recordId);
   }
@@ -151,14 +143,19 @@ class AuxRecordRepository {
   /// Returns all storage IDs and their recordIds for aux records in the current scope.
   ///
   /// This is used by persistence services to reload their state after app restart.
-  /// Returns a map of storageId → recordId (recordId is stored in cleartext for retrieval).
+  /// Returns a map of storageId → recordId. Modern records embed the recordId
+  /// inside the encrypted blob; legacy records may still carry `_rid`.
   Map<String, String> getAllAuxRecordIds() {
     if (!_hasScope) return const {};
     final result = <String, String>{};
-    for (final key in _box.keys.where(_isScopedKey).where(_isAuxRecord)) {
+    for (final key in _box.keys.where(_isScopedKey)) {
       final raw = _box.get(key);
       if (raw != null) {
-        final recordId = raw['_rid'] as String?;
+        final encryptedRecord = raw['encryptedRecord'] as String?;
+        final recordId = encryptedRecord == null
+            ? null
+            : AuxRecordCipher.extractRecordId(encryptedRecord) ??
+                raw['_rid'] as String?;
         if (recordId != null && recordId.isNotEmpty) {
           final storageId = (key as String).substring(_keyPrefix.length);
           result[storageId] = recordId;
@@ -188,13 +185,13 @@ class AuxRecordRepository {
   /// Records from other identity contexts are left intact (they cannot be
   /// distinguished from other records without the correct key).
   Future<void> clearAll() async {
-    if (!_hasScope) return;
-    final auxKeys = _box.keys
-        .where(_isScopedKey)
-        .where(_isAuxRecord)
-        .toList();
-    for (final key in auxKeys) {
-      await _box.delete(key);
+    if (!_hasScope || _auxStorageKey == null) return;
+    final allIds = getAllAuxRecordIds();
+    for (final entry in allIds.entries) {
+      final payload = await read(storageId: entry.key, recordId: entry.value);
+      if (payload != null) {
+        await _box.delete(_scopedKey(entry.key));
+      }
     }
   }
 
@@ -211,27 +208,14 @@ class AuxRecordRepository {
   /// matching the 'kind' field (and optionally 'identityContext') in the payload.
   Future<void> clearByKind(String kind, {String? identityContext}) async {
     if (!_hasScope || _auxStorageKey == null) {
-      assert(() {
-        print('[AUX-CLEAR] Skipped: no scope or no key');
-        return true;
-      }());
       return;
     }
 
     final allIds = getAllAuxRecordIds();
-    assert(() {
-      print('[AUX-CLEAR] Found ${allIds.length} records, looking for kind=$kind, ctx=$identityContext');
-      return true;
-    }());
-
-    int checked = 0;
-    int deleted = 0;
-    int skipped = 0;
 
     for (final entry in allIds.entries) {
       final storageId = entry.key;
       final recordId = entry.value;
-      checked++;
 
       // Try to read and decrypt the record
       final raw = _box.get(_scopedKey(storageId));
@@ -247,35 +231,23 @@ class AuxRecordRepository {
       );
 
       if (payload == null) {
-        assert(() {
-          print('[AUX-CLEAR] Failed to decrypt record $storageId');
-          return true;
-        }());
         continue;
       }
 
       // Check kind matches
       if (payload['kind'] != kind) {
-        skipped++;
         continue;
       }
 
       // If identityContext specified, check it matches too
       if (identityContext != null &&
           payload['identityContext'] != identityContext) {
-        skipped++;
         continue;
       }
 
       // Delete matching record
       await _box.delete(_scopedKey(storageId));
-      deleted++;
     }
-
-    assert(() {
-      print('[AUX-CLEAR] Done: checked=$checked, deleted=$deleted, skipped=$skipped');
-      return true;
-    }());
   }
 
   /// Deletes all auxiliary records that cannot be decrypted with the current key.
@@ -295,15 +267,17 @@ class AuxRecordRepository {
 
     for (final key in _box.keys) {
       if (!_isScopedKey(key)) continue;
-      if (!_isAuxRecord(key)) continue;
 
       final raw = _box.get(key as String);
       if (raw == null) continue;
 
       final encryptedRecord = raw['encryptedRecord'] as String?;
-      final recordId = raw['_rid'] as String?;
+      final recordId = encryptedRecord == null
+          ? null
+          : AuxRecordCipher.extractRecordId(encryptedRecord) ??
+              raw['_rid'] as String?;
       if (encryptedRecord == null || recordId == null) {
-        keysToDelete.add(key);
+        if (raw['a'] == true) keysToDelete.add(key);
         continue;
       }
 
@@ -314,18 +288,13 @@ class AuxRecordRepository {
       );
 
       if (payload == null) {
-        keysToDelete.add(key);
+        if (raw['a'] == true) keysToDelete.add(key);
       }
     }
 
     for (final key in keysToDelete) {
       await _box.delete(key);
     }
-
-    assert(() {
-      print('[AUX-CLEAN] Cleaned ${keysToDelete.length} undecryptable records');
-      return true;
-    }());
 
     return keysToDelete.length;
   }
@@ -338,19 +307,6 @@ class AuxRecordRepository {
     if (!_hasScope || _auxStorageKey == null) {
       throw StateError('AuxRecordRepository: storage context not initialized');
     }
-  }
-
-  /// Returns true if the raw stored map looks like an aux record rather than
-  /// a message record (both have an 'encryptedRecord' field, so we rely on
-  /// an internal 'auxRecord' marker set by this repository).
-  ///
-  /// In practice we use the same external shape; the distinction is that aux
-  /// records additionally carry a 'a' = true marker (single-char, opaque).
-  bool _isAuxRecord(Object? key) {
-    if (key is! String) return false;
-    final raw = _box.get(key);
-    if (raw == null) return false;
-    return raw['a'] == true;
   }
 
   static final Random _rng = Random.secure();

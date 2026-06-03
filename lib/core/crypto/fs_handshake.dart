@@ -66,7 +66,7 @@ class FsHandshake {
   }) async {
     final ekAPair = await _x25519.newKeyPair();
     final ekAPrivBytes = Uint8List.fromList(
-      await (await ekAPair.extractPrivateKeyBytes()),
+      await ekAPair.extractPrivateKeyBytes(),
     );
     final ekAPub = await ekAPair.extractPublicKey();
     final ekAPubBytes = Uint8List.fromList(ekAPub.bytes);
@@ -107,7 +107,7 @@ class FsHandshake {
     // Generate responder's ephemeral key pair.
     final ekBPair = await _x25519.newKeyPair();
     final ekBPrivBytes = Uint8List.fromList(
-      await (await ekBPair.extractPrivateKeyBytes()),
+      await ekBPair.extractPrivateKeyBytes(),
     );
     final ekBPub = await ekBPair.extractPublicKey();
     final ekBPubBytes = Uint8List.fromList(ekBPub.bytes);
@@ -131,19 +131,27 @@ class FsHandshake {
     );
 
     // Compute 5 DH values (B-side formulas, spec §8.3.7).
-    final dh1 = await _dh(dkBPriv, ikAPub);      // DH(DK_B_priv, IK_A_pub)
-    final dh2 = await _dh(ikBPriv, dkAPubBytes);  // DH(IK_B_priv, DK_A_pub)
-    final dh3 = await _dh(dkBPriv, ekAPubBytes);  // DH(DK_B_priv, EK_A_pub)
+    final dh1 = await _dh(dkBPriv, ikAPub); // DH(DK_B_priv, IK_A_pub)
+    final dh2 = await _dh(ikBPriv, dkAPubBytes); // DH(IK_B_priv, DK_A_pub)
+    final dh3 = await _dh(dkBPriv, ekAPubBytes); // DH(DK_B_priv, EK_A_pub)
     final dh4 = await _dh(ekBPrivBytes, dkAPubBytes); // DH(EK_B_priv, DK_A_pub)
     final dh5 = await _dh(ekBPrivBytes, ekAPubBytes); // DH(EK_B_priv, EK_A_pub)
 
     final initialRootSecret = await _deriveRootSecret(
-      dh1: dh1, dh2: dh2, dh3: dh3, dh4: dh4, dh5: dh5,
+      dh1: dh1,
+      dh2: dh2,
+      dh3: dh3,
+      dh4: dh4,
+      dh5: dh5,
       transcriptHash: th,
     );
 
     // Wipe intermediate DH outputs immediately.
-    _wipeList(dh1); _wipeList(dh2); _wipeList(dh3); _wipeList(dh4); _wipeList(dh5);
+    _wipeList(dh1);
+    _wipeList(dh2);
+    _wipeList(dh3);
+    _wipeList(dh4);
+    _wipeList(dh5);
 
     // Keep a copy of the root secret for B so it can verify FS_CONFIRM.
     // It is wiped by the caller after [verifyFsConfirmAsResponder] succeeds.
@@ -154,8 +162,10 @@ class FsHandshake {
     _wipeList(initialRootSecret);
 
     // Derive chain keys (B = responder, so A→B is receiving chain).
-    final receivingChainKey0 = await _deriveChainKey(chainSeed0, th, 'Layergram-FS-v1 A->B initial chain');
-    final sendingChainKey0 = await _deriveChainKey(chainSeed0, th, 'Layergram-FS-v1 B->A initial chain');
+    final receivingChainKey0 = await _deriveChainKey(
+        chainSeed0, th, 'Layergram-FS-v1 A->B initial chain');
+    final sendingChainKey0 = await _deriveChainKey(
+        chainSeed0, th, 'Layergram-FS-v1 B->A initial chain');
     _wipeList(chainSeed0);
 
     // Wipe responder ephemeral private key — no longer needed after chain derivation.
@@ -165,8 +175,9 @@ class FsHandshake {
     // The public key is published in FS_REPLY so A can set lastRemoteRatchetPub
     // correctly, avoiding a spurious DH ratchet step on first message delivery.
     final ratchetBPair = await _x25519.newKeyPair();
-    final ratchetBPriv = Uint8List.fromList(await ratchetBPair.extractPrivateKeyBytes());
-    final ratchetBPubKey = await ratchetBPair.extractPublicKey() as SimplePublicKey;
+    final ratchetBPriv =
+        Uint8List.fromList(await ratchetBPair.extractPrivateKeyBytes());
+    final ratchetBPubKey = await ratchetBPair.extractPublicKey();
     final ratchetBPub = Uint8List.fromList(ratchetBPubKey.bytes);
 
     return FsReplyPayload(
@@ -228,17 +239,25 @@ class FsHandshake {
     );
 
     // 5 DH values (A-side formulas, spec §8.3.7).
-    final dh1 = await _dh(ikAPriv, dkBPubBytes);      // DH(IK_A_priv, DK_B_pub)
-    final dh2 = await _dh(dkAPriv, ikBPub);           // DH(DK_A_priv, IK_B_pub)
+    final dh1 = await _dh(ikAPriv, dkBPubBytes); // DH(IK_A_priv, DK_B_pub)
+    final dh2 = await _dh(dkAPriv, ikBPub); // DH(DK_A_priv, IK_B_pub)
     final dh3 = await _dh(ekAPrivBytes, dkBPubBytes); // DH(EK_A_priv, DK_B_pub)
-    final dh4 = await _dh(dkAPriv, ekBPubBytes);      // DH(DK_A_priv, EK_B_pub)
+    final dh4 = await _dh(dkAPriv, ekBPubBytes); // DH(DK_A_priv, EK_B_pub)
     final dh5 = await _dh(ekAPrivBytes, ekBPubBytes); // DH(EK_A_priv, EK_B_pub)
 
     final initialRootSecret = await _deriveRootSecret(
-      dh1: dh1, dh2: dh2, dh3: dh3, dh4: dh4, dh5: dh5,
+      dh1: dh1,
+      dh2: dh2,
+      dh3: dh3,
+      dh4: dh4,
+      dh5: dh5,
       transcriptHash: th,
     );
-    _wipeList(dh1); _wipeList(dh2); _wipeList(dh3); _wipeList(dh4); _wipeList(dh5);
+    _wipeList(dh1);
+    _wipeList(dh2);
+    _wipeList(dh3);
+    _wipeList(dh4);
+    _wipeList(dh5);
 
     // Derive confirmKey and compute confirmTag (spec §8.3.8).
     final confirmKey = await _deriveConfirmKey(initialRootSecret, th);
@@ -250,8 +269,10 @@ class FsHandshake {
     _wipeList(initialRootSecret);
 
     // Derive chain keys (A = initiator: A→B is sending chain).
-    final sendingChainKey0 = await _deriveChainKey(chainSeed0, th, 'Layergram-FS-v1 A->B initial chain');
-    final receivingChainKey0 = await _deriveChainKey(chainSeed0, th, 'Layergram-FS-v1 B->A initial chain');
+    final sendingChainKey0 = await _deriveChainKey(
+        chainSeed0, th, 'Layergram-FS-v1 A->B initial chain');
+    final receivingChainKey0 = await _deriveChainKey(
+        chainSeed0, th, 'Layergram-FS-v1 B->A initial chain');
     _wipeList(chainSeed0);
 
     // Wipe A's ephemeral private key — no longer needed.
@@ -261,8 +282,9 @@ class FsHandshake {
     // The public key is published in FS_CONFIRM so B can set lastRemoteRatchetPub
     // correctly, avoiding a spurious DH ratchet step on first message delivery.
     final ratchetAPair = await _x25519.newKeyPair();
-    final ratchetAPriv = Uint8List.fromList(await ratchetAPair.extractPrivateKeyBytes());
-    final ratchetAPubKey = await ratchetAPair.extractPublicKey() as SimplePublicKey;
+    final ratchetAPriv =
+        Uint8List.fromList(await ratchetAPair.extractPrivateKeyBytes());
+    final ratchetAPubKey = await ratchetAPair.extractPublicKey();
     final ratchetAPub = Uint8List.fromList(ratchetAPubKey.bytes);
 
     return FsConfirmPayload(
@@ -320,6 +342,19 @@ class FsHandshake {
     );
     final expectedTag = await _computeConfirmTag(confirmKey, th, 'A confirms');
     _wipeList(confirmKey);
+
+    // Decode and verify the transcript hash carried on the wire. The confirm
+    // tag is computed over the stored transcript, but the message field itself
+    // must also match so callers cannot accept an inconsistent FS_CONFIRM.
+    final Uint8List receivedTranscriptHash;
+    try {
+      receivedTranscriptHash = Uint8List.fromList(
+        base64Url.decode(_padBase64Url(confirm.transcriptHash)),
+      );
+    } catch (_) {
+      return false;
+    }
+    if (!_constantTimeEqual(th, receivedTranscriptHash)) return false;
 
     // Decode received confirm tag.
     final Uint8List receivedTag;
@@ -511,8 +546,7 @@ class FsHandshake {
     return base64Url.encode(bytes).replaceAll('=', '');
   }
 
-  static int _nowSeconds() =>
-      DateTime.now().millisecondsSinceEpoch ~/ 1000;
+  static int _nowSeconds() => DateTime.now().millisecondsSinceEpoch ~/ 1000;
 
   static String _padBase64Url(String s) {
     final rem = s.length % 4;
@@ -563,22 +597,22 @@ class FsInitMessage {
   final int createdAt;
 
   Map<String, dynamic> toJson() => {
-    'v': 1,
-    'type': 'fs_init',
-    'initId': initId,
-    'initiatorDevicePub': initiatorDevicePub,
-    'initiatorEphemeralPub': initiatorEphemeralPub,
-    'caps': caps,
-    'createdAt': createdAt,
-  };
+        'v': 1,
+        'type': 'fs_init',
+        'initId': initId,
+        'initiatorDevicePub': initiatorDevicePub,
+        'initiatorEphemeralPub': initiatorEphemeralPub,
+        'caps': caps,
+        'createdAt': createdAt,
+      };
 
   factory FsInitMessage.fromJson(Map<String, dynamic> j) => FsInitMessage(
-    initId: j['initId'] as String,
-    initiatorDevicePub: j['initiatorDevicePub'] as String,
-    initiatorEphemeralPub: j['initiatorEphemeralPub'] as String,
-    caps: (j['caps'] as List).cast<String>(),
-    createdAt: j['createdAt'] as int,
-  );
+        initId: j['initId'] as String,
+        initiatorDevicePub: j['initiatorDevicePub'] as String,
+        initiatorEphemeralPub: j['initiatorEphemeralPub'] as String,
+        caps: (j['caps'] as List).cast<String>(),
+        createdAt: j['createdAt'] as int,
+      );
 }
 
 /// Return value of [FsHandshake.generateFsInit].
@@ -602,12 +636,12 @@ class FsInitPayload {
   final Uint8List ekAPrivBytes;
 
   FsInitMessage toMessage() => FsInitMessage(
-    initId: initId,
-    initiatorDevicePub: initiatorDevicePub,
-    initiatorEphemeralPub: initiatorEphemeralPub,
-    caps: caps,
-    createdAt: createdAt,
-  );
+        initId: initId,
+        initiatorDevicePub: initiatorDevicePub,
+        initiatorEphemeralPub: initiatorEphemeralPub,
+        caps: caps,
+        createdAt: createdAt,
+      );
 }
 
 /// The public fields sent in an FS_REPLY message (`x.fs`).
@@ -635,26 +669,26 @@ class FsReplyMessage {
   final int createdAt;
 
   Map<String, dynamic> toJson() => {
-    'v': 1,
-    'type': 'fs_reply',
-    'initId': initId,
-    'replyId': replyId,
-    'responderDevicePub': responderDevicePub,
-    'responderEphemeralPub': responderEphemeralPub,
-    'responderInitialRatchetPub': responderInitialRatchetPub,
-    'caps': caps,
-    'createdAt': createdAt,
-  };
+        'v': 1,
+        'type': 'fs_reply',
+        'initId': initId,
+        'replyId': replyId,
+        'responderDevicePub': responderDevicePub,
+        'responderEphemeralPub': responderEphemeralPub,
+        'responderInitialRatchetPub': responderInitialRatchetPub,
+        'caps': caps,
+        'createdAt': createdAt,
+      };
 
   factory FsReplyMessage.fromJson(Map<String, dynamic> j) => FsReplyMessage(
-    initId: j['initId'] as String,
-    replyId: j['replyId'] as String,
-    responderDevicePub: j['responderDevicePub'] as String,
-    responderEphemeralPub: j['responderEphemeralPub'] as String,
-    responderInitialRatchetPub: j['responderInitialRatchetPub'] as String,
-    caps: (j['caps'] as List).cast<String>(),
-    createdAt: j['createdAt'] as int,
-  );
+        initId: j['initId'] as String,
+        replyId: j['replyId'] as String,
+        responderDevicePub: j['responderDevicePub'] as String,
+        responderEphemeralPub: j['responderEphemeralPub'] as String,
+        responderInitialRatchetPub: j['responderInitialRatchetPub'] as String,
+        caps: (j['caps'] as List).cast<String>(),
+        createdAt: j['createdAt'] as int,
+      );
 }
 
 /// Return value of [FsHandshake.processFsInitAsResponder].
@@ -687,14 +721,14 @@ class FsReplyPayload {
   final FsHandshakePartialState partialState;
 
   FsReplyMessage toMessage() => FsReplyMessage(
-    initId: initId,
-    replyId: replyId,
-    responderDevicePub: responderDevicePub,
-    responderEphemeralPub: responderEphemeralPub,
-    responderInitialRatchetPub: responderInitialRatchetPub,
-    caps: caps,
-    createdAt: createdAt,
-  );
+        initId: initId,
+        replyId: replyId,
+        responderDevicePub: responderDevicePub,
+        responderEphemeralPub: responderEphemeralPub,
+        responderInitialRatchetPub: responderInitialRatchetPub,
+        caps: caps,
+        createdAt: createdAt,
+      );
 }
 
 /// The public fields sent in an FS_CONFIRM message (`x.fs`).
@@ -718,22 +752,22 @@ class FsConfirmMessage {
   final String initiatorInitialRatchetPub;
 
   Map<String, dynamic> toJson() => {
-    'v': 1,
-    'type': 'fs_confirm',
-    'initId': initId,
-    'replyId': replyId,
-    'transcriptHash': transcriptHash,
-    'confirmTag': confirmTag,
-    'initiatorInitialRatchetPub': initiatorInitialRatchetPub,
-  };
+        'v': 1,
+        'type': 'fs_confirm',
+        'initId': initId,
+        'replyId': replyId,
+        'transcriptHash': transcriptHash,
+        'confirmTag': confirmTag,
+        'initiatorInitialRatchetPub': initiatorInitialRatchetPub,
+      };
 
   factory FsConfirmMessage.fromJson(Map<String, dynamic> j) => FsConfirmMessage(
-    initId: j['initId'] as String,
-    replyId: j['replyId'] as String,
-    transcriptHash: j['transcriptHash'] as String,
-    confirmTag: j['confirmTag'] as String,
-    initiatorInitialRatchetPub: j['initiatorInitialRatchetPub'] as String,
-  );
+        initId: j['initId'] as String,
+        replyId: j['replyId'] as String,
+        transcriptHash: j['transcriptHash'] as String,
+        confirmTag: j['confirmTag'] as String,
+        initiatorInitialRatchetPub: j['initiatorInitialRatchetPub'] as String,
+      );
 }
 
 /// Return value of [FsHandshake.processFsReplyAsInitiator].
@@ -762,12 +796,12 @@ class FsConfirmPayload {
   final FsHandshakePartialState partialState;
 
   FsConfirmMessage toMessage() => FsConfirmMessage(
-    initId: initId,
-    replyId: replyId,
-    transcriptHash: transcriptHash,
-    confirmTag: confirmTag,
-    initiatorInitialRatchetPub: initiatorInitialRatchetPub,
-  );
+        initId: initId,
+        replyId: replyId,
+        transcriptHash: transcriptHash,
+        confirmTag: confirmTag,
+        initiatorInitialRatchetPub: initiatorInitialRatchetPub,
+      );
 }
 
 /// Intermediate FS handshake state held by each party between messages.

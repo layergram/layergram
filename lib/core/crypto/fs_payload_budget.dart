@@ -13,8 +13,6 @@
 // limitations under the License.
 
 import 'dart:convert';
-import 'dart:typed_data';
-
 import 'stego_encoder.dart';
 
 /// Payload budget analysis for FS control messages carried inside LMF v2.
@@ -164,8 +162,7 @@ class FsPayloadBudgetResult {
   final bool fitsStrict;
 
   @override
-  String toString() =>
-      'FsPayloadBudgetResult('
+  String toString() => 'FsPayloadBudgetResult('
       'fsExt=$fsExtensionBytes B, '
       'total=$totalEncryptedBytes B, '
       'runes=$stegoRuneCount, '

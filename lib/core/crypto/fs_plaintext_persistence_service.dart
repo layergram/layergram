@@ -145,11 +145,6 @@ class FsPlaintextPersistenceService {
         continue;
       }
     }
-
-    assert(() {
-      print('[FS-PT-PERSIST] Rebuilt index: ${_index.length} entries');
-      return true;
-    }());
   }
 
   // ---------------------------------------------------------------------------

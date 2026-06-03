@@ -30,10 +30,14 @@ import 'package:layergram/core/storage/secure_storage.dart';
 
 class _MemSecureStorage extends SecureStorageService {
   final _store = <String, String>{};
-  @override Future<void> write(String key, String value) async => _store[key] = value;
-  @override Future<String?> read(String key) async => _store[key];
-  @override Future<void> delete(String key) async => _store.remove(key);
-  @override Future<void> deleteAll() async => _store.clear();
+  @override
+  Future<void> write(String key, String value) async => _store[key] = value;
+  @override
+  Future<String?> read(String key) async => _store[key];
+  @override
+  Future<void> delete(String key) async => _store.remove(key);
+  @override
+  Future<void> deleteAll() async => _store.clear();
 }
 
 IdentityManager _makeManager({_MemSecureStorage? storage}) {
@@ -58,10 +62,14 @@ void main() {
       expect(SeedService().validateMnemonic(mnemonic24), isTrue);
     });
 
-    test('restoring a 24-word mnemonic twice yields the same identityId and fingerprint', () async {
+    test(
+        'restoring a 24-word mnemonic twice yields the same identityId and fingerprint',
+        () async {
       final mgr = _makeManager();
-      final a = await mgr.restoreIdentityFromMnemonic(mnemonic24, displayName: 'A');
-      final b = await mgr.restoreIdentityFromMnemonic(mnemonic24, displayName: 'B');
+      final a =
+          await mgr.restoreIdentityFromMnemonic(mnemonic24, displayName: 'A');
+      final b =
+          await mgr.restoreIdentityFromMnemonic(mnemonic24, displayName: 'B');
 
       expect(a.identityId, equals(b.identityId),
           reason: 'identityId must be deterministic from mnemonic');
@@ -71,7 +79,9 @@ void main() {
       expect(a.mnemonic, equals(mnemonic24));
     });
 
-    test('UI-normalised (toLowerCase) mnemonic yields the same identity as the original lowercase', () async {
+    test(
+        'UI-normalised (toLowerCase) mnemonic yields the same identity as the original lowercase',
+        () async {
       // The UI layer (create_or_restore_view.dart) calls .toLowerCase() before
       // passing the input to restoreIdentityFromMnemonic. This test verifies
       // that the lowercase-normalised version of a mixed-case input produces
@@ -99,11 +109,14 @@ void main() {
       expect(fromNormalised.publicKeyBase64, equals(fromLower.publicKeyBase64));
     });
 
-    test('restored identity private key matches re-derived private key from mnemonic', () async {
+    test(
+        'restored identity private key matches re-derived private key from mnemonic',
+        () async {
       final seed = SeedService().mnemonicToSeed(mnemonic24);
       final seedService = SeedService();
       final mgr = _makeManager();
-      final restored = await mgr.restoreIdentityFromMnemonic(mnemonic24, displayName: 'R');
+      final restored =
+          await mgr.restoreIdentityFromMnemonic(mnemonic24, displayName: 'R');
 
       final expectedPrivKey = await seedService.deriveIdentityPrivateKey(
         seed,
@@ -112,10 +125,13 @@ void main() {
       final actualPrivKey = await mgr.getLocalPrivateKeyBase64();
 
       expect(actualPrivKey, equals(base64Encode(expectedPrivKey)),
-          reason: 'Stored private key must equal the deterministically re-derived one');
+          reason:
+              'Stored private key must equal the deterministically re-derived one');
     });
 
-    test('restored identity v1 and v2 derivations produce different public keys', () async {
+    test(
+        'restored identity v1 and v2 derivations produce different public keys',
+        () async {
       final mgrV1 = _makeManager();
       final mgrV2 = _makeManager();
 
@@ -136,7 +152,8 @@ void main() {
     test('invalid mnemonic throws ArgumentError', () {
       final mgr = _makeManager();
       expect(
-        () => mgr.restoreIdentityFromMnemonic('not a valid mnemonic phrase at all'),
+        () => mgr
+            .restoreIdentityFromMnemonic('not a valid mnemonic phrase at all'),
         throwsArgumentError,
       );
     });
@@ -182,15 +199,16 @@ void main() {
           reason: 'Both users must see the same emoji');
     });
 
-    test('SAS for real identity key pairs derived from mnemonics matches both ways', () async {
+    test(
+        'SAS for real identity key pairs derived from mnemonics matches both ways',
+        () async {
       final seedSvc = SeedService();
 
       const mnemonicAlice =
           'abandon abandon abandon abandon abandon abandon abandon abandon '
           'abandon abandon abandon abandon abandon abandon abandon abandon '
           'abandon abandon abandon abandon abandon abandon abandon art';
-      const mnemonicBob =
-          'zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong';
+      const mnemonicBob = 'zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong';
 
       final aliceSeed = seedSvc.mnemonicToSeed(mnemonicAlice);
       final bobSeed = seedSvc.mnemonicToSeed(mnemonicBob);
@@ -200,9 +218,12 @@ void main() {
 
       final x25519 = X25519();
       final alicePub = base64Encode(
-          (await (await x25519.newKeyPairFromSeed(alicePriv)).extractPublicKey()).bytes);
+          (await (await x25519.newKeyPairFromSeed(alicePriv))
+                  .extractPublicKey())
+              .bytes);
       final bobPub = base64Encode(
-          (await (await x25519.newKeyPairFromSeed(bobPriv)).extractPublicKey()).bytes);
+          (await (await x25519.newKeyPairFromSeed(bobPriv)).extractPublicKey())
+              .bytes);
 
       final aliceView = await sas.derive(
         localPublicKeyBase64: alicePub,
@@ -217,14 +238,20 @@ void main() {
       expect(aliceView.emojiIndices, equals(bobView.emojiIndices));
     });
 
-    test('SAS is stable across multiple derivation calls (deterministic)', () async {
+    test('SAS is stable across multiple derivation calls (deterministic)',
+        () async {
       final x25519 = X25519();
-      final a = base64Encode((await (await x25519.newKeyPair()).extractPublicKey()).bytes);
-      final b = base64Encode((await (await x25519.newKeyPair()).extractPublicKey()).bytes);
+      final a = base64Encode(
+          (await (await x25519.newKeyPair()).extractPublicKey()).bytes);
+      final b = base64Encode(
+          (await (await x25519.newKeyPair()).extractPublicKey()).bytes);
 
-      final first = await sas.derive(localPublicKeyBase64: a, peerPublicKeyBase64: b);
-      final second = await sas.derive(localPublicKeyBase64: a, peerPublicKeyBase64: b);
-      final third = await sas.derive(localPublicKeyBase64: a, peerPublicKeyBase64: b);
+      final first =
+          await sas.derive(localPublicKeyBase64: a, peerPublicKeyBase64: b);
+      final second =
+          await sas.derive(localPublicKeyBase64: a, peerPublicKeyBase64: b);
+      final third =
+          await sas.derive(localPublicKeyBase64: a, peerPublicKeyBase64: b);
 
       expect(first.digits, equals(second.digits));
       expect(second.digits, equals(third.digits));
@@ -233,18 +260,23 @@ void main() {
 
     test('Swapping Alice key (MITM simulation) changes the SAS', () async {
       final x25519 = X25519();
-      final alice = base64Encode((await (await x25519.newKeyPair()).extractPublicKey()).bytes);
-      final bob = base64Encode((await (await x25519.newKeyPair()).extractPublicKey()).bytes);
-      final mitm = base64Encode((await (await x25519.newKeyPair()).extractPublicKey()).bytes);
+      final alice = base64Encode(
+          (await (await x25519.newKeyPair()).extractPublicKey()).bytes);
+      final bob = base64Encode(
+          (await (await x25519.newKeyPair()).extractPublicKey()).bytes);
+      final mitm = base64Encode(
+          (await (await x25519.newKeyPair()).extractPublicKey()).bytes);
 
-      final genuine = await sas.derive(localPublicKeyBase64: alice, peerPublicKeyBase64: bob);
-      final attacked = await sas.derive(localPublicKeyBase64: mitm, peerPublicKeyBase64: bob);
+      final genuine = await sas.derive(
+          localPublicKeyBase64: alice, peerPublicKeyBase64: bob);
+      final attacked = await sas.derive(
+          localPublicKeyBase64: mitm, peerPublicKeyBase64: bob);
 
       // It is astronomically unlikely both digits AND emoji match by chance.
       final sameDigits = genuine.digits == attacked.digits;
-      final sameEmoji = const _ListEq<int>().equals(genuine.emojiIndices, attacked.emojiIndices);
-      expect(sameDigits && sameEmoji, isFalse,
-          reason: 'MITM must change SAS');
+      final sameEmoji = const _ListEq<int>()
+          .equals(genuine.emojiIndices, attacked.emojiIndices);
+      expect(sameDigits && sameEmoji, isFalse, reason: 'MITM must change SAS');
     });
 
     test('Emoji palette has exactly 64 unique entries', () {
@@ -256,9 +288,12 @@ void main() {
     test('SAS digits are always 6 decimal characters', () async {
       final x25519 = X25519();
       for (var i = 0; i < 8; i++) {
-        final a = base64Encode((await (await x25519.newKeyPair()).extractPublicKey()).bytes);
-        final b = base64Encode((await (await x25519.newKeyPair()).extractPublicKey()).bytes);
-        final code = await sas.derive(localPublicKeyBase64: a, peerPublicKeyBase64: b);
+        final a = base64Encode(
+            (await (await x25519.newKeyPair()).extractPublicKey()).bytes);
+        final b = base64Encode(
+            (await (await x25519.newKeyPair()).extractPublicKey()).bytes);
+        final code =
+            await sas.derive(localPublicKeyBase64: a, peerPublicKeyBase64: b);
         expect(code.digits.length, equals(6));
         expect(RegExp(r'^\d{6}$').hasMatch(code.digits), isTrue);
       }
@@ -272,18 +307,21 @@ void main() {
     final encoder = StegoEncoder();
     final decoder = StegoDecoder();
 
-    Future<({String priv, String pub})> _makeKeyPair() async {
+    Future<({String priv, String pub})> makeKeyPair() async {
       final pair = await X25519().newKeyPair();
       final priv = base64Encode(await pair.extractPrivateKeyBytes());
       final pub = base64Encode((await pair.extractPublicKey()).bytes);
       return (priv: priv, pub: pub);
     }
 
-    test('encrypt → encodeBytes → decodeByteCandidates → decrypt yields original text', () async {
-      final alice = await _makeKeyPair();
-      final bob = await _makeKeyPair();
+    test(
+        'encrypt → encodeBytes → decodeByteCandidates → decrypt yields original text',
+        () async {
+      final alice = await makeKeyPair();
+      final bob = await makeKeyPair();
       const secretText = 'Messaggio segreto di test 🔐';
-      const cover = 'Questo è un lungo messaggio di copertura con abbastanza testo visibile per permettere il corretto embedding del payload cifrato nel suffisso del messaggio.';
+      const cover =
+          'Questo è un lungo messaggio di copertura con abbastanza testo visibile per permettere il corretto embedding del payload cifrato nel suffisso del messaggio.';
 
       final encResult = await enc.encrypt(
         senderPrivateKeyBase64: alice.priv,
@@ -309,11 +347,13 @@ void main() {
           .where((r) => r >= 0x20 && r <= 0x7E || r > 0x7E && !_isZeroWidth(r))
           .map(String.fromCharCode)
           .join();
-      expect(visibleOnly.trimRight(), equals(StegoEncoder.normalizeCoverText(cover)));
+      expect(visibleOnly.trimRight(),
+          equals(StegoEncoder.normalizeCoverText(cover)));
 
       // Decode step.
       final candidates = decoder.decodeByteCandidates(hiddenMessage);
-      expect(candidates, isNotEmpty, reason: 'Must find at least one candidate');
+      expect(candidates, isNotEmpty,
+          reason: 'Must find at least one candidate');
 
       // Try each candidate (alignment 0 should be correct).
       PlaintextPayload? decrypted;
@@ -332,17 +372,19 @@ void main() {
         if (decrypted != null) break;
       }
 
-      expect(decrypted, isNotNull, reason: 'Must successfully decrypt with Bob\'s key');
+      expect(decrypted, isNotNull,
+          reason: 'Must successfully decrypt with Bob\'s key');
       expect(decrypted!.text, equals(secretText));
       expect(decrypted.senderDisplayName, equals('Alice Test'));
     });
 
     test('wrong key cannot decrypt the hidden payload', () async {
-      final alice = await _makeKeyPair();
-      final bob = await _makeKeyPair();
-      final eve = await _makeKeyPair(); // attacker
+      final alice = await makeKeyPair();
+      final bob = await makeKeyPair();
+      final eve = await makeKeyPair(); // attacker
 
-      const cover = 'Lungo messaggio di copertura sufficientemente ampio per il test di sicurezza con chiave errata nel payload cifrato nascosto.';
+      const cover =
+          'Lungo messaggio di copertura sufficientemente ampio per il test di sicurezza con chiave errata nel payload cifrato nascosto.';
       const secretText = 'Il segreto di Alice per Bob';
 
       final encResult = await enc.encrypt(
@@ -377,14 +419,17 @@ void main() {
         eveDecrypted = await enc.tryDecryptWithKey(message: msg, key: eveKey);
         if (eveDecrypted != null) break;
       }
-      expect(eveDecrypted, isNull, reason: 'Eve must not decrypt a message for Bob');
+      expect(eveDecrypted, isNull,
+          reason: 'Eve must not decrypt a message for Bob');
     });
 
     test('roundtrip works with long secret text (emoji + accents)', () async {
-      final alice = await _makeKeyPair();
-      final bob = await _makeKeyPair();
-      const secretText = 'Caffè, mañana, déjà vu, résumé, 😄🔐🚀🌍 — un messaggio lungo con caratteri speciali!';
-      const cover = 'Caro amico, ti scrivo questa lunga lettera di copertura che non contiene alcun significato nascosto ma è abbastanza lunga da tenere pulita la parte iniziale del preview per il destinatario.';
+      final alice = await makeKeyPair();
+      final bob = await makeKeyPair();
+      const secretText =
+          'Caffè, mañana, déjà vu, résumé, 😄🔐🚀🌍 — un messaggio lungo con caratteri speciali!';
+      const cover =
+          'Caro amico, ti scrivo questa lunga lettera di copertura che non contiene alcun significato nascosto ma è abbastanza lunga da tenere pulita la parte iniziale del preview per il destinatario.';
 
       final encResult = await enc.encrypt(
         senderPrivateKeyBase64: alice.priv,
@@ -423,9 +468,10 @@ void main() {
       expect(decrypted.senderDisplayName, equals('Àlice 😄'));
     });
 
-    test('symmetric key derivation: same key for sender and recipient', () async {
-      final alice = await _makeKeyPair();
-      final bob = await _makeKeyPair();
+    test('symmetric key derivation: same key for sender and recipient',
+        () async {
+      final alice = await makeKeyPair();
+      final bob = await makeKeyPair();
 
       final senderKey = await enc.deriveSymmetricKey(
         localPrivateKeyBase64: alice.priv,
@@ -439,20 +485,26 @@ void main() {
       expect(
         await senderKey.extractBytes(),
         equals(await recipientKey.extractBytes()),
-        reason: 'X25519 ECDH must produce the same shared secret for both parties',
+        reason:
+            'X25519 ECDH must produce the same shared secret for both parties',
       );
     });
 
-    test('encodeBytes → decodeByteCandidates[0] == original bytes (binary stability)', () async {
-      final payload = Uint8List.fromList(List.generate(44, (i) => (i * 7 + 13) & 0xFF));
-      const cover = 'Cover text long enough to safely embed the payload in the hidden suffix while keeping the visible preview clean and readable for any observer.';
+    test(
+        'encodeBytes → decodeByteCandidates[0] == original bytes (binary stability)',
+        () async {
+      final payload =
+          Uint8List.fromList(List.generate(44, (i) => (i * 7 + 13) & 0xFF));
+      const cover =
+          'Cover text long enough to safely embed the payload in the hidden suffix while keeping the visible preview clean and readable for any observer.';
 
       final encoded = encoder.encodeBytes(cover, payload);
       final candidates = decoder.decodeByteCandidates(encoded);
 
       expect(candidates, isNotEmpty);
       expect(candidates[0].sublist(0, payload.length), equals(payload),
-          reason: 'Alignment-0 candidate must begin with the original payload bytes');
+          reason:
+              'Alignment-0 candidate must begin with the original payload bytes');
     });
 
     test('plain text (no hidden runes) returns empty candidates', () {
@@ -462,9 +514,10 @@ void main() {
       expect(candidates, isEmpty);
     });
 
-    test('roundtrip via link format (layergram://m/...) preserves bytes', () async {
-      final alice = await _makeKeyPair();
-      final bob = await _makeKeyPair();
+    test('roundtrip via link format (layergram://m/...) preserves bytes',
+        () async {
+      final alice = await makeKeyPair();
+      final bob = await makeKeyPair();
 
       final encResult = await enc.encrypt(
         senderPrivateKeyBase64: alice.priv,
@@ -483,7 +536,8 @@ void main() {
 
       // Simulate decoding from link (as done in home_controller).
       final encoded = link.substring('layergram://m/'.length);
-      final padded = encoded.padRight(encoded.length + (4 - encoded.length % 4) % 4, '=');
+      final padded =
+          encoded.padRight(encoded.length + (4 - encoded.length % 4) % 4, '=');
       final decoded = Uint8List.fromList(base64Url.decode(padded));
       final msg = EncryptedMessage.fromRawBytes(decoded);
 
@@ -491,7 +545,8 @@ void main() {
         localPrivateKeyBase64: bob.priv,
         remotePublicKeyBase64: alice.pub,
       );
-      final decryptedPayload = await enc.tryDecryptWithKey(message: msg, key: key);
+      final decryptedPayload =
+          await enc.tryDecryptWithKey(message: msg, key: key);
 
       expect(decryptedPayload, isNotNull);
       expect(decryptedPayload!.text, equals('Messaggio da cifrare'));
@@ -500,8 +555,11 @@ void main() {
 
   // ── 4. Cross-scenario: full identity lifecycle ────────────────────────────
 
-  group('Scenario 4 – Full identity lifecycle (create → export as contact → encrypt → decrypt)', () {
-    test('identity created on device A can receive a message from device B', () async {
+  group(
+      'Scenario 4 – Full identity lifecycle (create → export as contact → encrypt → decrypt)',
+      () {
+    test('identity created on device A can receive a message from device B',
+        () async {
       // Simulate two separate identity managers (two "devices").
       final mgrA = _makeManager();
       final mgrB = _makeManager();
@@ -537,7 +595,9 @@ void main() {
       expect(decResult.payload.recipientId, equals(identityA.identityId));
     });
 
-    test('restored identity can decrypt messages that were encrypted to it before restore', () async {
+    test(
+        'restored identity can decrypt messages that were encrypted to it before restore',
+        () async {
       const mnemonic =
           'abandon abandon abandon abandon abandon abandon abandon abandon '
           'abandon abandon abandon abandon abandon abandon abandon abandon '
@@ -545,7 +605,8 @@ void main() {
 
       // First time: "install" the identity.
       final mgrFirst = _makeManager();
-      final original = await mgrFirst.restoreIdentityFromMnemonic(mnemonic, displayName: 'Alice');
+      final original = await mgrFirst.restoreIdentityFromMnemonic(mnemonic,
+          displayName: 'Alice');
       final privFirst = (await mgrFirst.getLocalPrivateKeyBase64())!;
 
       // Bob encrypts a message to Alice.
@@ -568,7 +629,8 @@ void main() {
 
       // Now Alice restores her identity from mnemonic on a new device.
       final mgrRestored = _makeManager();
-      final restored = await mgrRestored.restoreIdentityFromMnemonic(mnemonic, displayName: 'Alice restored');
+      final restored = await mgrRestored.restoreIdentityFromMnemonic(mnemonic,
+          displayName: 'Alice restored');
       final privRestored = (await mgrRestored.getLocalPrivateKeyBase64())!;
 
       // Public keys must be identical.
@@ -593,8 +655,16 @@ void main() {
 
 bool _isZeroWidth(int rune) {
   const zwChars = {
-    0x200B, 0x200C, 0x200D, 0x200E, 0x200F,
-    0x2060, 0x2061, 0x2062, 0x2063, 0x2064,
+    0x200B,
+    0x200C,
+    0x200D,
+    0x200E,
+    0x200F,
+    0x2060,
+    0x2061,
+    0x2062,
+    0x2063,
+    0x2064,
     0xFEFF,
   };
   return zwChars.contains(rune);

@@ -24,15 +24,17 @@ void main() {
   const kSession1 = 'session-1';
 
   // Helper: build a service with a shared registry.
-  (FsPassphraseContextService, FsContactSecurityRegistry) _build() {
+  (FsPassphraseContextService, FsContactSecurityRegistry) build() {
     final registry = FsContactSecurityRegistry();
     final svc = FsPassphraseContextService(registry: registry);
     return (svc, registry);
   }
 
   // T8.1 — FS state visible only while passphrase is active.
-  test('T8.1: passphrase FS state visible only while passphrase context is active', () {
-    final (svc, _) = _build();
+  test(
+      'T8.1: passphrase FS state visible only while passphrase context is active',
+      () {
+    final (svc, _) = build();
 
     // Before activation: no state visible.
     expect(svc.isActive, isFalse);
@@ -60,7 +62,7 @@ void main() {
 
   // T8.2 — Expel passphrase → all passphrase FS state disappears.
   test('T8.2: deactivate (expel) clears all passphrase-specific FS state', () {
-    final (svc, registry) = _build();
+    final (svc, registry) = build();
 
     svc.activate(kCtxTag1);
     svc.updateSecurityState(
@@ -116,12 +118,14 @@ void main() {
   });
 
   // T8.3 — No global has_passphrase flag in storage (architectural check).
-  test('T8.3: FsPassphraseContextService does not write to any persistent storage', () {
+  test(
+      'T8.3: FsPassphraseContextService does not write to any persistent storage',
+      () {
     // This test is a static/architectural check:
     // FsPassphraseContextService has no constructor parameter for a storage
     // backend, no SecureStorage, no Hive box, and no async methods.
     // All state is in-memory only.
-    final (svc, _) = _build();
+    final (svc, _) = build();
     svc.activate(kCtxTag1);
     svc.updateSecurityState(
       contactId: kBobId,
@@ -134,11 +138,12 @@ void main() {
   });
 
   // T8.4 — No passphrase_settings box/key (architectural check).
-  test('T8.4: no passphrase_settings concept in FsPassphraseContextService', () {
+  test('T8.4: no passphrase_settings concept in FsPassphraseContextService',
+      () {
     // FsPassphraseContextService only has: activate, deactivate,
     // sessionManagerForContact, updateSecurityState, securityStateFor,
     // allStatesFor.  No "settings" getter or setter exists.
-    final (svc, _) = _build();
+    final (svc, _) = build();
     // Verify the expected API surface exists and nothing settings-related does.
     expect(svc.isActive, isFalse);
     expect(svc.activeContextTag, isNull);
@@ -147,7 +152,7 @@ void main() {
 
   // T8.5 — Passphrase FS state opaque without active context.
   test('T8.5: passphrase FS state not accessible without active context', () {
-    final (svc, registry) = _build();
+    final (svc, registry) = build();
 
     // Write directly to registry under a passphrase context tag.
     registry.upsert(FsContactSecurityState(
@@ -158,19 +163,21 @@ void main() {
     ));
 
     // Service is inactive → cannot retrieve state.
-    expect(svc.securityStateFor(contactId: kBobId, sessionId: kSession1), isNull,
+    expect(
+        svc.securityStateFor(contactId: kBobId, sessionId: kSession1), isNull,
         reason: 'State must not be accessible via service without activation');
     expect(svc.allStatesFor(kBobId), isEmpty);
 
     // Activate a DIFFERENT context → still cannot retrieve state.
     svc.activate(kCtxTag2);
-    expect(svc.securityStateFor(contactId: kBobId, sessionId: kSession1), isNull,
+    expect(
+        svc.securityStateFor(contactId: kBobId, sessionId: kSession1), isNull,
         reason: 'State for ctx1 must not be accessible from ctx2');
   });
 
   // T8.6 — Activate → deactivate → re-activate produces clean state.
   test('T8.6: deactivate then re-activate starts with clean slate', () {
-    final (svc, _) = _build();
+    final (svc, _) = build();
 
     svc.activate(kCtxTag1);
     svc.updateSecurityState(
@@ -182,14 +189,16 @@ void main() {
 
     // Re-activate same context → old state was cleared.
     svc.activate(kCtxTag1);
-    expect(svc.securityStateFor(contactId: kBobId, sessionId: kSession1), isNull,
+    expect(
+        svc.securityStateFor(contactId: kBobId, sessionId: kSession1), isNull,
         reason: 'Re-activation after deactivation must start with no state');
     expect(svc.allStatesFor(kBobId), isEmpty);
   });
 
   // T8.7 — Primary context unaffected by passphrase deactivation.
-  test('T8.7: primary context FS state unaffected by passphrase deactivation', () {
-    final (svc, registry) = _build();
+  test('T8.7: primary context FS state unaffected by passphrase deactivation',
+      () {
+    final (svc, registry) = build();
 
     // Register primary state directly.
     registry.upsert(FsContactSecurityState(
@@ -218,21 +227,25 @@ void main() {
   });
 
   // T8.8 — sessionManagerForContact returns null when inactive.
-  test('T8.8: sessionManagerForContact returns null when context is inactive', () {
-    final (svc, _) = _build();
+  test('T8.8: sessionManagerForContact returns null when context is inactive',
+      () {
+    final (svc, _) = build();
     expect(svc.sessionManagerForContact(kBobId), isNull);
   });
 
   // T8.9 — sessionManagerForContact returns stable instance per contact.
-  test('T8.9: sessionManagerForContact returns same FsSessionManager per contactId', () {
-    final (svc, _) = _build();
+  test(
+      'T8.9: sessionManagerForContact returns same FsSessionManager per contactId',
+      () {
+    final (svc, _) = build();
     svc.activate(kCtxTag1);
 
     final mgr1 = svc.sessionManagerForContact(kBobId);
     final mgr2 = svc.sessionManagerForContact(kBobId);
     expect(mgr1, isNotNull);
     expect(identical(mgr1, mgr2), isTrue,
-        reason: 'Same FsSessionManager must be returned for the same contactId');
+        reason:
+            'Same FsSessionManager must be returned for the same contactId');
 
     // Different contact → different manager.
     final mgrAlice = svc.sessionManagerForContact(kAliceId);
@@ -241,7 +254,7 @@ void main() {
 
   // T8.10 — Switching context tags clears the old context.
   test('T8.10: activating a different contextTag clears the previous one', () {
-    final (svc, registry) = _build();
+    final (svc, registry) = build();
 
     svc.activate(kCtxTag1);
     svc.updateSecurityState(

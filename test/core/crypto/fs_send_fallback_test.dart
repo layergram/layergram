@@ -28,13 +28,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 import 'package:layergram/core/crypto/aux_record_cipher.dart';
-import 'package:layergram/core/crypto/fs_contact_security_state.dart';
 import 'package:layergram/core/crypto/fs_double_ratchet.dart';
-import 'package:layergram/core/crypto/fs_ratchet_persistence_service.dart';
 import 'package:layergram/core/crypto/fs_session_manager.dart';
-import 'package:layergram/core/crypto/fs_state_persistence_service.dart';
 import 'package:layergram/core/providers.dart';
-import 'package:layergram/core/storage/aux_record_repository.dart';
 import 'package:layergram/core/storage/local_database.dart';
 
 void main() {
@@ -86,19 +82,24 @@ void main() {
 
     // Create session manager in fsActive state with sessionId
     final sessionManager = container.read(fsSessionManagerProvider(contactId));
-    sessionManager.setStateForTesting(FsSessionState.fsActive, sessionId: sessionId);
+    sessionManager.setStateForTesting(FsSessionState.fsActive,
+        sessionId: sessionId);
 
     // Clear ALL ratchet state from both cache and persistence
     container.read(fsRatchetStateCacheProvider.notifier).state = {};
-    await container.read(fsRatchetPersistenceServiceProvider).removeAllRatchetStates();
+    await container
+        .read(fsRatchetPersistenceServiceProvider)
+        .removeAllRatchetStates();
 
     // Verify ratchet is truly missing
-    final ratchetInCache = container.read(fsRatchetStateCacheProvider)[sessionId];
+    final ratchetInCache =
+        container.read(fsRatchetStateCacheProvider)[sessionId];
     final ratchetInPersistence = await container
         .read(fsRatchetPersistenceServiceProvider)
         .loadRatchetState(sessionId);
 
-    expect(ratchetInCache, isNull, reason: 'Setup: ratchet should not be in cache');
+    expect(ratchetInCache, isNull,
+        reason: 'Setup: ratchet should not be in cache');
     expect(ratchetInPersistence, isNull,
         reason: 'Setup: ratchet should not be in persistence');
 
@@ -127,14 +128,14 @@ void main() {
 
     // After the failure, session should be BROKEN
     expect(sessionManager.state, equals(FsSessionState.fsBroken),
-        reason: 'CRITICAL: When ratchet is missing, session MUST be marked broken');
+        reason:
+            'CRITICAL: When ratchet is missing, session MUST be marked broken');
   });
 
   // ---------------------------------------------------------------------------
   // T_SEND_FALLBACK_2: When session broken, must use legacy encryption
   // ---------------------------------------------------------------------------
-  test(
-      'T_SEND_FALLBACK_2: Broken session forces legacy encryption fallback',
+  test('T_SEND_FALLBACK_2: Broken session forces legacy encryption fallback',
       () async {
     const contactId = 'bob_device';
     const sessionId = 'broken_session';
@@ -153,7 +154,8 @@ void main() {
 
     // Create session manager in fsBroken state
     final sessionManager = container.read(fsSessionManagerProvider(contactId));
-    sessionManager.setStateForTesting(FsSessionState.fsBroken, sessionId: sessionId);
+    sessionManager.setStateForTesting(FsSessionState.fsBroken,
+        sessionId: sessionId);
 
     // Verify state is broken
     expect(sessionManager.state, equals(FsSessionState.fsBroken));
@@ -216,15 +218,18 @@ void main() {
 
     // Create session manager in fsActive state
     final sessionManager = container.read(fsSessionManagerProvider(contactId));
-    sessionManager.setStateForTesting(FsSessionState.fsActive, sessionId: sessionId);
+    sessionManager.setStateForTesting(FsSessionState.fsActive,
+        sessionId: sessionId);
 
     // Verify ratchet is in persistence but not cache
-    final ratchetInCache = container.read(fsRatchetStateCacheProvider)[sessionId];
+    final ratchetInCache =
+        container.read(fsRatchetStateCacheProvider)[sessionId];
     final ratchetInPersistence = await container
         .read(fsRatchetPersistenceServiceProvider)
         .loadRatchetState(sessionId);
 
-    expect(ratchetInCache, isNull, reason: 'Setup: ratchet should not be in cache');
+    expect(ratchetInCache, isNull,
+        reason: 'Setup: ratchet should not be in cache');
     expect(ratchetInPersistence, isNotNull,
         reason: 'Setup: ratchet should be in persistence');
 
@@ -247,10 +252,12 @@ void main() {
               .loadRatchetState(sid);
           if (ratchetToUse != null) {
             // Add back to cache
-            container.read(fsRatchetStateCacheProvider.notifier).update((cache) => {
-                  ...cache,
-                  sid: ratchetToUse!,
-                });
+            container
+                .read(fsRatchetStateCacheProvider.notifier)
+                .update((cache) => {
+                      ...cache,
+                      sid: ratchetToUse!,
+                    });
           }
         }
       }
@@ -261,7 +268,8 @@ void main() {
         reason: 'CRITICAL: Ratchet must be auto-loaded from persistence');
 
     // Should now be in cache
-    final ratchetNowInCache = container.read(fsRatchetStateCacheProvider)[sessionId];
+    final ratchetNowInCache =
+        container.read(fsRatchetStateCacheProvider)[sessionId];
     expect(ratchetNowInCache, isNotNull,
         reason: 'CRITICAL: Ratchet must be added back to cache after loading');
   });
@@ -289,11 +297,14 @@ void main() {
 
     // Create session manager in fsActive state
     final sessionManager = container.read(fsSessionManagerProvider(contactId));
-    sessionManager.setStateForTesting(FsSessionState.fsActive, sessionId: sessionId);
+    sessionManager.setStateForTesting(FsSessionState.fsActive,
+        sessionId: sessionId);
 
     // Clear all ratchet state
     container.read(fsRatchetStateCacheProvider.notifier).state = {};
-    await container.read(fsRatchetPersistenceServiceProvider).removeAllRatchetStates();
+    await container
+        .read(fsRatchetPersistenceServiceProvider)
+        .removeAllRatchetStates();
 
     // Simulate the _sendMessage logic that should be implemented
     Future<bool> attemptFsEncryption() async {
@@ -303,31 +314,33 @@ void main() {
         if (sid != null) {
           // Check cache
           var ratchet = container.read(fsRatchetStateCacheProvider)[sid];
-          
+
           if (ratchet == null) {
             // Try persistence
             ratchet = await container
                 .read(fsRatchetPersistenceServiceProvider)
                 .loadRatchetState(sid);
-            
+
             if (ratchet == null) {
               // CRITICAL: Ratchet truly missing - mark broken and return false
               sessionManager.markBroken();
               return false; // Cannot use FS encryption
             } else {
               // Found in persistence - add to cache
-              container.read(fsRatchetStateCacheProvider.notifier).update((cache) => {
-                    ...cache,
-                    sid: ratchet!,
-                  });
+              container
+                  .read(fsRatchetStateCacheProvider.notifier)
+                  .update((cache) => {
+                        ...cache,
+                        sid: ratchet!,
+                      });
             }
           }
-          
+
           // Have ratchet - can use FS
           return true;
         }
       }
-      
+
       // Not in active state - use legacy
       return false;
     }
@@ -340,6 +353,7 @@ void main() {
 
     // Session should be marked as broken
     expect(sessionManager.state, equals(FsSessionState.fsBroken),
-        reason: 'CRITICAL: Session must be marked broken when ratchet is missing');
+        reason:
+            'CRITICAL: Session must be marked broken when ratchet is missing');
   });
 }

@@ -115,7 +115,8 @@ class FsStrictModeController {
     if (state != FsSessionState.strictRequested) {
       return FsStrictModeResult._(
         success: false,
-        reason: 'activateStrict: state must be strictRequested (current: $state)',
+        reason:
+            'activateStrict: state must be strictRequested (current: $state)',
         code: FsStrictModeResultCode.invalidState,
       );
     }
@@ -165,6 +166,10 @@ class FsStrictModeController {
     final state = _sessionManager.state;
     if (state == FsSessionState.fsBroken) return false;
 
+    if (_hasActiveStrictConsentForAnotherState(state)) {
+      return false;
+    }
+
     if (state == FsSessionState.strictFsActive) {
       if (deviceChanged) return false; // Must repair before sending.
       return true;
@@ -179,6 +184,9 @@ class FsStrictModeController {
     final state = _sessionManager.state;
     if (state == FsSessionState.fsBroken) {
       return 'Session is broken and cannot be used';
+    }
+    if (_hasActiveStrictConsentForAnotherState(state)) {
+      return 'Maximum Forward Secrecy requires device repair before sending';
     }
     if (state == FsSessionState.strictFsActive && deviceChanged) {
       return 'Unexpected device detected — repair required before sending';
@@ -204,6 +212,16 @@ class FsStrictModeController {
     // Persist to storage (only for primary context)
     _persistenceService?.saveState(stateEntry);
   }
+
+  bool _hasActiveStrictConsentForAnotherState(FsSessionState currentState) {
+    if (currentState == FsSessionState.strictFsActive) return false;
+    return _registry
+        .forContact(
+          contactId: _contactId,
+          identityContext: _identityContext,
+        )
+        .any((entry) => entry.fsState == FsSessionState.strictFsActive);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -222,7 +240,8 @@ class FsStrictModeResult {
   final FsStrictModeResultCode code;
 
   @override
-  String toString() => 'FsStrictModeResult($code${reason != null ? ': $reason' : ''})';
+  String toString() =>
+      'FsStrictModeResult($code${reason != null ? ': $reason' : ''})';
 }
 
 enum FsStrictModeResultCode {

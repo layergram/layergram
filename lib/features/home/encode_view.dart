@@ -20,7 +20,6 @@ import '../../core/crypto/models.dart';
 import '../../core/crypto/stego_encoder.dart';
 import '../../core/providers.dart';
 import '../../l10n/app_strings.dart';
-import '../../utils/app_platform.dart';
 import '../../utils/sharing.dart';
 import 'home_controller.dart';
 

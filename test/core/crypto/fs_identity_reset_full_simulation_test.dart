@@ -69,8 +69,8 @@ void main() {
   // ---------------------------------------------------------------------------
   // T_FULL_SIM_1: Identity reset clears all persisted FS state
   // ---------------------------------------------------------------------------
-  test('T_FULL_SIM_1: After identity reset, all FS persisted state is cleared', () async {
-    const aliceContactId = 'alice_device';
+  test('T_FULL_SIM_1: After identity reset, all FS persisted state is cleared',
+      () async {
     const bobContactId = 'bob_device';
     const sessionId = 'shared_fs_session';
     const identityContext = 'primary';
@@ -139,9 +139,6 @@ void main() {
     // 3. Remove all persisted ratchet states
     await aliceRatchetService.removeAllRatchetStates();
 
-    // 4. Clear in-memory cache
-    final clearedCache = <String, RatchetState>{};
-
     // Verify: No ratchet states in storage
     final afterResetRatchets = await aliceRatchetService.loadAllRatchetStates();
     expect(afterResetRatchets, isEmpty,
@@ -183,7 +180,8 @@ void main() {
 
     // Simulate loading persisted state (as in _loadPersistedFsState)
     await restoredStateService.loadPersistedState();
-    final restoredRatchets = await restoredRatchetService.loadAllRatchetStates();
+    final restoredRatchets =
+        await restoredRatchetService.loadAllRatchetStates();
 
     // Populate cache from loaded state
     final restoredCache = <String, RatchetState>{};
@@ -198,9 +196,11 @@ void main() {
     // CRITICAL: After reset and restore, there should be NO ratchet state
     // for the old session. This is what prevents decryption of old messages.
     expect(restoredCache.containsKey(sessionId), isFalse,
-        reason: 'After reset+restore, cache should NOT contain old session ratchet');
+        reason:
+            'After reset+restore, cache should NOT contain old session ratchet');
     expect(restoredRatchets, isEmpty,
-        reason: 'After reset+restore, no ratchet states should be loaded from persistence');
+        reason:
+            'After reset+restore, no ratchet states should be loaded from persistence');
 
     // =========================================================================
     // PHASE 5: Verify handshake blocked in broken state

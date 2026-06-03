@@ -14,7 +14,7 @@ import 'package:layergram/l10n/fs_strings_bundle.dart';
 
 void main() {
   // Required key groups (spec §9.5).
-  const _mandatoryKeyPrefixes = [
+  const mandatoryKeyPrefixes = [
     'security.fs.status.',
     'security.fs.warning.',
     'security.fs.action.',
@@ -24,12 +24,12 @@ void main() {
     'security.contact.state.',
   ];
 
-  const _en = FsStringsBundle.bundle;
+  const en0 = FsStringsBundle.bundle;
 
   // T9.1 — All keys in non-English locales also exist in English.
   test('T9.1: all non-English locale keys have an English fallback', () {
-    final enKeys = (_en['en'] ?? {}).keys.toSet();
-    for (final entry in _en.entries) {
+    final enKeys = (en0['en'] ?? {}).keys.toSet();
+    for (final entry in en0.entries) {
       if (entry.key == 'en') continue;
       for (final key in entry.value.keys) {
         expect(enKeys, contains(key),
@@ -41,8 +41,8 @@ void main() {
 
   // T9.2 — All mandatory key groups present in English bundle.
   test('T9.2: all mandatory key groups present in English bundle', () {
-    final enKeys = (_en['en'] ?? {}).keys.toList();
-    for (final prefix in _mandatoryKeyPrefixes) {
+    final enKeys = (en0['en'] ?? {}).keys.toList();
+    for (final prefix in mandatoryKeyPrefixes) {
       final matching = enKeys.where((k) => k.startsWith(prefix)).toList();
       expect(matching, isNotEmpty,
           reason: 'No English keys found for group "$prefix"');
@@ -51,7 +51,7 @@ void main() {
 
   // T9.3 — Named placeholders are present where expected.
   test('T9.3: named placeholder {contact} in maximum.pending_notice', () {
-    final en = _en['en']!;
+    final en = en0['en']!;
     expect(
       en['security.fs.maximum.pending_notice'],
       contains('{contact}'),
@@ -66,7 +66,7 @@ void main() {
 
   // T9.4 — Key completeness: all status states covered.
   test('T9.4: all FS status keys are present in English bundle', () {
-    final en = _en['en']!;
+    final en = en0['en']!;
     const statusKeys = [
       'security.fs.status.legacy',
       'security.fs.status.upgrading',
@@ -82,7 +82,8 @@ void main() {
   });
 
   // T9.5 — AppStrings.registerStrings accepts the bundle without throwing.
-  test('T9.5: AppStrings.registerStrings accepts FsStringsBundle without error', () {
+  test('T9.5: AppStrings.registerStrings accepts FsStringsBundle without error',
+      () {
     expect(
       () => AppStrings.registerStrings(FsStringsBundle.bundle),
       returnsNormally,
@@ -92,7 +93,7 @@ void main() {
 
   // T9.6 — Warning keys are non-empty in English.
   test('T9.6: all warning keys are non-empty in English', () {
-    final en = _en['en']!;
+    final en = en0['en']!;
     const warningKeys = [
       'security.fs.warning.recoverability',
       'security.fs.warning.device_bound',
@@ -112,7 +113,7 @@ void main() {
 
   // T9.7 — Info modal keys present.
   test('T9.7: info modal keys present in English bundle', () {
-    final en = _en['en']!;
+    final en = en0['en']!;
     const infoKeys = [
       'security.fs.info.title',
       'security.fs.info.legacy_description',
@@ -141,7 +142,7 @@ void main() {
 
   // T9.9 — No key value equals the key itself (placeholder check).
   test('T9.9: no English value equals its key (not a passthrough)', () {
-    final en = _en['en']!;
+    final en = en0['en']!;
     for (final entry in en.entries) {
       expect(
         entry.value,

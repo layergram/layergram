@@ -27,54 +27,54 @@ import 'package:layergram/core/crypto/stego_encoder.dart';
 /// initId is a 22-char base64url (128-bit random).
 /// caps contains two capability strings.
 Map<String, dynamic> _maxFsInit() => {
-  'v': 1,
-  'type': 'fs_init',
-  'initId': 'AAAAAAAAAAAAAAAAAAAAAA',   // 22 chars (128-bit)
-  'initiatorDevicePub': 'AQ' + 'A' * 42,  // 44 chars
-  'initiatorEphemeralPub': 'AQ' + 'A' * 42,
-  'caps': ['lgfs1', 'dr1'],
-  'createdAt': 1700000000,
-};
+      'v': 1,
+      'type': 'fs_init',
+      'initId': 'AAAAAAAAAAAAAAAAAAAAAA', // 22 chars (128-bit)
+      'initiatorDevicePub': 'AQ${'A' * 42}', // 44 chars
+      'initiatorEphemeralPub': 'AQ${'A' * 42}',
+      'caps': ['lgfs1', 'dr1'],
+      'createdAt': 1700000000,
+    };
 
 /// A realistic maximum-size fs_reply JSON object.
 Map<String, dynamic> _maxFsReply() => {
-  'v': 1,
-  'type': 'fs_reply',
-  'initId': 'AAAAAAAAAAAAAAAAAAAAAA',
-  'replyId': 'BBBBBBBBBBBBBBBBBBBBBB',
-  'responderDevicePub': 'AQ' + 'B' * 42,
-  'responderEphemeralPub': 'AQ' + 'C' * 42,
-  'responderInitialRatchetPub': 'AQ' + 'D' * 42,
-  'caps': ['lgfs1', 'dr1'],
-  'createdAt': 1700000001,
-};
+      'v': 1,
+      'type': 'fs_reply',
+      'initId': 'AAAAAAAAAAAAAAAAAAAAAA',
+      'replyId': 'BBBBBBBBBBBBBBBBBBBBBB',
+      'responderDevicePub': 'AQ${'B' * 42}',
+      'responderEphemeralPub': 'AQ${'C' * 42}',
+      'responderInitialRatchetPub': 'AQ${'D' * 42}',
+      'caps': ['lgfs1', 'dr1'],
+      'createdAt': 1700000001,
+    };
 
 /// A realistic maximum-size fs_confirm JSON object.
 ///
 /// transcriptHash and confirmTag are each 43 chars (SHA-256 base64url).
 /// initiatorInitialRatchetPub is 44 chars.
 Map<String, dynamic> _maxFsConfirm() => {
-  'v': 1,
-  'type': 'fs_confirm',
-  'initId': 'AAAAAAAAAAAAAAAAAAAAAA',
-  'replyId': 'BBBBBBBBBBBBBBBBBBBBBB',
-  'transcriptHash': 'A' * 43,
-  'confirmTag': 'B' * 43,
-  'initiatorInitialRatchetPub': 'AQ' + 'E' * 42,
-};
+      'v': 1,
+      'type': 'fs_confirm',
+      'initId': 'AAAAAAAAAAAAAAAAAAAAAA',
+      'replyId': 'BBBBBBBBBBBBBBBBBBBBBB',
+      'transcriptHash': 'A' * 43,
+      'confirmTag': 'B' * 43,
+      'initiatorInitialRatchetPub': 'AQ${'E' * 42}',
+    };
 
 /// An oversized x.fs payload (> kMaxFsControlPayloadBytes).
 Map<String, dynamic> _oversizedFs() => {
-  'v': 1,
-  'type': 'fs_init',
-  'initId': 'X' * 22,
-  'initiatorDevicePub': 'AQ' + 'X' * 42,
-  'initiatorEphemeralPub': 'AQ' + 'X' * 42,
-  'caps': ['lgfs1'],
-  // Stuff with a large padding field to exceed the budget.
-  'extra': 'X' * 1500,
-  'createdAt': 1700000000,
-};
+      'v': 1,
+      'type': 'fs_init',
+      'initId': 'X' * 22,
+      'initiatorDevicePub': 'AQ${'X' * 42}',
+      'initiatorEphemeralPub': 'AQ${'X' * 42}',
+      'caps': ['lgfs1'],
+      // Stuff with a large padding field to exceed the budget.
+      'extra': 'X' * 1500,
+      'createdAt': 1700000000,
+    };
 
 // ---------------------------------------------------------------------------
 
@@ -159,7 +159,8 @@ void main() {
     });
 
     // T6.5 — Oversized payload in Strict mode: fitsStrict = false.
-    test('T6.5: oversized x.fs → fitsStrict = false (no silent drop allowed)', () {
+    test('T6.5: oversized x.fs → fitsStrict = false (no silent drop allowed)',
+        () {
       final result = FsPayloadBudget.measure(_oversizedFs());
       expect(result.fitsStrict, isFalse,
           reason: 'Oversized payload must not fit in Strict budget — caller '
@@ -167,21 +168,27 @@ void main() {
     });
 
     // T6.6 — All three real FS control messages fit within kMaxFsControlPayloadBytes.
-    test('T6.6: all real fs_init/fs_reply/fs_confirm fit within kMaxFsControlPayloadBytes', () {
+    test(
+        'T6.6: all real fs_init/fs_reply/fs_confirm fit within kMaxFsControlPayloadBytes',
+        () {
       for (final entry in {
         'fs_init': _maxFsInit(),
         'fs_reply': _maxFsReply(),
         'fs_confirm': _maxFsConfirm(),
       }.entries) {
         final bytes = FsPayloadBudget.fsExtensionBytes(entry.value);
-        expect(bytes, lessThanOrEqualTo(FsPayloadBudget.kMaxFsControlPayloadBytes),
-            reason: '${entry.key} extension ($bytes B) exceeds kMaxFsControlPayloadBytes '
+        expect(
+            bytes, lessThanOrEqualTo(FsPayloadBudget.kMaxFsControlPayloadBytes),
+            reason:
+                '${entry.key} extension ($bytes B) exceeds kMaxFsControlPayloadBytes '
                 '(${FsPayloadBudget.kMaxFsControlPayloadBytes} B)');
       }
     });
 
     // T6.7 — stegoRuneCount = 4 × totalEncryptedBytes.
-    test('T6.7: stegoRuneCount equals 4 × totalEncryptedBytes for all message types', () {
+    test(
+        'T6.7: stegoRuneCount equals 4 × totalEncryptedBytes for all message types',
+        () {
       for (final payload in [_maxFsInit(), _maxFsReply(), _maxFsConfirm()]) {
         final result = FsPayloadBudget.measure(payload);
         expect(result.stegoRuneCount, equals(result.totalEncryptedBytes * 4),
@@ -191,12 +198,15 @@ void main() {
     });
 
     // T6.8 — minimumCoverChars consistent with StegoEncoder.
-    test('T6.8: minimumCoverChars is consistent with StegoEncoder.minCoverLengthForBytes', () {
+    test(
+        'T6.8: minimumCoverChars is consistent with StegoEncoder.minCoverLengthForBytes',
+        () {
       for (final payload in [_maxFsInit(), _maxFsReply(), _maxFsConfirm()]) {
         final result = FsPayloadBudget.measure(payload);
         expect(
           result.minimumCoverChars,
-          equals(StegoEncoder.minCoverLengthForBytes(result.totalEncryptedBytes)),
+          equals(
+              StegoEncoder.minCoverLengthForBytes(result.totalEncryptedBytes)),
         );
       }
     });
@@ -209,15 +219,21 @@ void main() {
 
       // These values should change only when the FS wire format changes.
       // Update this test intentionally when that happens.
-      expect(initBytes, equals(
-        utf8.encode(jsonEncode(_maxFsInit())).length,
-      ));
-      expect(replyBytes, equals(
-        utf8.encode(jsonEncode(_maxFsReply())).length,
-      ));
-      expect(confirmBytes, equals(
-        utf8.encode(jsonEncode(_maxFsConfirm())).length,
-      ));
+      expect(
+          initBytes,
+          equals(
+            utf8.encode(jsonEncode(_maxFsInit())).length,
+          ));
+      expect(
+          replyBytes,
+          equals(
+            utf8.encode(jsonEncode(_maxFsReply())).length,
+          ));
+      expect(
+          confirmBytes,
+          equals(
+            utf8.encode(jsonEncode(_maxFsConfirm())).length,
+          ));
 
       // All must be below 800 B ceiling.
       expect(initBytes, lessThan(FsPayloadBudget.kMaxFsControlPayloadBytes));
@@ -229,7 +245,9 @@ void main() {
     });
 
     // totalEncryptedBytesWithFs includes fixed overhead.
-    test('T6.10: totalEncryptedBytesWithFs = overhead + baseEnvelope + fsExtBytes', () {
+    test(
+        'T6.10: totalEncryptedBytesWithFs = overhead + baseEnvelope + fsExtBytes',
+        () {
       final fs = _maxFsInit();
       final extBytes = FsPayloadBudget.fsExtensionBytes(fs);
       final expected = FsPayloadBudget.lmfV2WireOverheadBytes +
