@@ -38,34 +38,36 @@ void main() {
   });
 
   group('IdentityMigrationNoticeService', () {
-    test('legacy v1 identity without acknowledgement is eligible to show', () async {
+    test('legacy v1 identity never shows and does not write acknowledgement',
+        () async {
       final shouldShow = await service.shouldShowForIdentity(_identityV1());
 
-      expect(shouldShow, isTrue);
+      expect(shouldShow, isFalse);
       expect(await service.isAcknowledged(), isFalse);
     });
 
-    test('legacy v1 identity with acknowledgement does not show', () async {
+    test('markAcknowledged is retained as a no-op for compatibility', () async {
       await service.markAcknowledged();
 
       final shouldShow = await service.shouldShowForIdentity(_identityV1());
 
       expect(shouldShow, isFalse);
-      expect(await service.isAcknowledged(), isTrue);
+      expect(await service.isAcknowledged(), isFalse);
     });
 
-    test('v2 identity does not show and is auto acknowledged', () async {
+    test('v2 identity does not show and is not auto acknowledged', () async {
       final shouldShow = await service.shouldShowForIdentity(_identityV2());
 
       expect(shouldShow, isFalse);
-      expect(await service.isAcknowledged(), isTrue);
+      expect(await service.isAcknowledged(), isFalse);
     });
 
-    test('missing identity does not show and is auto acknowledged', () async {
+    test('missing identity does not show and is not auto acknowledged',
+        () async {
       final shouldShow = await service.shouldShowForIdentity(null);
 
       expect(shouldShow, isFalse);
-      expect(await service.isAcknowledged(), isTrue);
+      expect(await service.isAcknowledged(), isFalse);
     });
 
     test('feature disabled never shows', () async {
@@ -80,17 +82,19 @@ void main() {
       expect(await service.isAcknowledged(), isFalse);
     });
 
-    test('remind later keeps legacy identity eligible', () async {
+    test('remind later is retained as a no-op for compatibility', () async {
       await service.markAcknowledged();
       await service.remindLater();
 
       final shouldShow = await service.shouldShowForIdentity(_identityV1());
 
       expect(await service.isAcknowledged(), isFalse);
-      expect(shouldShow, isTrue);
+      expect(shouldShow, isFalse);
     });
 
-    test('explicit logic returns false for acknowledged legacy and v2 identities', () {
+    test(
+        'explicit logic returns false for acknowledged legacy and v2 identities',
+        () {
       expect(
         service.shouldShowLegacyIdentityNotice(
           _identityV1(),
@@ -117,14 +121,14 @@ void main() {
       );
     });
 
-    test('shouldShowLegacyIdentityNotice returns true only for v1 unacknowledged with feature on', () {
+    test('shouldShowLegacyIdentityNotice always returns false', () {
       expect(
         service.shouldShowLegacyIdentityNotice(
           _identityV1(),
           false,
           featureEnabled: true,
         ),
-        isTrue,
+        isFalse,
       );
     });
 
@@ -139,7 +143,9 @@ void main() {
       );
     });
 
-    test('shouldShowLegacyIdentityNotice returns false for v2 identity regardless of acknowledged', () {
+    test(
+        'shouldShowLegacyIdentityNotice returns false for v2 identity regardless of acknowledged',
+        () {
       expect(
         service.shouldShowLegacyIdentityNotice(
           _identityV2(),
@@ -150,7 +156,9 @@ void main() {
       );
     });
 
-    test('feature disabled short-circuits before synchronizeIdentityState (no auto-ack)', () async {
+    test(
+        'feature disabled short-circuits before synchronizeIdentityState (no auto-ack)',
+        () async {
       // With feature disabled, shouldShowForIdentity returns false immediately
       // WITHOUT calling synchronizeIdentityState, so a v2 identity does NOT
       // auto-acknowledge and does NOT pollute storage.
@@ -165,17 +173,18 @@ void main() {
           reason: 'feature-disabled path must not write to storage');
     });
 
-    test('synchronizeIdentityState marks acknowledged for null identity', () async {
+    test('synchronizeIdentityState does not write for null identity', () async {
       await service.synchronizeIdentityState(null);
-      expect(await service.isAcknowledged(), isTrue);
+      expect(await service.isAcknowledged(), isFalse);
     });
 
-    test('synchronizeIdentityState marks acknowledged for v2 identity', () async {
+    test('synchronizeIdentityState does not write for v2 identity', () async {
       await service.synchronizeIdentityState(_identityV2());
-      expect(await service.isAcknowledged(), isTrue);
+      expect(await service.isAcknowledged(), isFalse);
     });
 
-    test('synchronizeIdentityState does NOT mark acknowledged for v1 identity', () async {
+    test('synchronizeIdentityState does NOT mark acknowledged for v1 identity',
+        () async {
       await service.synchronizeIdentityState(_identityV1());
       expect(await service.isAcknowledged(), isFalse);
     });

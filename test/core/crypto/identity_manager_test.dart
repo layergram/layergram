@@ -12,7 +12,6 @@ import 'package:layergram/core/storage/local_database.dart';
 import 'package:layergram/core/storage/local_identity_vault.dart';
 import 'package:layergram/core/storage/local_storage_security_service.dart';
 import 'package:layergram/core/storage/secure_storage.dart';
-import 'package:layergram/features/identity_migration_notice/identity_migration_notice_service.dart';
 
 class InMemorySecureStorageService extends SecureStorageService {
   final Map<String, String> _values = <String, String>{};
@@ -45,7 +44,6 @@ void main() {
   late SeedService seedService;
   late IdentityManager manager;
   late LocalStorageSecurityService storageSecurity;
-  late IdentityMigrationNoticeService noticeService;
 
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
@@ -76,11 +74,12 @@ void main() {
       secureStorage: secureStorage,
       localIdentityVault: vault,
     );
-    noticeService = IdentityMigrationNoticeService(secureStorage);
   });
 
   group('IdentityManager', () {
-    test('creates a new identity in the secure vault and derives the private key on demand', () async {
+    test(
+        'creates a new identity in the secure vault and derives the private key on demand',
+        () async {
       final created = await manager.createNewIdentity(displayName: 'Alice');
 
       final storedRaw = await secureStorage.read(LocalIdentityVault.storageKey);
@@ -92,7 +91,8 @@ void main() {
       expect(loaded?.displayName, 'Alice');
       expect(loaded?.mnemonic, created.mnemonic);
       expect(loaded?.derivationVersion, IdentityDerivationVersion.v2);
-      expect(loaded?.derivationAlgorithm, IdentityDerivationVersion.v2.algorithm);
+      expect(
+          loaded?.derivationAlgorithm, IdentityDerivationVersion.v2.algorithm);
 
       final privateKeyBase64 = await manager.getLocalPrivateKeyBase64();
       final expectedPrivateKey = base64Encode(
@@ -114,7 +114,8 @@ void main() {
       );
       expect(restored.displayName, 'Recovered');
       expect(restored.derivationVersion, IdentityDerivationVersion.v1);
-      expect(restored.derivationAlgorithm, IdentityDerivationVersion.v1.algorithm);
+      expect(
+          restored.derivationAlgorithm, IdentityDerivationVersion.v1.algorithm);
 
       await manager.clearLocalIdentity();
 
@@ -122,32 +123,9 @@ void main() {
       expect(await secureStorage.read(LocalIdentityVault.storageKey), isNull);
     });
 
-    test('creating a new v2 identity marks the migration notice acknowledged when synchronized', () async {
-      final created = await manager.createNewIdentity(displayName: 'Alice');
-
-      await noticeService.synchronizeIdentityState(created);
-
-      expect(created.derivationVersion, IdentityDerivationVersion.v2);
-      expect(await noticeService.isAcknowledged(), isTrue);
-    });
-
-    test('restoring a v2 identity marks the migration notice acknowledged when synchronized', () async {
-      const mnemonic =
-          'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
-
-      final restored = await manager.restoreIdentityFromMnemonic(
-        mnemonic,
-        displayName: 'Recovered V2',
-        derivationVersion: IdentityDerivationVersion.v2,
-      );
-
-      await noticeService.synchronizeIdentityState(restored);
-
-      expect(restored.derivationVersion, IdentityDerivationVersion.v2);
-      expect(await noticeService.isAcknowledged(), isTrue);
-    });
-
-    test('restores the same mnemonic deterministically for the selected derivation version', () async {
+    test(
+        'restores the same mnemonic deterministically for the selected derivation version',
+        () async {
       const mnemonic =
           'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 
@@ -179,7 +157,9 @@ void main() {
       expect(restoredV2.derivationVersion, IdentityDerivationVersion.v2);
     });
 
-    test('derives stored local private keys using the saved legacy v1 version without upgrading', () async {
+    test(
+        'derives stored local private keys using the saved legacy v1 version without upgrading',
+        () async {
       const mnemonic =
           'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
       final seed = seedService.mnemonicToSeed(mnemonic);
@@ -203,10 +183,13 @@ void main() {
 
       expect(privateKeyBase64, base64Encode(legacyPrivateKey));
       expect(loaded?.derivationVersion, IdentityDerivationVersion.v1);
-      expect(loaded?.derivationAlgorithm, IdentityDerivationVersion.v1.algorithm);
+      expect(
+          loaded?.derivationAlgorithm, IdentityDerivationVersion.v1.algorithm);
     });
 
-    test('bootstraps legacy layout by migrating local identity to secure storage and clearing Hive boxes', () async {
+    test(
+        'bootstraps legacy layout by migrating local identity to secure storage and clearing Hive boxes',
+        () async {
       final legacyIdentity = <String, dynamic>{
         'identityId': 'LEGACY',
         'publicKeyBase64': base64Encode(List<int>.filled(32, 7)),
@@ -228,7 +211,8 @@ void main() {
       final migrated = await vault.read();
       expect(migrated?.identityId, 'LEGACY');
       expect(migrated?.derivationVersion, IdentityDerivationVersion.v1);
-      expect(migrated?.derivationAlgorithm, IdentityDerivationVersion.v1.algorithm);
+      expect(migrated?.derivationAlgorithm,
+          IdentityDerivationVersion.v1.algorithm);
       expect(
         Hive.box<Map>(LocalDatabase.identitiesBoxName).isEmpty,
         isTrue,
