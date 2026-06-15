@@ -1,11 +1,17 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:layergram/core/crypto/aux_record_cipher.dart';
 import 'package:layergram/core/crypto/encryption_service.dart';
+import 'package:layergram/core/crypto/fs_double_ratchet.dart';
+import 'package:layergram/core/crypto/fs_message_classification.dart';
+import 'package:layergram/core/crypto/fs_security_mode.dart';
+import 'package:layergram/core/crypto/fs_session_manager.dart';
 import 'package:layergram/core/crypto/identity_manager.dart';
 import 'package:layergram/core/crypto/models.dart';
 import 'package:layergram/core/crypto/seed_service.dart';
@@ -27,6 +33,23 @@ Future<({String privateKeyBase64, String publicKeyBase64})> _keyMaterial(
     publicKeyBase64: base64Encode(publicKeyBytes),
   );
 }
+
+Uint8List _bytes(int seed) => Uint8List.fromList(
+      List<int>.generate(32, (i) => (seed + i) % 256),
+    );
+
+RatchetState _testRatchet(String sessionId) => RatchetState(
+      sessionId: sessionId,
+      rootKey: _bytes(1),
+      sendingChainKey: _bytes(33),
+      receivingChainKey: _bytes(65),
+      localRatchetPriv: _bytes(97),
+      localRatchetPub: _bytes(129),
+      lastRemoteRatchetPub: _bytes(161),
+      sendCounter: 0,
+      recvCounter: 0,
+      skippedKeys: const {},
+    );
 
 class _InMemorySecureStorageService extends SecureStorageService {
   final Map<String, String> _values = <String, String>{};
@@ -132,6 +155,8 @@ class _Fixture {
     required this.container,
     required this.encryptionService,
     required this.contacts,
+    required this.localKeys,
+    required this.contactKeysById,
     required this.identitiesRepository,
     required this.messagesRepository,
   });
@@ -139,6 +164,9 @@ class _Fixture {
   final ProviderContainer container;
   final _CountingEncryptionService encryptionService;
   final List<RemoteIdentity> contacts;
+  final ({String privateKeyBase64, String publicKeyBase64}) localKeys;
+  final Map<String, ({String privateKeyBase64, String publicKeyBase64})>
+      contactKeysById;
   final _FakeIdentitiesRepository identitiesRepository;
   final _FakeMessagesRepository messagesRepository;
 }
@@ -209,11 +237,23 @@ Future<_Fixture> _createFixture() async {
       messagesRepositoryProvider.overrideWithValue(messagesRepository),
     ],
   );
+  final auxStorageKey = await AuxRecordCipher.deriveAuxStorageKey(
+    base64Decode(localKeys.privateKeyBase64),
+  );
+  container.read(auxRecordRepositoryProvider).setActiveContext(
+        scopeToken: 'home-controller-cache-test',
+        auxStorageKey: auxStorageKey,
+      );
 
   return _Fixture(
     container: container,
     encryptionService: encryptionService,
     contacts: contacts,
+    localKeys: localKeys,
+    contactKeysById: {
+      'contact-a': contactAKeys,
+      'contact-b': contactBKeys,
+    },
     identitiesRepository: identitiesRepository,
     messagesRepository: messagesRepository,
   );
@@ -258,8 +298,9 @@ void main() {
       await controller.warmSessionDisplayKeys();
       expect(fixture.encryptionService.deriveCalls, 0);
 
-      fixture.container.read(sessionDecryptionCacheEnabledProvider.notifier).state =
-          true;
+      fixture.container
+          .read(sessionDecryptionCacheEnabledProvider.notifier)
+          .state = true;
       await controller.warmSessionDisplayKeys();
       expect(fixture.encryptionService.deriveCalls, fixture.contacts.length);
 
@@ -275,8 +316,9 @@ void main() {
         fixture.container.dispose();
       });
 
-      fixture.container.read(sessionDecryptionCacheEnabledProvider.notifier).state =
-          true;
+      fixture.container
+          .read(sessionDecryptionCacheEnabledProvider.notifier)
+          .state = true;
       final controller = fixture.container.read(homeControllerProvider);
 
       await controller.primeDisplayKey(contact: fixture.contacts.first);
@@ -297,8 +339,9 @@ void main() {
         fixture.container.dispose();
       });
 
-      fixture.container.read(sessionDecryptionCacheEnabledProvider.notifier).state =
-          true;
+      fixture.container
+          .read(sessionDecryptionCacheEnabledProvider.notifier)
+          .state = true;
       final controller = fixture.container.read(homeControllerProvider);
 
       await controller.primeDisplayKey(contact: fixture.contacts.first);
@@ -309,5 +352,115 @@ void main() {
       await controller.primeDisplayKey(contact: fixture.contacts.first);
       expect(fixture.encryptionService.deriveCalls, 2);
     });
+
+    test(
+      'Advanced FS includes fallback readable by same identity without ratchet',
+      () async {
+        final fixture = await _createFixture();
+        addTearDown(() {
+          fixture.identitiesRepository.dispose();
+          fixture.messagesRepository.dispose();
+          fixture.container.dispose();
+        });
+
+        final contact = fixture.contacts.first;
+        const sessionId = 'session-advanced';
+        final sessionManager = fixture.container
+            .read(fsSessionManagerProvider(contact.identityId));
+        sessionManager.setStateForTesting(
+          FsSessionState.fsActive,
+          sessionId: sessionId,
+        );
+        fixture.container.read(fsRatchetStateCacheProvider.notifier).state = {
+          sessionId: _testRatchet(sessionId),
+        };
+
+        final controller = fixture.container.read(homeControllerProvider);
+        const secret = 'Advanced FS stays readable from a restored device';
+        final result = await controller.encryptForRecipient(
+          secretText: secret,
+          recipient: contact,
+        );
+
+        expect(result.isFsEncrypted, isTrue);
+        expect(result.classification, FsMessageClassification.fsWithFallback);
+
+        final contactKeys = fixture.contactKeysById[contact.identityId]!;
+        final decoded = await fixture.encryptionService.decrypt(
+          recipientPrivateKeyBase64: contactKeys.privateKeyBase64,
+          senderPublicKeyBase64: fixture.localKeys.publicKeyBase64,
+          message: result.message,
+          allRatchetStates: const {},
+        );
+
+        expect(decoded.fsDecryptFailed, isFalse);
+        expect(decoded.isFsEnvelope, isTrue);
+        expect(decoded.hasLegacyFallback, isTrue);
+        expect(decoded.payload.text, secret);
+        expect(decoded.newRatchetState, isNull);
+      },
+    );
+
+    test(
+      'Strict FS omits fallback for same identity without ratchet',
+      () async {
+        final fixture = await _createFixture();
+        addTearDown(() {
+          fixture.identitiesRepository.dispose();
+          fixture.messagesRepository.dispose();
+          fixture.container.dispose();
+        });
+
+        final contact = fixture.contacts.first;
+        const sessionId = 'session-strict';
+        final sessionManager = fixture.container
+            .read(fsSessionManagerProvider(contact.identityId));
+        sessionManager.setStateForTesting(
+          FsSessionState.fsActive,
+          sessionId: sessionId,
+        );
+        fixture.container.read(fsRatchetStateCacheProvider.notifier).state = {
+          sessionId: _testRatchet(sessionId),
+        };
+
+        final modeService =
+            fixture.container.read(fsSecurityModeServiceProvider);
+        final fsController = fixture.container.read(
+          fsOpportunisticControllerProvider(contact.identityId),
+        );
+        await modeService.setMode(
+          contactId: contact.identityId,
+          identityContext: fsController.identityContext,
+          mode: FsSecurityMode.strict,
+        );
+        final strictController = fixture.container.read(
+          fsStrictModeControllerProvider(contact.identityId),
+        );
+        expect(strictController.requestMaximum(sessionId).success, isTrue);
+        expect(strictController.activateStrict(sessionId).success, isTrue);
+
+        final controller = fixture.container.read(homeControllerProvider);
+        final result = await controller.encryptForRecipient(
+          secretText: 'Strict FS should not expose fallback',
+          recipient: contact,
+        );
+
+        expect(result.isFsEncrypted, isTrue);
+        expect(result.classification, FsMessageClassification.strictFs);
+
+        final contactKeys = fixture.contactKeysById[contact.identityId]!;
+        final decoded = await fixture.encryptionService.decrypt(
+          recipientPrivateKeyBase64: contactKeys.privateKeyBase64,
+          senderPublicKeyBase64: fixture.localKeys.publicKeyBase64,
+          message: result.message,
+          allRatchetStates: const {},
+        );
+
+        expect(decoded.fsDecryptFailed, isTrue);
+        expect(decoded.isFsEnvelope, isTrue);
+        expect(decoded.hasLegacyFallback, isFalse);
+        expect(decoded.payload.text, isEmpty);
+      },
+    );
   });
 }

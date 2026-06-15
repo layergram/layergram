@@ -170,6 +170,7 @@ class HomeController {
     // §9.6: when the contact has multiple active device sessions, the content
     // key is wrapped for all of them in a single multi-envelope message.
     Map<String, RatchetState>? multiSessionRatchets;
+    bool includeLegacyFallback = false;
 
     if (!selfCopy) {
       final fsController = ref.read(
@@ -182,6 +183,11 @@ class HomeController {
 
       // Prepare handshake payload based on current state
       final state = sessionManager.state;
+      final securityMode = ref.read(fsSecurityModeServiceProvider).getModeSync(
+            contactId: recipient.identityId,
+            identityContext: fsController.identityContext,
+          );
+      fsController.securityMode = securityMode;
       final outgoingExt = await _buildFsOutgoingExtension(
         fsController: fsController,
         sessionManager: sessionManager,
@@ -194,8 +200,9 @@ class HomeController {
       }
 
       // If FS is active, get the ratchet state for encryption
-      if (state == FsSessionState.fsActive ||
-          state == FsSessionState.strictFsActive) {
+      if (securityMode != FsSecurityMode.base &&
+          (state == FsSessionState.fsActive ||
+              state == FsSessionState.strictFsActive)) {
         sessionId = sessionManager.activeSessionId;
         if (sessionId != null) {
           ratchetState = ref.read(fsRatchetStateCacheProvider)[sessionId];
@@ -225,12 +232,16 @@ class HomeController {
         }
       }
 
-      // §9.6: collect every active device session so a single message can be
-      // read in FS by all of the contact's devices. Strict mode never adds a
-      // legacy fallback (handled below via includeLegacyFallback: false).
+      // §9.6: collect active device sessions so one payload can be read by
+      // every known device. Advanced mode also includes a legacy identity
+      // fallback for restored devices that do not yet have a ratchet.
+      includeLegacyFallback = securityMode == FsSecurityMode.advanced &&
+          state == FsSessionState.fsActive;
       if (ratchetState != null) {
         final activeIds = fsController.allActiveSessionIds;
-        if (activeIds.length >= 2) {
+        final shouldUseMultiEnvelope =
+            includeLegacyFallback || activeIds.length >= 2;
+        if (shouldUseMultiEnvelope) {
           final cache = ref.read(fsRatchetStateCacheProvider);
           final persistence = ref.read(fsRatchetPersistenceServiceProvider);
           final collected = <String, RatchetState>{};
@@ -238,7 +249,10 @@ class HomeController {
             final r = cache[id] ?? await persistence.loadRatchetState(id);
             if (r != null) collected[id] = r;
           }
-          if (collected.length >= 2) multiSessionRatchets = collected;
+          if (collected.isNotEmpty &&
+              (includeLegacyFallback || collected.length >= 2)) {
+            multiSessionRatchets = collected;
+          }
         }
       }
 
@@ -257,7 +271,7 @@ class HomeController {
                 payload: payload,
                 sessionRatchets: multiSessionRatchets,
                 fsExtension: fsExtension,
-                includeLegacyFallback: false,
+                includeLegacyFallback: includeLegacyFallback,
               );
       final cacheNotifier = ref.read(fsRatchetStateCacheProvider.notifier);
       final persistence = ref.read(fsRatchetPersistenceServiceProvider);
@@ -308,6 +322,7 @@ class HomeController {
       );
       classification = _classifyOutgoing(
         isFsEncrypted: isFsEncrypted,
+        hasLegacyFallback: includeLegacyFallback,
         hasFsExtension: fsExtension != null,
         sessionState: fsController.sessionManager.state,
         securityMode: fsController.securityMode,
@@ -396,6 +411,11 @@ class HomeController {
     // §12.3: Check in-memory cache first, then aux record persistence.
     final fsController =
         ref.read(fsOpportunisticControllerProvider(contact.identityId));
+    fsController.securityMode =
+        ref.read(fsSecurityModeServiceProvider).getModeSync(
+              contactId: contact.identityId,
+              identityContext: fsController.identityContext,
+            );
     final cacheKey = '${contact.identityId}|${message.id}';
     final cached = fsController.getCachedPlaintext(cacheKey);
     if (cached != null) return cached;
@@ -450,7 +470,7 @@ class HomeController {
       return null;
     }
 
-    final isFs = result.newRatchetState != null;
+    final isFs = result.isFsEnvelope;
 
     // Update ratchet state if it changed (e.g., received new message advanced counter)
     if (result.newRatchetState != null) {
@@ -568,12 +588,12 @@ class HomeController {
         if (result.fsDecryptFailed) continue;
 
         // Update ratchet state if it changed
-        if (result.newRatchetState != null && activeSessionId != null) {
+        if (result.newRatchetState != null) {
           final newState = result.newRatchetState!;
           ratchetState = newState; // Update local var for next iteration
           ref.read(fsRatchetStateCacheProvider.notifier).update((cache) => {
                 ...cache,
-                activeSessionId: newState,
+                newState.sessionId: newState,
               });
           // Persist updated state (don't await in loop)
           unawaited(ref
@@ -674,6 +694,11 @@ class HomeController {
         RatchetState? ratchetState;
         final fsController =
             ref.read(fsOpportunisticControllerProvider(contact.identityId));
+        fsController.securityMode =
+            ref.read(fsSecurityModeServiceProvider).getModeSync(
+                  contactId: contact.identityId,
+                  identityContext: fsController.identityContext,
+                );
         final sessionManager = fsController.sessionManager;
         final activeSessionId = sessionManager.activeSessionId;
         if (activeSessionId != null) {
@@ -704,12 +729,17 @@ class HomeController {
         final fsCtrl = ref.read(
           fsOpportunisticControllerProvider(contact.identityId),
         );
-        final isFs = result.newRatchetState != null;
-        if (isFs && activeSessionId != null) {
+        fsCtrl.securityMode =
+            ref.read(fsSecurityModeServiceProvider).getModeSync(
+                  contactId: contact.identityId,
+                  identityContext: fsCtrl.identityContext,
+                );
+        final isFs = result.isFsEnvelope;
+        if (result.newRatchetState != null) {
           final newState = result.newRatchetState!;
           ref.read(fsRatchetStateCacheProvider.notifier).update((cache) => {
                 ...cache,
-                activeSessionId: newState,
+                newState.sessionId: newState,
               });
           // Persist updated state
           unawaited(ref
@@ -768,6 +798,7 @@ class HomeController {
         final incomingClassification = _classifyIncoming(
           isFsEncrypted: isFs,
           fsDecryptFailed: false,
+          hasLegacyFallback: result.hasLegacyFallback,
           hasFsExtension: hasFsExt,
           sessionState: fsCtrl.sessionManager.state,
           securityMode: fsCtrl.securityMode,
@@ -858,11 +889,16 @@ class HomeController {
 
   static FsMessageClassification _classifyOutgoing({
     required bool isFsEncrypted,
+    required bool hasLegacyFallback,
     required bool hasFsExtension,
     required FsSessionState sessionState,
     required FsSecurityMode securityMode,
   }) {
     if (isFsEncrypted) {
+      if (hasLegacyFallback) {
+        return FsMessageClassification.fsWithFallback;
+      }
+
       if (securityMode == FsSecurityMode.strict &&
           sessionState == FsSessionState.strictFsActive) {
         return FsMessageClassification.strictFs;
@@ -885,6 +921,7 @@ class HomeController {
   static FsMessageClassification _classifyIncoming({
     required bool isFsEncrypted,
     required bool fsDecryptFailed,
+    required bool hasLegacyFallback,
     required bool hasFsExtension,
     required FsSessionState sessionState,
     required FsSecurityMode securityMode,
@@ -893,6 +930,10 @@ class HomeController {
       return FsMessageClassification.fsFailed;
     }
     if (isFsEncrypted) {
+      if (hasLegacyFallback) {
+        return FsMessageClassification.fsWithFallback;
+      }
+
       if (securityMode == FsSecurityMode.strict &&
           sessionState == FsSessionState.strictFsActive) {
         return FsMessageClassification.strictFs;

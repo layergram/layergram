@@ -59,6 +59,8 @@ class DecryptionResult {
     this.newRatchetState,
     this.fsDecryptFailed = false,
     this.fsReplayDetected = false,
+    this.isFsEnvelope = false,
+    this.hasLegacyFallback = false,
   });
 
   final PlaintextPayload payload;
@@ -72,6 +74,15 @@ class DecryptionResult {
 
   /// `true` when an FS counter has already been processed for this session.
   final bool fsReplayDetected;
+
+  /// `true` when the decoded envelope carried FS ciphertext or FS wraps.
+  ///
+  /// This is independent from [newRatchetState]: an FS-with-fallback message
+  /// may be read by a device that has the identity key but no ratchet state.
+  final bool isFsEnvelope;
+
+  /// `true` when the FS envelope also carried a legacy identity-key fallback.
+  final bool hasLegacyFallback;
 }
 
 class EncryptionService {
@@ -344,6 +355,7 @@ class EncryptionService {
             deleteAfterRead: (map['deleteAfterRead'] as bool?) ?? false,
           ),
           fsDecryptFailed: true,
+          isFsEnvelope: true,
         );
       }
 
@@ -367,6 +379,7 @@ class EncryptionService {
             deleteAfterRead: (map['deleteAfterRead'] as bool?) ?? false,
           ),
           fsReplayDetected: true,
+          isFsEnvelope: true,
         );
       }
 
@@ -394,6 +407,7 @@ class EncryptionService {
           deleteAfterRead: (map['deleteAfterRead'] as bool?) ?? false,
         ),
         newRatchetState: newState,
+        isFsEnvelope: true,
       );
     }
 
@@ -435,6 +449,7 @@ class EncryptionService {
         );
 
     final wraps = (map['fs_wraps'] as List?) ?? const [];
+    final hasLegacyFallback = map['mc_fallback_key'] != null;
 
     // Find a wrap addressed to one of our sessions.
     Map<String, dynamic>? matchedWrap;
@@ -462,6 +477,8 @@ class EncryptionService {
         return DecryptionResult(
           payload: buildPayload(''),
           fsReplayDetected: true,
+          isFsEnvelope: true,
+          hasLegacyFallback: hasLegacyFallback,
         );
       }
       final fsMessage = FsEncryptedMessage(
@@ -477,7 +494,7 @@ class EncryptionService {
       );
       contentKeyBytes = Uint8List.fromList(plaintext);
       newState = ns;
-    } else if (map['mc_fallback_key'] != null) {
+    } else if (hasLegacyFallback) {
       // Legacy fallback: content key is readable via the identity-key outer
       // layer (already decrypted to reach `map`).
       contentKeyBytes = base64Decode(map['mc_fallback_key'] as String);
@@ -488,6 +505,8 @@ class EncryptionService {
       return DecryptionResult(
         payload: buildPayload(''),
         fsDecryptFailed: true,
+        isFsEnvelope: true,
+        hasLegacyFallback: hasLegacyFallback,
       );
     }
 
@@ -503,6 +522,8 @@ class EncryptionService {
     return DecryptionResult(
       payload: buildPayload(utf8.decode(clear)),
       newRatchetState: newState,
+      isFsEnvelope: true,
+      hasLegacyFallback: hasLegacyFallback,
     );
   }
 

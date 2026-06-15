@@ -41,9 +41,8 @@ enum FsMessageClassification {
   ///
   /// Per §9.5 this is the only case that must NOT be treated as full FS.
   /// It corresponds to a multi-envelope message (§9.6) that includes the
-  /// optional legacy fallback (`mc_fallback_key`). The live classifier does
-  /// not emit it because Layergram sends multi-envelope messages without a
-  /// legacy fallback by default (they stay `fsOnly`/`strictFs`).
+  /// optional legacy fallback (`mc_fallback_key`). Advanced mode emits this
+  /// classification; Strict / Maximum FS must not.
   fsWithFallback,
 
   /// FS encrypted only; not decryptable by the legacy identity key.

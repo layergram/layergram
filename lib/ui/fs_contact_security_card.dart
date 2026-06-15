@@ -118,8 +118,7 @@ class FsContactSecurityCard extends ConsumerWidget {
                   label: t(context, 'security.fs.action.change_mode'),
                   icon: Icons.tune,
                   onPressed: () async {
-                    final modeService =
-                        ref.read(fsSecurityModeServiceProvider);
+                    final modeService = ref.read(fsSecurityModeServiceProvider);
                     final ctrl = ref.read(
                       fsOpportunisticControllerProvider(contactId),
                     );
@@ -137,13 +136,28 @@ class FsContactSecurityCard extends ConsumerWidget {
                         identityContext: ctrl.identityContext,
                         mode: selected,
                       );
+                      ctrl.securityMode = selected;
+                      final strictCtrl = ref.read(
+                        fsStrictModeControllerProvider(contactId),
+                      );
+                      final sessionId = ctrl.sessionManager.activeSessionId;
+                      if (selected == FsSecurityMode.strict) {
+                        if (sessionId != null) {
+                          final requested =
+                              strictCtrl.requestMaximum(sessionId);
+                          if (requested.success) {
+                            strictCtrl.activateStrict(sessionId);
+                          }
+                        }
+                      } else {
+                        strictCtrl.disableStrict(sessionId ?? '');
+                      }
                       ref.read(fsRegistryVersionProvider.notifier).state++;
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text(
-                              t(context,
-                                  'security.fs.mode.changed_snackbar'),
+                              t(context, 'security.fs.mode.changed_snackbar'),
                             ),
                           ),
                         );
@@ -244,17 +258,29 @@ class FsContactSecurityCard extends ConsumerWidget {
                       final confirmed =
                           await showMaximumFsConsentDialog(context);
                       if (confirmed == true && context.mounted) {
-                        final ctrl = ref.read(
+                        final fsCtrl = ref.read(
+                          fsOpportunisticControllerProvider(contactId),
+                        );
+                        final strictCtrl = ref.read(
                           fsStrictModeControllerProvider(contactId),
                         );
-                        final session = ref
-                            .read(fsContactSecurityRegistryProvider)
-                            .forContactAllContexts(contactId)
-                            .firstOrNull;
-                        ctrl.requestMaximum(session?.sessionId ?? '');
-                        ref
-                            .read(fsRegistryVersionProvider.notifier)
-                            .state++;
+                        final sessionId = fsCtrl.sessionManager.activeSessionId;
+                        if (sessionId != null) {
+                          final modeService =
+                              ref.read(fsSecurityModeServiceProvider);
+                          await modeService.setMode(
+                            contactId: contactId,
+                            identityContext: fsCtrl.identityContext,
+                            mode: FsSecurityMode.strict,
+                          );
+                          fsCtrl.securityMode = FsSecurityMode.strict;
+                          final requested =
+                              strictCtrl.requestMaximum(sessionId);
+                          if (requested.success) {
+                            strictCtrl.activateStrict(sessionId);
+                          }
+                        }
+                        ref.read(fsRegistryVersionProvider.notifier).state++;
                       }
                     },
                   ),
