@@ -233,15 +233,13 @@ class HomeController {
       }
 
       // §9.6: collect active device sessions so one payload can be read by
-      // every known device. Advanced mode also includes a legacy identity
-      // fallback for restored devices that do not yet have a ratchet.
+      // every known device. Single-session Advanced uses the smaller FS
+      // envelope plus legacy fallback instead of forcing fs_multi.
       includeLegacyFallback = securityMode == FsSecurityMode.advanced &&
           state == FsSessionState.fsActive;
       if (ratchetState != null) {
         final activeIds = fsController.allActiveSessionIds;
-        final shouldUseMultiEnvelope =
-            includeLegacyFallback || activeIds.length >= 2;
-        if (shouldUseMultiEnvelope) {
+        if (activeIds.length >= 2) {
           final cache = ref.read(fsRatchetStateCacheProvider);
           final persistence = ref.read(fsRatchetPersistenceServiceProvider);
           final collected = <String, RatchetState>{};
@@ -249,8 +247,7 @@ class HomeController {
             final r = cache[id] ?? await persistence.loadRatchetState(id);
             if (r != null) collected[id] = r;
           }
-          if (collected.isNotEmpty &&
-              (includeLegacyFallback || collected.length >= 2)) {
+          if (collected.length >= 2) {
             multiSessionRatchets = collected;
           }
         }
@@ -289,6 +286,7 @@ class HomeController {
             payload: payload,
             fsExtension: fsExtension,
             ratchetState: ratchetState,
+            includeLegacyFallback: includeLegacyFallback,
           );
 
       // Save updated ratchet state if FS was used

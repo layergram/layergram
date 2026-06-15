@@ -101,6 +101,7 @@ class EncryptionService {
     required PlaintextPayload payload,
     Map<String, dynamic>? fsExtension,
     RatchetState? ratchetState,
+    bool includeLegacyFallback = false,
   }) async {
     // If we have an active ratchet state, use double ratchet encryption
     if (ratchetState != null) {
@@ -122,6 +123,7 @@ class EncryptionService {
         'fs_counter': message.counter,
         'fs_cipher': base64Encode(message.ciphertext),
         'fs_nonce': base64Encode(message.nonce),
+        if (includeLegacyFallback) 'text': payload.text,
         if (payload.senderDisplayName != null)
           'senderDisplayName': payload.senderDisplayName,
         if (payload.expireAfter != null) 'expireAfter': payload.expireAfter,
@@ -339,7 +341,24 @@ class EncryptionService {
         effectiveRatchet = allRatchetStates[envelopeFsSession] ?? ratchetState;
       }
 
+      final hasLegacyFallback = map['text'] is String;
       if (effectiveRatchet == null) {
+        if (hasLegacyFallback) {
+          return DecryptionResult(
+            payload: PlaintextPayload(
+              senderId: map['senderId'] as String,
+              recipientId: map['recipientId'] as String,
+              text: map['text'] as String,
+              timestamp: map['timestamp'] as int,
+              senderDisplayName: map['senderDisplayName'] as String?,
+              expireAfter: map['expireAfter'] as int?,
+              deleteAfterRead: (map['deleteAfterRead'] as bool?) ?? false,
+            ),
+            isFsEnvelope: true,
+            hasLegacyFallback: true,
+          );
+        }
+
         // The outer legacy layer was decrypted successfully, but the FS
         // inner payload requires the ratchet state which is gone (identity
         // reset, app reinstall, etc.).  Return metadata-only result so the
@@ -380,6 +399,7 @@ class EncryptionService {
           ),
           fsReplayDetected: true,
           isFsEnvelope: true,
+          hasLegacyFallback: hasLegacyFallback,
         );
       }
 
@@ -408,6 +428,7 @@ class EncryptionService {
         ),
         newRatchetState: newState,
         isFsEnvelope: true,
+        hasLegacyFallback: hasLegacyFallback,
       );
     }
 

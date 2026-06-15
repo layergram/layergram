@@ -259,6 +259,66 @@ Future<_Fixture> _createFixture() async {
   );
 }
 
+Future<_Fixture> _createFixtureFor({
+  required String localIdentityId,
+  required String localDisplayName,
+  required ({String privateKeyBase64, String publicKeyBase64}) localKeys,
+  required Map<String, ({String privateKeyBase64, String publicKeyBase64})>
+      contactKeysById,
+}) async {
+  final localIdentity = LocalIdentity(
+    identityId: localIdentityId,
+    publicKeyBase64: localKeys.publicKeyBase64,
+    fingerprint: 'fp-$localIdentityId',
+    displayName: localDisplayName,
+    mnemonic:
+        'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+  );
+  final contacts = contactKeysById.entries
+      .map(
+        (entry) => RemoteIdentity(
+          identityId: entry.key,
+          publicKeyBase64: entry.value.publicKeyBase64,
+          fingerprint: 'fp-${entry.key}',
+          displayName: entry.key,
+        ),
+      )
+      .toList();
+  final messagesRepository = _FakeMessagesRepository(const []);
+  final identitiesRepository = _FakeIdentitiesRepository(contacts);
+  final encryptionService = _CountingEncryptionService();
+  final container = ProviderContainer(
+    overrides: [
+      identityManagerProvider.overrideWithValue(
+        _FakeIdentityManager(
+          localIdentity: localIdentity,
+          privateKeyBase64: localKeys.privateKeyBase64,
+        ),
+      ),
+      encryptionServiceProvider.overrideWithValue(encryptionService),
+      identitiesRepositoryProvider.overrideWithValue(identitiesRepository),
+      messagesRepositoryProvider.overrideWithValue(messagesRepository),
+    ],
+  );
+  final auxStorageKey = await AuxRecordCipher.deriveAuxStorageKey(
+    base64Decode(localKeys.privateKeyBase64),
+  );
+  container.read(auxRecordRepositoryProvider).setActiveContext(
+        scopeToken: 'home-controller-cache-test-$localIdentityId',
+        auxStorageKey: auxStorageKey,
+      );
+
+  return _Fixture(
+    container: container,
+    encryptionService: encryptionService,
+    contacts: contacts,
+    localKeys: localKeys,
+    contactKeysById: contactKeysById,
+    identitiesRepository: identitiesRepository,
+    messagesRepository: messagesRepository,
+  );
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -398,6 +458,64 @@ void main() {
         expect(decoded.hasLegacyFallback, isTrue);
         expect(decoded.payload.text, secret);
         expect(decoded.newRatchetState, isNull);
+      },
+    );
+
+    test(
+      'Advanced hidden message decodes on same identity device without ratchet',
+      () async {
+        final senderFixture = await _createFixture();
+        final recipient = senderFixture.contacts.first;
+        final recipientKeys =
+            senderFixture.contactKeysById[recipient.identityId]!;
+        final receiverFixture = await _createFixtureFor(
+          localIdentityId: recipient.identityId,
+          localDisplayName: recipient.displayName,
+          localKeys: recipientKeys,
+          contactKeysById: {'me': senderFixture.localKeys},
+        );
+        addTearDown(() {
+          senderFixture.identitiesRepository.dispose();
+          senderFixture.messagesRepository.dispose();
+          senderFixture.container.dispose();
+          receiverFixture.identitiesRepository.dispose();
+          receiverFixture.messagesRepository.dispose();
+          receiverFixture.container.dispose();
+        });
+
+        const sessionId = 'session-hidden-advanced';
+        final sessionManager = senderFixture.container
+            .read(fsSessionManagerProvider(recipient.identityId));
+        sessionManager.setStateForTesting(
+          FsSessionState.fsActive,
+          sessionId: sessionId,
+        );
+        senderFixture.container
+            .read(fsRatchetStateCacheProvider.notifier)
+            .state = {sessionId: _testRatchet(sessionId)};
+
+        final senderController =
+            senderFixture.container.read(homeControllerProvider);
+        const secret = 'Advanced FS hidden message from another device';
+        final hidden = await senderController.generateHiddenMessage(
+          coverText: List.filled(
+            30,
+            'This is a normal looking carrier message.',
+          ).join(' '),
+          secretText: secret,
+          recipient: recipient,
+        );
+
+        final receiverController =
+            receiverFixture.container.read(homeControllerProvider);
+        final outcome = await receiverController.decodeHiddenMessage(
+          hidden,
+          hintContactId: 'me',
+        );
+
+        expect(outcome.kind, DecodeKind.success);
+        expect(outcome.payload?.senderId, 'me');
+        expect(outcome.payload?.text, secret);
       },
     );
 
