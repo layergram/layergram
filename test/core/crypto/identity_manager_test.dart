@@ -113,9 +113,9 @@ void main() {
         displayName: 'Recovered',
       );
       expect(restored.displayName, 'Recovered');
-      expect(restored.derivationVersion, IdentityDerivationVersion.v1);
+      expect(restored.derivationVersion, IdentityDerivationVersion.v2);
       expect(
-          restored.derivationAlgorithm, IdentityDerivationVersion.v1.algorithm);
+          restored.derivationAlgorithm, IdentityDerivationVersion.v2.algorithm);
 
       await manager.clearLocalIdentity();
 
@@ -132,10 +132,12 @@ void main() {
       final restoredV1 = await manager.restoreIdentityFromMnemonic(
         mnemonic,
         displayName: 'Recovered',
+        derivationVersion: IdentityDerivationVersion.v1,
       );
       final restoredV1Again = await manager.restoreIdentityFromMnemonic(
         mnemonic,
         displayName: 'Recovered Again',
+        derivationVersion: IdentityDerivationVersion.v1,
       );
       final restoredV2 = await manager.restoreIdentityFromMnemonic(
         mnemonic,

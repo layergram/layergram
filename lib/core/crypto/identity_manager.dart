@@ -51,7 +51,7 @@ class IdentityManager {
     String mnemonic, {
     String? displayName,
     IdentityDerivationVersion derivationVersion =
-        SeedService.legacyIdentityDerivationVersion,
+        SeedService.preferredIdentityDerivationVersion,
   }) async {
     if (!_seedService.validateMnemonic(mnemonic)) {
       throw ArgumentError('Invalid mnemonic');

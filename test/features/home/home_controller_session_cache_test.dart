@@ -34,6 +34,41 @@ Future<({String privateKeyBase64, String publicKeyBase64})> _keyMaterial(
   );
 }
 
+Future<
+    ({
+      LocalIdentity identity,
+      ({String privateKeyBase64, String publicKeyBase64}) keys,
+    })> _restoreIdentityFromMnemonicForTest(
+  String mnemonic, {
+  required String displayName,
+  IdentityDerivationVersion? derivationVersion,
+}) async {
+  final manager = IdentityManager(
+    seedService: SeedService(),
+    localIdentityVault: LocalIdentityVault(
+      secureStorage: _InMemorySecureStorageService(),
+    ),
+  );
+  final identity = derivationVersion == null
+      ? await manager.restoreIdentityFromMnemonic(
+          mnemonic,
+          displayName: displayName,
+        )
+      : await manager.restoreIdentityFromMnemonic(
+          mnemonic,
+          displayName: displayName,
+          derivationVersion: derivationVersion,
+        );
+  final privateKeyBase64 = await manager.getLocalPrivateKeyBase64();
+  return (
+    identity: identity,
+    keys: (
+      privateKeyBase64: privateKeyBase64!,
+      publicKeyBase64: identity.publicKeyBase64,
+    ),
+  );
+}
+
 Uint8List _bytes(int seed) => Uint8List.fromList(
       List<int>.generate(32, (i) => (seed + i) % 256),
     );
@@ -571,6 +606,144 @@ void main() {
           hidden,
           hintContactId: disp1Contact.identityId,
         );
+
+        expect(outcome.kind, DecodeKind.success);
+        expect(outcome.payload?.senderId, disp1Contact.identityId);
+        expect(outcome.payload?.recipientId, 'me');
+        expect(outcome.payload?.text, secret);
+      },
+    );
+
+    test(
+      'First link from same identity device decodes on FS-active receiver',
+      () async {
+        final disp2Fixture = await _createFixture();
+        final disp1Contact = disp2Fixture.contacts.first;
+        final disp1Keys =
+            disp2Fixture.contactKeysById[disp1Contact.identityId]!;
+        final disp3Fixture = await _createFixtureFor(
+          localIdentityId: disp1Contact.identityId,
+          localDisplayName: disp1Contact.displayName,
+          localKeys: disp1Keys,
+          contactKeysById: {'me': disp2Fixture.localKeys},
+        );
+        addTearDown(() {
+          disp2Fixture.identitiesRepository.dispose();
+          disp2Fixture.messagesRepository.dispose();
+          disp2Fixture.container.dispose();
+          disp3Fixture.identitiesRepository.dispose();
+          disp3Fixture.messagesRepository.dispose();
+          disp3Fixture.container.dispose();
+        });
+
+        const existingSessionId = 'disp1-disp2-green-session';
+        final receiverSessionManager = disp2Fixture.container.read(
+          fsSessionManagerProvider(disp1Contact.identityId),
+        );
+        receiverSessionManager.setStateForTesting(
+          FsSessionState.fsActive,
+          sessionId: existingSessionId,
+        );
+        disp2Fixture.container
+            .read(fsRatchetStateCacheProvider.notifier)
+            .state = {existingSessionId: _testRatchet(existingSessionId)};
+
+        final disp3Controller =
+            disp3Fixture.container.read(homeControllerProvider);
+        const secret = 'First link hello from disp3 using disp1 identity';
+        final encrypted = await disp3Controller.encryptForRecipient(
+          secretText: secret,
+          recipient: disp3Fixture.contacts.single,
+        );
+        final link = disp3Controller.buildLinkPayload(encrypted.message);
+        expect(link, startsWith('layergram://m/'));
+
+        final disp2Controller =
+            disp2Fixture.container.read(homeControllerProvider);
+        final outcome = await disp2Controller.decodeHiddenMessage(
+          link,
+          hintContactId: disp1Contact.identityId,
+        );
+
+        expect(outcome.kind, DecodeKind.success);
+        expect(outcome.payload?.senderId, disp1Contact.identityId);
+        expect(outcome.payload?.recipientId, 'me');
+        expect(outcome.payload?.text, secret);
+      },
+    );
+
+    test(
+      'First link from mnemonic-restored device decodes beside existing green FS',
+      () async {
+        const mnemonic =
+            'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+        final originalDisp1 = await _restoreIdentityFromMnemonicForTest(
+          mnemonic,
+          displayName: 'Disp1 original',
+          derivationVersion: SeedService.preferredIdentityDerivationVersion,
+        );
+        final restoredDisp3 = await _restoreIdentityFromMnemonicForTest(
+          mnemonic,
+          displayName: 'Disp1 restored on disp3',
+        );
+        expect(
+          restoredDisp3.identity.identityId,
+          originalDisp1.identity.identityId,
+        );
+        expect(
+          restoredDisp3.keys.publicKeyBase64,
+          originalDisp1.keys.publicKeyBase64,
+        );
+
+        final disp2Keys = await _keyMaterial(await X25519().newKeyPair());
+        final disp2Fixture = await _createFixtureFor(
+          localIdentityId: 'me',
+          localDisplayName: 'Disp2',
+          localKeys: disp2Keys,
+          contactKeysById: {
+            originalDisp1.identity.identityId: originalDisp1.keys,
+          },
+        );
+        final disp1Contact = disp2Fixture.contacts.single;
+        final disp3Fixture = await _createFixtureFor(
+          localIdentityId: restoredDisp3.identity.identityId,
+          localDisplayName: restoredDisp3.identity.displayName,
+          localKeys: restoredDisp3.keys,
+          contactKeysById: {'me': disp2Keys},
+        );
+        addTearDown(() {
+          disp2Fixture.identitiesRepository.dispose();
+          disp2Fixture.messagesRepository.dispose();
+          disp2Fixture.container.dispose();
+          disp3Fixture.identitiesRepository.dispose();
+          disp3Fixture.messagesRepository.dispose();
+          disp3Fixture.container.dispose();
+        });
+
+        const existingSessionId = 'disp1-disp2-green-session';
+        final receiverSessionManager = disp2Fixture.container.read(
+          fsSessionManagerProvider(disp1Contact.identityId),
+        );
+        receiverSessionManager.setStateForTesting(
+          FsSessionState.fsActive,
+          sessionId: existingSessionId,
+        );
+        disp2Fixture.container
+            .read(fsRatchetStateCacheProvider.notifier)
+            .state = {existingSessionId: _testRatchet(existingSessionId)};
+
+        final disp3Controller =
+            disp3Fixture.container.read(homeControllerProvider);
+        const secret = 'Hello from disp3 restored from disp1 phrase';
+        final encrypted = await disp3Controller.encryptForRecipient(
+          secretText: secret,
+          recipient: disp3Fixture.contacts.single,
+        );
+        final link = disp3Controller.buildLinkPayload(encrypted.message);
+
+        final outcome = await disp2Fixture.container
+            .read(homeControllerProvider)
+            .decodeHiddenMessage(link, hintContactId: disp1Contact.identityId);
 
         expect(outcome.kind, DecodeKind.success);
         expect(outcome.payload?.senderId, disp1Contact.identityId);

@@ -524,6 +524,32 @@ void main() {
               'Confirms: links were from different random keypairs, not these mnemonics');
     });
   });
+
+  test(
+    '[REGRESSION] default restore uses the same key derivation as create',
+    () async {
+      final seedSvc = SeedService();
+      final alexSeed = seedSvc.mnemonicToSeed(_alexMnemonic);
+      final alexV2Priv = await seedSvc.deriveIdentityPrivateKey(
+        alexSeed,
+        version: SeedService.preferredIdentityDerivationVersion,
+      );
+      final alexV2Pair = await X25519().newKeyPairFromSeed(alexV2Priv);
+      final alexV2Pub =
+          base64Encode((await alexV2Pair.extractPublicKey()).bytes);
+
+      final restoredDefault = await _mgr().restoreIdentityFromMnemonic(
+        _alexMnemonic,
+        displayName: 'Alex default restore',
+      );
+
+      expect(restoredDefault.publicKeyBase64, equals(alexV2Pub));
+      expect(
+        restoredDefault.derivationVersion,
+        SeedService.preferredIdentityDerivationVersion,
+      );
+    },
+  );
 }
 
 // ── Minimal encryption helper (mirrors EncryptionService logic) ────────────
