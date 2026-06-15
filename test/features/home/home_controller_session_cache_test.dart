@@ -520,6 +520,267 @@ void main() {
     );
 
     test(
+      'First message from same identity device decodes on FS-active receiver',
+      () async {
+        final disp2Fixture = await _createFixture();
+        final disp1Contact = disp2Fixture.contacts.first;
+        final disp1Keys =
+            disp2Fixture.contactKeysById[disp1Contact.identityId]!;
+        final disp3Fixture = await _createFixtureFor(
+          localIdentityId: disp1Contact.identityId,
+          localDisplayName: disp1Contact.displayName,
+          localKeys: disp1Keys,
+          contactKeysById: {'me': disp2Fixture.localKeys},
+        );
+        addTearDown(() {
+          disp2Fixture.identitiesRepository.dispose();
+          disp2Fixture.messagesRepository.dispose();
+          disp2Fixture.container.dispose();
+          disp3Fixture.identitiesRepository.dispose();
+          disp3Fixture.messagesRepository.dispose();
+          disp3Fixture.container.dispose();
+        });
+
+        const existingSessionId = 'disp1-disp2-green-session';
+        final receiverSessionManager = disp2Fixture.container.read(
+          fsSessionManagerProvider(disp1Contact.identityId),
+        );
+        receiverSessionManager.setStateForTesting(
+          FsSessionState.fsActive,
+          sessionId: existingSessionId,
+        );
+        disp2Fixture.container
+            .read(fsRatchetStateCacheProvider.notifier)
+            .state = {existingSessionId: _testRatchet(existingSessionId)};
+
+        final disp3Controller =
+            disp3Fixture.container.read(homeControllerProvider);
+        const secret = 'First hello from disp3 using disp1 identity';
+        final hidden = await disp3Controller.generateHiddenMessage(
+          coverText: List.filled(
+            30,
+            'This is a normal looking carrier message.',
+          ).join(' '),
+          secretText: secret,
+          recipient: disp3Fixture.contacts.single,
+        );
+
+        final disp2Controller =
+            disp2Fixture.container.read(homeControllerProvider);
+        final outcome = await disp2Controller.decodeHiddenMessage(
+          hidden,
+          hintContactId: disp1Contact.identityId,
+        );
+
+        expect(outcome.kind, DecodeKind.success);
+        expect(outcome.payload?.senderId, disp1Contact.identityId);
+        expect(outcome.payload?.recipientId, 'me');
+        expect(outcome.payload?.text, secret);
+      },
+    );
+
+    test('Layergram link decodes when pasted with surrounding text', () async {
+      final senderFixture = await _createFixture();
+      final recipient = senderFixture.contacts.first;
+      final recipientKeys =
+          senderFixture.contactKeysById[recipient.identityId]!;
+      final receiverFixture = await _createFixtureFor(
+        localIdentityId: recipient.identityId,
+        localDisplayName: recipient.displayName,
+        localKeys: recipientKeys,
+        contactKeysById: {'me': senderFixture.localKeys},
+      );
+      addTearDown(() {
+        senderFixture.identitiesRepository.dispose();
+        senderFixture.messagesRepository.dispose();
+        senderFixture.container.dispose();
+        receiverFixture.identitiesRepository.dispose();
+        receiverFixture.messagesRepository.dispose();
+        receiverFixture.container.dispose();
+      });
+
+      final senderController =
+          senderFixture.container.read(homeControllerProvider);
+      const secret = 'Link pasted with context still decodes';
+      final encrypted = await senderController.encryptForRecipient(
+        secretText: secret,
+        recipient: recipient,
+      );
+      final link = senderController.buildLinkPayload(encrypted.message);
+
+      final receiverController =
+          receiverFixture.container.read(homeControllerProvider);
+      final outcome = await receiverController.decodeHiddenMessage(
+        'Forwarded message: $link Thanks',
+        hintContactId: 'me',
+      );
+
+      expect(outcome.kind, DecodeKind.success);
+      expect(outcome.payload?.text, secret);
+    });
+
+    test(
+      'Fresh reinstall with new identity returns notForMe for the old contact',
+      () async {
+        final disp2Fixture = await _createFixture();
+        final oldDisp1Contact = disp2Fixture.contacts.first;
+        addTearDown(() {
+          disp2Fixture.identitiesRepository.dispose();
+          disp2Fixture.messagesRepository.dispose();
+          disp2Fixture.container.dispose();
+        });
+
+        const existingSessionId = 'old-disp1-disp2-green-session';
+        final receiverSessionManager = disp2Fixture.container.read(
+          fsSessionManagerProvider(oldDisp1Contact.identityId),
+        );
+        receiverSessionManager.setStateForTesting(
+          FsSessionState.fsActive,
+          sessionId: existingSessionId,
+        );
+        disp2Fixture.container
+            .read(fsRatchetStateCacheProvider.notifier)
+            .state = {existingSessionId: _testRatchet(existingSessionId)};
+
+        final freshDisp1Fixture = await _createFixtureFor(
+          localIdentityId: 'disp1-reinstalled-new-key',
+          localDisplayName: 'Disp1 Reinstalled',
+          localKeys: await _keyMaterial(await X25519().newKeyPair()),
+          contactKeysById: {'me': disp2Fixture.localKeys},
+        );
+        addTearDown(() {
+          freshDisp1Fixture.identitiesRepository.dispose();
+          freshDisp1Fixture.messagesRepository.dispose();
+          freshDisp1Fixture.container.dispose();
+        });
+
+        final hidden = await freshDisp1Fixture.container
+            .read(homeControllerProvider)
+            .generateHiddenMessage(
+              coverText: List.filled(
+                30,
+                'This is a normal looking carrier message.',
+              ).join(' '),
+              secretText: 'Hello after reinstall with a new identity',
+              recipient: freshDisp1Fixture.contacts.single,
+            );
+
+        final outcome = await disp2Fixture.container
+            .read(homeControllerProvider)
+            .decodeHiddenMessage(
+              hidden,
+              hintContactId: oldDisp1Contact.identityId,
+            );
+
+        expect(outcome.kind, DecodeKind.notForMe);
+      },
+    );
+
+    test(
+      'Fresh reinstall with new imported identity decodes beside old FS session',
+      () async {
+        final oldDisp1Keys = await _keyMaterial(await X25519().newKeyPair());
+        final freshDisp1Keys = await _keyMaterial(await X25519().newKeyPair());
+        final disp2Keys = await _keyMaterial(await X25519().newKeyPair());
+        final disp2Fixture = await _createFixtureFor(
+          localIdentityId: 'me',
+          localDisplayName: 'Disp2',
+          localKeys: disp2Keys,
+          contactKeysById: {
+            'disp1-old': oldDisp1Keys,
+            'disp1-reinstalled-new-key': freshDisp1Keys,
+          },
+        );
+        addTearDown(() {
+          disp2Fixture.identitiesRepository.dispose();
+          disp2Fixture.messagesRepository.dispose();
+          disp2Fixture.container.dispose();
+        });
+
+        const existingSessionId = 'old-disp1-disp2-green-session';
+        final receiverSessionManager = disp2Fixture.container.read(
+          fsSessionManagerProvider('disp1-old'),
+        );
+        receiverSessionManager.setStateForTesting(
+          FsSessionState.fsActive,
+          sessionId: existingSessionId,
+        );
+        disp2Fixture.container
+            .read(fsRatchetStateCacheProvider.notifier)
+            .state = {existingSessionId: _testRatchet(existingSessionId)};
+
+        final freshDisp1Fixture = await _createFixtureFor(
+          localIdentityId: 'disp1-reinstalled-new-key',
+          localDisplayName: 'Disp1 Reinstalled',
+          localKeys: freshDisp1Keys,
+          contactKeysById: {'me': disp2Keys},
+        );
+        addTearDown(() {
+          freshDisp1Fixture.identitiesRepository.dispose();
+          freshDisp1Fixture.messagesRepository.dispose();
+          freshDisp1Fixture.container.dispose();
+        });
+
+        const secret = 'Hello after reinstall with imported identity';
+        final hidden = await freshDisp1Fixture.container
+            .read(homeControllerProvider)
+            .generateHiddenMessage(
+              coverText: List.filled(
+                30,
+                'This is a normal looking carrier message.',
+              ).join(' '),
+              secretText: secret,
+              recipient: freshDisp1Fixture.contacts.single,
+            );
+
+        final outcome = await disp2Fixture.container
+            .read(homeControllerProvider)
+            .decodeHiddenMessage(hidden, hintContactId: 'disp1-old');
+
+        expect(outcome.kind, DecodeKind.success);
+        expect(outcome.payload?.senderId, 'disp1-reinstalled-new-key');
+        expect(outcome.payload?.recipientId, 'me');
+        expect(outcome.payload?.text, secret);
+      },
+    );
+
+    test('valid Layergram payload for another identity returns notForMe',
+        () async {
+      final senderFixture = await _createFixture();
+      final unrelatedReceiver = await _createFixtureFor(
+        localIdentityId: 'unrelated',
+        localDisplayName: 'Unrelated',
+        localKeys: await _keyMaterial(await X25519().newKeyPair()),
+        contactKeysById: {'me': senderFixture.localKeys},
+      );
+      addTearDown(() {
+        senderFixture.identitiesRepository.dispose();
+        senderFixture.messagesRepository.dispose();
+        senderFixture.container.dispose();
+        unrelatedReceiver.identitiesRepository.dispose();
+        unrelatedReceiver.messagesRepository.dispose();
+        unrelatedReceiver.container.dispose();
+      });
+
+      final senderController =
+          senderFixture.container.read(homeControllerProvider);
+      final hidden = await senderController.generateHiddenMessage(
+        coverText: List.filled(
+          30,
+          'This is a normal looking carrier message.',
+        ).join(' '),
+        secretText: 'This is not for the unrelated receiver',
+        recipient: senderFixture.contacts.first,
+      );
+
+      final outcome = await unrelatedReceiver.container
+          .read(homeControllerProvider)
+          .decodeHiddenMessage(hidden, hintContactId: 'me');
+
+      expect(outcome.kind, DecodeKind.notForMe);
+    });
+
+    test(
       'Strict FS omits fallback for same identity without ratchet',
       () async {
         final fixture = await _createFixture();

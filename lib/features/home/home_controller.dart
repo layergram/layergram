@@ -648,9 +648,10 @@ class HomeController {
     // Extract raw byte candidates from stego or link.
     List<Uint8List> candidates;
 
-    if (source.startsWith('layergram://m/')) {
-      final encoded = source.substring('layergram://m/'.length);
-      final cleaned = encoded.replaceAll(RegExp(r'\s+'), '');
+    final linkMatch =
+        RegExp(r'layergram://m/([A-Za-z0-9_-]+={0,2})').firstMatch(source);
+    if (linkMatch != null) {
+      final cleaned = linkMatch.group(1)!.replaceAll(RegExp(r'\s+'), '');
       try {
         final raw = Uint8List.fromList(base64Url.decode(_padBase64(cleaned)));
         if (raw.length >= 28) {
@@ -814,7 +815,8 @@ class HomeController {
       }
     }
 
-    return null; // no candidate decrypted successfully
+    return const DecodeOutcome
+        .notForMe(); // candidates existed, but none decrypted
   }
 
   // ── Persist decoded message and return success ──────────────────────────
