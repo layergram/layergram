@@ -500,6 +500,13 @@ class _HomeViewState extends ConsumerState<HomeView> {
                   Text(AppStrings.t(context, 'security.fs.message_lost'))),
         );
         break;
+      case DecodeKind.notForMe:
+        messenger.showSnackBar(
+          SnackBar(
+              content:
+                  Text(AppStrings.t(context, 'security.message_not_for_me'))),
+        );
+        break;
       default:
         messenger.showSnackBar(
           SnackBar(content: Text(AppStrings.t(context, 'noMessageFoundDesc'))),

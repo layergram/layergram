@@ -73,6 +73,7 @@ class FsStringsBundle {
 
     // Actions
     'security.fs.message_lost': 'This message was encrypted with a previous session and cannot be decrypted.',
+    'security.message_not_for_me': 'Layergram message found, but it is not encrypted for this identity. Check that this device and contact use the same identity fingerprint.',
     'security.fs.message_expired_fs': 'Forward Secrecy message',
     'security.fs.session_reset_done': 'Secure session reset. A new session will be negotiated automatically.',
     'security.fs.action.retry': 'Retry upgrade',
@@ -300,6 +301,7 @@ class FsStringsBundle {
         'Forward Secrecy massima attiva. I messaggi non possono essere inviati senza un canale sicuro confermato.',
     'security.fs.new_device_detected': 'Nuovo dispositivo o sessione rilevato per questo contatto. Una nuova sessione sicura è in fase di negoziazione.',
     'security.fs.message_lost': 'Questo messaggio era cifrato con una sessione precedente e non può essere decifrato.',
+    'security.message_not_for_me': 'Messaggio Layergram trovato, ma non è cifrato per questa identità. Verifica che questo dispositivo e il contatto usino la stessa impronta.',
     'security.fs.message_expired_fs': 'Messaggio Forward Secrecy',
     'security.fs.session_reset_done': 'Sessione sicura reimpostata. Una nuova sessione sarà negoziata automaticamente.',
     'security.fs.action.retry': 'Riprova aggiornamento',

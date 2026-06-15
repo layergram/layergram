@@ -425,6 +425,17 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
           MaterialPageRoute(builder: (_) => ChatView(contact: sender)),
         );
         break;
+      case DecodeKind.notForMe:
+        {
+          final ctx = _navKey.currentContext;
+          if (ctx == null || !ctx.mounted) return;
+          ScaffoldMessenger.of(ctx).showSnackBar(
+            SnackBar(
+                content:
+                    Text(AppStrings.t(ctx, 'security.message_not_for_me'))),
+          );
+        }
+        break;
       default:
         {
           final ctx = _navKey.currentContext;

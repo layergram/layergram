@@ -123,6 +123,10 @@ class _OutcomeView extends StatelessWidget {
       return SelectableText(t(context, 'security.fs.message_lost'));
     }
 
+    if (outcome.kind == DecodeKind.notForMe) {
+      return SelectableText(t(context, 'security.message_not_for_me'));
+    }
+
     if (outcome.kind != DecodeKind.success || outcome.payload == null) {
       return SelectableText(t(context, 'noMessageFoundDesc'));
     }

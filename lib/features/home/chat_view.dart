@@ -1758,7 +1758,9 @@ class ChatViewState extends ConsumerState<ChatView> {
                     return;
                   }
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(t(context, 'noMessageFoundDesc'))),
+                    SnackBar(
+                      content: Text(t(context, 'security.message_not_for_me')),
+                    ),
                   );
                   break;
                 case DecodeKind.notForMe:

@@ -676,6 +676,43 @@ void main() {
       },
     );
 
+    test('Sender does not accept its own outbound link as an inbound message',
+        () async {
+      final disp2Fixture = await _createFixture();
+      final disp1Contact = disp2Fixture.contacts.first;
+      final disp1Keys = disp2Fixture.contactKeysById[disp1Contact.identityId]!;
+      final disp3Fixture = await _createFixtureFor(
+        localIdentityId: disp1Contact.identityId,
+        localDisplayName: disp1Contact.displayName,
+        localKeys: disp1Keys,
+        contactKeysById: {'me': disp2Fixture.localKeys},
+      );
+      addTearDown(() {
+        disp2Fixture.identitiesRepository.dispose();
+        disp2Fixture.messagesRepository.dispose();
+        disp2Fixture.container.dispose();
+        disp3Fixture.identitiesRepository.dispose();
+        disp3Fixture.messagesRepository.dispose();
+        disp3Fixture.container.dispose();
+      });
+
+      final disp3Controller =
+          disp3Fixture.container.read(homeControllerProvider);
+      final encrypted = await disp3Controller.encryptForRecipient(
+        secretText: 'Outbound link must not decode locally as incoming',
+        recipient: disp3Fixture.contacts.single,
+      );
+      final link = disp3Controller.buildLinkPayload(encrypted.message);
+
+      final outcome = await disp3Controller.decodeHiddenMessage(
+        link,
+        hintContactId: 'me',
+      );
+
+      expect(outcome.kind, DecodeKind.notForMe);
+      expect(disp3Fixture.messagesRepository.messages, isEmpty);
+    });
+
     test(
       'First link from mnemonic-restored device decodes beside existing green FS',
       () async {
@@ -901,6 +938,50 @@ void main() {
         expect(outcome.kind, DecodeKind.notForMe);
       },
     );
+
+    test('Same identity id with a different key returns notForMe', () async {
+      final oldDisp1Keys = await _keyMaterial(await X25519().newKeyPair());
+      final differentDisp1Keys =
+          await _keyMaterial(await X25519().newKeyPair());
+      final disp2Keys = await _keyMaterial(await X25519().newKeyPair());
+      final disp2Fixture = await _createFixtureFor(
+        localIdentityId: 'me',
+        localDisplayName: 'Disp2',
+        localKeys: disp2Keys,
+        contactKeysById: {'disp1': oldDisp1Keys},
+      );
+      final disp3Fixture = await _createFixtureFor(
+        localIdentityId: 'disp1',
+        localDisplayName: 'Disp1 restored with wrong key',
+        localKeys: differentDisp1Keys,
+        contactKeysById: {'me': disp2Keys},
+      );
+      addTearDown(() {
+        disp2Fixture.identitiesRepository.dispose();
+        disp2Fixture.messagesRepository.dispose();
+        disp2Fixture.container.dispose();
+        disp3Fixture.identitiesRepository.dispose();
+        disp3Fixture.messagesRepository.dispose();
+        disp3Fixture.container.dispose();
+      });
+
+      final encrypted = await disp3Fixture.container
+          .read(homeControllerProvider)
+          .encryptForRecipient(
+            secretText: 'Same id but wrong key',
+            recipient: disp3Fixture.contacts.single,
+          );
+      final link = disp3Fixture.container
+          .read(homeControllerProvider)
+          .buildLinkPayload(encrypted.message);
+
+      final outcome = await disp2Fixture.container
+          .read(homeControllerProvider)
+          .decodeHiddenMessage(link, hintContactId: 'disp1');
+
+      expect(outcome.kind, DecodeKind.notForMe);
+      expect(disp2Fixture.messagesRepository.messages, isEmpty);
+    });
 
     test(
       'Fresh reinstall with new imported identity decodes beside old FS session',

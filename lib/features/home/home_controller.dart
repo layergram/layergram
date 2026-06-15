@@ -715,6 +715,11 @@ class HomeController {
           continue;
         }
 
+        if (result.payload.recipientId != local.identityId ||
+            result.payload.senderId != contact.identityId) {
+          continue;
+        }
+
         // Update ratchet state if it changed (e.g., received new message advanced counter)
         final fsCtrl = ref.read(
           fsOpportunisticControllerProvider(contact.identityId),
