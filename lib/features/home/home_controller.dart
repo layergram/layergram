@@ -648,20 +648,11 @@ class HomeController {
     // Extract raw byte candidates from stego or link.
     List<Uint8List> candidates;
 
-    final linkMatch =
-        RegExp(r'layergram://m/([A-Za-z0-9_-]+={0,2})').firstMatch(source);
-    if (linkMatch != null) {
-      final cleaned = linkMatch.group(1)!.replaceAll(RegExp(r'\s+'), '');
-      try {
-        final raw = Uint8List.fromList(base64Url.decode(_padBase64(cleaned)));
-        if (raw.length >= 28) {
-          candidates = [raw];
-        } else {
-          return null;
-        }
-      } catch (_) {
-        return null;
-      }
+    final linkCandidates = _decodeLinkRawCandidates(source);
+    if (linkCandidates.isNotEmpty) {
+      candidates = linkCandidates;
+    } else if (source.toLowerCase().contains('layergram://m/')) {
+      return null;
     } else {
       candidates = ref.read(stegoDecoderProvider).decodeByteCandidates(source);
       if (candidates.isEmpty) return null;
@@ -998,6 +989,42 @@ class HomeController {
     final rem = input.length % 4;
     if (rem == 0) return input;
     return input.padRight(input.length + (4 - rem), '=');
+  }
+
+  List<Uint8List> _decodeLinkRawCandidates(String source) {
+    final prefix = RegExp('layergram://m/', caseSensitive: false);
+    final match = prefix.firstMatch(source);
+    if (match == null) return const [];
+
+    final tail = source.substring(match.end);
+    final tokenMatches = RegExp(r'[A-Za-z0-9_-]+={0,2}').allMatches(tail);
+    final candidates = <Uint8List>[];
+    final seen = <String>{};
+    final buffer = StringBuffer();
+    var expectedStart = 0;
+
+    for (final token in tokenMatches) {
+      final separator = tail.substring(expectedStart, token.start);
+      if (separator.isNotEmpty && !RegExp(r'^\s+$').hasMatch(separator)) {
+        break;
+      }
+
+      buffer.write(token.group(0)!);
+      expectedStart = token.end;
+      final encoded = buffer.toString();
+      if (!seen.add(encoded)) continue;
+
+      try {
+        final raw = Uint8List.fromList(base64Url.decode(_padBase64(encoded)));
+        if (raw.length >= 28) {
+          candidates.add(raw);
+        }
+      } catch (_) {
+        // Keep collecting; a wrapped link may only decode after later tokens.
+      }
+    }
+
+    return candidates;
   }
 
   RemoteIdentity parseIdentityBlock(String text) {

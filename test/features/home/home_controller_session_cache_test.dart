@@ -655,6 +655,10 @@ void main() {
           secretText: secret,
           recipient: disp3Fixture.contacts.single,
         );
+        expect(
+          disp3Fixture.container.read(fsSessionManagerProvider('me')).state,
+          FsSessionState.fsInitSent,
+        );
         final link = disp3Controller.buildLinkPayload(encrypted.message);
         expect(link, startsWith('layergram://m/'));
 
@@ -739,6 +743,10 @@ void main() {
           secretText: secret,
           recipient: disp3Fixture.contacts.single,
         );
+        expect(
+          disp3Fixture.container.read(fsSessionManagerProvider('me')).state,
+          FsSessionState.fsInitSent,
+        );
         final link = disp3Controller.buildLinkPayload(encrypted.message);
 
         final outcome = await disp2Fixture.container
@@ -785,6 +793,51 @@ void main() {
           receiverFixture.container.read(homeControllerProvider);
       final outcome = await receiverController.decodeHiddenMessage(
         'Forwarded message: $link Thanks',
+        hintContactId: 'me',
+      );
+
+      expect(outcome.kind, DecodeKind.success);
+      expect(outcome.payload?.text, secret);
+    });
+
+    test('Layergram link decodes when payload is line wrapped', () async {
+      final senderFixture = await _createFixture();
+      final recipient = senderFixture.contacts.first;
+      final recipientKeys =
+          senderFixture.contactKeysById[recipient.identityId]!;
+      final receiverFixture = await _createFixtureFor(
+        localIdentityId: recipient.identityId,
+        localDisplayName: recipient.displayName,
+        localKeys: recipientKeys,
+        contactKeysById: {'me': senderFixture.localKeys},
+      );
+      addTearDown(() {
+        senderFixture.identitiesRepository.dispose();
+        senderFixture.messagesRepository.dispose();
+        senderFixture.container.dispose();
+        receiverFixture.identitiesRepository.dispose();
+        receiverFixture.messagesRepository.dispose();
+        receiverFixture.container.dispose();
+      });
+
+      final senderController =
+          senderFixture.container.read(homeControllerProvider);
+      const secret = 'Wrapped link still decodes';
+      final encrypted = await senderController.encryptForRecipient(
+        secretText: secret,
+        recipient: recipient,
+      );
+      final link = senderController.buildLinkPayload(encrypted.message);
+      final prefix = 'layergram://m/';
+      final encoded = link.substring(prefix.length);
+      final wrappedLink =
+          '$prefix${encoded.substring(0, 24)}\n${encoded.substring(24, 61)} '
+          '${encoded.substring(61)}';
+
+      final receiverController =
+          receiverFixture.container.read(homeControllerProvider);
+      final outcome = await receiverController.decodeHiddenMessage(
+        'Forwarded:\n$wrappedLink\nThanks',
         hintContactId: 'me',
       );
 
