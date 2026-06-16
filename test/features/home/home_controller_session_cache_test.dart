@@ -556,6 +556,82 @@ void main() {
     );
 
     test(
+      'Advanced FS out-of-order links decode on same identity without ratchet',
+      () async {
+        final senderFixture = await _createFixture();
+        final recipient = senderFixture.contacts.first;
+        final recipientKeys =
+            senderFixture.contactKeysById[recipient.identityId]!;
+        final receiverFixture = await _createFixtureFor(
+          localIdentityId: recipient.identityId,
+          localDisplayName: recipient.displayName,
+          localKeys: recipientKeys,
+          contactKeysById: {'me': senderFixture.localKeys},
+        );
+        addTearDown(() {
+          senderFixture.identitiesRepository.dispose();
+          senderFixture.messagesRepository.dispose();
+          senderFixture.container.dispose();
+          receiverFixture.identitiesRepository.dispose();
+          receiverFixture.messagesRepository.dispose();
+          receiverFixture.container.dispose();
+        });
+
+        const sessionId = 'session-advanced-out-of-order';
+        final sessionManager = senderFixture.container.read(
+          fsSessionManagerProvider(recipient.identityId),
+        );
+        sessionManager.setStateForTesting(
+          FsSessionState.fsActive,
+          sessionId: sessionId,
+        );
+        senderFixture.container
+            .read(fsRatchetStateCacheProvider.notifier)
+            .state = {sessionId: _testRatchet(sessionId)};
+
+        final senderController =
+            senderFixture.container.read(homeControllerProvider);
+        final firstEncrypted = await senderController.encryptForRecipient(
+          secretText: 'First Advanced FS copied message',
+          recipient: recipient,
+        );
+        final secondEncrypted = await senderController.encryptForRecipient(
+          secretText: 'Second Advanced FS copied message',
+          recipient: recipient,
+        );
+        expect(
+          firstEncrypted.classification,
+          FsMessageClassification.fsWithFallback,
+        );
+        expect(
+          secondEncrypted.classification,
+          FsMessageClassification.fsWithFallback,
+        );
+        final firstLink =
+            senderController.buildLinkPayload(firstEncrypted.message);
+        final secondLink =
+            senderController.buildLinkPayload(secondEncrypted.message);
+
+        final receiverController =
+            receiverFixture.container.read(homeControllerProvider);
+        final secondOutcome = await receiverController.decodeHiddenMessage(
+          secondLink,
+          hintContactId: 'me',
+        );
+        final firstOutcome = await receiverController.decodeHiddenMessage(
+          firstLink,
+          hintContactId: 'me',
+        );
+
+        expect(secondOutcome.kind, DecodeKind.success);
+        expect(
+            secondOutcome.payload?.text, 'Second Advanced FS copied message');
+        expect(firstOutcome.kind, DecodeKind.success);
+        expect(firstOutcome.payload?.text, 'First Advanced FS copied message');
+      },
+    );
+
+    test(
       'First message from same identity device decodes on FS-active receiver',
       () async {
         final disp2Fixture = await _createFixture();
@@ -881,6 +957,144 @@ void main() {
 
       expect(outcome.kind, DecodeKind.success);
       expect(outcome.payload?.text, secret);
+    });
+
+    test('Repeated pasted legacy link remains decodable', () async {
+      final senderFixture = await _createFixture();
+      final recipient = senderFixture.contacts.first;
+      final recipientKeys =
+          senderFixture.contactKeysById[recipient.identityId]!;
+      final receiverFixture = await _createFixtureFor(
+        localIdentityId: recipient.identityId,
+        localDisplayName: recipient.displayName,
+        localKeys: recipientKeys,
+        contactKeysById: {'me': senderFixture.localKeys},
+      );
+      addTearDown(() {
+        senderFixture.identitiesRepository.dispose();
+        senderFixture.messagesRepository.dispose();
+        senderFixture.container.dispose();
+        receiverFixture.identitiesRepository.dispose();
+        receiverFixture.messagesRepository.dispose();
+        receiverFixture.container.dispose();
+      });
+
+      final senderController =
+          senderFixture.container.read(homeControllerProvider);
+      const secret = 'Manual paste can be retried';
+      final encrypted = await senderController.encryptForRecipient(
+        secretText: secret,
+        recipient: recipient,
+      );
+      final link = senderController.buildLinkPayload(encrypted.message);
+      final receiverController =
+          receiverFixture.container.read(homeControllerProvider);
+
+      final first = await receiverController.decodeHiddenMessage(
+        link,
+        hintContactId: 'me',
+      );
+      final second = await receiverController.decodeHiddenMessage(
+        'Retrying the same copied link: $link',
+        hintContactId: 'me',
+      );
+
+      expect(first.kind, DecodeKind.success);
+      expect(first.payload?.text, secret);
+      expect(second.kind, DecodeKind.success);
+      expect(second.payload?.text, secret);
+    });
+
+    test('Out-of-order pasted legacy links decode independently', () async {
+      final senderFixture = await _createFixture();
+      final recipient = senderFixture.contacts.first;
+      final recipientKeys =
+          senderFixture.contactKeysById[recipient.identityId]!;
+      final receiverFixture = await _createFixtureFor(
+        localIdentityId: recipient.identityId,
+        localDisplayName: recipient.displayName,
+        localKeys: recipientKeys,
+        contactKeysById: {'me': senderFixture.localKeys},
+      );
+      addTearDown(() {
+        senderFixture.identitiesRepository.dispose();
+        senderFixture.messagesRepository.dispose();
+        senderFixture.container.dispose();
+        receiverFixture.identitiesRepository.dispose();
+        receiverFixture.messagesRepository.dispose();
+        receiverFixture.container.dispose();
+      });
+
+      final senderController =
+          senderFixture.container.read(homeControllerProvider);
+      final firstEncrypted = await senderController.encryptForRecipient(
+        secretText: 'First copied message',
+        recipient: recipient,
+      );
+      final secondEncrypted = await senderController.encryptForRecipient(
+        secretText: 'Second copied message',
+        recipient: recipient,
+      );
+      final firstLink =
+          senderController.buildLinkPayload(firstEncrypted.message);
+      final secondLink =
+          senderController.buildLinkPayload(secondEncrypted.message);
+      final receiverController =
+          receiverFixture.container.read(homeControllerProvider);
+
+      final secondOutcome = await receiverController.decodeHiddenMessage(
+        secondLink,
+        hintContactId: 'me',
+      );
+      final firstOutcome = await receiverController.decodeHiddenMessage(
+        firstLink,
+        hintContactId: 'me',
+      );
+
+      expect(secondOutcome.kind, DecodeKind.success);
+      expect(secondOutcome.payload?.text, 'Second copied message');
+      expect(firstOutcome.kind, DecodeKind.success);
+      expect(firstOutcome.payload?.text, 'First copied message');
+    });
+
+    test('Stripped zero-width payload without link does not decode', () async {
+      final senderFixture = await _createFixture();
+      final recipient = senderFixture.contacts.first;
+      final recipientKeys =
+          senderFixture.contactKeysById[recipient.identityId]!;
+      final receiverFixture = await _createFixtureFor(
+        localIdentityId: recipient.identityId,
+        localDisplayName: recipient.displayName,
+        localKeys: recipientKeys,
+        contactKeysById: {'me': senderFixture.localKeys},
+      );
+      addTearDown(() {
+        senderFixture.identitiesRepository.dispose();
+        senderFixture.messagesRepository.dispose();
+        senderFixture.container.dispose();
+        receiverFixture.identitiesRepository.dispose();
+        receiverFixture.messagesRepository.dispose();
+        receiverFixture.container.dispose();
+      });
+
+      final senderController =
+          senderFixture.container.read(homeControllerProvider);
+      final hidden = await senderController.generateHiddenMessage(
+        coverText: List.filled(
+          30,
+          'This normal looking carrier message.',
+        ).join(' '),
+        secretText: 'This hidden payload may be stripped',
+        recipient: recipient,
+      );
+      final stripped = hidden.replaceAll(RegExp(r'[\u200B-\u200D\uFEFF]'), '');
+
+      final outcome = await receiverFixture.container
+          .read(homeControllerProvider)
+          .decodeHiddenMessage(stripped, hintContactId: 'me');
+
+      expect(outcome.kind, isNot(DecodeKind.success));
+      expect(receiverFixture.messagesRepository.messages, isEmpty);
     });
 
     test(
