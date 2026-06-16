@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:layergram/core/crypto/aux_record_cipher.dart';
 import 'package:layergram/core/crypto/encryption_service.dart';
+import 'package:layergram/core/crypto/fs_contact_security_state.dart';
 import 'package:layergram/core/crypto/fs_double_ratchet.dart';
 import 'package:layergram/core/crypto/fs_message_classification.dart';
 import 'package:layergram/core/crypto/fs_security_mode.dart';
@@ -1148,6 +1149,110 @@ void main() {
         expect(decoded.payload.text, isEmpty);
       },
     );
+
+    test('Advanced FS keeps sending when another device appears', () async {
+      final fixture = await _createFixture();
+      addTearDown(() {
+        fixture.identitiesRepository.dispose();
+        fixture.messagesRepository.dispose();
+        fixture.container.dispose();
+      });
+
+      final contact = fixture.contacts.first;
+      const currentSessionId = 'session-advanced-current';
+      const otherDeviceSessionId = 'session-advanced-other-device';
+      final sessionManager =
+          fixture.container.read(fsSessionManagerProvider(contact.identityId));
+      sessionManager.setStateForTesting(
+        FsSessionState.fsActive,
+        sessionId: currentSessionId,
+      );
+      fixture.container.read(fsRatchetStateCacheProvider.notifier).state = {
+        currentSessionId: _testRatchet(currentSessionId),
+      };
+
+      final fsController = fixture.container.read(
+        fsOpportunisticControllerProvider(contact.identityId),
+      );
+      fixture.container.read(fsContactSecurityRegistryProvider).upsert(
+            FsContactSecurityState(
+              contactId: contact.identityId,
+              identityContext: fsController.identityContext,
+              sessionId: otherDeviceSessionId,
+              fsState: FsSessionState.fsActive,
+            ),
+          );
+
+      final result = await fixture.container
+          .read(homeControllerProvider)
+          .encryptForRecipient(
+            secretText: 'Advanced FS should stay smooth',
+            recipient: contact,
+          );
+
+      expect(result.isFsEncrypted, isTrue);
+      expect(result.classification, FsMessageClassification.fsWithFallback);
+      expect(sessionManager.state, FsSessionState.fsActive);
+    });
+
+    test('Strict FS blocks sending when another device appears', () async {
+      final fixture = await _createFixture();
+      addTearDown(() {
+        fixture.identitiesRepository.dispose();
+        fixture.messagesRepository.dispose();
+        fixture.container.dispose();
+      });
+
+      final contact = fixture.contacts.first;
+      const strictSessionId = 'session-strict-current';
+      const otherDeviceSessionId = 'session-strict-other-device';
+      final sessionManager =
+          fixture.container.read(fsSessionManagerProvider(contact.identityId));
+      sessionManager.setStateForTesting(
+        FsSessionState.fsActive,
+        sessionId: strictSessionId,
+      );
+      fixture.container.read(fsRatchetStateCacheProvider.notifier).state = {
+        strictSessionId: _testRatchet(strictSessionId),
+      };
+
+      final modeService = fixture.container.read(fsSecurityModeServiceProvider);
+      final fsController = fixture.container.read(
+        fsOpportunisticControllerProvider(contact.identityId),
+      );
+      await modeService.setMode(
+        contactId: contact.identityId,
+        identityContext: fsController.identityContext,
+        mode: FsSecurityMode.strict,
+      );
+      final strictController = fixture.container.read(
+        fsStrictModeControllerProvider(contact.identityId),
+      );
+      expect(strictController.requestMaximum(strictSessionId).success, isTrue);
+      expect(strictController.activateStrict(strictSessionId).success, isTrue);
+      fixture.container.read(fsContactSecurityRegistryProvider).upsert(
+            FsContactSecurityState(
+              contactId: contact.identityId,
+              identityContext: fsController.identityContext,
+              sessionId: otherDeviceSessionId,
+              fsState: FsSessionState.fsActive,
+            ),
+          );
+
+      await expectLater(
+        fixture.container.read(homeControllerProvider).encryptForRecipient(
+              secretText: 'Strict FS should require repair',
+              recipient: contact,
+            ),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('Unexpected device detected'),
+          ),
+        ),
+      );
+    });
 
     test('Strict FS blocks sending when local ratchet is missing', () async {
       final fixture = await _createFixture();
