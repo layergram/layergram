@@ -148,6 +148,7 @@ class ChatViewState extends ConsumerState<ChatView> {
   String _encryptedOutput = '';
   bool _dirtySinceEncode = true;
   bool _sending = false;
+  int? _exactCoverMissingCount;
   bool _handoffScheduled = false;
   bool _decryptionPrimed = false;
   Timer? _decryptionPrimeTimer;
@@ -852,6 +853,7 @@ class ChatViewState extends ConsumerState<ChatView> {
   void _onFieldChanged() {
     setState(() {
       _dirtySinceEncode = true;
+      _exactCoverMissingCount = null;
     });
   }
 
@@ -1263,6 +1265,7 @@ class ChatViewState extends ConsumerState<ChatView> {
 
   bool get _coverTooShort {
     if (_linkMode || _secretCtrl.text.trim().isEmpty) return false;
+    if (_exactCoverMissingCount != null) return true;
     return !StegoEncoder.canEmbedBytes(_coverCtrl.text, _estimatedPayloadBytes);
   }
 
@@ -1270,6 +1273,7 @@ class ChatViewState extends ConsumerState<ChatView> {
     if (_linkMode || _secretCtrl.text.trim().isEmpty) {
       return 0;
     }
+    if (_exactCoverMissingCount != null) return _exactCoverMissingCount!;
     return StegoEncoder.missingCoverCapacityForBytes(
       _coverCtrl.text,
       _estimatedPayloadBytes,
@@ -1347,6 +1351,21 @@ class ChatViewState extends ConsumerState<ChatView> {
                 deleteAfterRead: _deleteAfterRead,
               );
       final encrypted = encResult.message;
+      final rawBytes = encrypted.toRawBytes();
+      if (!_linkMode &&
+          !StegoEncoder.canEmbedBytes(_coverCtrl.text, rawBytes.length)) {
+        final missing = StegoEncoder.missingCoverCapacityForBytes(
+          _coverCtrl.text,
+          rawBytes.length,
+        );
+        if (mounted) {
+          setState(() => _exactCoverMissingCount = missing);
+          _showTouchComposerSnackbar(
+            AppStrings.t(context, 'coverTooShort').replaceAll('{n}', '$missing'),
+          );
+        }
+        return null;
+      }
 
       final output = _linkMode
           ? ref.read(homeControllerProvider).buildLinkPayload(encrypted)
@@ -1354,7 +1373,7 @@ class ChatViewState extends ConsumerState<ChatView> {
               .read(stegoEncoderProvider)
               .encodeBytes(
                 _coverCtrl.text,
-                encrypted.toRawBytes(),
+                rawBytes,
                 maxTotalCharacters: _coverLengthLimit,
               );
 

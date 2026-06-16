@@ -205,6 +205,61 @@ void main() {
       );
     });
 
+    test('missingCoverCapacityForBytes reports exact visible deficit', () {
+      const byteCount = 44;
+      final minCoverLength = StegoEncoder.minCoverLengthForBytes(byteCount);
+      final oneShortCover = 'A' * (minCoverLength - 1);
+      final exactCover = 'A' * minCoverLength;
+
+      expect(StegoEncoder.canEmbedBytes(oneShortCover, byteCount), isFalse);
+      expect(
+        StegoEncoder.missingCoverCapacityForBytes(oneShortCover, byteCount),
+        equals(1),
+      );
+      expect(StegoEncoder.canEmbedBytes(exactCover, byteCount), isTrue);
+      expect(
+        StegoEncoder.missingCoverCapacityForBytes(exactCover, byteCount),
+        equals(0),
+      );
+    });
+
+    test('missingCoverCapacityForBytes accounts for unsafe carrier slots', () {
+      final payload = Uint8List.fromList(List.generate(44, (i) => i));
+      final unsafeSuffixCover = ('A' * 64) + ('é' * 11);
+      final repairedCover = unsafeSuffixCover + ('B' * 12);
+
+      expect(
+        StegoEncoder.visibleCharacterCount(unsafeSuffixCover),
+        equals(StegoEncoder.minCoverLengthForBytes(payload.length)),
+      );
+      expect(
+        StegoEncoder.canEmbedBytes(unsafeSuffixCover, payload.length),
+        isFalse,
+      );
+      expect(
+        StegoEncoder.missingCoverCapacityForBytes(
+          unsafeSuffixCover,
+          payload.length,
+        ),
+        equals(12),
+      );
+      expect(StegoEncoder.canEmbedBytes(repairedCover, payload.length), isTrue);
+      expect(
+        StegoEncoder.missingCoverCapacityForBytes(repairedCover, payload.length),
+        equals(0),
+      );
+      expect(
+        () => StegoEncoder().encodeBytes(unsafeSuffixCover, payload),
+        throwsA(
+          isA<ArgumentError>().having(
+            (error) => error.message,
+            'message',
+            contains('Add at least 12'),
+          ),
+        ),
+      );
+    });
+
     test('encodeBytes respects maxTotalCharacters when provided', () {
       final payload = Uint8List.fromList(List.generate(44, (i) => i));
       final cover = 'A' * 140;

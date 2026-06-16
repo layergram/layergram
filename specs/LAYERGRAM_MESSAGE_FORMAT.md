@@ -315,14 +315,29 @@ This preserves global payload order while avoiding a rigid left-to-right even sp
 To ensure all payload symbols fit while preserving the clean preview-safe prefix, the minimum cover text length is calculated conservatively using the **maximum payload capacity per carrier slot**:
 
 ```
+payloadSymbols = rawPayloadBytes.length * 4
 maxPayloadPerCarrierSlot = 16
 requiredCarrierSlots = ceil(payloadSymbols / 16)
 minCoverLength = 64 + requiredCarrierSlots
 ```
 
+For exact user-facing validation, `rawPayloadBytes` means the final byte array
+that will be embedded after the complete message has been constructed and
+encrypted. This includes all optional protocol fields and envelopes, including
+forward-secrecy metadata such as `fs_*` fields, `x.fs`, `fs_multi`, `fs_wraps`,
+and `mc_fallback_key` when present. A pre-encryption estimate based only on the
+secret text length is therefore only a UI estimate; send/copy/share actions MUST
+re-check cover capacity against the final `rawPayloadBytes.length`.
+
 The actual clean prefix may be longer than 64 (up to 96) when cover length allows it. The formula above guarantees the minimum safe case.
 
 In addition to satisfying the minimum visible length, the cover text must contain at least `requiredCarrierSlots` carrier-safe eligible slots after filtering. Covers with many accented, emoji, or other non-ASCII grapheme clusters may therefore require additional visible text even when the simple length formula is met.
+
+When reporting how much text the user must add, implementations SHOULD compute
+the minimal number of plain visible ASCII characters that must be appended to
+the normalized current cover text until both conditions are true: visible length
+is at least `minCoverLength`, and carrier-safe eligible slot count is at least
+`requiredCarrierSlots`.
 
 Before this length is checked, the cover text is normalized with trailing-whitespace trimming. In other words, spaces, tabs, or line breaks after the user's last non-whitespace character do **not** count as usable cover capacity.
 

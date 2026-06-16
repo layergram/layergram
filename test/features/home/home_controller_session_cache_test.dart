@@ -16,6 +16,7 @@ import 'package:layergram/core/crypto/fs_session_manager.dart';
 import 'package:layergram/core/crypto/identity_manager.dart';
 import 'package:layergram/core/crypto/models.dart';
 import 'package:layergram/core/crypto/seed_service.dart';
+import 'package:layergram/core/crypto/stego_encoder.dart';
 import 'package:layergram/core/providers.dart';
 import 'package:layergram/core/storage/identities_repository.dart';
 import 'package:layergram/core/storage/local_database.dart';
@@ -1407,6 +1408,60 @@ void main() {
       expect(result.isFsEncrypted, isTrue);
       expect(result.classification, FsMessageClassification.fsWithFallback);
       expect(sessionManager.state, FsSessionState.fsActive);
+    });
+
+    test('Advanced FS final payload can exceed legacy stego estimate', () async {
+      final fixture = await _createFixture();
+      addTearDown(() {
+        fixture.identitiesRepository.dispose();
+        fixture.messagesRepository.dispose();
+        fixture.container.dispose();
+      });
+
+      final contact = fixture.contacts.first;
+      const currentSessionId = 'session-advanced-payload-budget';
+      final sessionManager =
+          fixture.container.read(fsSessionManagerProvider(contact.identityId));
+      sessionManager.setStateForTesting(
+        FsSessionState.fsActive,
+        sessionId: currentSessionId,
+      );
+      fixture.container.read(fsRatchetStateCacheProvider.notifier).state = {
+        currentSessionId: _testRatchet(currentSessionId),
+      };
+
+      const secret = 'x';
+      final result = await fixture.container
+          .read(homeControllerProvider)
+          .encryptForRecipient(
+            secretText: secret,
+            recipient: contact,
+          );
+      final estimatedBytes = StegoEncoder.estimatedEncryptedPayloadBytes(secret);
+      final actualBytes = result.message.toRawBytes().length;
+      final coverAcceptedByLegacyEstimate =
+          'A' * StegoEncoder.minCoverLengthForBytes(estimatedBytes);
+
+      expect(result.isFsEncrypted, isTrue);
+      expect(actualBytes, greaterThan(estimatedBytes));
+      expect(
+        StegoEncoder.canEmbedBytes(
+          coverAcceptedByLegacyEstimate,
+          estimatedBytes,
+        ),
+        isTrue,
+      );
+      expect(
+        StegoEncoder.canEmbedBytes(coverAcceptedByLegacyEstimate, actualBytes),
+        isFalse,
+      );
+      expect(
+        StegoEncoder.missingCoverCapacityForBytes(
+          coverAcceptedByLegacyEstimate,
+          actualBytes,
+        ),
+        greaterThan(0),
+      );
     });
 
     test('Strict FS blocks sending when another device appears', () async {

@@ -38,6 +38,7 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
   RemoteIdentity? _recipient;
   bool _deleteAfterRead = false;
   String _output = '';
+  int? _exactCoverMissingCount;
 
   int get _estimatedPayloadBytes {
     return StegoEncoder.estimatedEncryptedPayloadBytes(_secretCtrl.text);
@@ -161,11 +162,14 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
 
   void _onFieldChanged() {
     if (!mounted) return;
-    setState(() {});
+    setState(() {
+      _exactCoverMissingCount = null;
+    });
   }
 
   bool get _coverTooShort {
     if (_secretCtrl.text.trim().isEmpty) return false;
+    if (_exactCoverMissingCount != null) return true;
     return !StegoEncoder.canEmbedBytes(_coverCtrl.text, _estimatedPayloadBytes);
   }
 
@@ -173,6 +177,7 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
     if (_secretCtrl.text.trim().isEmpty) {
       return 0;
     }
+    if (_exactCoverMissingCount != null) return _exactCoverMissingCount!;
     return StegoEncoder.missingCoverCapacityForBytes(
       _coverCtrl.text,
       _estimatedPayloadBytes,
@@ -399,9 +404,28 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
                                 deleteAfterRead: _deleteAfterRead,
                               );
                           final encrypted = encResult.message;
+                          final rawBytes = encrypted.toRawBytes();
+                          if (!StegoEncoder.canEmbedBytes(
+                            _coverCtrl.text,
+                            rawBytes.length,
+                          )) {
+                            final missing =
+                                StegoEncoder.missingCoverCapacityForBytes(
+                              _coverCtrl.text,
+                              rawBytes.length,
+                            );
+                            if (!context.mounted) return;
+                            setState(() => _exactCoverMissingCount = missing);
+                            final message = strings(context, 'coverTooShort')
+                                .replaceAll('{n}', '$missing');
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(message)),
+                            );
+                            return;
+                          }
                           final output = ref.read(stegoEncoderProvider).encodeBytes(
                               _coverCtrl.text,
-                              encrypted.toRawBytes(),
+                              rawBytes,
                               maxTotalCharacters: _coverLengthLimit);
                           
                           // Only save to chat if deleteAfterRead is false
