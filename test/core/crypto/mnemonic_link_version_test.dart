@@ -12,6 +12,8 @@ import 'package:layergram/core/crypto/seed_service.dart';
 import 'package:layergram/core/storage/local_identity_vault.dart';
 import 'package:layergram/core/storage/secure_storage.dart';
 
+import '../../test_diagnostics.dart';
+
 // ── Real mnemonics (demo accounts for manual) ─────────────────────────────
 
 const _alexMnemonic =
@@ -60,12 +62,9 @@ void main() {
       final mgr = _mgr();
       final id = await mgr.restoreIdentityFromMnemonic(_alexMnemonic,
           displayName: 'Alex', derivationVersion: IdentityDerivationVersion.v1);
-      // ignore: avoid_print
-      print('Alex v1  pk: ${id.publicKeyBase64}');
-      // ignore: avoid_print
-      print('Alex v1  fp: ${id.fingerprint}');
-      // ignore: avoid_print
-      print('Alex v1  id: ${id.identityId}');
+      diagnosticLog('Alex v1  pk: ${id.publicKeyBase64}');
+      diagnosticLog('Alex v1  fp: ${id.fingerprint}');
+      diagnosticLog('Alex v1  id: ${id.identityId}');
       expect(id.publicKeyBase64, isNotEmpty);
     });
 
@@ -73,12 +72,9 @@ void main() {
       final mgr = _mgr();
       final id = await mgr.restoreIdentityFromMnemonic(_alexMnemonic,
           displayName: 'Alex', derivationVersion: IdentityDerivationVersion.v2);
-      // ignore: avoid_print
-      print('Alex v2  pk: ${id.publicKeyBase64}');
-      // ignore: avoid_print
-      print('Alex v2  fp: ${id.fingerprint}');
-      // ignore: avoid_print
-      print('Alex v2  id: ${id.identityId}');
+      diagnosticLog('Alex v2  pk: ${id.publicKeyBase64}');
+      diagnosticLog('Alex v2  fp: ${id.fingerprint}');
+      diagnosticLog('Alex v2  id: ${id.identityId}');
       expect(id.publicKeyBase64, isNotEmpty);
     });
 
@@ -93,20 +89,17 @@ void main() {
 
       final matchesV1 = v1.publicKeyBase64 == _alexLinkPk;
       final matchesV2 = v2.publicKeyBase64 == _alexLinkPk;
-
-      // ignore: avoid_print
-      print('\n>>> Alex link pk: $_alexLinkPk');
-      // ignore: avoid_print
-      print('>>> Alex v1   pk: ${v1.publicKeyBase64}  match=$matchesV1');
-      // ignore: avoid_print
-      print('>>> Alex v2   pk: ${v2.publicKeyBase64}  match=$matchesV2');
+      diagnosticLog('\n>>> Alex link pk: $_alexLinkPk');
+      diagnosticLog(
+          '>>> Alex v1   pk: ${v1.publicKeyBase64}  match=$matchesV1');
+      diagnosticLog(
+          '>>> Alex v2   pk: ${v2.publicKeyBase64}  match=$matchesV2');
 
       // NOTE: the links provided were from identities created with createNewIdentity
       // (random keypairs, v2) — not from these mnemonics. After the bug fix,
       // restoring from mnemonic now uses v2. The test below verifies the important
       // property: create and restore from same mnemonic must yield the same key.
-      // ignore: avoid_print
-      print(
+      diagnosticLog(
           '>>> (Links were from different random keypairs, not these mnemonics)');
     });
   });
@@ -121,12 +114,9 @@ void main() {
       final id = await mgr.restoreIdentityFromMnemonic(_sofiaMnemonic,
           displayName: 'Sofia',
           derivationVersion: IdentityDerivationVersion.v1);
-      // ignore: avoid_print
-      print('Sofia v1  pk: ${id.publicKeyBase64}');
-      // ignore: avoid_print
-      print('Sofia v1  fp: ${id.fingerprint}');
-      // ignore: avoid_print
-      print('Sofia v1  id: ${id.identityId}');
+      diagnosticLog('Sofia v1  pk: ${id.publicKeyBase64}');
+      diagnosticLog('Sofia v1  fp: ${id.fingerprint}');
+      diagnosticLog('Sofia v1  id: ${id.identityId}');
       expect(id.publicKeyBase64, isNotEmpty);
     });
 
@@ -135,12 +125,9 @@ void main() {
       final id = await mgr.restoreIdentityFromMnemonic(_sofiaMnemonic,
           displayName: 'Sofia',
           derivationVersion: IdentityDerivationVersion.v2);
-      // ignore: avoid_print
-      print('Sofia v2  pk: ${id.publicKeyBase64}');
-      // ignore: avoid_print
-      print('Sofia v2  fp: ${id.fingerprint}');
-      // ignore: avoid_print
-      print('Sofia v2  id: ${id.identityId}');
+      diagnosticLog('Sofia v2  pk: ${id.publicKeyBase64}');
+      diagnosticLog('Sofia v2  fp: ${id.fingerprint}');
+      diagnosticLog('Sofia v2  id: ${id.identityId}');
       expect(id.publicKeyBase64, isNotEmpty);
     });
 
@@ -157,15 +144,12 @@ void main() {
 
       final matchesV1 = v1.publicKeyBase64 == _sofiaLinkPk;
       final matchesV2 = v2.publicKeyBase64 == _sofiaLinkPk;
-
-      // ignore: avoid_print
-      print('\n>>> Sofia link pk: $_sofiaLinkPk');
-      // ignore: avoid_print
-      print('>>> Sofia v1   pk: ${v1.publicKeyBase64}  match=$matchesV1');
-      // ignore: avoid_print
-      print('>>> Sofia v2   pk: ${v2.publicKeyBase64}  match=$matchesV2');
-      // ignore: avoid_print
-      print(
+      diagnosticLog('\n>>> Sofia link pk: $_sofiaLinkPk');
+      diagnosticLog(
+          '>>> Sofia v1   pk: ${v1.publicKeyBase64}  match=$matchesV1');
+      diagnosticLog(
+          '>>> Sofia v2   pk: ${v2.publicKeyBase64}  match=$matchesV2');
+      diagnosticLog(
           '>>> (Links were from different random keypairs, not these mnemonics)');
     });
   });
@@ -203,13 +187,9 @@ void main() {
 
       final alexBytes = await sharedByAlex.extractBytes();
       final sofiaBytes = await sharedBySofia.extractBytes();
-
-      // ignore: avoid_print
-      print('\n>>> Alex v2  pub: ${base64Encode(alexPub.bytes)}');
-      // ignore: avoid_print
-      print('>>> Sofia v2 pub: ${base64Encode(sofiaPub.bytes)}');
-      // ignore: avoid_print
-      print(
+      diagnosticLog('\n>>> Alex v2  pub: ${base64Encode(alexPub.bytes)}');
+      diagnosticLog('>>> Sofia v2 pub: ${base64Encode(sofiaPub.bytes)}');
+      diagnosticLog(
           '>>> Shared secret match: ${alexBytes.toString() == sofiaBytes.toString()}');
 
       expect(alexBytes, equals(sofiaBytes),
@@ -243,21 +223,14 @@ void main() {
       final sofiaPrivB64 = base64Encode(sofiaPrivBytes);
       final alexPubB64 = base64Encode(alexPubBytes);
       final sofiaPubB64 = base64Encode(sofiaPubBytes);
-
-      // ignore: avoid_print
-      print('\n>>> Alex v2 pub (derived from mnemonic): $alexPubB64');
-      // ignore: avoid_print
-      print('>>> Alex link pk (from shared link):     $_alexLinkPk');
-      // ignore: avoid_print
-      print('>>> Alex pub matches link: ${alexPubB64 == _alexLinkPk}');
-      // ignore: avoid_print
-      print('');
-      // ignore: avoid_print
-      print('>>> Sofia v2 pub (derived from mnemonic): $sofiaPubB64');
-      // ignore: avoid_print
-      print('>>> Sofia link pk (from shared link):     $_sofiaLinkPk');
-      // ignore: avoid_print
-      print('>>> Sofia pub matches link: ${sofiaPubB64 == _sofiaLinkPk}');
+      diagnosticLog('\n>>> Alex v2 pub (derived from mnemonic): $alexPubB64');
+      diagnosticLog('>>> Alex link pk (from shared link):     $_alexLinkPk');
+      diagnosticLog('>>> Alex pub matches link: ${alexPubB64 == _alexLinkPk}');
+      diagnosticLog('');
+      diagnosticLog('>>> Sofia v2 pub (derived from mnemonic): $sofiaPubB64');
+      diagnosticLog('>>> Sofia link pk (from shared link):     $_sofiaLinkPk');
+      diagnosticLog(
+          '>>> Sofia pub matches link: ${sofiaPubB64 == _sofiaLinkPk}');
 
       // Sofia encrypts to Alex.
       const secret = 'user: admin\npassword: jusg-Yets!gJdh@GTfJ';
@@ -275,9 +248,7 @@ void main() {
         nonce: nonce,
         ciphertext: ct,
       );
-
-      // ignore: avoid_print
-      print('\n>>> Decrypted text: $decrypted');
+      diagnosticLog('\n>>> Decrypted text: $decrypted');
 
       expect(decrypted, equals(secret),
           reason:
@@ -311,13 +282,10 @@ void main() {
       final sofiaPrivB64 = base64Encode(sofiaPrivBytes);
       final alexPubB64 = base64Encode(alexPubBytes);
       final sofiaPubB64 = base64Encode(sofiaPubBytes);
-
-      // ignore: avoid_print
-      print('\n>>> Alex v1 pub (derived from mnemonic): $alexPubB64');
-      // ignore: avoid_print
-      print('>>> Alex link pk (from shared link):     $_alexLinkPk');
-      // ignore: avoid_print
-      print('>>> Alex v1 pub matches link: ${alexPubB64 == _alexLinkPk}');
+      diagnosticLog('\n>>> Alex v1 pub (derived from mnemonic): $alexPubB64');
+      diagnosticLog('>>> Alex link pk (from shared link):     $_alexLinkPk');
+      diagnosticLog(
+          '>>> Alex v1 pub matches link: ${alexPubB64 == _alexLinkPk}');
 
       const secret = 'user: admin\npassword: jusg-Yets!gJdh@GTfJ';
       final enc = _SimpleEncryptionService();
@@ -396,15 +364,10 @@ void main() {
       expect(wrongDecrypt, isNull,
           reason:
               'v2 sender + v1 recipient key = shared secret mismatch → decryption fails');
-
-      // ignore: avoid_print
-      print('\n>>> Alex v1 pub: $alexPubV1');
-      // ignore: avoid_print
-      print('>>> Alex v2 pub: $alexPubV2');
-      // ignore: avoid_print
-      print('>>> Sofia v2→AlexV2 decrypt: $okDecrypt');
-      // ignore: avoid_print
-      print(
+      diagnosticLog('\n>>> Alex v1 pub: $alexPubV1');
+      diagnosticLog('>>> Alex v2 pub: $alexPubV2');
+      diagnosticLog('>>> Sofia v2→AlexV2 decrypt: $okDecrypt');
+      diagnosticLog(
           '>>> Sofia v2→AlexV1 decrypt: $wrongDecrypt (null = correct failure)');
     });
 
@@ -448,14 +411,10 @@ void main() {
       expect(restoredV1.publicKeyBase64, isNot(equals(alexPubV2)),
           reason:
               'v1 restore must NOT equal v2 create — confirms the bug was real');
-
-      // ignore: avoid_print
-      print('\n>>> Alex v2 create pk: $alexPubV2');
-      // ignore: avoid_print
-      print(
+      diagnosticLog('\n>>> Alex v2 create pk: $alexPubV2');
+      diagnosticLog(
           '>>> Alex v2 restore pk: ${restoredV2.publicKeyBase64}  match=${restoredV2.publicKeyBase64 == alexPubV2}');
-      // ignore: avoid_print
-      print(
+      diagnosticLog(
           '>>> Alex v1 restore pk: ${restoredV1.publicKeyBase64}  (must differ)');
     });
 
@@ -478,29 +437,22 @@ void main() {
           await pubB64(_sofiaMnemonic, IdentityDerivationVersion.v1);
       final sofiaV2 =
           await pubB64(_sofiaMnemonic, IdentityDerivationVersion.v2);
-
-      // ignore: avoid_print
-      print('\n╔══════════════════════════════════════════════════════╗');
-      // ignore: avoid_print
-      print('║              KEY VERSION SUMMARY                     ║');
-      // ignore: avoid_print
-      print('╠══════════════════════════════════════════════════════╣');
-      // ignore: avoid_print
-      print('║ Alex  link pk: $_alexLinkPk');
-      // ignore: avoid_print
-      print('║ Alex  v1   pk: $alexV1  [match=${alexV1 == _alexLinkPk}]');
-      // ignore: avoid_print
-      print('║ Alex  v2   pk: $alexV2  [match=${alexV2 == _alexLinkPk}]');
-      // ignore: avoid_print
-      print('╠══════════════════════════════════════════════════════╣');
-      // ignore: avoid_print
-      print('║ Sofia link pk: $_sofiaLinkPk');
-      // ignore: avoid_print
-      print('║ Sofia v1   pk: $sofiaV1  [match=${sofiaV1 == _sofiaLinkPk}]');
-      // ignore: avoid_print
-      print('║ Sofia v2   pk: $sofiaV2  [match=${sofiaV2 == _sofiaLinkPk}]');
-      // ignore: avoid_print
-      print('╚══════════════════════════════════════════════════════╝');
+      diagnosticLog(
+          '\n╔══════════════════════════════════════════════════════╗');
+      diagnosticLog('║              KEY VERSION SUMMARY                     ║');
+      diagnosticLog('╠══════════════════════════════════════════════════════╣');
+      diagnosticLog('║ Alex  link pk: $_alexLinkPk');
+      diagnosticLog(
+          '║ Alex  v1   pk: $alexV1  [match=${alexV1 == _alexLinkPk}]');
+      diagnosticLog(
+          '║ Alex  v2   pk: $alexV2  [match=${alexV2 == _alexLinkPk}]');
+      diagnosticLog('╠══════════════════════════════════════════════════════╣');
+      diagnosticLog('║ Sofia link pk: $_sofiaLinkPk');
+      diagnosticLog(
+          '║ Sofia v1   pk: $sofiaV1  [match=${sofiaV1 == _sofiaLinkPk}]');
+      diagnosticLog(
+          '║ Sofia v2   pk: $sofiaV2  [match=${sofiaV2 == _sofiaLinkPk}]');
+      diagnosticLog('╚══════════════════════════════════════════════════════╝');
 
       // The links were generated from random keypairs (createNewIdentity) on the device,
       // NOT from these demo mnemonics. So no version will match — that is expected and
@@ -510,11 +462,9 @@ void main() {
       // must be shared.
       final alexMatches = alexV1 == _alexLinkPk || alexV2 == _alexLinkPk;
       final sofiaMatches = sofiaV1 == _sofiaLinkPk || sofiaV2 == _sofiaLinkPk;
-      // ignore: avoid_print
-      print(
+      diagnosticLog(
           '>>> Alex  link matches a mnemonic-derived key: $alexMatches  (expected: false)');
-      // ignore: avoid_print
-      print(
+      diagnosticLog(
           '>>> Sofia link matches a mnemonic-derived key: $sofiaMatches (expected: false)');
       expect(alexMatches, isFalse,
           reason:

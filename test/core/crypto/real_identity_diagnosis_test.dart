@@ -20,6 +20,8 @@ import 'package:layergram/core/storage/local_identity_vault.dart';
 import 'package:layergram/core/storage/secure_storage.dart';
 import 'package:layergram/features/contact_verification/contact_sas_service.dart';
 
+import '../../test_diagnostics.dart';
+
 // ── Real identity data decoded from the provided links ──────────────────────
 
 // Alex:  id=SJ4566BT3OZTURRTZ7IM5QZKBRN4JYGKYEA2HZINVP7DXANTIJOA  pk=YaI6sOitsGi5lEHxiLlKuBtQSESdKghc19MmimTZ6gY=
@@ -132,14 +134,10 @@ void main() {
         peerPublicKeyBase64: sofia.publicKeyBase64,
       );
       // This test always passes — it just prints the ground-truth SAS.
-      // ignore: avoid_print
-      print('\n>>> Expected SAS (Alex ↔ Sofia)');
-      // ignore: avoid_print
-      print('    digits: ${code.digits}');
-      // ignore: avoid_print
-      print('    emoji indices: ${code.emojiIndices}');
-      // ignore: avoid_print
-      print('    emoji: ${code.emojiGlyphs.join(' ')}');
+      diagnosticLog('\n>>> Expected SAS (Alex ↔ Sofia)');
+      diagnosticLog('    digits: ${code.digits}');
+      diagnosticLog('    emoji indices: ${code.emojiIndices}');
+      diagnosticLog('    emoji: ${code.emojiGlyphs.join(' ')}');
       expect(code.digits, hasLength(6));
     });
   });
@@ -178,11 +176,8 @@ void main() {
       expect(v1.publicKeyBase64, isNot(equals(v2.publicKeyBase64)),
           reason: 'v1 and v2 MUST produce different key pairs – '
               'if app stores v2 but link was shared from v1, ECDH secret will differ');
-
-      // ignore: avoid_print
-      print('\n>>> v1 pk: ${v1.publicKeyBase64}');
-      // ignore: avoid_print
-      print('>>> v2 pk: ${v2.publicKeyBase64}');
+      diagnosticLog('\n>>> v1 pk: ${v1.publicKeyBase64}');
+      diagnosticLog('>>> v2 pk: ${v2.publicKeyBase64}');
     });
 
     test(
@@ -257,15 +252,10 @@ void main() {
           StegoEncoder.estimatedEncryptedPayloadBytes(_secret);
       final minCover = StegoEncoder.minCoverLengthForBytes(estimatedBytes);
       final coverLen = StegoEncoder.visibleCharacterCount(_cover);
-
-      // ignore: avoid_print
-      print('\n>>> Secret payload estimate: $estimatedBytes bytes');
-      // ignore: avoid_print
-      print('>>> Min cover chars needed:  $minCover');
-      // ignore: avoid_print
-      print('>>> Actual cover chars:      $coverLen');
-      // ignore: avoid_print
-      print('>>> Cover is sufficient:     ${coverLen >= minCover}');
+      diagnosticLog('\n>>> Secret payload estimate: $estimatedBytes bytes');
+      diagnosticLog('>>> Min cover chars needed:  $minCover');
+      diagnosticLog('>>> Actual cover chars:      $coverLen');
+      diagnosticLog('>>> Cover is sufficient:     ${coverLen >= minCover}');
 
       expect(coverLen, greaterThanOrEqualTo(minCover),
           reason: 'Cover text must be long enough to embed the secret');

@@ -146,8 +146,8 @@ dart doc
 
 ### Forward Secrecy Status
 
-Forward Secrecy is implemented in the dedicated FS branch and is not described in `llms.txt`
-until it is part of the official public release. The branch preserves Layergram's core model:
+Forward Secrecy is implemented in this dedicated FS branch, but is not described
+as part of the official public release until it ships. This branch preserves Layergram's core model:
 no Layergram server, no accounts, no key directory, and no contact public-key redistribution.
 FS control messages are carried inside ordinary encrypted Layergram messages and older clients
 can ignore them while continuing to use the base identity-key encryption model.

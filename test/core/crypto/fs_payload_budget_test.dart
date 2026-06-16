@@ -17,6 +17,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:layergram/core/crypto/fs_payload_budget.dart';
 import 'package:layergram/core/crypto/stego_encoder.dart';
 
+import '../../test_diagnostics.dart';
+
 // ---------------------------------------------------------------------------
 // Realistic maximum-size FS control payloads (44-char base64url keys).
 // ---------------------------------------------------------------------------
@@ -85,8 +87,7 @@ void main() {
       final result = FsPayloadBudget.measure(_maxFsInit());
 
       // Print for visibility during development.
-      // ignore: avoid_print
-      print('fs_init: $result');
+      diagnosticLog('fs_init: $result');
 
       // Must be below the opportunistic ceiling.
       expect(result.fitsOpportunistic, isTrue,
@@ -110,9 +111,7 @@ void main() {
     // T6.2 — Maximum-size fs_reply measured.
     test('T6.2: fs_reply max size measurement', () {
       final result = FsPayloadBudget.measure(_maxFsReply());
-
-      // ignore: avoid_print
-      print('fs_reply: $result');
+      diagnosticLog('fs_reply: $result');
 
       expect(result.fitsOpportunistic, isTrue,
           reason: 'fs_reply must fit in Opportunistic FS budget '
@@ -131,9 +130,7 @@ void main() {
     // T6.3 — Maximum-size fs_confirm measured.
     test('T6.3: fs_confirm max size measurement', () {
       final result = FsPayloadBudget.measure(_maxFsConfirm());
-
-      // ignore: avoid_print
-      print('fs_confirm: $result');
+      diagnosticLog('fs_confirm: $result');
 
       expect(result.fitsOpportunistic, isTrue,
           reason: 'fs_confirm must fit in Opportunistic FS budget');
@@ -150,9 +147,7 @@ void main() {
     // T6.4 — Oversized payload in Opportunistic mode.
     test('T6.4: oversized x.fs → fitsOpportunistic = false', () {
       final result = FsPayloadBudget.measure(_oversizedFs());
-
-      // ignore: avoid_print
-      print('oversized: $result');
+      diagnosticLog('oversized: $result');
 
       expect(result.fitsOpportunistic, isFalse,
           reason: 'Oversized payload must NOT fit in Opportunistic budget');

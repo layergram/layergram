@@ -216,7 +216,7 @@ documented (see "Divergences") before release.
 - [x] local DoS behavior.
 
 The checklist above reflects the dedicated review performed on this branch. It does not imply
-that FS is already present in public store builds or in the official `llms.txt` release
+that FS is already present in public store builds or in the official public release
 description.
 
 ## Divergences from the specification
