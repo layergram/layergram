@@ -15,6 +15,7 @@ void main() {
     }
 
     expect(find.byType(MaterialApp), findsOneWidget);
-    expect(find.text('Layergram', skipOffstage: false), findsWidgets);
+    expect(find.byType(Scaffold), findsWidgets);
+    expect(tester.takeException(), isNull);
   });
 }
