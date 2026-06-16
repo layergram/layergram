@@ -58,129 +58,131 @@ class _FsSecurityModeSheetState extends State<_FsSecurityModeSheet> {
     final cs = theme.colorScheme;
 
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              t(context, 'security.fs.mode.sheet_title'),
-              style: theme.textTheme.titleLarge,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              t(context, 'security.fs.mode.sheet_subtitle'),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: cs.onSurfaceVariant,
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                t(context, 'security.fs.mode.sheet_title'),
+                style: theme.textTheme.titleLarge,
               ),
-            ),
-            const SizedBox(height: 16),
-
-            // ── Mode cards ──────────────────────────────────────────────────
-            _ModeCard(
-              mode: FsSecurityMode.base,
-              selected: _selected == FsSecurityMode.base,
-              icon: Icons.shield_outlined,
-              iconColor: Colors.grey,
-              titleKey: 'security.fs.mode.base_title',
-              descKey: 'security.fs.mode.base_desc',
-              onTap: () => setState(() {
-                _selected = FsSecurityMode.base;
-                _strictWarningAccepted = false;
-              }),
-            ),
-            const SizedBox(height: 8),
-            _ModeCard(
-              mode: FsSecurityMode.advanced,
-              selected: _selected == FsSecurityMode.advanced,
-              icon: Icons.shield,
-              iconColor: Colors.green,
-              titleKey: 'security.fs.mode.advanced_title',
-              descKey: 'security.fs.mode.advanced_desc',
-              onTap: () => setState(() {
-                _selected = FsSecurityMode.advanced;
-                _strictWarningAccepted = false;
-              }),
-            ),
-            const SizedBox(height: 8),
-            _ModeCard(
-              mode: FsSecurityMode.strict,
-              selected: _selected == FsSecurityMode.strict,
-              icon: Icons.shield,
-              iconColor: Colors.green.shade800,
-              borderColor: Colors.amber.shade700,
-              titleKey: 'security.fs.mode.strict_title',
-              descKey: 'security.fs.mode.strict_desc',
-              onTap: () => setState(() {
-                _selected = FsSecurityMode.strict;
-              }),
-            ),
-
-            // ── Strict FS warning (§14.6.2) ─────────────────────────────────
-            if (_selected == FsSecurityMode.strict &&
-                widget.currentMode != FsSecurityMode.strict) ...[
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: cs.errorContainer,
-                  borderRadius: BorderRadius.circular(8),
+              const SizedBox(height: 4),
+              Text(
+                t(context, 'security.fs.mode.sheet_subtitle'),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: cs.onSurfaceVariant,
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      t(context, 'security.fs.warning.device_bound_title'),
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: cs.onErrorContainer,
-                        fontWeight: FontWeight.bold,
+              ),
+              const SizedBox(height: 16),
+
+              // ── Mode cards ──────────────────────────────────────────────────
+              _ModeCard(
+                mode: FsSecurityMode.base,
+                selected: _selected == FsSecurityMode.base,
+                icon: Icons.shield_outlined,
+                iconColor: Colors.grey,
+                titleKey: 'security.fs.mode.base_title',
+                descKey: 'security.fs.mode.base_desc',
+                onTap: () => setState(() {
+                  _selected = FsSecurityMode.base;
+                  _strictWarningAccepted = false;
+                }),
+              ),
+              const SizedBox(height: 8),
+              _ModeCard(
+                mode: FsSecurityMode.advanced,
+                selected: _selected == FsSecurityMode.advanced,
+                icon: Icons.shield,
+                iconColor: Colors.green,
+                titleKey: 'security.fs.mode.advanced_title',
+                descKey: 'security.fs.mode.advanced_desc',
+                onTap: () => setState(() {
+                  _selected = FsSecurityMode.advanced;
+                  _strictWarningAccepted = false;
+                }),
+              ),
+              const SizedBox(height: 8),
+              _ModeCard(
+                mode: FsSecurityMode.strict,
+                selected: _selected == FsSecurityMode.strict,
+                icon: Icons.shield,
+                iconColor: Colors.green.shade800,
+                borderColor: Colors.amber.shade700,
+                titleKey: 'security.fs.mode.strict_title',
+                descKey: 'security.fs.mode.strict_desc',
+                onTap: () => setState(() {
+                  _selected = FsSecurityMode.strict;
+                }),
+              ),
+
+              // ── Strict FS warning (§14.6.2) ─────────────────────────────────
+              if (_selected == FsSecurityMode.strict &&
+                  widget.currentMode != FsSecurityMode.strict) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: cs.errorContainer,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        t(context, 'security.fs.warning.device_bound_title'),
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: cs.onErrorContainer,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      t(context, 'security.fs.warning.device_bound_body'),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: cs.onErrorContainer,
+                      const SizedBox(height: 4),
+                      Text(
+                        t(context, 'security.fs.warning.device_bound_body'),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: cs.onErrorContainer,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                CheckboxListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  value: _strictWarningAccepted,
+                  onChanged: (v) =>
+                      setState(() => _strictWarningAccepted = v ?? false),
+                  title: Text(
+                    t(context, 'security.fs.warning.device_bound_confirm'),
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ),
+              ],
+
+              const SizedBox(height: 20),
+
+              // ── Confirm button ──────────────────────────────────────────────
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: _canConfirm ? _onConfirm : null,
+                  child: Text(t(context, 'security.fs.mode.confirm_button')),
                 ),
               ),
               const SizedBox(height: 8),
-              CheckboxListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                controlAffinity: ListTileControlAffinity.leading,
-                value: _strictWarningAccepted,
-                onChanged: (v) =>
-                    setState(() => _strictWarningAccepted = v ?? false),
-                title: Text(
-                  t(context, 'security.fs.warning.device_bound_confirm'),
-                  style: theme.textTheme.bodySmall,
+              SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: Text(t(context, 'security.fs.mode.cancel_button')),
                 ),
               ),
             ],
-
-            const SizedBox(height: 20),
-
-            // ── Confirm button ──────────────────────────────────────────────
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: _canConfirm ? _onConfirm : null,
-                child: Text(t(context, 'security.fs.mode.confirm_button')),
-              ),
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: Text(t(context, 'security.fs.mode.cancel_button')),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -267,7 +269,8 @@ class _ModeCard extends StatelessWidget {
                     Text(
                       t(context, titleKey),
                       style: theme.textTheme.labelLarge?.copyWith(
-                        fontWeight: selected ? FontWeight.bold : FontWeight.w500,
+                        fontWeight:
+                            selected ? FontWeight.bold : FontWeight.w500,
                       ),
                     ),
                     const SizedBox(height: 2),
