@@ -85,12 +85,6 @@ Future<ShareResult> shareTextExternally(
   final shouldUseCustomSelector =
       !isDeeplink && (forceStegoCover || hasSteganography);
 
-  // Debug logging to investigate link sharing issues
-  debugPrint(
-      'shareTextExternally: forceStegoCover=$forceStegoCover, hasSteganography=$hasSteganography, isDeeplink=$isDeeplink, shouldUseCustomSelector=$shouldUseCustomSelector');
-  debugPrint(
-      'shareTextExternally: text length=${text.length}, startsWith=${text.substring(0, text.length > 50 ? 50 : text.length)}');
-
   // On Android, use custom share flow only for steganographic messages.
   // For deeplinks, use the standard share sheet.
   if (AppPlatform.isAndroid && context.mounted && shouldUseCustomSelector) {

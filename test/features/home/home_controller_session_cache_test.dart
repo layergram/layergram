@@ -1148,5 +1148,53 @@ void main() {
         expect(decoded.payload.text, isEmpty);
       },
     );
+
+    test('Strict FS blocks sending when local ratchet is missing', () async {
+      final fixture = await _createFixture();
+      addTearDown(() {
+        fixture.identitiesRepository.dispose();
+        fixture.messagesRepository.dispose();
+        fixture.container.dispose();
+      });
+
+      final contact = fixture.contacts.first;
+      const sessionId = 'session-strict-missing-ratchet';
+      final sessionManager =
+          fixture.container.read(fsSessionManagerProvider(contact.identityId));
+      sessionManager.setStateForTesting(
+        FsSessionState.fsActive,
+        sessionId: sessionId,
+      );
+
+      final modeService = fixture.container.read(fsSecurityModeServiceProvider);
+      final fsController = fixture.container.read(
+        fsOpportunisticControllerProvider(contact.identityId),
+      );
+      await modeService.setMode(
+        contactId: contact.identityId,
+        identityContext: fsController.identityContext,
+        mode: FsSecurityMode.strict,
+      );
+      final strictController = fixture.container.read(
+        fsStrictModeControllerProvider(contact.identityId),
+      );
+      expect(strictController.requestMaximum(sessionId).success, isTrue);
+      expect(strictController.activateStrict(sessionId).success, isTrue);
+
+      fixture.container.read(fsRatchetStateCacheProvider.notifier).state = {};
+      await fixture.container
+          .read(fsRatchetPersistenceServiceProvider)
+          .removeAllRatchetStates();
+
+      final controller = fixture.container.read(homeControllerProvider);
+      await expectLater(
+        controller.encryptForRecipient(
+          secretText: 'Strict FS must not downgrade',
+          recipient: contact,
+        ),
+        throwsA(isA<StateError>()),
+      );
+      expect(sessionManager.state, FsSessionState.fsBroken);
+    });
   });
 }

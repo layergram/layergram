@@ -26,8 +26,8 @@ import 'package:archive/archive.dart';
 /// - Compression threshold: do not compress if plaintext < 96 bytes
 /// - Minimum savings: only use compressed if it saves at least 4 bytes
 /// - If compression fails: fall back to uncompressed
-class CompressionZstd {
-  const CompressionZstd._();
+class CompressionGzip {
+  const CompressionGzip._();
 
   /// Default compression level for gzip (6 is a good balance).
   static const int compressionLevel = 6;
@@ -79,7 +79,8 @@ class CompressionZstd {
 
   /// Compress without applying policy (always compress if possible).
   /// Used for testing or when policy is applied externally.
-  static Uint8List? compressRaw(Uint8List plaintext, {int level = compressionLevel}) {
+  static Uint8List? compressRaw(Uint8List plaintext,
+      {int level = compressionLevel}) {
     try {
       final compressed = const GZipEncoder().encode(plaintext);
       return Uint8List.fromList(compressed);

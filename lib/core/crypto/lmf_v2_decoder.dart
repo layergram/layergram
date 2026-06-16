@@ -17,7 +17,7 @@ import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 
-import 'compression_zstd.dart';
+import 'compression_gzip.dart';
 import 'stego_alphabet_v2.dart';
 
 /// LMF v2 message decoder.
@@ -157,7 +157,7 @@ class LmfV2Decoder {
     // Decompress if needed
     Uint8List jsonBytes;
     if (isCompressed) {
-      final decompressed = CompressionZstd.decompress(payloadBytes);
+      final decompressed = CompressionGzip.decompress(payloadBytes);
       if (decompressed == null) return null;
       jsonBytes = decompressed;
     } else {

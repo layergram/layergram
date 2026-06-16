@@ -14,6 +14,7 @@ void main() {
       expect(capabilities.coverGenerator, isNotNull);
       expect(capabilities.chatFolders, isNotNull);
       expect(capabilities.mediaLight, isNotNull);
+      expect(capabilities.secureKeyboard, isNotNull);
     });
 
     test('should report all capabilities as unavailable in OSS', () {
@@ -26,6 +27,8 @@ void main() {
       expect(capabilities.coverGenerator.isAvailable, isFalse);
       expect(capabilities.chatFolders.isAvailable, isFalse);
       expect(capabilities.mediaLight.isAvailable, isFalse);
+      expect(capabilities.secureKeyboard.isAvailable, isFalse);
+      expect(capabilities.secureKeyboard.supportsScramble, isFalse);
     });
 
     test('should maintain capability immutability', () {
@@ -46,6 +49,7 @@ void main() {
       expect(capabilities.coverGenerator.toString(), isA<String>());
       expect(capabilities.chatFolders.toString(), isA<String>());
       expect(capabilities.mediaLight.toString(), isA<String>());
+      expect(capabilities.secureKeyboard.toString(), isA<String>());
     });
   });
 
@@ -59,6 +63,8 @@ void main() {
       expect(capabilities.coverGenerator.isAvailable, isA<bool>());
       expect(capabilities.chatFolders.isAvailable, isA<bool>());
       expect(capabilities.mediaLight.isAvailable, isA<bool>());
+      expect(capabilities.secureKeyboard.isAvailable, isA<bool>());
+      expect(capabilities.secureKeyboard.supportsScramble, isA<bool>());
 
       // All should be false in OSS
       expect(capabilities.identity.isAvailable, isFalse);
@@ -77,6 +83,7 @@ void main() {
       expect(() => capabilities.coverGenerator.toString(), returnsNormally);
       expect(() => capabilities.chatFolders.toString(), returnsNormally);
       expect(() => capabilities.mediaLight.toString(), returnsNormally);
+      expect(() => capabilities.secureKeyboard.toString(), returnsNormally);
     });
   });
 }

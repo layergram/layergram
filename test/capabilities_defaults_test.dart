@@ -6,6 +6,7 @@ import 'package:layergram/core/capabilities/cover_message_generator_capability.d
 import 'package:layergram/core/capabilities/identity_capability.dart';
 import 'package:layergram/core/capabilities/layergram_capabilities.dart';
 import 'package:layergram/core/capabilities/media_light_capability.dart';
+import 'package:layergram/core/capabilities/secure_keyboard_capability.dart';
 
 void main() {
   test('LayergramCapabilities defaults to OSS stubs', () {
@@ -25,5 +26,8 @@ void main() {
 
     expect(caps.mediaLight, isA<NoMediaLightCapability>());
     expect(caps.mediaLight.isAvailable, isFalse);
+    expect(caps.secureKeyboard, isA<NoSecureKeyboardCapability>());
+    expect(caps.secureKeyboard.isAvailable, isFalse);
+    expect(caps.secureKeyboard.supportsScramble, isFalse);
   });
 }

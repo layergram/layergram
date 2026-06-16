@@ -139,10 +139,12 @@ class HomeController {
       final strictController = ref.read(
         fsStrictModeControllerProvider(recipient.identityId),
       );
-      // TODO: Track device changes for strict mode - currently assumes known device
-      if (!strictController.canSendMessage(deviceChanged: false)) {
-        final reason = strictController.sendBlockReason(deviceChanged: false) ??
-            'Maximum Forward Secrecy prevents sending in current state';
+      final deviceChanged =
+          _strictModeHasUnexpectedDevice(recipient.identityId);
+      if (!strictController.canSendMessage(deviceChanged: deviceChanged)) {
+        final reason =
+            strictController.sendBlockReason(deviceChanged: deviceChanged) ??
+                'Maximum Forward Secrecy prevents sending in current state';
         throw StateError(reason);
       }
     }
@@ -220,8 +222,15 @@ class HomeController {
             } else {
               // CRITICAL: Ratchet state is missing from both cache and persistence.
               // This should never happen in normal operation - the session is inconsistent.
-              // Mark session as broken and fall back to legacy encryption (safe default).
+              // Mark session as broken. Strict/Maximum FS must not silently
+              // fall back to legacy encryption when the ratchet is unavailable.
               sessionManager.markBroken();
+              if (securityMode == FsSecurityMode.strict ||
+                  state == FsSessionState.strictFsActive) {
+                throw StateError(
+                  'Maximum Forward Secrecy requires device repair before sending',
+                );
+              }
             }
           }
         } else {
@@ -229,6 +238,12 @@ class HomeController {
           // This is an inconsistent state - the session activation failed or was lost.
           // Mark session as broken to recover gracefully.
           sessionManager.markBroken();
+          if (securityMode == FsSecurityMode.strict ||
+              state == FsSessionState.strictFsActive) {
+            throw StateError(
+              'Maximum Forward Secrecy requires device repair before sending',
+            );
+          }
         }
       }
 
@@ -881,6 +896,20 @@ class HomeController {
     return DecodeOutcome.success(payload);
   }
 
+  bool _strictModeHasUnexpectedDevice(String contactId) {
+    final fsController = ref.read(fsOpportunisticControllerProvider(contactId));
+    final states = ref.read(fsContactSecurityRegistryProvider).forContact(
+          contactId: contactId,
+          identityContext: fsController.identityContext,
+        );
+    final hasStrictSession = states.any((entry) => entry.isStrict);
+    if (!hasStrictSession) return false;
+
+    return states.any((entry) =>
+        entry.sessionId != null &&
+        entry.fsState != FsSessionState.strictFsActive);
+  }
+
   // ── Message classification (§14.4) ─────────────────────────────────────────
 
   static FsMessageClassification _classifyOutgoing({
@@ -899,10 +928,9 @@ class HomeController {
           sessionState == FsSessionState.strictFsActive) {
         return FsMessageClassification.strictFs;
       }
-      // §9.5: an FS-encrypted message is only ever encrypted with the ratchet
-      // (never dual-encrypted with the legacy identity key), so it is true
-      // FS-only. fs_with_fallback is reserved for the multi-envelope case (§9.6)
-      // which Layergram does not implement.
+      // §9.5: a single-envelope FS message is only encrypted with the ratchet.
+      // Multi-envelope messages with legacy fallback are classified above as
+      // fs_with_fallback.
       return FsMessageClassification.fsOnly;
     }
     if (hasFsExtension) {

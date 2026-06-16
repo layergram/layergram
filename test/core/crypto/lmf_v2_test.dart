@@ -17,7 +17,7 @@ import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:layergram/core/crypto/compression_zstd.dart';
+import 'package:layergram/core/crypto/compression_gzip.dart';
 import 'package:layergram/core/crypto/lmf_v2_decoder.dart';
 import 'package:layergram/core/crypto/lmf_v2_encoder.dart';
 import 'package:layergram/core/crypto/stego_alphabet_v2.dart';
@@ -89,10 +89,10 @@ void main() {
     });
   });
 
-  group('CompressionZstd', () {
+  group('CompressionGzip', () {
     test('short plaintext (< 96 bytes) is not compressed', () {
       final short = Uint8List.fromList(List.generate(50, (i) => i));
-      final (result, wasCompressed) = CompressionZstd.compress(short);
+      final (result, wasCompressed) = CompressionGzip.compress(short);
       expect(wasCompressed, isFalse);
       expect(result.length, short.length);
     });
@@ -102,7 +102,7 @@ void main() {
       final compressible = Uint8List.fromList(
         List.generate(200, (i) => 'A'.codeUnitAt(0)),
       );
-      final (result, wasCompressed) = CompressionZstd.compress(compressible);
+      final (result, wasCompressed) = CompressionGzip.compress(compressible);
       // Note: May or may not compress depending on implementation
       // Just verify it doesn't crash
       expect(result, isNotNull);
@@ -110,9 +110,9 @@ void main() {
 
     test('decompress recovers original data', () {
       final original = utf8.encode('Hello, World! This is a test message.');
-      final compressed = CompressionZstd.compressRaw(original);
+      final compressed = CompressionGzip.compressRaw(original);
       if (compressed != null) {
-        final recovered = CompressionZstd.decompress(compressed);
+        final recovered = CompressionGzip.decompress(compressed);
         expect(recovered, isNotNull);
         expect(recovered!.toList(), original.toList());
       }
@@ -120,7 +120,7 @@ void main() {
 
     test('decompress returns null for invalid data', () {
       final invalid = Uint8List.fromList([0x00, 0x01, 0x02, 0x03]);
-      final result = CompressionZstd.decompress(invalid);
+      final result = CompressionGzip.decompress(invalid);
       expect(result, isNull);
     });
   });
