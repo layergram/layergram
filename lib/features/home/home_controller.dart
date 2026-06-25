@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -613,10 +612,9 @@ class HomeController {
                 ...cache,
                 newState.sessionId: newState,
               });
-          // Persist updated state (don't await in loop)
-          unawaited(ref
+          await ref
               .read(fsRatchetPersistenceServiceProvider)
-              .saveRatchetState(newState));
+              .saveRatchetState(newState);
         }
 
         return DecryptedMessagePreview(
@@ -756,10 +754,9 @@ class HomeController {
                 ...cache,
                 newState.sessionId: newState,
               });
-          // Persist updated state
-          unawaited(ref
+          await ref
               .read(fsRatchetPersistenceServiceProvider)
-              .saveRatchetState(newState));
+              .saveRatchetState(newState);
 
           // Record message counter in replay cache (§8.7)
           fsCtrl.recordMessageProcessed(

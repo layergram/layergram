@@ -29,7 +29,7 @@ import 'package:layergram/l10n/fs_strings_bundle.dart';
 void main() {
   group('FS Release Gate', () {
     // G.1 — RemoteIdentity has no FS state fields.
-    test('G.1: RemoteIdentity model has no FS state fields', () {
+    test('G.1: RemoteIdentity model has no FS state fields', () async {
       // Compile-time structural check: RemoteIdentity is imported in
       // models.dart and must not have fs_active, strict_requested, etc.
       // We verify this by checking the FsContactSecurityState is completely
@@ -46,7 +46,8 @@ void main() {
     });
 
     // G.2 — FsPassphraseContextService has no persistent storage.
-    test('G.2: FsPassphraseContextService is RAM-only (no storage params)', () {
+    test('G.2: FsPassphraseContextService is RAM-only (no storage params)',
+        () async {
       // The constructor takes only registry — no SecureStorage, no Hive box.
       final registry = FsContactSecurityRegistry();
       final svc = FsPassphraseContextService(registry: registry);
@@ -55,7 +56,7 @@ void main() {
 
     // G.3 — FsContactSecurityRegistry is per-context, no hidden global list.
     test('G.3: registry clearContext removes all entries for that context only',
-        () {
+        () async {
       final registry = FsContactSecurityRegistry();
       registry.upsert(const FsContactSecurityState(
         contactId: 'bob',
@@ -89,7 +90,7 @@ void main() {
     });
 
     // G.4 — kMaxFsControlPayloadBytes is defined and > 0.
-    test('G.4: kMaxFsControlPayloadBytes is defined and > 0', () {
+    test('G.4: kMaxFsControlPayloadBytes is defined and > 0', () async {
       expect(FsPayloadBudget.kMaxFsControlPayloadBytes, greaterThan(0));
       expect(FsPayloadBudget.kStrictMaxFsControlPayloadBytes, greaterThan(0));
     });
@@ -97,7 +98,7 @@ void main() {
     // G.5 — No silent downgrade: canSendMessage = false in strict + broken.
     test(
         'G.5: FsStrictModeController blocks sending in broken state (no silent downgrade)',
-        () {
+        () async {
       final registry = FsContactSecurityRegistry();
       final mgr = FsSessionManager();
       final ctrl = FsStrictModeController(
@@ -107,8 +108,8 @@ void main() {
         registry: registry,
       );
       mgr.setStateForTesting(FsSessionState.fsActive);
-      ctrl.requestMaximum('s1');
-      ctrl.activateStrict('s1');
+      await ctrl.requestMaximum('s1');
+      await ctrl.activateStrict('s1');
       mgr.markBroken();
       expect(ctrl.canSendMessage(), isFalse,
           reason: 'Broken strict session must block sending');
@@ -124,7 +125,7 @@ void main() {
     });
 
     // G.7 — All FsSessionState values are handled by FsStringsBundle.
-    test('G.7: FsStringsBundle covers all 6 status states', () {
+    test('G.7: FsStringsBundle covers all 6 status states', () async {
       const expected = [
         'security.fs.status.legacy',
         'security.fs.status.upgrading',
@@ -140,7 +141,8 @@ void main() {
     });
 
     // G.8 — All mandatory key groups present.
-    test('G.8: all mandatory string key groups present in English bundle', () {
+    test('G.8: all mandatory string key groups present in English bundle',
+        () async {
       const groups = [
         'security.fs.status.',
         'security.fs.warning.',
@@ -158,14 +160,14 @@ void main() {
     });
 
     // G.9 — clearContext is safe to call when context is absent.
-    test('G.9: clearContext on non-existent context is a no-op', () {
+    test('G.9: clearContext on non-existent context is a no-op', () async {
       final registry = FsContactSecurityRegistry();
       expect(() => registry.clearContext('non-existent-ctx'), returnsNormally);
       expect(registry.length, equals(0));
     });
 
     // G.10 — Strict FS cannot activate directly from legacyOnly.
-    test('G.10: strict cannot activate directly from legacyOnly', () {
+    test('G.10: strict cannot activate directly from legacyOnly', () async {
       final registry = FsContactSecurityRegistry();
       final mgr = FsSessionManager();
       final ctrl = FsStrictModeController(
@@ -175,19 +177,19 @@ void main() {
         registry: registry,
       );
       // requestMaximum in legacyOnly → fails.
-      final req = ctrl.requestMaximum('no-session');
+      final req = await ctrl.requestMaximum('no-session');
       expect(req.success, isFalse);
       expect(req.code, equals(FsStrictModeResultCode.notYetActive));
 
       // activateStrict also fails.
-      final act = ctrl.activateStrict('no-session');
+      final act = await ctrl.activateStrict('no-session');
       expect(act.success, isFalse);
       expect(mgr.state, equals(FsSessionState.legacyOnly));
     });
 
     // G.11 — FsOpportunisticController does not expose strict bypass.
     test('G.11: FsOpportunisticController.state reflects session manager state',
-        () {
+        () async {
       final registry = FsContactSecurityRegistry();
       final mgr = FsSessionManager();
       final ctrl = FsOpportunisticController(
@@ -200,7 +202,7 @@ void main() {
     });
 
     // G.12 — FsStringsBundle has no untranslated passthrough keys.
-    test('G.12: no English string value equals its own key', () {
+    test('G.12: no English string value equals its own key', () async {
       final en = FsStringsBundle.bundle['en']!;
       for (final entry in en.entries) {
         expect(
@@ -211,7 +213,7 @@ void main() {
       }
     });
 
-    test('G.13: skipped message keys are wiped before removal', () {
+    test('G.13: skipped message keys are wiped before removal', () async {
       final source =
           File('lib/core/crypto/fs_double_ratchet.dart').readAsStringSync();
       expect(source, contains('_wipeSkippedEntry'));

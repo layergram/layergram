@@ -41,7 +41,8 @@ class _FakeClock implements FsClock {
 
 void main() {
   // T11.1 — Request Maximum FS for Bob only; Alice's state unchanged.
-  test('T11.1: requestMaximum is per-contact — Alice registry unaffected', () {
+  test('T11.1: requestMaximum is per-contact — Alice registry unaffected',
+      () async {
     final (bobCtrl, bobMgr, bobRegistry) = _build(contactId: 'bob');
     final (aliceCtrl, aliceMgr, aliceRegistry) = _build(contactId: 'alice');
 
@@ -49,7 +50,7 @@ void main() {
     bobMgr.setStateForTesting(FsSessionState.fsActive,
         sessionId: 'session-bob');
 
-    bobCtrl.requestMaximum('session-bob');
+    await bobCtrl.requestMaximum('session-bob');
     expect(bobMgr.state, equals(FsSessionState.strictRequested));
     expect(bobRegistry.forContact(contactId: 'bob', identityContext: 'primary'),
         isNotEmpty);
@@ -63,11 +64,11 @@ void main() {
   });
 
   // T11.2 — requestMaximum in legacyOnly → notYetActive.
-  test('T11.2: requestMaximum in legacyOnly returns notYetActive', () {
+  test('T11.2: requestMaximum in legacyOnly returns notYetActive', () async {
     final (ctrl, mgr, _) = _build();
     expect(mgr.state, equals(FsSessionState.legacyOnly));
 
-    final result = ctrl.requestMaximum('no-session-yet');
+    final result = await ctrl.requestMaximum('no-session-yet');
     expect(result.success, isFalse);
     expect(result.code, equals(FsStrictModeResultCode.notYetActive));
     expect(mgr.state, equals(FsSessionState.legacyOnly),
@@ -75,12 +76,13 @@ void main() {
   });
 
   // T11.3 — requestMaximum in fsActive → strictRequested.
-  test('T11.3: requestMaximum in fsActive transitions to strictRequested', () {
+  test('T11.3: requestMaximum in fsActive transitions to strictRequested',
+      () async {
     final (ctrl, mgr, registry) = _build();
     mgr.setStateForTesting(FsSessionState.fsActive, sessionId: 'session-1');
     expect(mgr.state, equals(FsSessionState.fsActive));
 
-    final result = ctrl.requestMaximum('session-1');
+    final result = await ctrl.requestMaximum('session-1');
     expect(result.success, isTrue);
     expect(result.code, equals(FsStrictModeResultCode.ok));
     expect(mgr.state, equals(FsSessionState.strictRequested));
@@ -95,13 +97,13 @@ void main() {
   });
 
   // T11.4 — activateStrict after requestMaximum → strictFsActive.
-  test('T11.4: activateStrict after requestMaximum → strictFsActive', () {
+  test('T11.4: activateStrict after requestMaximum → strictFsActive', () async {
     final (ctrl, mgr, registry) = _build();
     mgr.setStateForTesting(FsSessionState.fsActive, sessionId: 'session-1');
-    ctrl.requestMaximum('session-1');
+    await ctrl.requestMaximum('session-1');
     expect(mgr.state, equals(FsSessionState.strictRequested));
 
-    final result = ctrl.activateStrict('session-1');
+    final result = await ctrl.activateStrict('session-1');
     expect(result.success, isTrue);
     expect(mgr.state, equals(FsSessionState.strictFsActive));
 
@@ -115,11 +117,11 @@ void main() {
   });
 
   // T11.5 — strictFsActive + deviceChanged → canSendMessage = false (pause).
-  test('T11.5: new remote device in strictFsActive pauses sending', () {
+  test('T11.5: new remote device in strictFsActive pauses sending', () async {
     final (ctrl, mgr, _) = _build();
     mgr.setStateForTesting(FsSessionState.fsActive, sessionId: 'session-1');
-    ctrl.requestMaximum('session-1');
-    ctrl.activateStrict('session-1');
+    await ctrl.requestMaximum('session-1');
+    await ctrl.activateStrict('session-1');
     expect(mgr.state, equals(FsSessionState.strictFsActive));
 
     expect(ctrl.canSendMessage(deviceChanged: true), isFalse,
@@ -129,11 +131,11 @@ void main() {
   });
 
   test('T11.5b: existing strict consent blocks sending after session rotation',
-      () {
+      () async {
     final (ctrl, mgr, registry) = _build();
     mgr.setStateForTesting(FsSessionState.fsActive, sessionId: 'session-old');
-    ctrl.requestMaximum('session-old');
-    ctrl.activateStrict('session-old');
+    await ctrl.requestMaximum('session-old');
+    await ctrl.activateStrict('session-old');
 
     expect(mgr.state, equals(FsSessionState.strictFsActive));
     expect(
@@ -158,14 +160,15 @@ void main() {
   });
 
   // T11.6 — Disable Maximum FS → fsActive, fallback allowed.
-  test('T11.6: disableStrict reverts to fsActive; legacy fallback allowed', () {
+  test('T11.6: disableStrict reverts to fsActive; legacy fallback allowed',
+      () async {
     final (ctrl, mgr, registry) = _build();
     mgr.setStateForTesting(FsSessionState.fsActive, sessionId: 'session-1');
-    ctrl.requestMaximum('session-1');
-    ctrl.activateStrict('session-1');
+    await ctrl.requestMaximum('session-1');
+    await ctrl.activateStrict('session-1');
     expect(mgr.state, equals(FsSessionState.strictFsActive));
 
-    final result = ctrl.disableStrict('session-1');
+    final result = await ctrl.disableStrict('session-1');
     expect(result.success, isTrue);
     expect(mgr.state, equals(FsSessionState.fsActive));
     expect(ctrl.isStrictRequested, isFalse);
@@ -184,7 +187,8 @@ void main() {
   });
 
   // T11.7 — Passphrase context isolation.
-  test('T11.7: strict state is per (contactId, identityContext) pair', () {
+  test('T11.7: strict state is per (contactId, identityContext) pair',
+      () async {
     final sharedRegistry = FsContactSecurityRegistry();
 
     // Primary context controller for Bob.
@@ -207,8 +211,8 @@ void main() {
 
     primaryMgr.setStateForTesting(FsSessionState.fsActive,
         sessionId: 'primary-session');
-    primaryCtrl.requestMaximum('primary-session');
-    primaryCtrl.activateStrict('primary-session');
+    await primaryCtrl.requestMaximum('primary-session');
+    await primaryCtrl.activateStrict('primary-session');
     expect(primaryMgr.state, equals(FsSessionState.strictFsActive));
 
     // Passphrase context remains independent.
@@ -225,32 +229,32 @@ void main() {
   });
 
   // T11.8 — activateStrict without prior requestMaximum → notRequested.
-  test('T11.8: activateStrict without requestMaximum → notRequested', () {
+  test('T11.8: activateStrict without requestMaximum → notRequested', () async {
     final (ctrl, mgr, _) = _build();
     mgr.setStateForTesting(FsSessionState.fsActive, sessionId: 'session-1');
     mgr.requestStrict(); // Manually set state but without ctrl knowing.
     // Ctrl's _strictRequested is still false.
-    final result = ctrl.activateStrict('session-1');
+    final result = await ctrl.activateStrict('session-1');
     expect(result.success, isFalse);
     expect(result.code, equals(FsStrictModeResultCode.notRequested));
   });
 
   // T11.9 — canSendMessage in strictFsActive without device change → true.
   test('T11.9: canSendMessage is true in strictFsActive with no device change',
-      () {
+      () async {
     final (ctrl, mgr, _) = _build();
     mgr.setStateForTesting(FsSessionState.fsActive, sessionId: 'session-1');
-    ctrl.requestMaximum('session-1');
-    ctrl.activateStrict('session-1');
+    await ctrl.requestMaximum('session-1');
+    await ctrl.activateStrict('session-1');
     expect(ctrl.canSendMessage(), isTrue);
   });
 
   // T11.10 — sendBlockReason provides meaningful message.
-  test('T11.10: sendBlockReason explains why sending is blocked', () {
+  test('T11.10: sendBlockReason explains why sending is blocked', () async {
     final (ctrl, mgr, _) = _build();
     mgr.setStateForTesting(FsSessionState.fsActive, sessionId: 'session-1');
-    ctrl.requestMaximum('session-1');
-    ctrl.activateStrict('session-1');
+    await ctrl.requestMaximum('session-1');
+    await ctrl.activateStrict('session-1');
 
     // Device changed → block with reason.
     final reason = ctrl.sendBlockReason(deviceChanged: true);
@@ -266,14 +270,15 @@ void main() {
   });
 
   // T11.11 — Maximum FS cannot be enabled globally: no global flag.
-  test('T11.11: FsStrictModeController has no static/global enabled flag', () {
+  test('T11.11: FsStrictModeController has no static/global enabled flag',
+      () async {
     // Each instance is per-contact. Two controllers must not share state.
     final (ctrl1, mgr1, _) = _build(contactId: 'bob');
     final (ctrl2, mgr2, _) = _build(contactId: 'carol');
 
     mgr1.setStateForTesting(FsSessionState.fsActive, sessionId: 's1');
-    ctrl1.requestMaximum('s1');
-    ctrl1.activateStrict('s1');
+    await ctrl1.requestMaximum('s1');
+    await ctrl1.activateStrict('s1');
 
     expect(mgr1.state, equals(FsSessionState.strictFsActive));
     expect(mgr2.state, equals(FsSessionState.legacyOnly),

@@ -144,13 +144,13 @@ class FsContactSecurityCard extends ConsumerWidget {
                       if (selected == FsSecurityMode.strict) {
                         if (sessionId != null) {
                           final requested =
-                              strictCtrl.requestMaximum(sessionId);
+                              await strictCtrl.requestMaximum(sessionId);
                           if (requested.success) {
-                            strictCtrl.activateStrict(sessionId);
+                            await strictCtrl.activateStrict(sessionId);
                           }
                         }
                       } else {
-                        strictCtrl.disableStrict(sessionId ?? '');
+                        await strictCtrl.disableStrict(sessionId ?? '');
                       }
                       ref.read(fsRegistryVersionProvider.notifier).state++;
                       if (context.mounted) {
@@ -170,7 +170,7 @@ class FsContactSecurityCard extends ConsumerWidget {
                   _ActionChip(
                     label: t(context, 'security.fs.action.retry'),
                     icon: Icons.refresh,
-                    onPressed: () {
+                    onPressed: () async {
                       final sm = ref.read(
                         fsSessionManagerProvider(contactId),
                       );
@@ -194,7 +194,7 @@ class FsContactSecurityCard extends ConsumerWidget {
                   _ActionChip(
                     label: t(context, 'security.fs.action.reset'),
                     icon: Icons.lock_reset,
-                    onPressed: () {
+                    onPressed: () async {
                       final sm = ref.read(
                         fsSessionManagerProvider(contactId),
                       );
@@ -238,7 +238,7 @@ class FsContactSecurityCard extends ConsumerWidget {
                     label: t(context, 'security.fs.action.disable_strict'),
                     icon: Icons.shield_outlined,
                     color: Theme.of(context).colorScheme.error,
-                    onPressed: () {
+                    onPressed: () async {
                       final ctrl = ref.read(
                         fsStrictModeControllerProvider(contactId),
                       );
@@ -246,7 +246,7 @@ class FsContactSecurityCard extends ConsumerWidget {
                           .read(fsContactSecurityRegistryProvider)
                           .forContactAllContexts(contactId)
                           .firstOrNull;
-                      ctrl.disableStrict(session?.sessionId ?? '');
+                      await ctrl.disableStrict(session?.sessionId ?? '');
                       ref.read(fsRegistryVersionProvider.notifier).state++;
                     },
                   )
@@ -275,9 +275,9 @@ class FsContactSecurityCard extends ConsumerWidget {
                           );
                           fsCtrl.securityMode = FsSecurityMode.strict;
                           final requested =
-                              strictCtrl.requestMaximum(sessionId);
+                              await strictCtrl.requestMaximum(sessionId);
                           if (requested.success) {
-                            strictCtrl.activateStrict(sessionId);
+                            await strictCtrl.activateStrict(sessionId);
                           }
                         }
                         ref.read(fsRegistryVersionProvider.notifier).state++;

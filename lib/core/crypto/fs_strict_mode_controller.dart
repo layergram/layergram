@@ -74,7 +74,7 @@ class FsStrictModeController {
   /// - Maximum FS cannot be requested globally: this controller is per-contact.
   /// - The session must be at least in [FsSessionState.fsActive].
   ///   If not, the result is [FsStrictModeResult.notYetActive].
-  FsStrictModeResult requestMaximum(String sessionId) {
+  Future<FsStrictModeResult> requestMaximum(String sessionId) async {
     final state = _sessionManager.state;
     if (state != FsSessionState.fsActive) {
       return FsStrictModeResult._(
@@ -87,7 +87,7 @@ class FsStrictModeController {
 
     _strictRequested = true;
     _sessionManager.requestStrict();
-    _updateRegistry(
+    await _updateRegistry(
       sessionId: sessionId,
       state: FsSessionState.strictRequested,
     );
@@ -102,7 +102,7 @@ class FsStrictModeController {
   /// Transitions state to [FsSessionState.strictFsActive].
   /// Returns [FsStrictModeResult.notRequested] if [requestMaximum] was never
   /// called for this session.
-  FsStrictModeResult activateStrict(String sessionId) {
+  Future<FsStrictModeResult> activateStrict(String sessionId) async {
     if (!_strictRequested) {
       return const FsStrictModeResult._(
         success: false,
@@ -122,7 +122,7 @@ class FsStrictModeController {
     }
 
     _sessionManager.activateStrictSession(sessionId);
-    _updateRegistry(
+    await _updateRegistry(
       sessionId: sessionId,
       state: FsSessionState.strictFsActive,
     );
@@ -138,10 +138,10 @@ class FsStrictModeController {
   /// - [FsSessionState.fsActive] is restored.
   /// - Legacy fallback is allowed again.
   /// - [_strictRequested] is cleared.
-  FsStrictModeResult disableStrict(String sessionId) {
+  Future<FsStrictModeResult> disableStrict(String sessionId) async {
     _strictRequested = false;
     _sessionManager.disableStrict();
-    _updateRegistry(
+    await _updateRegistry(
       sessionId: sessionId,
       state: FsSessionState.fsActive,
     );
@@ -198,10 +198,10 @@ class FsStrictModeController {
   // Internal helpers
   // ---------------------------------------------------------------------------
 
-  void _updateRegistry({
+  Future<void> _updateRegistry({
     required String? sessionId,
     required FsSessionState state,
-  }) {
+  }) async {
     final stateEntry = FsContactSecurityState(
       contactId: _contactId,
       identityContext: _identityContext,
@@ -210,7 +210,7 @@ class FsStrictModeController {
     );
     _registry.upsert(stateEntry);
     // Persist to storage (only for primary context)
-    _persistenceService?.saveState(stateEntry);
+    await _persistenceService?.saveState(stateEntry);
   }
 
   bool _hasActiveStrictConsentForAnotherState(FsSessionState currentState) {

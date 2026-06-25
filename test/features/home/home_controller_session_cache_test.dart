@@ -1969,8 +1969,10 @@ void main() {
         final strictController = fixture.container.read(
           fsStrictModeControllerProvider(contact.identityId),
         );
-        expect(strictController.requestMaximum(sessionId).success, isTrue);
-        expect(strictController.activateStrict(sessionId).success, isTrue);
+        expect(
+            (await strictController.requestMaximum(sessionId)).success, isTrue);
+        expect(
+            (await strictController.activateStrict(sessionId)).success, isTrue);
 
         final controller = fixture.container.read(homeControllerProvider);
         final result = await controller.encryptForRecipient(
@@ -2151,8 +2153,10 @@ void main() {
       final strictController = fixture.container.read(
         fsStrictModeControllerProvider(contact.identityId),
       );
-      expect(strictController.requestMaximum(strictSessionId).success, isTrue);
-      expect(strictController.activateStrict(strictSessionId).success, isTrue);
+      expect((await strictController.requestMaximum(strictSessionId)).success,
+          isTrue);
+      expect((await strictController.activateStrict(strictSessionId)).success,
+          isTrue);
       fixture.container.read(fsContactSecurityRegistryProvider).upsert(
             FsContactSecurityState(
               contactId: contact.identityId,
@@ -2206,8 +2210,10 @@ void main() {
       final strictController = fixture.container.read(
         fsStrictModeControllerProvider(contact.identityId),
       );
-      expect(strictController.requestMaximum(sessionId).success, isTrue);
-      expect(strictController.activateStrict(sessionId).success, isTrue);
+      expect(
+          (await strictController.requestMaximum(sessionId)).success, isTrue);
+      expect(
+          (await strictController.activateStrict(sessionId)).success, isTrue);
 
       fixture.container.read(fsRatchetStateCacheProvider.notifier).state = {};
       await fixture.container
