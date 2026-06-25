@@ -553,6 +553,22 @@ void main() {
         expect(outcome.kind, DecodeKind.success);
         expect(outcome.payload?.senderId, 'me');
         expect(outcome.payload?.text, secret);
+
+        final thread = await receiverFixture.messagesRepository.getThread('me');
+        final received =
+            thread.singleWhere((message) => message.rawSource == hidden);
+        expect(received.direction, 'incoming');
+        expect(received.senderId, 'me');
+        expect(received.recipientId, recipient.identityId);
+        expect(received.isFsEncrypted, isTrue);
+        expect(received.text, isNull);
+        expect(
+          await receiverController.decryptForDisplay(
+            message: received,
+            contact: receiverFixture.contacts.single,
+          ),
+          secret,
+        );
       },
     );
 

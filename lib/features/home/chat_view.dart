@@ -1263,6 +1263,14 @@ class ChatViewState extends ConsumerState<ChatView> {
     });
   }
 
+  void refreshAfterDecodedMessage() {
+    _decryptFutures.clear();
+    if (mounted) {
+      setState(() {});
+      _scrollToBottom();
+    }
+  }
+
   bool get _coverTooShort {
     if (_linkMode || _secretCtrl.text.trim().isEmpty) return false;
     if (_exactCoverMissingCount != null) return true;
@@ -1750,7 +1758,7 @@ class ChatViewState extends ConsumerState<ChatView> {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(content: Text(t(context, 'messageDecoded'))),
                       );
-                      _scrollToBottom();
+                      refreshAfterDecodedMessage();
                     } else {
                       await Navigator.of(context).pushReplacement(
                         MaterialPageRoute(

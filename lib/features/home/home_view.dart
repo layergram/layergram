@@ -485,7 +485,13 @@ class _HomeViewState extends ConsumerState<HomeView> {
           if (isNarrow) {
             await _openChat(sender);
           } else {
-            _selectContact(sender);
+            final sameChat = _selectedContact?.identityId == sender.identityId;
+            final chatState = _embeddedChatKey.currentState;
+            if (sameChat && chatState != null) {
+              chatState.refreshAfterDecodedMessage();
+            } else {
+              _selectContact(sender);
+            }
           }
         } else {
           messenger.showSnackBar(
