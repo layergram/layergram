@@ -84,6 +84,20 @@ class StegoEncoder {
     return 12 + 4 + jsonEnvelopeBytes + secretJsonBytes + 16;
   }
 
+  // Cover composer messages may carry production-length identity ids,
+  // sender metadata, and Advanced FS envelope fields. The legacy 256-byte JSON
+  // estimate is intentionally kept for LMF v2 core tests; composer UI needs a
+  // conservative preflight estimate so copy/share does not fail after the user
+  // added the advertised missing cover characters.
+  static const int coverComposerJsonEnvelopeBytes = 512;
+
+  static int estimatedCoverMessagePayloadBytes(String secretText) {
+    return estimatedEncryptedPayloadBytes(
+      secretText,
+      jsonEnvelopeBytes: coverComposerJsonEnvelopeBytes,
+    );
+  }
+
   static String normalizeCoverText(String coverText) {
     return coverText.trimRight();
   }

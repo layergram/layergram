@@ -1661,11 +1661,22 @@ void main() {
       expect(sessionManager.state, FsSessionState.fsActive);
     });
 
-    test('Advanced FS final payload can exceed legacy stego estimate', () async {
-      final fixture = await _createFixture();
-      addTearDown(() {
-        fixture.identitiesRepository.dispose();
-        fixture.messagesRepository.dispose();
+  test('Composer-safe cover estimate fits Advanced FS payload', () async {
+    final x25519 = X25519();
+    final localKeys = await _keyMaterial(await x25519.newKeyPair());
+    final contactKeys = await _keyMaterial(await x25519.newKeyPair());
+    final fixture = await _createFixtureFor(
+      localIdentityId: 'ZDUAW7VUD2REOOXCEM42V2YLLWWEWXAHMANIQN6SSR2OUMZAA3SQ',
+      localDisplayName: 'Layergram sender with realistic display name',
+      localKeys: localKeys,
+      contactKeysById: {
+        'TUJLJ5VUTD7S5B3S2CMVLOHNPDNBVPWJVPDFUENAI4NRYDZIIQVA':
+            contactKeys,
+      },
+    );
+    addTearDown(() {
+      fixture.identitiesRepository.dispose();
+      fixture.messagesRepository.dispose();
         fixture.container.dispose();
       });
 
@@ -1688,20 +1699,26 @@ void main() {
             secretText: secret,
             recipient: contact,
           );
-      final estimatedBytes = StegoEncoder.estimatedEncryptedPayloadBytes(secret);
-      final actualBytes = result.message.toRawBytes().length;
-      final coverAcceptedByLegacyEstimate =
-          'A' * StegoEncoder.minCoverLengthForBytes(estimatedBytes);
+    final legacyEstimatedBytes =
+        StegoEncoder.estimatedEncryptedPayloadBytes(secret);
+    final composerEstimatedBytes =
+        StegoEncoder.estimatedCoverMessagePayloadBytes(secret);
+    final actualBytes = result.message.toRawBytes().length;
+    final coverAcceptedByLegacyEstimate =
+        'A' * StegoEncoder.minCoverLengthForBytes(legacyEstimatedBytes);
+    final coverAcceptedByComposerEstimate =
+        'A' * StegoEncoder.minCoverLengthForBytes(composerEstimatedBytes);
 
-      expect(result.isFsEncrypted, isTrue);
-      expect(actualBytes, greaterThan(estimatedBytes));
-      expect(
-        StegoEncoder.canEmbedBytes(
-          coverAcceptedByLegacyEstimate,
-          estimatedBytes,
-        ),
-        isTrue,
-      );
+    expect(result.isFsEncrypted, isTrue);
+    expect(actualBytes, greaterThan(legacyEstimatedBytes));
+    expect(composerEstimatedBytes, greaterThanOrEqualTo(actualBytes));
+    expect(
+      StegoEncoder.canEmbedBytes(
+        coverAcceptedByLegacyEstimate,
+        legacyEstimatedBytes,
+      ),
+      isTrue,
+    );
       expect(
         StegoEncoder.canEmbedBytes(coverAcceptedByLegacyEstimate, actualBytes),
         isFalse,
@@ -1710,10 +1727,17 @@ void main() {
         StegoEncoder.missingCoverCapacityForBytes(
           coverAcceptedByLegacyEstimate,
           actualBytes,
-        ),
-        greaterThan(0),
-      );
-    });
+      ),
+      greaterThan(0),
+    );
+    expect(
+      StegoEncoder.canEmbedBytes(
+        coverAcceptedByComposerEstimate,
+        actualBytes,
+      ),
+      isTrue,
+    );
+  });
 
     test('Strict FS blocks sending when another device appears', () async {
       final fixture = await _createFixture();

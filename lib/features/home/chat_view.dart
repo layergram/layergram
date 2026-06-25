@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/crypto/fs_security_mode.dart';
 import '../../core/crypto/models.dart';
 import '../../core/crypto/stego_encoder.dart';
 import '../../core/providers.dart';
@@ -222,7 +223,7 @@ class ChatViewState extends ConsumerState<ChatView> {
   }
 
   int get _estimatedPayloadBytes {
-    return StegoEncoder.estimatedEncryptedPayloadBytes(_secretCtrl.text);
+    return _estimatedPayloadBytesForSecret(_secretCtrl.text);
   }
 
   int? get _coverLengthLimit {
@@ -230,7 +231,21 @@ class ChatViewState extends ConsumerState<ChatView> {
   }
 
   int _estimatedPayloadBytesForSecret(String secretText) {
+    if (_usesFsCoverPayloadBudget) {
+      return StegoEncoder.estimatedCoverMessagePayloadBytes(secretText);
+    }
     return StegoEncoder.estimatedEncryptedPayloadBytes(secretText);
+  }
+
+  bool get _usesFsCoverPayloadBudget {
+    final fsController = ref.read(
+      fsOpportunisticControllerProvider(widget.contact.identityId),
+    );
+    final mode = ref.read(fsSecurityModeServiceProvider).getModeSync(
+          contactId: widget.contact.identityId,
+          identityContext: fsController.identityContext,
+        );
+    return mode != FsSecurityMode.base;
   }
 
   int _estimatedLinkLengthForSecret(String secretText) {

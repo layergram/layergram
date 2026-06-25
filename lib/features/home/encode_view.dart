@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/crypto/fs_security_mode.dart';
 import '../../core/crypto/models.dart';
 import '../../core/crypto/stego_encoder.dart';
 import '../../core/providers.dart';
@@ -41,7 +42,7 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
   int? _exactCoverMissingCount;
 
   int get _estimatedPayloadBytes {
-    return StegoEncoder.estimatedEncryptedPayloadBytes(_secretCtrl.text);
+    return _estimatedPayloadBytesForSecret(_secretCtrl.text);
   }
 
   int? get _coverLengthLimit {
@@ -49,7 +50,23 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
   }
 
   int _estimatedPayloadBytesForSecret(String secretText) {
+    if (_usesFsCoverPayloadBudget) {
+      return StegoEncoder.estimatedCoverMessagePayloadBytes(secretText);
+    }
     return StegoEncoder.estimatedEncryptedPayloadBytes(secretText);
+  }
+
+  bool get _usesFsCoverPayloadBudget {
+    final recipient = _recipient;
+    if (recipient == null) return true;
+    final fsController = ref.read(
+      fsOpportunisticControllerProvider(recipient.identityId),
+    );
+    final mode = ref.read(fsSecurityModeServiceProvider).getModeSync(
+          contactId: recipient.identityId,
+          identityContext: fsController.identityContext,
+        );
+    return mode != FsSecurityMode.base;
   }
 
   int _minimumStegoCharacterCount({
