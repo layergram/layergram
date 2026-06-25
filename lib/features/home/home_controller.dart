@@ -230,8 +230,8 @@ class HomeController {
               // Mark session as broken. Strict/Maximum FS must not silently
               // fall back to legacy encryption when the ratchet is unavailable.
               sessionManager.markBroken();
-            if (securityMode == FsSecurityMode.strict ||
-                effectiveState == FsSessionState.strictFsActive) {
+              if (securityMode == FsSecurityMode.strict ||
+                  effectiveState == FsSessionState.strictFsActive) {
                 throw StateError(
                   'Maximum Forward Secrecy requires device repair before sending',
                 );
@@ -1219,6 +1219,28 @@ class HomeController {
   /// session state. Only FS_INIT generation is fully implemented here;
   /// FS_REPLY and FS_CONFIRM require state from previous handshake messages
   /// that should be stored in the session manager.
+  Future<FsOutgoingExtension?> _startFsInit({
+    required FsOpportunisticController fsController,
+    required FsSessionManager sessionManager,
+    required String privateKey,
+  }) async {
+    final identityManager = ref.read(identityManagerProvider);
+    final local = await identityManager.getLocalIdentity();
+    if (local == null) return null;
+
+    // Derive device key from identity key. The public protocol still treats it
+    // as a device key, even when restored devices share the identity seed.
+    final ikPrivBytes = base64Decode(privateKey);
+    final dkPrivBytes = ikPrivBytes;
+    final initPayload = await FsHandshake.generateFsInit(
+      ikAPriv: ikPrivBytes,
+      dkAPriv: dkPrivBytes,
+    );
+
+    sessionManager.setPendingInitEphemeralPriv(initPayload.ekAPrivBytes);
+    return fsController.buildOutgoingExtension(pendingInit: initPayload);
+  }
+
   Future<FsOutgoingExtension?> _buildFsOutgoingExtension({
     required FsOpportunisticController fsController,
     required FsSessionManager sessionManager,
@@ -1228,26 +1250,22 @@ class HomeController {
   }) async {
     switch (state) {
       case FsSessionState.legacyOnly:
-        // Generate FS_INIT payload to start handshake
-        final identityManager = ref.read(identityManagerProvider);
-        final local = await identityManager.getLocalIdentity();
-        if (local == null) return null;
-
-        // Derive device key from identity key (simplified: use identity key as device key)
-        final ikPrivBytes = base64Decode(privateKey);
-        final dkPrivBytes =
-            ikPrivBytes; // In production, derive separate device key
-
-        final initPayload = await FsHandshake.generateFsInit(
-          ikAPriv: ikPrivBytes,
-          dkAPriv: dkPrivBytes,
+        return _startFsInit(
+          fsController: fsController,
+          sessionManager: sessionManager,
+          privateKey: privateKey,
         );
 
-        // Store the ephemeral key for later use in FS_CONFIRM
-        sessionManager.setPendingInitEphemeralPriv(initPayload.ekAPrivBytes);
-
-        return await fsController.buildOutgoingExtension(
-            pendingInit: initPayload);
+      case FsSessionState.fsInitSent:
+        // Copy/paste transports can lose either FS_INIT or the matching
+        // FS_REPLY. Retry with a fresh initId so the peer can replace a stale
+        // fsReplySent handshake instead of leaving this chat orange forever.
+        sessionManager.reset();
+        return _startFsInit(
+          fsController: fsController,
+          sessionManager: sessionManager,
+          privateKey: privateKey,
+        );
 
       case FsSessionState.fsInitSeen:
         // Generate FS_REPLY in response to received FS_INIT
@@ -1336,7 +1354,6 @@ class HomeController {
       case FsSessionState.fsActive:
       case FsSessionState.strictFsActive:
       case FsSessionState.strictRequested:
-      case FsSessionState.fsInitSent:
       case FsSessionState.fsReplySent:
       case FsSessionState.fsConfirmSent:
       case FsSessionState.fsConfirmed:

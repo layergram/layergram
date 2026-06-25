@@ -341,6 +341,25 @@ class FsSessionManager {
       }
     }
 
+    if ((_state == FsSessionState.fsInitSeen ||
+            _state == FsSessionState.fsReplySent) &&
+        pendingInitId != message.initId) {
+      // Manual/copy-paste transports can lose the FS_REPLY or FS_CONFIRM. If
+      // the peer retries with a fresh init while this side is still waiting in
+      // the responder half-handshake, replace the stale pending handshake.
+      pendingInitId = message.initId;
+      pendingReplyId = null;
+      handshakeStartedAt = _clock.nowSeconds();
+      _storedInitMessage = message;
+      _storedReplyMessage = null;
+      _pendingReplyEphemeralPriv = null;
+      _pendingRawRootSecret = null;
+      _pendingTranscriptHash = null;
+      _responderPartialState = null;
+      _state = FsSessionState.fsInitSeen;
+      return FsSessionTransitionResult.ok(_state, message);
+    }
+
     if (_state != FsSessionState.legacyOnly) {
       // Already in mid-handshake from our side; ignore duplicate.
       return FsSessionTransitionResult.rejected(

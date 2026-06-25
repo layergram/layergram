@@ -238,10 +238,10 @@ class FsOpportunisticController {
           _sessionManager.markBroken();
         }
 
-      await _updateRegistry(
-        sessionId: pendingConfirm.replyId,
-        state: _sessionManager.state,
-      );
+        await _updateRegistry(
+          sessionId: pendingConfirm.replyId,
+          state: _sessionManager.state,
+        );
 
         return FsOutgoingExtension._(json: json);
 
@@ -362,17 +362,6 @@ class FsOpportunisticController {
       return const FsIncomingResult._(type: FsIncomingType.fsInitRejected);
     }
 
-    // DoS guard: check pending handshake limits for remote contact (§20.3)
-    if (_dosGuard != null) {
-      final dosCheck = _dosGuard.canInitiateHandshake(remoteContactId);
-      if (!dosCheck.allowed) {
-        return FsIncomingResult._(
-          type: FsIncomingType.fsInitRejected,
-          rejectionReason: 'DoS: ${dosCheck.detail}',
-        );
-      }
-    }
-
     // §7.3/§7.9: Per-device session routing.
     // If the current session is in a terminal state (active/broken/suspended),
     // a new fs_init from the same identity means a new device or restored
@@ -384,6 +373,26 @@ class FsOpportunisticController {
         currentState == FsSessionState.strictFsActive ||
         currentState == FsSessionState.fsBroken ||
         currentState == FsSessionState.fsSuspended;
+    final replacingPendingResponder =
+        (currentState == FsSessionState.fsInitSeen ||
+                currentState == FsSessionState.fsReplySent) &&
+            _sessionManager.pendingInitId != null &&
+            _sessionManager.pendingInitId != msg.initId;
+    final replacedInitId =
+        replacingPendingResponder ? _sessionManager.pendingInitId : null;
+
+    // DoS guard: check pending handshake limits for remote contact (§20.3).
+    // A fresh init replacing the current responder-side pending handshake is
+    // recovery from lossy manual transport, not another parallel handshake.
+    if (_dosGuard != null && !replacingPendingResponder) {
+      final dosCheck = _dosGuard.canInitiateHandshake(remoteContactId);
+      if (!dosCheck.allowed) {
+        return FsIncomingResult._(
+          type: FsIncomingType.fsInitRejected,
+          rejectionReason: 'DoS: ${dosCheck.detail}',
+        );
+      }
+    }
 
     bool newDeviceDetected = false;
     if (isTerminal) {
@@ -416,16 +425,22 @@ class FsOpportunisticController {
       remoteCanonical: remoteCanonical,
     );
     if (result.accepted) {
+      if (replacedInitId != null) {
+        _dosGuard?.completeHandshake(
+          contactId: remoteContactId,
+          initId: replacedInitId,
+        );
+      }
       _replayCache?.recordHandshakeId(msg.initId);
       _dosGuard?.recordHandshakeInitiation(
         contactId: remoteContactId,
         initId: msg.initId,
       );
-        await _updateRegistry(
-          sessionId: msg.initId,
-          state: _sessionManager.state,
-          remoteDeviceId: msg.initiatorDevicePub,
-        );
+      await _updateRegistry(
+        sessionId: msg.initId,
+        state: _sessionManager.state,
+        remoteDeviceId: msg.initiatorDevicePub,
+      );
     }
     return FsIncomingResult._(
       type: result.accepted
