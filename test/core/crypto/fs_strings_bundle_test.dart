@@ -8,6 +8,8 @@
 //  T9.4  No hardcoded English strings in FsStatusIcon (uses key lookup).
 //  T9.5  AppStrings.registerStrings accepts the bundle without throwing.
 
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:layergram/l10n/app_strings.dart';
 import 'package:layergram/l10n/fs_strings_bundle.dart';
@@ -149,6 +151,61 @@ void main() {
         isNot(equals(entry.key)),
         reason: 'Value equals key (untranslated): ${entry.key}',
       );
+    }
+  });
+
+  // T9.10 — Decode failures must not reveal payload existence or identity fit.
+  test('T9.10: notForMe copy is indistinguishable from generic no-data', () {
+    final en = en0['en']!;
+    final it = en0['it']!;
+
+    expect(
+      en['security.message_not_for_me'],
+      equals('No decodable Layergram message found.'),
+    );
+    expect(
+      it['security.message_not_for_me'],
+      equals('Nessun messaggio Layergram decifrabile trovato.'),
+    );
+
+    for (final value in [
+      en['security.message_not_for_me']!,
+      it['security.message_not_for_me']!,
+    ]) {
+      expect(value.toLowerCase(), isNot(contains('found, but')));
+      expect(value.toLowerCase(), isNot(contains('not encrypted')));
+      expect(value.toLowerCase(), isNot(contains('questa identità')));
+      expect(value.toLowerCase(), isNot(contains('stessa impronta')));
+    }
+  });
+
+  // T9.11 — Public decode surfaces must not reintroduce the old oracle text.
+  test('T9.11: public decode UI does not leak notForMe details', () {
+    const publicDecodeFiles = [
+      'lib/app.dart',
+      'lib/features/home/home_view.dart',
+      'lib/features/home/chat_view.dart',
+      'lib/features/home/decode_view.dart',
+      'lib/l10n/fs_strings_bundle.dart',
+    ];
+    const forbiddenFragments = [
+      'Layergram message found, but',
+      'Messaggio Layergram trovato',
+      'not encrypted for this identity',
+      'non è cifrato per questa identità',
+      'Check that this device and contact use the same identity fingerprint.',
+      'Verifica che questo dispositivo e il contatto usino la stessa impronta.',
+    ];
+
+    for (final path in publicDecodeFiles) {
+      final source = File(path).readAsStringSync();
+      for (final fragment in forbiddenFragments) {
+        expect(
+          source,
+          isNot(contains(fragment)),
+          reason: '$path must not expose "$fragment"',
+        );
+      }
     }
   });
 }
