@@ -838,6 +838,26 @@ class FsOpportunisticController {
 
   /// Returns all active session IDs across all device sessions.
   List<String> get allActiveSessionIds => _deviceRouter.allActiveSessionIds;
+
+  /// Restores an active session from persisted registry + ratchet state.
+  void restorePersistedActiveSession({
+    required String sessionId,
+    required FsSessionState state,
+  }) {
+    if (allActiveSessionIds.contains(sessionId)) return;
+    if (_sessionManager.state == FsSessionState.legacyOnly &&
+        _sessionManager.activeSessionId == null) {
+      _sessionManager.restorePersistedActiveSession(
+        state,
+        sessionId: sessionId,
+      );
+      return;
+    }
+
+    final restored = FsSessionManager();
+    restored.restorePersistedActiveSession(state, sessionId: sessionId);
+    _deviceRouter.restorePreviousSession(sessionId, restored);
+  }
 }
 
 // ---------------------------------------------------------------------------

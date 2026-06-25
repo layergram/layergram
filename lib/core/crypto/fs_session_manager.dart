@@ -495,6 +495,24 @@ class FsSessionManager {
     if (sessionId != null) activeSessionId = sessionId;
   }
 
+  /// Restores an already-established session from persisted state.
+  ///
+  /// This is used after app restart: the registry and ratchet records can be
+  /// restored before a full handshake is observed in memory again.
+  void restorePersistedActiveSession(
+    FsSessionState state, {
+    required String sessionId,
+  }) {
+    if (state != FsSessionState.fsActive &&
+        state != FsSessionState.strictFsActive &&
+        state != FsSessionState.strictRequested) {
+      throw ArgumentError('Cannot restore non-active FS state: $state');
+    }
+    _state = state;
+    activeSessionId = sessionId;
+    _clearHandshakeMaterial();
+  }
+
   // ---------------------------------------------------------------------------
   // Strict / Maximum FS mode
   // ---------------------------------------------------------------------------

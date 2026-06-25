@@ -770,8 +770,243 @@ void main() {
       },
     );
 
-    test('Sender does not accept its own outbound link as an inbound message',
-        () async {
+  test('Responder becomes FS active after confirm exchange', () async {
+    final aliceFixture = await _createFixture();
+    final bobContact = aliceFixture.contacts.first;
+    final bobKeys = aliceFixture.contactKeysById[bobContact.identityId]!;
+    final bobFixture = await _createFixtureFor(
+      localIdentityId: bobContact.identityId,
+      localDisplayName: bobContact.displayName,
+      localKeys: bobKeys,
+      contactKeysById: {'me': aliceFixture.localKeys},
+    );
+    addTearDown(() {
+      aliceFixture.identitiesRepository.dispose();
+      aliceFixture.messagesRepository.dispose();
+      aliceFixture.container.dispose();
+      bobFixture.identitiesRepository.dispose();
+      bobFixture.messagesRepository.dispose();
+      bobFixture.container.dispose();
+    });
+
+    final aliceController = aliceFixture.container.read(homeControllerProvider);
+    final bobController = bobFixture.container.read(homeControllerProvider);
+    final aliceContactForBob = bobFixture.contacts.single;
+
+    final init = await aliceController.encryptForRecipient(
+      secretText: 'alice init',
+      recipient: bobContact,
+    );
+    expect(
+      aliceFixture.container
+          .read(fsSessionManagerProvider(bobContact.identityId))
+          .state,
+      FsSessionState.fsInitSent,
+    );
+    final initOutcome = await bobController.decodeHiddenMessage(
+      aliceController.buildLinkPayload(init.message),
+      hintContactId: aliceContactForBob.identityId,
+    );
+    expect(initOutcome.kind, DecodeKind.success);
+    expect(
+      bobFixture.container
+          .read(fsSessionManagerProvider(aliceContactForBob.identityId))
+          .state,
+      FsSessionState.fsInitSeen,
+    );
+
+    final reply = await bobController.encryptForRecipient(
+      secretText: 'bob reply',
+      recipient: aliceContactForBob,
+    );
+    expect(
+      bobFixture.container
+          .read(fsSessionManagerProvider(aliceContactForBob.identityId))
+          .state,
+      FsSessionState.fsReplySent,
+    );
+    final replyOutcome = await aliceController.decodeHiddenMessage(
+      bobController.buildLinkPayload(reply.message),
+      hintContactId: bobContact.identityId,
+    );
+    expect(replyOutcome.kind, DecodeKind.success);
+    expect(
+      aliceFixture.container
+          .read(fsSessionManagerProvider(bobContact.identityId))
+          .state,
+      FsSessionState.fsReplySeen,
+    );
+
+    final confirm = await aliceController.encryptForRecipient(
+      secretText: 'alice confirm',
+      recipient: bobContact,
+    );
+    expect(
+      aliceFixture.container
+          .read(fsSessionManagerProvider(bobContact.identityId))
+          .state,
+      FsSessionState.fsActive,
+    );
+    expect(
+      aliceFixture.container
+          .read(fsStateForContactProvider(bobContact.identityId)),
+      FsSessionState.fsActive,
+    );
+
+    final confirmOutcome = await bobController.decodeHiddenMessage(
+      aliceController.buildLinkPayload(confirm.message),
+      hintContactId: aliceContactForBob.identityId,
+    );
+    expect(confirmOutcome.kind, DecodeKind.success);
+    expect(
+      bobFixture.container
+          .read(fsSessionManagerProvider(aliceContactForBob.identityId))
+          .state,
+      FsSessionState.fsActive,
+    );
+    expect(
+      bobFixture.container
+          .read(fsStateForContactProvider(aliceContactForBob.identityId)),
+      FsSessionState.fsActive,
+    );
+
+    final activeReply = await bobController.encryptForRecipient(
+      secretText: 'bob active fs',
+      recipient: aliceContactForBob,
+    );
+    expect(activeReply.isFsEncrypted, isTrue);
+  });
+
+  test('Restored responder keeps sending with active FS session', () async {
+    final aliceFixture = await _createFixture();
+    final bobContact = aliceFixture.contacts.first;
+    final bobKeys = aliceFixture.contactKeysById[bobContact.identityId]!;
+    final bobFixture = await _createFixtureFor(
+      localIdentityId: bobContact.identityId,
+      localDisplayName: bobContact.displayName,
+      localKeys: bobKeys,
+      contactKeysById: {'me': aliceFixture.localKeys},
+    );
+    addTearDown(() {
+      aliceFixture.identitiesRepository.dispose();
+      aliceFixture.messagesRepository.dispose();
+      aliceFixture.container.dispose();
+      bobFixture.identitiesRepository.dispose();
+      bobFixture.messagesRepository.dispose();
+      bobFixture.container.dispose();
+    });
+
+    final aliceController = aliceFixture.container.read(homeControllerProvider);
+    final bobController = bobFixture.container.read(homeControllerProvider);
+    final aliceContactForBob = bobFixture.contacts.single;
+
+    final init = await aliceController.encryptForRecipient(
+      secretText: 'alice init',
+      recipient: bobContact,
+    );
+    expect(
+      (await bobController.decodeHiddenMessage(
+        aliceController.buildLinkPayload(init.message),
+        hintContactId: aliceContactForBob.identityId,
+      ))
+          .kind,
+      DecodeKind.success,
+    );
+
+    final reply = await bobController.encryptForRecipient(
+      secretText: 'bob reply',
+      recipient: aliceContactForBob,
+    );
+    expect(
+      (await aliceController.decodeHiddenMessage(
+        bobController.buildLinkPayload(reply.message),
+        hintContactId: bobContact.identityId,
+      ))
+          .kind,
+      DecodeKind.success,
+    );
+
+    final confirm = await aliceController.encryptForRecipient(
+      secretText: 'alice confirm',
+      recipient: bobContact,
+    );
+    expect(
+      (await bobController.decodeHiddenMessage(
+        aliceController.buildLinkPayload(confirm.message),
+        hintContactId: aliceContactForBob.identityId,
+      ))
+          .kind,
+      DecodeKind.success,
+    );
+
+    final bobActiveState = bobFixture.container
+        .read(fsContactSecurityRegistryProvider)
+        .lookup(
+          contactId: aliceContactForBob.identityId,
+          identityContext: 'primary',
+          sessionId: bobFixture.container
+              .read(fsSessionManagerProvider(aliceContactForBob.identityId))
+              .activeSessionId,
+        );
+    expect(bobActiveState?.fsState, FsSessionState.fsActive);
+    await bobFixture.container
+        .read(fsStatePersistenceServiceProvider)
+        .saveState(bobActiveState!);
+    await bobFixture.container.read(fsStatePersistenceServiceProvider).saveState(
+          bobActiveState.copyWith(fsState: FsSessionState.fsConfirmed),
+        );
+
+    final restartedBob = await _createFixtureFor(
+      localIdentityId: bobContact.identityId,
+      localDisplayName: bobContact.displayName,
+      localKeys: bobKeys,
+      contactKeysById: {'me': aliceFixture.localKeys},
+    );
+    addTearDown(() {
+      restartedBob.identitiesRepository.dispose();
+      restartedBob.messagesRepository.dispose();
+      restartedBob.container.dispose();
+    });
+
+    await restartedBob.container
+        .read(fsStatePersistenceServiceProvider)
+        .loadPersistedState();
+    final ratchets = await restartedBob.container
+        .read(fsRatchetPersistenceServiceProvider)
+        .loadAllRatchetStates();
+    restartedBob.container.read(fsRatchetStateCacheProvider.notifier).state = {
+      for (final ratchet in ratchets) ratchet.sessionId: ratchet,
+    };
+
+    expect(
+      restartedBob.container.read(fsStateForContactProvider('me')),
+      FsSessionState.fsConfirmed,
+    );
+    expect(
+      restartedBob.container.read(fsSessionManagerProvider('me')).state,
+      FsSessionState.legacyOnly,
+    );
+
+    final afterRestart = await restartedBob.container
+        .read(homeControllerProvider)
+        .encryptForRecipient(
+          secretText: 'bob after restart',
+          recipient: restartedBob.contacts.single,
+        );
+
+    expect(afterRestart.isFsEncrypted, isTrue);
+    expect(
+      restartedBob.container.read(fsStateForContactProvider('me')),
+      FsSessionState.fsActive,
+    );
+    expect(
+      restartedBob.container.read(fsSessionManagerProvider('me')).state,
+      FsSessionState.fsActive,
+    );
+  });
+
+  test('Sender does not accept its own outbound link as an inbound message',
+      () async {
       final disp2Fixture = await _createFixture();
       final disp1Contact = disp2Fixture.contacts.first;
       final disp1Keys = disp2Fixture.contactKeysById[disp1Contact.identityId]!;

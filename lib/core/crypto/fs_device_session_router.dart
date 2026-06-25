@@ -159,6 +159,11 @@ class FsDeviceSessionRouter {
 
   /// For testing: add a previous session.
   void addPreviousSessionForTesting(String sessionId, FsSessionManager session) {
+    restorePreviousSession(sessionId, session);
+  }
+
+  /// Restores a previously active session from persisted state.
+  void restorePreviousSession(String sessionId, FsSessionManager session) {
     _previousSessions[sessionId] = session;
   }
 }

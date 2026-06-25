@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import 'dart:async';
+
 import '../storage/aux_record_repository.dart';
 import 'fs_contact_security_state.dart';
 import 'fs_session_manager.dart';
@@ -38,6 +40,7 @@ class FsStatePersistenceService {
   // In-memory cache of storage info for primary context entries
   // Key: (contactId, sessionId) → (storageId, recordId)
   final Map<String, ({String storageId, String recordId})> _storageInfo = {};
+  final Map<String, Future<void>> _saveChains = {};
 
   static const String _kRecordKind = 'fs_state_v1';
   static const String _kPrimaryContext = 'primary';
@@ -96,11 +99,28 @@ class FsStatePersistenceService {
   ///
   /// Only saves 'primary' context entries. Passphrase context entries
   /// are silently ignored (they are meant to be RAM-only).
-  Future<void> saveState(FsContactSecurityState state) async {
+  Future<void> saveState(FsContactSecurityState state) {
     // Don't persist passphrase contexts (plausible deniability)
-    if (state.identityContext != _kPrimaryContext) return;
+    if (state.identityContext != _kPrimaryContext) return Future.value();
 
     final cacheKey = '${state.contactId}:${state.sessionId ?? "null"}';
+    final previous = _saveChains[cacheKey] ?? Future<void>.value();
+    final chained = previous
+        .catchError((_) {})
+        .then((_) => _saveStateLocked(cacheKey, state));
+    _saveChains[cacheKey] = chained;
+    unawaited(chained.whenComplete(() {
+      if (_saveChains[cacheKey] == chained) {
+        _saveChains.remove(cacheKey);
+      }
+    }));
+    return chained;
+  }
+
+  Future<void> _saveStateLocked(
+    String cacheKey,
+    FsContactSecurityState state,
+  ) async {
     final existingInfo = _storageInfo[cacheKey];
 
     final payload = _payloadFromState(state);

@@ -184,16 +184,21 @@ class HomeController {
       final sessionManager = fsController.sessionManager;
 
       // Prepare handshake payload based on current state
-      final state = sessionManager.state;
       final securityMode = ref.read(fsSecurityModeServiceProvider).getModeSync(
             contactId: recipient.identityId,
             identityContext: fsController.identityContext,
           );
       fsController.securityMode = securityMode;
+      await _restorePersistedActiveFsSessionIfNeeded(
+        contactId: recipient.identityId,
+        fsController: fsController,
+      );
+      // Refresh state after possible restart hydration.
+      final effectiveState = sessionManager.state;
       final outgoingExt = await _buildFsOutgoingExtension(
         fsController: fsController,
         sessionManager: sessionManager,
-        state: state,
+        state: effectiveState,
         recipient: recipient,
         privateKey: privateKey,
       );
@@ -203,8 +208,8 @@ class HomeController {
 
       // If FS is active, get the ratchet state for encryption
       if (securityMode != FsSecurityMode.base &&
-          (state == FsSessionState.fsActive ||
-              state == FsSessionState.strictFsActive)) {
+          (effectiveState == FsSessionState.fsActive ||
+              effectiveState == FsSessionState.strictFsActive)) {
         sessionId = sessionManager.activeSessionId;
         if (sessionId != null) {
           ratchetState = ref.read(fsRatchetStateCacheProvider)[sessionId];
@@ -225,8 +230,8 @@ class HomeController {
               // Mark session as broken. Strict/Maximum FS must not silently
               // fall back to legacy encryption when the ratchet is unavailable.
               sessionManager.markBroken();
-              if (securityMode == FsSecurityMode.strict ||
-                  state == FsSessionState.strictFsActive) {
+            if (securityMode == FsSecurityMode.strict ||
+                effectiveState == FsSessionState.strictFsActive) {
                 throw StateError(
                   'Maximum Forward Secrecy requires device repair before sending',
                 );
@@ -239,7 +244,7 @@ class HomeController {
           // Mark session as broken to recover gracefully.
           sessionManager.markBroken();
           if (securityMode == FsSecurityMode.strict ||
-              state == FsSessionState.strictFsActive) {
+              effectiveState == FsSessionState.strictFsActive) {
             throw StateError(
               'Maximum Forward Secrecy requires device repair before sending',
             );
@@ -251,7 +256,7 @@ class HomeController {
       // every known device. Single-session Advanced uses the smaller FS
       // envelope plus legacy fallback instead of forcing fs_multi.
       includeLegacyFallback = securityMode == FsSecurityMode.advanced &&
-          state == FsSessionState.fsActive;
+          effectiveState == FsSessionState.fsActive;
       if (ratchetState != null) {
         final activeIds = fsController.allActiveSessionIds;
         if (activeIds.length >= 2) {
@@ -1102,6 +1107,108 @@ class HomeController {
     return lines
         .firstWhere((line) => line.trim().isNotEmpty, orElse: () => '')
         .trim();
+  }
+
+  Future<void> _restorePersistedActiveFsSessionIfNeeded({
+    required String contactId,
+    required FsOpportunisticController fsController,
+  }) async {
+    if (fsController.sessionManager.state != FsSessionState.legacyOnly ||
+        fsController.sessionManager.activeSessionId != null) {
+      return;
+    }
+
+    final entries = ref
+        .read(fsContactSecurityRegistryProvider)
+        .forContact(
+          contactId: contactId,
+          identityContext: fsController.identityContext,
+        )
+        .where((entry) =>
+            entry.sessionId != null &&
+            (entry.fsState == FsSessionState.fsActive ||
+                entry.fsState == FsSessionState.strictFsActive ||
+                entry.fsState == FsSessionState.strictRequested ||
+                entry.fsState == FsSessionState.fsConfirmed ||
+                entry.fsState == FsSessionState.fsConfirmSent))
+        .toList()
+      ..sort((a, b) => _restoredSessionPriority(a.fsState)
+          .compareTo(_restoredSessionPriority(b.fsState)));
+    if (entries.isEmpty) return;
+
+    final cache = ref.read(fsRatchetStateCacheProvider);
+    final persistence = ref.read(fsRatchetPersistenceServiceProvider);
+    var restoredAny = false;
+    for (final entry in entries) {
+      final sessionId = entry.sessionId!;
+      var ratchet = cache[sessionId];
+      if (ratchet == null) {
+        ratchet = await persistence.loadRatchetState(sessionId);
+        if (ratchet != null) {
+          ref.read(fsRatchetStateCacheProvider.notifier).update(
+                (current) => {...current, sessionId: ratchet!},
+              );
+        }
+      }
+      if (ratchet == null) continue;
+      final restoredState = _restoredSessionState(entry.fsState);
+      fsController.restorePersistedActiveSession(
+        sessionId: sessionId,
+        state: restoredState,
+      );
+      if (restoredState != entry.fsState) {
+        final repaired = entry.copyWith(fsState: restoredState);
+        ref.read(fsContactSecurityRegistryProvider).upsert(repaired);
+        await ref.read(fsStatePersistenceServiceProvider).saveState(repaired);
+      }
+      restoredAny = true;
+    }
+
+    if (restoredAny) {
+      ref.read(fsRegistryVersionProvider.notifier).state++;
+    }
+  }
+
+  int _restoredSessionPriority(FsSessionState state) {
+    switch (state) {
+      case FsSessionState.strictFsActive:
+        return 0;
+      case FsSessionState.fsActive:
+        return 1;
+      case FsSessionState.strictRequested:
+        return 2;
+      case FsSessionState.fsConfirmed:
+      case FsSessionState.fsConfirmSent:
+        return 3;
+      case FsSessionState.legacyOnly:
+      case FsSessionState.fsInitSent:
+      case FsSessionState.fsInitSeen:
+      case FsSessionState.fsReplySent:
+      case FsSessionState.fsReplySeen:
+      case FsSessionState.fsSuspended:
+      case FsSessionState.fsBroken:
+        return 99;
+    }
+  }
+
+  FsSessionState _restoredSessionState(FsSessionState state) {
+    switch (state) {
+      case FsSessionState.fsConfirmed:
+      case FsSessionState.fsConfirmSent:
+        return FsSessionState.fsActive;
+      case FsSessionState.strictFsActive:
+      case FsSessionState.fsActive:
+      case FsSessionState.strictRequested:
+        return state;
+      case FsSessionState.legacyOnly:
+      case FsSessionState.fsInitSent:
+      case FsSessionState.fsInitSeen:
+      case FsSessionState.fsReplySent:
+      case FsSessionState.fsReplySeen:
+      case FsSessionState.fsSuspended:
+      case FsSessionState.fsBroken:
+        throw ArgumentError('Cannot restore non-active FS state: $state');
+    }
   }
 
   // ── Forward Secrecy handshake payload preparation ───────────────────────
