@@ -172,7 +172,7 @@ class FsOpportunisticController {
             droppedReason: FsExtensionDropReason.payloadTooLarge,
           );
         }
-        _updateRegistry(
+        await _updateRegistry(
           sessionId: pendingInit.initId,
           state: FsSessionState.fsInitSent,
         );
@@ -195,7 +195,7 @@ class FsOpportunisticController {
             droppedReason: FsExtensionDropReason.payloadTooLarge,
           );
         }
-        _updateRegistry(
+        await _updateRegistry(
           sessionId: pendingReply.replyId,
           state: FsSessionState.fsReplySent,
         );
@@ -238,10 +238,10 @@ class FsOpportunisticController {
           _sessionManager.markBroken();
         }
 
-        _updateRegistry(
-          sessionId: pendingConfirm.replyId,
-          state: _sessionManager.state,
-        );
+      await _updateRegistry(
+        sessionId: pendingConfirm.replyId,
+        state: _sessionManager.state,
+      );
 
         return FsOutgoingExtension._(json: json);
 
@@ -314,19 +314,21 @@ class FsOpportunisticController {
     final type = LmfV2Decoder.fsMsgType(envelope);
     switch (type) {
       case 'fs_init':
-        return _handleFsInit(fs,
-            remoteContactId: remoteContactId,
-            remoteIdentityPublicKey: remoteIdentityPublicKey);
+        return await _handleFsInit(
+          fs,
+          remoteContactId: remoteContactId,
+          remoteIdentityPublicKey: remoteIdentityPublicKey,
+        );
       case 'fs_reply':
-        return _handleFsReply(fs, remoteContactId: remoteContactId);
+        return await _handleFsReply(fs, remoteContactId: remoteContactId);
       case 'fs_confirm':
         return await _handleFsConfirm(fs, remoteContactId: remoteContactId);
       case 'fs_ack':
         return _handleFsAck(fs);
       case 'fs_suspend':
-        return _handleFsSuspend(fs, remoteContactId: remoteContactId);
+        return await _handleFsSuspend(fs, remoteContactId: remoteContactId);
       case 'fs_reset':
-        return _handleFsReset(fs, remoteContactId: remoteContactId);
+        return await _handleFsReset(fs, remoteContactId: remoteContactId);
       case 'fs_downgrade_notice':
         return _handleFsDowngradeNotice(fs, remoteContactId: remoteContactId);
       case 'fs_simultaneous_notice':
@@ -343,11 +345,11 @@ class FsOpportunisticController {
   // Private handlers
   // ---------------------------------------------------------------------------
 
-  FsIncomingResult _handleFsInit(
+  Future<FsIncomingResult> _handleFsInit(
     Map<String, dynamic> fs, {
     required String remoteContactId,
     String? remoteIdentityPublicKey,
-  }) {
+  }) async {
     late FsInitMessage msg;
     try {
       msg = FsInitMessage.fromJson(fs);
@@ -419,11 +421,11 @@ class FsOpportunisticController {
         contactId: remoteContactId,
         initId: msg.initId,
       );
-      _updateRegistry(
-        sessionId: msg.initId,
-        state: _sessionManager.state,
-        remoteDeviceId: msg.initiatorDevicePub,
-      );
+        await _updateRegistry(
+          sessionId: msg.initId,
+          state: _sessionManager.state,
+          remoteDeviceId: msg.initiatorDevicePub,
+        );
     }
     return FsIncomingResult._(
       type: result.accepted
@@ -434,10 +436,10 @@ class FsOpportunisticController {
     );
   }
 
-  FsIncomingResult _handleFsReply(
+  Future<FsIncomingResult> _handleFsReply(
     Map<String, dynamic> fs, {
     required String remoteContactId,
-  }) {
+  }) async {
     late FsReplyMessage msg;
     try {
       msg = FsReplyMessage.fromJson(fs);
@@ -453,7 +455,10 @@ class FsOpportunisticController {
     final result = _sessionManager.processFsReplyReceived(msg);
     if (result.accepted) {
       _replayCache?.recordHandshakeId(msg.replyId);
-      _updateRegistry(sessionId: msg.replyId, state: _sessionManager.state);
+      await _updateRegistry(
+        sessionId: msg.replyId,
+        state: _sessionManager.state,
+      );
     }
     return FsIncomingResult._(
       type: result.accepted
@@ -511,7 +516,10 @@ class FsOpportunisticController {
         contactId: remoteContactId,
         initId: msg.initId,
       );
-      _updateRegistry(sessionId: msg.replyId, state: _sessionManager.state);
+      await _updateRegistry(
+        sessionId: msg.replyId,
+        state: _sessionManager.state,
+      );
 
       // Activate the session after successful confirm
       if (verified) {
@@ -528,7 +536,10 @@ class FsOpportunisticController {
         } else {
           _sessionManager.markBroken();
         }
-        _updateRegistry(sessionId: msg.replyId, state: _sessionManager.state);
+        await _updateRegistry(
+          sessionId: msg.replyId,
+          state: _sessionManager.state,
+        );
       }
     }
 
@@ -555,17 +566,17 @@ class FsOpportunisticController {
     return const FsIncomingResult._(type: FsIncomingType.fsAckReceived);
   }
 
-  FsIncomingResult _handleFsSuspend(
+  Future<FsIncomingResult> _handleFsSuspend(
     Map<String, dynamic> fs, {
     required String remoteContactId,
-  }) {
+  }) async {
     try {
       final msg = FsSuspendMessage.fromJson(fs);
       final currentState = _sessionManager.state;
       if (currentState == FsSessionState.fsActive ||
           currentState == FsSessionState.strictFsActive) {
         _sessionManager.suspend();
-        _updateRegistry(
+        await _updateRegistry(
           sessionId: msg.sessionId,
           state: _sessionManager.state,
         );
@@ -576,10 +587,10 @@ class FsOpportunisticController {
     }
   }
 
-  FsIncomingResult _handleFsReset(
+  Future<FsIncomingResult> _handleFsReset(
     Map<String, dynamic> fs, {
     required String remoteContactId,
-  }) {
+  }) async {
     try {
       final msg = FsResetMessage.fromJson(fs);
       // Reset all sessions (current + previous devices) — explicit reset
@@ -590,7 +601,7 @@ class FsOpportunisticController {
         contactId: remoteContactId,
         initId: msg.previousSessionId,
       );
-      _updateRegistry(
+      await _updateRegistry(
         sessionId: null,
         state: _sessionManager.state,
       );
@@ -701,11 +712,11 @@ class FsOpportunisticController {
     _replayCache?.recordMessage(sessionId: sessionId, counter: counter);
   }
 
-  void _updateRegistry({
+  Future<void> _updateRegistry({
     required String? sessionId,
     required FsSessionState state,
     String? remoteDeviceId,
-  }) {
+  }) async {
     final stateEntry = FsContactSecurityState(
       contactId: _localContactId,
       identityContext: _identityContext,
@@ -715,7 +726,7 @@ class FsOpportunisticController {
     );
     _registry.upsert(stateEntry);
     // Persist to storage (only for primary context)
-    _persistenceService?.saveState(stateEntry);
+    await _persistenceService?.saveState(stateEntry);
   }
 
   // ---------------------------------------------------------------------------

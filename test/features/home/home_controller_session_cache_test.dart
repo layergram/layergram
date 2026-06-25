@@ -705,11 +705,144 @@ void main() {
         expect(outcome.payload?.senderId, disp1Contact.identityId);
         expect(outcome.payload?.recipientId, 'me');
         expect(outcome.payload?.text, secret);
-      },
-    );
+  },
+  );
 
-    test(
-      'First link from same identity device decodes on FS-active receiver',
+  test(
+    'First cover from same identity device decodes after green FS handshake',
+    () async {
+      final x25519 = X25519();
+      final disp1Keys = await _keyMaterial(await x25519.newKeyPair());
+      final disp2Keys = await _keyMaterial(await x25519.newKeyPair());
+      const disp1Id =
+          'ZDUAW7VUD2REOOXCEM42V2YLLWWEWXAHMANIQN6SSR2OUMZAA3SQ';
+      const disp2Id =
+          'TUJLJ5VUTD7S5B3S2CMVLOHNPDNBVPWJVPDFUENAI4NRYDZIIQVA';
+
+      final disp1Fixture = await _createFixtureFor(
+        localIdentityId: disp1Id,
+        localDisplayName: 'Disp1 A',
+        localKeys: disp1Keys,
+        contactKeysById: {disp2Id: disp2Keys},
+      );
+      final disp2Fixture = await _createFixtureFor(
+        localIdentityId: disp2Id,
+        localDisplayName: 'Disp2 B',
+        localKeys: disp2Keys,
+        contactKeysById: {disp1Id: disp1Keys},
+      );
+      final disp3Fixture = await _createFixtureFor(
+        localIdentityId: disp1Id,
+        localDisplayName: 'Disp3 A',
+        localKeys: disp1Keys,
+        contactKeysById: {disp2Id: disp2Keys},
+      );
+      addTearDown(() {
+        disp1Fixture.identitiesRepository.dispose();
+        disp1Fixture.messagesRepository.dispose();
+        disp1Fixture.container.dispose();
+        disp2Fixture.identitiesRepository.dispose();
+        disp2Fixture.messagesRepository.dispose();
+        disp2Fixture.container.dispose();
+        disp3Fixture.identitiesRepository.dispose();
+        disp3Fixture.messagesRepository.dispose();
+        disp3Fixture.container.dispose();
+      });
+
+      final disp1Controller =
+          disp1Fixture.container.read(homeControllerProvider);
+      final disp2Controller =
+          disp2Fixture.container.read(homeControllerProvider);
+      final disp3Controller =
+          disp3Fixture.container.read(homeControllerProvider);
+      final disp2ContactForDisp1 = disp1Fixture.contacts.single;
+      final disp1ContactForDisp2 = disp2Fixture.contacts.single;
+      final disp2ContactForDisp3 = disp3Fixture.contacts.single;
+
+      final init = await disp1Controller.encryptForRecipient(
+        secretText: 'disp1 init',
+        recipient: disp2ContactForDisp1,
+      );
+      expect(
+        (await disp2Controller.decodeHiddenMessage(
+          disp1Controller.buildLinkPayload(init.message),
+          hintContactId: disp1Id,
+        ))
+            .kind,
+        DecodeKind.success,
+      );
+
+      final reply = await disp2Controller.encryptForRecipient(
+        secretText: 'disp2 reply',
+        recipient: disp1ContactForDisp2,
+      );
+      expect(
+        (await disp1Controller.decodeHiddenMessage(
+          disp2Controller.buildLinkPayload(reply.message),
+          hintContactId: disp2Id,
+        ))
+            .kind,
+        DecodeKind.success,
+      );
+
+      final confirm = await disp1Controller.encryptForRecipient(
+        secretText: 'disp1 confirm',
+        recipient: disp2ContactForDisp1,
+      );
+      expect(
+        (await disp2Controller.decodeHiddenMessage(
+          disp1Controller.buildLinkPayload(confirm.message),
+          hintContactId: disp1Id,
+        ))
+            .kind,
+        DecodeKind.success,
+      );
+
+      expect(
+        disp1Fixture.container.read(fsSessionManagerProvider(disp2Id)).state,
+        FsSessionState.fsActive,
+      );
+      expect(
+        disp2Fixture.container.read(fsSessionManagerProvider(disp1Id)).state,
+        FsSessionState.fsActive,
+      );
+      expect(
+        disp3Fixture.container.read(fsSessionManagerProvider(disp2Id)).state,
+        FsSessionState.legacyOnly,
+      );
+
+      const secret = 'first cover from disp3 A to disp2 B';
+      final encrypted = await disp3Controller.encryptForRecipient(
+        secretText: secret,
+        recipient: disp2ContactForDisp3,
+      );
+      expect(
+        disp3Fixture.container.read(fsSessionManagerProvider(disp2Id)).state,
+        FsSessionState.fsInitSent,
+      );
+      final rawBytes = encrypted.message.toRawBytes();
+      final hidden = disp3Fixture.container
+          .read(stegoEncoderProvider)
+          .encodeBytes(
+            'A' * StegoEncoder.minCoverLengthForBytes(rawBytes.length),
+            rawBytes,
+            maxTotalCharacters: 4000,
+          );
+
+      final outcome = await disp2Controller.decodeHiddenMessage(
+        hidden,
+        hintContactId: disp1Id,
+      );
+
+      expect(outcome.kind, DecodeKind.success);
+      expect(outcome.payload?.senderId, disp1Id);
+      expect(outcome.payload?.recipientId, disp2Id);
+      expect(outcome.payload?.text, secret);
+    },
+  );
+
+  test(
+    'First link from same identity device decodes on FS-active receiver',
       () async {
         final disp2Fixture = await _createFixture();
         final disp1Contact = disp2Fixture.contacts.first;
