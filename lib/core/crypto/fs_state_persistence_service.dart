@@ -142,11 +142,39 @@ class FsStatePersistenceService {
   /// Removes a persisted FS state entry.
   Future<void> removeState(String contactId, String? sessionId) async {
     final cacheKey = '$contactId:${sessionId ?? "null"}';
+    final pendingSave = _saveChains[cacheKey];
+    if (pendingSave != null) {
+      try {
+        await pendingSave;
+      } catch (_) {
+        // Continue with best-effort deletion below.
+      }
+    }
+
     final existingInfo = _storageInfo[cacheKey];
 
     if (existingInfo != null) {
       await _auxRepository.delete(existingInfo.storageId);
       _storageInfo.remove(cacheKey);
+      return;
+    }
+
+    final allRecords = _auxRepository.getAllAuxRecordIds();
+    for (final entry in allRecords.entries) {
+      try {
+        final payload = await _auxRepository.read(
+          storageId: entry.key,
+          recordId: entry.value,
+        );
+        if (payload == null) continue;
+        if (payload['kind'] != _kRecordKind) continue;
+        if (payload['contactId'] != contactId) continue;
+        if (payload['sessionId'] != sessionId) continue;
+
+        await _auxRepository.delete(entry.key);
+      } catch (_) {
+        continue;
+      }
     }
   }
 

@@ -138,7 +138,7 @@ class FsContactSecurityCard extends ConsumerWidget {
                       );
                       ctrl.securityMode = selected;
                       if (selected == FsSecurityMode.strict) {
-                        await ctrl.activateStrictForKnownActiveSessions();
+                        await _resetForStrictRekey(ref, contactId);
                       } else {
                         await ctrl.disableStrictForKnownActiveSessions();
                       }
@@ -263,7 +263,7 @@ class FsContactSecurityCard extends ConsumerWidget {
                           mode: FsSecurityMode.strict,
                         );
                         fsCtrl.securityMode = FsSecurityMode.strict;
-                        await fsCtrl.activateStrictForKnownActiveSessions();
+                        await _resetForStrictRekey(ref, contactId);
                         ref.read(fsRegistryVersionProvider.notifier).state++;
                       }
                     },
@@ -335,6 +335,20 @@ class FsContactSecurityCard extends ConsumerWidget {
     );
     return mode == FsSecurityMode.advanced;
   }
+}
+
+Future<void> _resetForStrictRekey(WidgetRef ref, String contactId) async {
+  final fsCtrl = ref.read(fsOpportunisticControllerProvider(contactId));
+  final removedSessionIds = await fsCtrl.resetForStrictRekey();
+  if (removedSessionIds.isEmpty) return;
+
+  ref.read(fsRatchetStateCacheProvider.notifier).update((cache) {
+    final next = {...cache};
+    for (final sessionId in removedSessionIds) {
+      next.remove(sessionId);
+    }
+    return next;
+  });
 }
 
 // ── Security mode badge (§14.3) ───────────────────────────────────────────────

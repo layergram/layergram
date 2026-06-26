@@ -732,6 +732,12 @@ class FsOpportunisticController {
     required FsSessionState state,
     String? remoteDeviceId,
   }) async {
+    if (sessionId != null &&
+        (state == FsSessionState.fsActive ||
+            state == FsSessionState.strictFsActive)) {
+      await _pruneInactiveRegistryEntries(activeSessionId: sessionId);
+    }
+
     final stateEntry = FsContactSecurityState(
       contactId: _localContactId,
       identityContext: _identityContext,
@@ -742,6 +748,27 @@ class FsOpportunisticController {
     _registry.upsert(stateEntry);
     // Persist to storage (only for primary context)
     await _persistenceService?.saveState(stateEntry);
+  }
+
+  Future<void> _pruneInactiveRegistryEntries({
+    required String activeSessionId,
+  }) async {
+    final entries = _registry.forContact(
+      contactId: _localContactId,
+      identityContext: _identityContext,
+    );
+
+    for (final entry in entries) {
+      if (entry.sessionId == activeSessionId) continue;
+      if (entry.isActive) continue;
+
+      _registry.remove(
+        contactId: entry.contactId,
+        identityContext: entry.identityContext,
+        sessionId: entry.sessionId,
+      );
+      await _persistenceService?.removeState(entry.contactId, entry.sessionId);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -865,12 +892,58 @@ class FsOpportunisticController {
   /// Returns all active session IDs across all device sessions.
   List<String> get allActiveSessionIds => _deviceRouter.allActiveSessionIds;
 
+  /// Requests Maximum FS by clearing existing sessions and starting a fresh
+  /// strict re-key for this contact.
+  ///
+  /// Maximum FS is a contact-level policy, but the secure channel is still
+  /// bound to a concrete device/session handshake. Keeping old Advanced
+  /// sessions around after the user requests Maximum FS would leave fallback
+  /// paths visible and usable. This method therefore forgets every known
+  /// session for the current contact/context, removes their ratchets, records a
+  /// single `strictRequested` entry, and lets the next message start a new
+  /// handshake that will become `strictFsActive` only after confirmation.
+  ///
+  /// Returns the session IDs whose cached ratchets should be evicted by callers
+  /// that also maintain an in-memory ratchet cache.
+  Future<Set<String>> resetForStrictRekey() async {
+    final sessionIdsToForget = <String>{...allActiveSessionIds};
+    final entries = _registry.forContact(
+      contactId: _localContactId,
+      identityContext: _identityContext,
+    );
+
+    for (final entry in entries) {
+      final sessionId = entry.sessionId;
+      if (sessionId != null) {
+        sessionIdsToForget.add(sessionId);
+      }
+      _registry.remove(
+        contactId: entry.contactId,
+        identityContext: entry.identityContext,
+        sessionId: sessionId,
+      );
+      await _persistenceService?.removeState(entry.contactId, sessionId);
+    }
+
+    for (final sessionId in sessionIdsToForget) {
+      await _ratchetPersistenceService?.removeRatchetState(sessionId);
+    }
+
+    _deviceRouter.resetAll();
+    _sessionManager = _deviceRouter.currentSession;
+    _sessionManager.requestStrict();
+    await _updateRegistry(
+      sessionId: null,
+      state: FsSessionState.strictRequested,
+    );
+    return sessionIdsToForget;
+  }
+
   /// Promotes every known active device session for this contact to Strict FS.
   ///
-  /// The UI exposes Maximum FS as a contact-level setting. When the same
-  /// identity has already established green FS from multiple devices, promoting
-  /// only the most recent session would leave the older valid device unable to
-  /// send or receive strict messages.
+  /// Kept for non-UI callers that explicitly need the old in-place promotion
+  /// semantics. User-facing Maximum FS activation uses [resetForStrictRekey]
+  /// so stale Advanced sessions cannot remain visible or fallback-capable.
   Future<void> activateStrictForKnownActiveSessions() async {
     for (final sessionId in allActiveSessionIds) {
       final manager = _deviceRouter.sessionForId(sessionId);

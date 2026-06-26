@@ -362,6 +362,7 @@ Future<void> _completeFsHandshake({
   required _Fixture responderFixture,
   required RemoteIdentity responderContact,
   required String label,
+  FsSessionState expectedState = FsSessionState.fsActive,
 }) async {
   final initiatorController =
       initiatorFixture.container.read(homeControllerProvider);
@@ -411,13 +412,13 @@ Future<void> _completeFsHandshake({
     initiatorFixture.container
         .read(fsOpportunisticControllerProvider(initiatorContact.identityId))
         .bestState,
-    FsSessionState.fsActive,
+    expectedState,
   );
   expect(
     responderFixture.container
         .read(fsOpportunisticControllerProvider(responderContact.identityId))
         .bestState,
-    FsSessionState.fsActive,
+    expectedState,
   );
 }
 
@@ -434,7 +435,18 @@ Future<void> _setStrictModeForKnownSessions({
     mode: FsSecurityMode.strict,
   );
   fsController.securityMode = FsSecurityMode.strict;
-  await fsController.activateStrictForKnownActiveSessions();
+  final removedSessionIds = await fsController.resetForStrictRekey();
+  if (removedSessionIds.isNotEmpty) {
+    fixture.container.read(fsRatchetStateCacheProvider.notifier).update(
+      (cache) {
+        final next = {...cache};
+        for (final sessionId in removedSessionIds) {
+          next.remove(sessionId);
+        }
+        return next;
+      },
+    );
+  }
   fixture.container.read(fsRegistryVersionProvider.notifier).state++;
 }
 
@@ -2264,6 +2276,89 @@ void main() {
         expect(bToAOutcome.payload?.text, 'strict B to original A1');
       },
     );
+
+    test('Maximum FS activation clears stale contact sessions before rekey',
+        () async {
+      final fixture = await _createFixture();
+      addTearDown(() {
+        fixture.identitiesRepository.dispose();
+        fixture.messagesRepository.dispose();
+        fixture.container.dispose();
+      });
+
+      final contact = fixture.contacts.first;
+      const activeSessionId = 'session-current-green';
+      const staleActiveSessionId = 'session-stale-green';
+      const staleInitSessionId = 'session-stale-init';
+      const staleReplySessionId = 'session-stale-reply';
+      final fsController = fixture.container.read(
+        fsOpportunisticControllerProvider(contact.identityId),
+      );
+      final sessionManager = fixture.container.read(
+        fsSessionManagerProvider(contact.identityId),
+      );
+      sessionManager.setStateForTesting(
+        FsSessionState.fsActive,
+        sessionId: activeSessionId,
+      );
+      fixture.container.read(fsRatchetStateCacheProvider.notifier).state = {
+        activeSessionId: _testRatchet(activeSessionId),
+        staleActiveSessionId: _testRatchet(staleActiveSessionId),
+      };
+
+      final registry =
+          fixture.container.read(fsContactSecurityRegistryProvider);
+      for (final entry in [
+        FsContactSecurityState(
+          contactId: contact.identityId,
+          identityContext: 'primary',
+          sessionId: activeSessionId,
+          fsState: FsSessionState.fsActive,
+        ),
+        FsContactSecurityState(
+          contactId: contact.identityId,
+          identityContext: 'primary',
+          sessionId: staleActiveSessionId,
+          fsState: FsSessionState.fsActive,
+        ),
+        FsContactSecurityState(
+          contactId: contact.identityId,
+          identityContext: 'primary',
+          sessionId: staleInitSessionId,
+          fsState: FsSessionState.fsInitSent,
+        ),
+        FsContactSecurityState(
+          contactId: contact.identityId,
+          identityContext: 'primary',
+          sessionId: staleReplySessionId,
+          fsState: FsSessionState.fsReplySeen,
+        ),
+      ]) {
+        registry.upsert(entry);
+      }
+
+      await _setStrictModeForKnownSessions(
+        fixture: fixture,
+        contactId: contact.identityId,
+      );
+
+      final states = registry.forContact(
+        contactId: contact.identityId,
+        identityContext: fsController.identityContext,
+      );
+      expect(states, hasLength(1));
+      expect(states.single.sessionId, isNull);
+      expect(states.single.fsState, FsSessionState.strictRequested);
+      expect(fsController.allActiveSessionIds, isEmpty);
+      expect(
+        fixture.container.read(fsRatchetStateCacheProvider),
+        isNot(contains(activeSessionId)),
+      );
+      expect(
+        fixture.container.read(fsRatchetStateCacheProvider),
+        isNot(contains(staleActiveSessionId)),
+      );
+    });
 
     test('Composer-safe cover estimate fits Advanced FS payload', () async {
       final x25519 = X25519();

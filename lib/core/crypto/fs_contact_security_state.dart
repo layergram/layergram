@@ -147,6 +147,16 @@ class FsContactSecurityRegistry {
     return _entries[_StateKey(contactId, identityContext, sessionId)];
   }
 
+  /// Removes the security state for a specific
+  /// `(contactId, identityContext, sessionId)` tuple.
+  void remove({
+    required String contactId,
+    required String identityContext,
+    String? sessionId,
+  }) {
+    _entries.remove(_StateKey(contactId, identityContext, sessionId));
+  }
+
   /// Returns all security states for [contactId] in [identityContext].
   ///
   /// Returns an empty list if no entries exist.
