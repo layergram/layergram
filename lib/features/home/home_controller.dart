@@ -904,10 +904,11 @@ class HomeController {
           contactId: contactId,
           identityContext: fsController.identityContext,
         );
-    final hasStrictSession = states.any((entry) => entry.isStrict);
+    final activeStates = states.where((entry) => entry.isActive);
+    final hasStrictSession = activeStates.any((entry) => entry.isStrict);
     if (!hasStrictSession) return false;
 
-    return states.any((entry) =>
+    return activeStates.any((entry) =>
         entry.sessionId != null &&
         entry.fsState != FsSessionState.strictFsActive);
   }

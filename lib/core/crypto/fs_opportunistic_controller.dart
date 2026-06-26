@@ -865,6 +865,62 @@ class FsOpportunisticController {
   /// Returns all active session IDs across all device sessions.
   List<String> get allActiveSessionIds => _deviceRouter.allActiveSessionIds;
 
+  /// Promotes every known active device session for this contact to Strict FS.
+  ///
+  /// The UI exposes Maximum FS as a contact-level setting. When the same
+  /// identity has already established green FS from multiple devices, promoting
+  /// only the most recent session would leave the older valid device unable to
+  /// send or receive strict messages.
+  Future<void> activateStrictForKnownActiveSessions() async {
+    for (final sessionId in allActiveSessionIds) {
+      final manager = _deviceRouter.sessionForId(sessionId);
+      if (manager == null) continue;
+
+      switch (manager.state) {
+        case FsSessionState.fsActive:
+          manager.requestStrict();
+          manager.activateStrictSession(sessionId);
+        case FsSessionState.strictRequested:
+          manager.activateStrictSession(sessionId);
+        case FsSessionState.strictFsActive:
+          break;
+        case FsSessionState.legacyOnly:
+        case FsSessionState.fsInitSent:
+        case FsSessionState.fsInitSeen:
+        case FsSessionState.fsReplySent:
+        case FsSessionState.fsReplySeen:
+        case FsSessionState.fsConfirmSent:
+        case FsSessionState.fsConfirmed:
+        case FsSessionState.fsSuspended:
+        case FsSessionState.fsBroken:
+          continue;
+      }
+
+      await _updateRegistry(
+        sessionId: sessionId,
+        state: manager.state,
+      );
+    }
+  }
+
+  /// Disables Strict FS on every known active strict session for this contact.
+  Future<void> disableStrictForKnownActiveSessions() async {
+    for (final sessionId in allActiveSessionIds) {
+      final manager = _deviceRouter.sessionForId(sessionId);
+      if (manager == null) continue;
+      if (manager.state != FsSessionState.strictFsActive &&
+          manager.state != FsSessionState.strictRequested) {
+        continue;
+      }
+
+      manager.disableStrict();
+      await _updateRegistry(
+        sessionId: sessionId,
+        state: manager.state,
+      );
+    }
+  }
+
   /// Restores an active session from persisted registry + ratchet state.
   void restorePersistedActiveSession({
     required String sessionId,

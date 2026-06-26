@@ -88,12 +88,16 @@ Each contact has a per-contact security mode (`lib/core/crypto/fs_security_mode.
 - **Advanced** — opportunistic FS with compatibility fallback allowed. While FS is active the
   contact card shows an amber fallback warning, because some messages may still use the legacy
   model (spec §14.6.4).
-- **Strict (Maximum FS)** — single confirmed device per side, no legacy fallback. Requires
+- **Strict (Maximum FS)** — contact-level mode with no legacy fallback. Requires
   explicit mutual consent; while requested but not yet confirmed the UI shows a distinct
   "Maximum FS requested" pending state, not active Strict (spec §14.6.3).
-  If a new device/session appears after Strict is active, sending is paused until the session
-  is repaired or Maximum FS is explicitly disabled; the implementation must not silently fall
-  back to legacy encryption in this state.
+  When enabled for a contact, every already-known active device session for that identity is
+  promoted to `strictFsActive` together, so restored same-identity devices that have already
+  reached green FS stay compatible. If a new active device/session appears after Strict is
+  active, sending is paused until the session is repaired or Maximum FS is explicitly disabled.
+  Historical or transient handshake states (`fsInitSent`, `fsReplySeen`, etc.) are not by
+  themselves unexpected devices and must not force a downgrade or false repair state. The
+  implementation must not silently fall back to legacy encryption in Strict.
 
 ## Per-message classification
 

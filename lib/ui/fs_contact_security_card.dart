@@ -137,20 +137,10 @@ class FsContactSecurityCard extends ConsumerWidget {
                         mode: selected,
                       );
                       ctrl.securityMode = selected;
-                      final strictCtrl = ref.read(
-                        fsStrictModeControllerProvider(contactId),
-                      );
-                      final sessionId = ctrl.sessionManager.activeSessionId;
                       if (selected == FsSecurityMode.strict) {
-                        if (sessionId != null) {
-                          final requested =
-                              await strictCtrl.requestMaximum(sessionId);
-                          if (requested.success) {
-                            await strictCtrl.activateStrict(sessionId);
-                          }
-                        }
+                        await ctrl.activateStrictForKnownActiveSessions();
                       } else {
-                        await strictCtrl.disableStrict(sessionId ?? '');
+                        await ctrl.disableStrictForKnownActiveSessions();
                       }
                       ref.read(fsRegistryVersionProvider.notifier).state++;
                       if (context.mounted) {
@@ -239,14 +229,18 @@ class FsContactSecurityCard extends ConsumerWidget {
                     icon: Icons.shield_outlined,
                     color: Theme.of(context).colorScheme.error,
                     onPressed: () async {
-                      final ctrl = ref.read(
-                        fsStrictModeControllerProvider(contactId),
+                      final fsCtrl = ref.read(
+                        fsOpportunisticControllerProvider(contactId),
                       );
-                      final session = ref
-                          .read(fsContactSecurityRegistryProvider)
-                          .forContactAllContexts(contactId)
-                          .firstOrNull;
-                      await ctrl.disableStrict(session?.sessionId ?? '');
+                      final modeService =
+                          ref.read(fsSecurityModeServiceProvider);
+                      await modeService.setMode(
+                        contactId: contactId,
+                        identityContext: fsCtrl.identityContext,
+                        mode: FsSecurityMode.advanced,
+                      );
+                      fsCtrl.securityMode = FsSecurityMode.advanced;
+                      await fsCtrl.disableStrictForKnownActiveSessions();
                       ref.read(fsRegistryVersionProvider.notifier).state++;
                     },
                   )
@@ -261,25 +255,15 @@ class FsContactSecurityCard extends ConsumerWidget {
                         final fsCtrl = ref.read(
                           fsOpportunisticControllerProvider(contactId),
                         );
-                        final strictCtrl = ref.read(
-                          fsStrictModeControllerProvider(contactId),
+                        final modeService =
+                            ref.read(fsSecurityModeServiceProvider);
+                        await modeService.setMode(
+                          contactId: contactId,
+                          identityContext: fsCtrl.identityContext,
+                          mode: FsSecurityMode.strict,
                         );
-                        final sessionId = fsCtrl.sessionManager.activeSessionId;
-                        if (sessionId != null) {
-                          final modeService =
-                              ref.read(fsSecurityModeServiceProvider);
-                          await modeService.setMode(
-                            contactId: contactId,
-                            identityContext: fsCtrl.identityContext,
-                            mode: FsSecurityMode.strict,
-                          );
-                          fsCtrl.securityMode = FsSecurityMode.strict;
-                          final requested =
-                              await strictCtrl.requestMaximum(sessionId);
-                          if (requested.success) {
-                            await strictCtrl.activateStrict(sessionId);
-                          }
-                        }
+                        fsCtrl.securityMode = FsSecurityMode.strict;
+                        await fsCtrl.activateStrictForKnownActiveSessions();
                         ref.read(fsRegistryVersionProvider.notifier).state++;
                       }
                     },

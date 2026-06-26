@@ -356,6 +356,88 @@ Future<_Fixture> _createFixtureFor({
   );
 }
 
+Future<void> _completeFsHandshake({
+  required _Fixture initiatorFixture,
+  required RemoteIdentity initiatorContact,
+  required _Fixture responderFixture,
+  required RemoteIdentity responderContact,
+  required String label,
+}) async {
+  final initiatorController =
+      initiatorFixture.container.read(homeControllerProvider);
+  final responderController =
+      responderFixture.container.read(homeControllerProvider);
+
+  final init = await initiatorController.encryptForRecipient(
+    secretText: '$label init',
+    recipient: initiatorContact,
+  );
+  expect(
+    (await responderController.decodeHiddenMessage(
+      initiatorController.buildLinkPayload(init.message),
+      hintContactId: responderContact.identityId,
+    ))
+        .kind,
+    DecodeKind.success,
+  );
+
+  final reply = await responderController.encryptForRecipient(
+    secretText: '$label reply',
+    recipient: responderContact,
+  );
+  expect(
+    (await initiatorController.decodeHiddenMessage(
+      responderController.buildLinkPayload(reply.message),
+      hintContactId: initiatorContact.identityId,
+    ))
+        .kind,
+    DecodeKind.success,
+  );
+
+  final confirm = await initiatorController.encryptForRecipient(
+    secretText: '$label confirm',
+    recipient: initiatorContact,
+  );
+  expect(
+    (await responderController.decodeHiddenMessage(
+      initiatorController.buildLinkPayload(confirm.message),
+      hintContactId: responderContact.identityId,
+    ))
+        .kind,
+    DecodeKind.success,
+  );
+
+  expect(
+    initiatorFixture.container
+        .read(fsOpportunisticControllerProvider(initiatorContact.identityId))
+        .bestState,
+    FsSessionState.fsActive,
+  );
+  expect(
+    responderFixture.container
+        .read(fsOpportunisticControllerProvider(responderContact.identityId))
+        .bestState,
+    FsSessionState.fsActive,
+  );
+}
+
+Future<void> _setStrictModeForKnownSessions({
+  required _Fixture fixture,
+  required String contactId,
+}) async {
+  final fsController =
+      fixture.container.read(fsOpportunisticControllerProvider(contactId));
+  final modeService = fixture.container.read(fsSecurityModeServiceProvider);
+  await modeService.setMode(
+    contactId: contactId,
+    identityContext: fsController.identityContext,
+    mode: FsSecurityMode.strict,
+  );
+  fsController.securityMode = FsSecurityMode.strict;
+  await fsController.activateStrictForKnownActiveSessions();
+  fixture.container.read(fsRegistryVersionProvider.notifier).state++;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -2042,6 +2124,146 @@ void main() {
       expect(result.classification, FsMessageClassification.fsWithFallback);
       expect(sessionManager.state, FsSessionState.fsActive);
     });
+
+    test(
+      'Strict FS between original devices still decodes after restored device also reaches green',
+      () async {
+        final x25519 = X25519();
+        final disp1Keys = await _keyMaterial(await x25519.newKeyPair());
+        final disp2Keys = await _keyMaterial(await x25519.newKeyPair());
+        const disp1Id = 'ZDUAW7VUD2REOOXCEM42V2YLLWWEWXAHMANIQN6SSR2OUMZAA3SQ';
+        const disp2Id = 'TUJLJ5VUTD7S5B3S2CMVLOHNPDNBVPWJVPDFUENAI4NRYDZIIQVA';
+
+        final disp1Fixture = await _createFixtureFor(
+          localIdentityId: disp1Id,
+          localDisplayName: 'Disp1 Identità A',
+          localKeys: disp1Keys,
+          contactKeysById: {disp2Id: disp2Keys},
+        );
+        final disp2Fixture = await _createFixtureFor(
+          localIdentityId: disp2Id,
+          localDisplayName: 'Disp2 Identità B',
+          localKeys: disp2Keys,
+          contactKeysById: {disp1Id: disp1Keys},
+        );
+        final disp3Fixture = await _createFixtureFor(
+          localIdentityId: disp1Id,
+          localDisplayName: 'Disp3 Identità A',
+          localKeys: disp1Keys,
+          contactKeysById: {disp2Id: disp2Keys},
+        );
+        addTearDown(() {
+          disp1Fixture.identitiesRepository.dispose();
+          disp1Fixture.messagesRepository.dispose();
+          disp1Fixture.container.dispose();
+          disp2Fixture.identitiesRepository.dispose();
+          disp2Fixture.messagesRepository.dispose();
+          disp2Fixture.container.dispose();
+          disp3Fixture.identitiesRepository.dispose();
+          disp3Fixture.messagesRepository.dispose();
+          disp3Fixture.container.dispose();
+        });
+
+        final disp2ContactForDisp1 = disp1Fixture.contacts.single;
+        final disp1ContactForDisp2 = disp2Fixture.contacts.single;
+        final disp2ContactForDisp3 = disp3Fixture.contacts.single;
+
+        await _completeFsHandshake(
+          initiatorFixture: disp1Fixture,
+          initiatorContact: disp2ContactForDisp1,
+          responderFixture: disp2Fixture,
+          responderContact: disp1ContactForDisp2,
+          label: 'disp1-disp2',
+        );
+        final disp1SessionId = disp1Fixture.container
+            .read(fsOpportunisticControllerProvider(disp2Id))
+            .sessionManager
+            .activeSessionId;
+        expect(disp1SessionId, isNotNull);
+
+        await _completeFsHandshake(
+          initiatorFixture: disp3Fixture,
+          initiatorContact: disp2ContactForDisp3,
+          responderFixture: disp2Fixture,
+          responderContact: disp1ContactForDisp2,
+          label: 'disp3-disp2',
+        );
+
+        final disp2FsForA = disp2Fixture.container
+            .read(fsOpportunisticControllerProvider(disp1Id));
+        expect(disp2FsForA.allActiveSessionIds, hasLength(2));
+        expect(disp2FsForA.allActiveSessionIds, contains(disp1SessionId));
+
+        await _setStrictModeForKnownSessions(
+          fixture: disp1Fixture,
+          contactId: disp2Id,
+        );
+        await _setStrictModeForKnownSessions(
+          fixture: disp2Fixture,
+          contactId: disp1Id,
+        );
+
+        final disp2StrictStates = disp2Fixture.container
+            .read(fsContactSecurityRegistryProvider)
+            .forContact(
+              contactId: disp1Id,
+              identityContext: disp2FsForA.identityContext,
+            )
+            .where((entry) => disp2FsForA.allActiveSessionIds.contains(
+                  entry.sessionId,
+                ))
+            .toList(growable: false);
+        expect(disp2StrictStates, hasLength(2));
+        expect(
+          disp2StrictStates.map((entry) => entry.fsState),
+          everyElement(FsSessionState.strictFsActive),
+        );
+        final disp1StatesForB = disp1Fixture.container
+            .read(fsContactSecurityRegistryProvider)
+            .forContact(
+              contactId: disp2Id,
+              identityContext: disp1Fixture.container
+                  .read(fsOpportunisticControllerProvider(disp2Id))
+                  .identityContext,
+            );
+        expect(
+          disp1StatesForB
+              .where((entry) => entry.isActive)
+              .map((entry) => entry.fsState),
+          everyElement(FsSessionState.strictFsActive),
+          reason: disp1StatesForB.join('\n'),
+        );
+
+        final disp1Controller =
+            disp1Fixture.container.read(homeControllerProvider);
+        final disp2Controller =
+            disp2Fixture.container.read(homeControllerProvider);
+
+        final aToB = await disp1Controller.encryptForRecipient(
+          secretText: 'strict original A1 to B',
+          recipient: disp2ContactForDisp1,
+        );
+        expect(aToB.classification, FsMessageClassification.strictFs);
+        final aToBOutcome = await disp2Controller.decodeHiddenMessage(
+          disp1Controller.buildLinkPayload(aToB.message),
+          hintContactId: disp1Id,
+        );
+        expect(aToBOutcome.kind, DecodeKind.success);
+        expect(aToBOutcome.payload?.text, 'strict original A1 to B');
+
+        final bToA = await disp2Controller.encryptForRecipient(
+          secretText: 'strict B to original A1',
+          recipient: disp1ContactForDisp2,
+        );
+        expect(bToA.classification, FsMessageClassification.strictFs);
+        final bToAOutcome = await disp1Controller.decodeHiddenMessage(
+          disp2Controller.buildLinkPayload(bToA.message),
+          hintContactId: disp2Id,
+        );
+        expect(bToAOutcome.kind, DecodeKind.success);
+        expect(bToAOutcome.payload?.text, 'strict B to original A1');
+      },
+    );
 
     test('Composer-safe cover estimate fits Advanced FS payload', () async {
       final x25519 = X25519();
