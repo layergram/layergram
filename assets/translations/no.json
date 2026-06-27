@@ -318,7 +318,7 @@
   "security.passphrase.settings_visible_note": "Disse innstillingene er bare tilgjengelige mens passordfrasekonteksten er aktiv.",
   "security.fs.mode.sheet_title": "Sikkerhetsmodus",
   "security.fs.mode.sheet_subtitle": "Velg videresend hemmelighetsnivå for denne kontakten.",
-  "security.fs.mode.base_title": "Base",
+  "security.fs.mode.base_title": "Grunnleggende",
   "security.fs.mode.base_desc": "Standard kryptering. Maksimal kompatibilitet.",
   "security.fs.mode.advanced_title": "Avansert",
   "security.fs.mode.advanced_desc": "Automatisk videresendingshemmelighold når støttet. Eldre reserve tillatt.",

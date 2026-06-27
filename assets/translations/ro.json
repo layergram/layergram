@@ -322,7 +322,7 @@
   "security.fs.mode.base_desc": "Criptare standard. Compatibilitate maxima.",
   "security.fs.mode.advanced_title": "Avansat",
   "security.fs.mode.advanced_desc": "Redirecționare secretă automată atunci când este acceptată. Moștenire alternativă permisă.",
-  "security.fs.mode.strict_title": "Maximum",
+  "security.fs.mode.strict_title": "Maxim",
   "security.fs.mode.strict_desc": "Cea mai puternică protecție. Legat de dispozitiv, fără rezervă.",
   "security.fs.mode.confirm_button": "Aplicați",
   "security.fs.mode.cancel_button": "Anulează",

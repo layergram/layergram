@@ -318,7 +318,7 @@
   "security.passphrase.settings_visible_note": "Aquesta configuració només està disponible mentre el context de la frase de contrasenya està actiu.",
   "security.fs.mode.sheet_title": "Mode de seguretat",
   "security.fs.mode.sheet_subtitle": "Trieu el nivell de secret de reenviament per a aquest contacte.",
-  "security.fs.mode.base_title": "Base",
+  "security.fs.mode.base_title": "Bàsic",
   "security.fs.mode.base_desc": "Xifratge estàndard. Màxima compatibilitat.",
   "security.fs.mode.advanced_title": "Avançat",
   "security.fs.mode.advanced_desc": "Secret d'enviament automàtic quan s'admet. Es permet el recurs heretat.",

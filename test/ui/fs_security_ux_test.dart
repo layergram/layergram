@@ -7,7 +7,9 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:layergram/core/crypto/fs_contact_security_state.dart';
 import 'package:layergram/core/crypto/fs_security_mode.dart';
 import 'package:layergram/core/crypto/fs_session_manager.dart';
+import 'package:layergram/core/crypto/fs_state_persistence_service.dart';
 import 'package:layergram/core/providers.dart';
+import 'package:layergram/core/storage/aux_record_repository.dart';
 import 'package:layergram/core/storage/local_database.dart';
 import 'package:layergram/l10n/app_strings.dart';
 import 'package:layergram/l10n/fs_strings_bundle.dart';
@@ -16,6 +18,46 @@ import 'package:layergram/ui/fs_info_sheet.dart';
 import 'package:layergram/ui/fs_maximum_fs_dialog.dart';
 import 'package:layergram/ui/fs_security_mode_sheet.dart';
 import 'package:layergram/ui/fs_status_icon.dart';
+
+class _MemoryFsSecurityModeService extends FsSecurityModeService {
+  _MemoryFsSecurityModeService() : super(auxRepository: AuxRecordRepository());
+
+  final Map<String, FsSecurityMode> _modes = {};
+
+  @override
+  Future<FsSecurityMode> getMode({
+    required String contactId,
+    required String identityContext,
+  }) async =>
+      getModeSync(contactId: contactId, identityContext: identityContext);
+
+  @override
+  FsSecurityMode getModeSync({
+    required String contactId,
+    required String identityContext,
+  }) =>
+      _modes['$contactId:$identityContext'] ?? FsSecurityMode.advanced;
+
+  @override
+  Future<void> setMode({
+    required String contactId,
+    required String identityContext,
+    required FsSecurityMode mode,
+  }) async {
+    _modes['$contactId:$identityContext'] = mode;
+  }
+}
+
+class _NoopFsStatePersistenceService extends FsStatePersistenceService {
+  _NoopFsStatePersistenceService(FsContactSecurityRegistry registry)
+      : super(auxRepository: AuxRecordRepository(), registry: registry);
+
+  @override
+  Future<void> saveState(FsContactSecurityState state) async {}
+
+  @override
+  Future<void> removeState(String contactId, String? sessionId) async {}
+}
 
 void main() {
   late Directory tmpDir;
@@ -120,6 +162,76 @@ void main() {
     expect(find.text(en['security.fs.action.retry']!), findsOneWidget);
     expect(find.text(en['security.fs.action.reset']!), findsOneWidget);
     expect(find.byIcon(Icons.warning_amber_rounded), findsWidgets);
+  });
+
+  testWidgets(
+      'disable Maximum FS downgrades registry-only strict session and confirms',
+      (tester) async {
+    final en = FsStringsBundle.bundle['en']!;
+    final registry = FsContactSecurityRegistry()
+      ..upsert(
+        const FsContactSecurityState(
+          contactId: 'alice',
+          identityContext: 'primary',
+          sessionId: 'current-session',
+          fsState: FsSessionState.fsActive,
+        ),
+      )
+      ..upsert(
+        const FsContactSecurityState(
+          contactId: 'alice',
+          identityContext: 'primary',
+          sessionId: 'registry-only-strict-session',
+          fsState: FsSessionState.strictFsActive,
+        ),
+      );
+    final sessionManager = FsSessionManager()
+      ..setStateForTesting(
+        FsSessionState.fsActive,
+        sessionId: 'current-session',
+      );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          fsContactSecurityRegistryProvider.overrideWithValue(registry),
+          fsSessionManagerProvider('alice').overrideWithValue(sessionManager),
+          fsSecurityModeServiceProvider
+              .overrideWithValue(_MemoryFsSecurityModeService()),
+          fsStatePersistenceServiceProvider
+              .overrideWithValue(_NoopFsStatePersistenceService(registry)),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: FsContactSecurityCard(contactId: 'alice'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final disableFinder = find.text(en['security.fs.action.disable_strict']!);
+    expect(disableFinder, findsOneWidget);
+
+    await tester.ensureVisible(disableFinder);
+    await tester.tap(disableFinder);
+    await tester.pumpAndSettle();
+
+    expect(
+      registry
+          .lookup(
+            contactId: 'alice',
+            identityContext: 'primary',
+            sessionId: 'registry-only-strict-session',
+          )
+          ?.fsState,
+      FsSessionState.fsActive,
+    );
+    expect(find.text(en['security.fs.mode.changed_snackbar']!), findsOneWidget);
+    expect(disableFinder, findsNothing);
+    expect(
+        find.text(en['security.fs.action.request_maximum']!), findsOneWidget);
   });
 
   testWidgets('Maximum FS consent cannot be confirmed without both warnings',

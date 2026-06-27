@@ -373,6 +373,13 @@ class FsOpportunisticController {
         currentState == FsSessionState.strictFsActive ||
         currentState == FsSessionState.fsBroken ||
         currentState == FsSessionState.fsSuspended;
+    if (isTerminal && _hasActiveStrictSession()) {
+      return const FsIncomingResult._(
+        type: FsIncomingType.fsInitRejected,
+        rejectionReason: 'security.fs.error.unexpected_device',
+        newDeviceDetected: true,
+      );
+    }
     final replacingPendingResponder =
         (currentState == FsSessionState.fsInitSeen ||
                 currentState == FsSessionState.fsReplySent) &&
@@ -771,6 +778,16 @@ class FsOpportunisticController {
     }
   }
 
+  bool _hasActiveStrictSession() {
+    if (_sessionManager.state == FsSessionState.strictFsActive) return true;
+    return _registry
+        .forContact(
+          contactId: _localContactId,
+          identityContext: _identityContext,
+        )
+        .any((entry) => entry.fsState == FsSessionState.strictFsActive);
+  }
+
   // ---------------------------------------------------------------------------
   // Ratchet initialization after handshake
   // ---------------------------------------------------------------------------
@@ -978,8 +995,7 @@ class FsOpportunisticController {
 
   /// Disables Strict FS on every known active strict session for this contact.
   Future<void> disableStrictForKnownActiveSessions() async {
-    final activeSessionIds = allActiveSessionIds;
-    for (final sessionId in activeSessionIds) {
+    for (final sessionId in allActiveSessionIds) {
       final manager = _deviceRouter.sessionForId(sessionId);
       if (manager == null) continue;
       if (manager.state != FsSessionState.strictFsActive &&
@@ -994,26 +1010,25 @@ class FsOpportunisticController {
       );
     }
 
-    final pendingStrictEntries = _registry
+    final remainingStrictEntries = _registry
         .forContact(
           contactId: _localContactId,
           identityContext: _identityContext,
         )
         .where((entry) =>
-            entry.fsState == FsSessionState.strictRequested &&
-            (entry.sessionId == null ||
-                !activeSessionIds.contains(entry.sessionId)))
+            entry.fsState == FsSessionState.strictFsActive ||
+            entry.fsState == FsSessionState.strictRequested)
         .toList(growable: false);
-    if (pendingStrictEntries.isEmpty) {
-      _sessionManager.disableStrict();
-      return;
-    }
 
     _sessionManager.disableStrict();
-    for (final entry in pendingStrictEntries) {
+    for (final entry in remainingStrictEntries) {
+      final sessionId = entry.sessionId;
+      if (sessionId != null) {
+        _deviceRouter.sessionForId(sessionId)?.disableStrict();
+      }
       await _updateRegistry(
-        sessionId: entry.sessionId,
-        state: entry.sessionId == null
+        sessionId: sessionId,
+        state: sessionId == null
             ? FsSessionState.legacyOnly
             : FsSessionState.fsActive,
       );

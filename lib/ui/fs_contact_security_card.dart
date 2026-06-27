@@ -242,6 +242,15 @@ class FsContactSecurityCard extends ConsumerWidget {
                       fsCtrl.securityMode = FsSecurityMode.advanced;
                       await fsCtrl.disableStrictForKnownActiveSessions();
                       ref.read(fsRegistryVersionProvider.notifier).state++;
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              t(context, 'security.fs.mode.changed_snackbar'),
+                            ),
+                          ),
+                        );
+                      }
                     },
                   )
                 else if (topState != FsSessionState.strictRequested)

@@ -658,6 +658,102 @@ void main() {
     );
   });
 
+  test('incoming fs_init is rejected while Maximum FS is active', () async {
+    final (alice, registry, aliceMgr) = _buildAlice();
+
+    aliceMgr.setStateForTesting(
+      FsSessionState.strictFsActive,
+      sessionId: 'strict-session',
+    );
+    registry.upsert(
+      const FsContactSecurityState(
+        contactId: 'alice',
+        identityContext: 'primary',
+        sessionId: 'strict-session',
+        fsState: FsSessionState.strictFsActive,
+      ),
+    );
+
+    final result = await alice.processIncomingEnvelope(
+      {
+        'v': 2,
+        'senderId': 'bob',
+        'x': {
+          'fs': _initPayload(initId: 'unexpected-new-device')
+              .toMessage()
+              .toJson(),
+        },
+      },
+      remoteContactId: 'bob',
+    );
+
+    expect(result.type, FsIncomingType.fsInitRejected);
+    expect(result.rejectionReason, 'security.fs.error.unexpected_device');
+    expect(result.newDeviceDetected, isTrue);
+    expect(aliceMgr.state, FsSessionState.strictFsActive);
+    expect(alice.allActiveSessionIds, ['strict-session']);
+    expect(
+      registry.lookup(
+        contactId: 'alice',
+        identityContext: 'primary',
+        sessionId: 'unexpected-new-device',
+      ),
+      isNull,
+    );
+  });
+
+  test(
+      'disableStrictForKnownActiveSessions reverts registry-only strict sessions',
+      () async {
+    final (alice, registry, aliceMgr) = _buildAlice();
+
+    aliceMgr.setStateForTesting(
+      FsSessionState.fsActive,
+      sessionId: 'current-session',
+    );
+    registry
+      ..upsert(
+        const FsContactSecurityState(
+          contactId: 'alice',
+          identityContext: 'primary',
+          sessionId: 'current-session',
+          fsState: FsSessionState.fsActive,
+        ),
+      )
+      ..upsert(
+        const FsContactSecurityState(
+          contactId: 'alice',
+          identityContext: 'primary',
+          sessionId: 'registry-only-strict-session',
+          fsState: FsSessionState.strictFsActive,
+        ),
+      );
+
+    await alice.disableStrictForKnownActiveSessions();
+
+    expect(aliceMgr.state, equals(FsSessionState.fsActive));
+    expect(
+      registry
+          .lookup(
+            contactId: 'alice',
+            identityContext: 'primary',
+            sessionId: 'current-session',
+          )
+          ?.fsState,
+      equals(FsSessionState.fsActive),
+    );
+    expect(
+      registry
+          .lookup(
+            contactId: 'alice',
+            identityContext: 'primary',
+            sessionId: 'registry-only-strict-session',
+          )
+          ?.fsState,
+      equals(FsSessionState.fsActive),
+    );
+  });
+
   test(
       'disableStrictForKnownActiveSessions cancels pending strict rekey before a session exists',
       () async {
