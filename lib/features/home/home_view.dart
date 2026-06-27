@@ -178,86 +178,88 @@ class _HomeViewState extends ConsumerState<HomeView> {
           child: SizedBox(
             height: maxSheetHeight,
             child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                child: Row(
-                  children: [
-                    const Icon(Icons.chat_bubble_outline),
-                    const SizedBox(width: 8),
-                    Text(AppStrings.t(context, 'newChat'),
-                        style: const TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.w600)),
-                  ],
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.chat_bubble_outline),
+                      const SizedBox(width: 8),
+                      Text(AppStrings.t(context, 'newChat'),
+                          style: const TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
                 ),
-              ),
-              const Divider(height: 1),
-              StatefulBuilder(
-                builder: (_, setStateModal) {
-                  final query = searchCtrl.text.trim().toLowerCase();
-                  final filtered = _contacts
-                      .where((c) =>
-                          query.isEmpty ||
-                          c.displayName.toLowerCase().contains(query) ||
-                          c.fingerprint.toLowerCase().contains(query))
-                      .toList();
-                  return Expanded(
-                    child: Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                          child: TextField(
-                            controller: searchCtrl,
-                            autofocus: false,
-                            decoration: InputDecoration(
-                              prefixIcon: const Icon(Icons.search),
-                              hintText: AppStrings.t(context, 'searchContact'),
+                const Divider(height: 1),
+                StatefulBuilder(
+                  builder: (_, setStateModal) {
+                    final query = searchCtrl.text.trim().toLowerCase();
+                    final filtered = _contacts
+                        .where((c) =>
+                            query.isEmpty ||
+                            c.displayName.toLowerCase().contains(query) ||
+                            c.fingerprint.toLowerCase().contains(query))
+                        .toList();
+                    return Expanded(
+                      child: Column(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                            child: TextField(
+                              controller: searchCtrl,
+                              autofocus: false,
+                              decoration: InputDecoration(
+                                prefixIcon: const Icon(Icons.search),
+                                hintText:
+                                    AppStrings.t(context, 'searchContact'),
+                              ),
+                              onChanged: (q) {
+                                setStateModal(() {});
+                              },
+                              onTapOutside: (_) =>
+                                  FocusScope.of(modalContext).unfocus(),
                             ),
-                            onChanged: (q) {
-                              setStateModal(() {});
-                            },
-                            onTapOutside: (_) => FocusScope.of(modalContext).unfocus(),
                           ),
-                        ),
-                        const Divider(height: 1),
-                        Expanded(
-                          child: ListView.separated(
-                            itemCount: filtered.length,
-                            separatorBuilder: (_, __) =>
-                                const Divider(height: 1, thickness: 0.2),
-                            itemBuilder: (_, index) {
-                              final c = filtered[index];
-                              return ListTile(
-                                leading: CircleAvatar(
-                                  backgroundColor: const Color(0xFF25D366)
-                                      .withValues(alpha: 0.18),
-                                  child: Text(c.displayName.isNotEmpty
-                                      ? c.displayName[0].toUpperCase()
-                                      : '?'),
-                                ),
-                                title: Text(c.displayName),
-                                subtitle: Text(c.fingerprint),
-                                onTap: () {
-                                  Navigator.of(modalContext).pop();
-                                  outerRef
-                                      .read(encodeRecipientProvider.notifier)
-                                      .state = c;
-                                  if (isNarrow) {
-                                    _openChat(c);
-                                  } else {
-                                    _selectContact(c);
-                                  }
-                                },
-                              );
-                            },
+                          const Divider(height: 1),
+                          Expanded(
+                            child: ListView.separated(
+                              itemCount: filtered.length,
+                              separatorBuilder: (_, __) =>
+                                  const Divider(height: 1, thickness: 0.2),
+                              itemBuilder: (_, index) {
+                                final c = filtered[index];
+                                return ListTile(
+                                  leading: CircleAvatar(
+                                    backgroundColor: const Color(0xFF25D366)
+                                        .withValues(alpha: 0.18),
+                                    child: Text(c.displayName.isNotEmpty
+                                        ? c.displayName[0].toUpperCase()
+                                        : '?'),
+                                  ),
+                                  title: Text(c.displayName),
+                                  subtitle: Text(c.fingerprint),
+                                  onTap: () {
+                                    Navigator.of(modalContext).pop();
+                                    outerRef
+                                        .read(encodeRecipientProvider.notifier)
+                                        .state = c;
+                                    if (isNarrow) {
+                                      _openChat(c);
+                                    } else {
+                                      _selectContact(c);
+                                    }
+                                  },
+                                );
+                              },
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ],
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ],
             ),
           ),
         );
@@ -296,7 +298,11 @@ class _HomeViewState extends ConsumerState<HomeView> {
     final allowedPeerIds = _currentAllowedPeerIds;
     final restrictToFolder = allowedPeerIds != null;
     final allMessages = List<MessageRecord>.from(await repo.getAllMessages())
-      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      ..sort((a, b) {
+        final byTs = b.timestamp.compareTo(a.timestamp);
+        if (byTs != 0) return byTs;
+        return b.id.compareTo(a.id);
+      });
     final contactsCache = <String, RemoteIdentity>{
       for (final c in _contacts) c.identityId: c,
     };
@@ -307,7 +313,9 @@ class _HomeViewState extends ConsumerState<HomeView> {
     // Process in chunks so we can show partial results quickly
     const chunkSize = 20;
     for (var i = 0; i < allMessages.length; i += chunkSize) {
-      if (!mounted || _disposed || generation != _globalSearchGeneration) { return; }
+      if (!mounted || _disposed || generation != _globalSearchGeneration) {
+        return;
+      }
 
       final end = (i + chunkSize).clamp(0, allMessages.length);
       final chunk = allMessages.sublist(i, end);
@@ -346,13 +354,17 @@ class _HomeViewState extends ConsumerState<HomeView> {
       }
 
       // Publish partial results after each chunk
-      if (!mounted || _disposed || generation != _globalSearchGeneration) { return; }
+      if (!mounted || _disposed || generation != _globalSearchGeneration) {
+        return;
+      }
       setState(() {
         _globalMessageHits = List.unmodifiable(hits);
       });
     }
 
-    if (!mounted || _disposed || generation != _globalSearchGeneration) { return; }
+    if (!mounted || _disposed || generation != _globalSearchGeneration) {
+      return;
+    }
     setState(() {
       _globalSearchInProgress = false;
       _globalMessageHits = List.unmodifiable(hits);
@@ -433,14 +445,18 @@ class _HomeViewState extends ConsumerState<HomeView> {
     // Check if it's an identity link first
     if (source.trim().startsWith('layergram://i/')) {
       try {
-        final identity = ref.read(identitiesControllerProvider).parseIdentityFromLink(source);
+        final identity = ref
+            .read(identitiesControllerProvider)
+            .parseIdentityFromLink(source);
         await ref.read(identitiesControllerProvider).saveIdentity(identity);
-        
+
         if (!mounted) return;
         messenger.showSnackBar(
-          SnackBar(content: Text(AppStrings.t(context, 'contactNameSaved'))), // Reusing existing translation
+          SnackBar(
+              content: Text(AppStrings.t(context,
+                  'contactNameSaved'))), // Reusing existing translation
         );
-        
+
         // Open the chat with the newly imported contact
         ref.read(encodeRecipientProvider.notifier).state = identity;
         if (isNarrow) {
@@ -452,17 +468,17 @@ class _HomeViewState extends ConsumerState<HomeView> {
       } catch (e) {
         if (!mounted) return;
         messenger.showSnackBar(
-          SnackBar(content: Text(AppStrings.t(context, 'invalidLayergramLink'))),
+          SnackBar(
+              content: Text(AppStrings.t(context, 'invalidLayergramLink'))),
         );
         return;
       }
     }
 
-    final outcome =
-        await ref.read(homeControllerProvider).decodeHiddenMessage(
-              source,
-              hintContactId: _selectedContact?.identityId,
-            );
+    final outcome = await ref.read(homeControllerProvider).decodeHiddenMessage(
+          source,
+          hintContactId: _selectedContact?.identityId,
+        );
     if (!mounted) {
       return;
     }
@@ -481,13 +497,25 @@ class _HomeViewState extends ConsumerState<HomeView> {
           if (isNarrow) {
             await _openChat(sender);
           } else {
-            _selectContact(sender);
+            final sameChat = _selectedContact?.identityId == sender.identityId;
+            final chatState = _embeddedChatKey.currentState;
+            if (sameChat && chatState != null) {
+              chatState.refreshAfterDecodedMessage();
+            } else {
+              _selectContact(sender);
+            }
           }
         } else {
           messenger.showSnackBar(
             SnackBar(content: Text(AppStrings.t(context, 'unknownSender'))),
           );
         }
+        break;
+      case DecodeKind.fsLost:
+        messenger.showSnackBar(
+          SnackBar(
+              content: Text(AppStrings.t(context, 'security.fs.message_lost'))),
+        );
         break;
       default:
         messenger.showSnackBar(
@@ -545,7 +573,9 @@ class _HomeViewState extends ConsumerState<HomeView> {
         _pendingComposerState = state;
       }
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || _disposed) { return; }
+        if (!mounted || _disposed) {
+          return;
+        }
         _openChat(contact);
       });
     } else if (!showFab && !_sentToNarrow) {
@@ -625,7 +655,8 @@ class _HomeViewState extends ConsumerState<HomeView> {
                           }
 
                           final allMessages = messagesSnapshot.data ?? [];
-                          final effectiveTag = ref.watch(effectiveKeyTagProvider);
+                          final effectiveTag =
+                              ref.watch(effectiveKeyTagProvider);
                           final keyFilteredMessages = allMessages.where((m) {
                             if (effectiveTag == null) return true;
                             return m.keyTag == effectiveTag;
@@ -638,14 +669,15 @@ class _HomeViewState extends ConsumerState<HomeView> {
                                       : m.recipientId;
                                   return allowedPeerIds.contains(peerId);
                                 }).toList();
-                          final messagesByPeer = <String, List<MessageRecord>>{};
+                          final messagesByPeer =
+                              <String, List<MessageRecord>>{};
                           final lastByPeer = <String, int>{};
                           for (final m in visibleMessages) {
                             final peerId = m.direction == 'incoming'
                                 ? m.senderId
                                 : m.recipientId;
                             messagesByPeer.putIfAbsent(peerId, () => []).add(m);
-                            
+
                             final existing = lastByPeer[peerId];
                             if (existing == null || m.timestamp > existing) {
                               lastByPeer[peerId] = m.timestamp;
@@ -654,7 +686,9 @@ class _HomeViewState extends ConsumerState<HomeView> {
                           _lastMessageByContact = lastByPeer;
 
                           final filteredContacts = allContacts.where((c) {
-                            if (!lastByPeer.containsKey(c.identityId)) { return false; }
+                            if (!lastByPeer.containsKey(c.identityId)) {
+                              return false;
+                            }
                             if (allowedPeerIds != null &&
                                 !allowedPeerIds.contains(c.identityId)) {
                               return false;
@@ -676,7 +710,9 @@ class _HomeViewState extends ConsumerState<HomeView> {
                                     (pinnedByChatId[b.identityId] ?? 0)
                                         .compareTo(
                                             pinnedByChatId[a.identityId] ?? 0);
-                                if (byPin != 0) { return byPin; }
+                                if (byPin != 0) {
+                                  return byPin;
+                                }
                               }
                               final byLast = (lastByPeer[b.identityId] ?? 0)
                                   .compareTo(lastByPeer[a.identityId] ?? 0);
@@ -687,27 +723,28 @@ class _HomeViewState extends ConsumerState<HomeView> {
                             });
 
                           final selectedContact = _selectedContact;
-                          final selectedMatchesSearch = selectedContact != null &&
-                              (query.isEmpty ||
-                                  selectedContact.displayName
-                                      .toLowerCase()
-                                      .contains(query) ||
-                                  selectedContact.fingerprint
-                                      .toLowerCase()
-                                      .contains(query));
-                          final selectedAllowedInFolder = selectedContact != null &&
-                              (allowedPeerIds == null ||
-                                  allowedPeerIds.contains(
-                                      selectedContact.identityId));
-                          final shouldKeepSelectedEmptyChat =
+                          final selectedMatchesSearch =
                               selectedContact != null &&
-                                  !lastByPeer.containsKey(
-                                      selectedContact.identityId) &&
-                                  selectedMatchesSearch &&
-                                  selectedAllowedInFolder &&
-                                  !filteredContacts.any((c) =>
-                                      c.identityId ==
-                                      selectedContact.identityId);
+                                  (query.isEmpty ||
+                                      selectedContact.displayName
+                                          .toLowerCase()
+                                          .contains(query) ||
+                                      selectedContact.fingerprint
+                                          .toLowerCase()
+                                          .contains(query));
+                          final selectedAllowedInFolder = selectedContact !=
+                                  null &&
+                              (allowedPeerIds == null ||
+                                  allowedPeerIds
+                                      .contains(selectedContact.identityId));
+                          final shouldKeepSelectedEmptyChat = selectedContact !=
+                                  null &&
+                              !lastByPeer
+                                  .containsKey(selectedContact.identityId) &&
+                              selectedMatchesSearch &&
+                              selectedAllowedInFolder &&
+                              !filteredContacts.any((c) =>
+                                  c.identityId == selectedContact.identityId);
                           if (shouldKeepSelectedEmptyChat) {
                             filteredContacts.insert(0, selectedContact);
                           }
@@ -806,7 +843,8 @@ class _HomeViewState extends ConsumerState<HomeView> {
                               final hidePreview =
                                   ref.watch(hideChatPreviewProvider);
                               final isSearching = query.isNotEmpty;
-                              final contactMessages = messagesByPeer[c.identityId] ?? [];
+                              final contactMessages =
+                                  messagesByPeer[c.identityId] ?? [];
                               final hasMessages = contactMessages.isNotEmpty;
                               final showPreview = !hidePreview || isSearching;
                               return Padding(
@@ -856,29 +894,42 @@ class _HomeViewState extends ConsumerState<HomeView> {
                                                       .textTheme.titleMedium),
                                               const SizedBox(height: 2),
                                               if (hasMessages)
-                                                FutureBuilder<DecryptedMessagePreview?>(
+                                                FutureBuilder<
+                                                    DecryptedMessagePreview?>(
                                                   future: ref
                                                       .read(
                                                           homeControllerProvider)
                                                       .getLastDecryptableMessagePreview(
-                                                          messages: contactMessages,
+                                                          messages:
+                                                              contactMessages,
                                                           contact: c),
                                                   builder: (context, snap) {
                                                     if (!snap.hasData) {
                                                       return Text('',
-                                                          style: theme
-                                                              .textTheme.bodySmall);
+                                                          style: theme.textTheme
+                                                              .bodySmall);
                                                     }
-                                                    
+
                                                     final preview = snap.data!;
-                                                    
-                                                    // This will be called synchronously during the build pass, 
+
+                                                    // This will be called synchronously during the build pass,
                                                     // but we defer updating the state to avoid build-phase exceptions.
-                                                    if (_lastMessageByContact[c.identityId] != preview.timestamp) {
-                                                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                                                        if (mounted && _lastMessageByContact[c.identityId] != preview.timestamp) {
+                                                    if (_lastMessageByContact[
+                                                            c.identityId] !=
+                                                        preview.timestamp) {
+                                                      WidgetsBinding.instance
+                                                          .addPostFrameCallback(
+                                                              (_) {
+                                                        if (mounted &&
+                                                            _lastMessageByContact[c
+                                                                    .identityId] !=
+                                                                preview
+                                                                    .timestamp) {
                                                           setState(() {
-                                                            _lastMessageByContact[c.identityId] = preview.timestamp;
+                                                            _lastMessageByContact[
+                                                                    c.identityId] =
+                                                                preview
+                                                                    .timestamp;
                                                           });
                                                         }
                                                       });
@@ -892,10 +943,10 @@ class _HomeViewState extends ConsumerState<HomeView> {
                                                           style: theme.textTheme
                                                               .bodySmall);
                                                     }
-                                                    
+
                                                     return Text('',
-                                                        style: theme
-                                                            .textTheme.bodySmall);
+                                                        style: theme.textTheme
+                                                            .bodySmall);
                                                   },
                                                 )
                                               else
@@ -1069,7 +1120,8 @@ class _HomeViewState extends ConsumerState<HomeView> {
                       const SizedBox(height: 10),
                       Expanded(
                         child: StreamBuilder<List<MessageRecord>>(
-                          stream: ref.read(messagesRepositoryProvider).watchAll(),
+                          stream:
+                              ref.read(messagesRepositoryProvider).watchAll(),
                           builder: (context, messagesSnapshot) {
                             if (isFolderLoading) {
                               return const Center(
@@ -1077,7 +1129,8 @@ class _HomeViewState extends ConsumerState<HomeView> {
                             }
 
                             final allMessages = messagesSnapshot.data ?? [];
-                            final effectiveTagN = ref.watch(effectiveKeyTagProvider);
+                            final effectiveTagN =
+                                ref.watch(effectiveKeyTagProvider);
                             final keyFilteredMessagesN = allMessages.where((m) {
                               if (effectiveTagN == null) return true;
                               return m.keyTag == effectiveTagN;
@@ -1088,11 +1141,14 @@ class _HomeViewState extends ConsumerState<HomeView> {
                                     final peerId = _peerIdOf(m);
                                     return allowedPeerIds.contains(peerId);
                                   }).toList();
-                            final messagesByPeerN = <String, List<MessageRecord>>{};
+                            final messagesByPeerN =
+                                <String, List<MessageRecord>>{};
                             final lastByPeerTs = <String, int>{};
                             for (final m in visibleMessages) {
                               final peerId = _peerIdOf(m);
-                              messagesByPeerN.putIfAbsent(peerId, () => []).add(m);
+                              messagesByPeerN
+                                  .putIfAbsent(peerId, () => [])
+                                  .add(m);
                               final existing = lastByPeerTs[peerId];
                               if (existing == null || m.timestamp > existing) {
                                 lastByPeerTs[peerId] = m.timestamp;
@@ -1103,10 +1159,8 @@ class _HomeViewState extends ConsumerState<HomeView> {
 
                             final peerIds = lastByPeerTs.keys.toList()
                               ..sort((a, b) {
-                                final aPinned =
-                                    pinnedByChatId.containsKey(a);
-                                final bPinned =
-                                    pinnedByChatId.containsKey(b);
+                                final aPinned = pinnedByChatId.containsKey(a);
+                                final bPinned = pinnedByChatId.containsKey(b);
                                 if (aPinned != bPinned) {
                                   return aPinned ? -1 : 1;
                                 }
@@ -1114,9 +1168,12 @@ class _HomeViewState extends ConsumerState<HomeView> {
                                   final aPin = pinnedByChatId[a] ?? 0;
                                   final bPin = pinnedByChatId[b] ?? 0;
                                   final byPin = bPin.compareTo(aPin);
-                                  if (byPin != 0) { return byPin; }
+                                  if (byPin != 0) {
+                                    return byPin;
+                                  }
                                 }
-                                return (lastByPeerTs[b] ?? 0).compareTo(lastByPeerTs[a] ?? 0);
+                                return (lastByPeerTs[b] ?? 0)
+                                    .compareTo(lastByPeerTs[a] ?? 0);
                               });
 
                             final filtered = peerIds.where((peerId) {
@@ -1167,7 +1224,8 @@ class _HomeViewState extends ConsumerState<HomeView> {
                                 final peerId = filtered[index];
                                 final isPinned =
                                     pinnedByChatId.containsKey(peerId);
-                                final contactMessages = messagesByPeerN[peerId] ?? [];
+                                final contactMessages =
+                                    messagesByPeerN[peerId] ?? [];
                                 final contact = allContacts
                                     .cast<RemoteIdentity?>()
                                     .firstWhere(
@@ -1195,7 +1253,8 @@ class _HomeViewState extends ConsumerState<HomeView> {
                                       ? _showChatContextMenu(context, contact,
                                           position: details.globalPosition)
                                       : null,
-                                  child: (contact != null && contactMessages.isNotEmpty)
+                                  child: (contact != null &&
+                                          contactMessages.isNotEmpty)
                                       ? FutureBuilder<DecryptedMessagePreview?>(
                                           future: ref
                                               .read(homeControllerProvider)
@@ -1206,11 +1265,13 @@ class _HomeViewState extends ConsumerState<HomeView> {
                                             final preview = snap.data;
                                             return ListTile(
                                               title: Text(contact.displayName),
-                                              subtitle: (showPreviewNarrow && preview != null)
+                                              subtitle: (showPreviewNarrow &&
+                                                      preview != null)
                                                   ? Text(
                                                       preview.text,
                                                       maxLines: 1,
-                                                      overflow: TextOverflow.ellipsis,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
                                                     )
                                                   : const Text(''),
                                               trailing: Row(
@@ -1228,12 +1289,18 @@ class _HomeViewState extends ConsumerState<HomeView> {
                                                   if (preview != null)
                                                     Text(
                                                       _formatLastMessageTime(
-                                                          context, preview.timestamp),
+                                                          context,
+                                                          preview.timestamp),
                                                     )
-                                                  else if ((lastByPeerTs[peerId] ?? 0) > 0)
+                                                  else if ((lastByPeerTs[
+                                                              peerId] ??
+                                                          0) >
+                                                      0)
                                                     Text(
                                                       _formatLastMessageTime(
-                                                          context, lastByPeerTs[peerId]!),
+                                                          context,
+                                                          lastByPeerTs[
+                                                              peerId]!),
                                                     ),
                                                 ],
                                               ),
@@ -1241,7 +1308,8 @@ class _HomeViewState extends ConsumerState<HomeView> {
                                           },
                                         )
                                       : ListTile(
-                                          title: Text(contact?.displayName ?? peerId),
+                                          title: Text(
+                                              contact?.displayName ?? peerId),
                                           subtitle: const Text(''),
                                           trailing: Row(
                                             mainAxisSize: MainAxisSize.min,
@@ -1255,10 +1323,12 @@ class _HomeViewState extends ConsumerState<HomeView> {
                                                       .primary,
                                                 ),
                                               const SizedBox(width: 4),
-                                              if ((lastByPeerTs[peerId] ?? 0) > 0)
+                                              if ((lastByPeerTs[peerId] ?? 0) >
+                                                  0)
                                                 Text(
                                                   _formatLastMessageTime(
-                                                      context, lastByPeerTs[peerId]!),
+                                                      context,
+                                                      lastByPeerTs[peerId]!),
                                                 ),
                                             ],
                                           ),
@@ -1325,7 +1395,9 @@ class _HomeViewState extends ConsumerState<HomeView> {
         ),
       ),
     );
-    if (!mounted || _disposed) { return; }
+    if (!mounted || _disposed) {
+      return;
+    }
 
     if (result is Map) {
       // ChatView handed off state when resizing to wide — store it for the embedded ChatView.
@@ -1424,7 +1496,9 @@ class _HomeViewState extends ConsumerState<HomeView> {
               );
           break;
         case 'delete':
-          if (!menuContext.mounted) { return; }
+          if (!menuContext.mounted) {
+            return;
+          }
           final confirmed = await showDialog<bool>(
             context: menuContext,
             builder: (context) => AlertDialog(
@@ -1458,7 +1532,9 @@ class _HomeViewState extends ConsumerState<HomeView> {
 
   Future<void> _openGlobalSearchHit(_GlobalChatHit hit) async {
     final query = _globalSearchQuery;
-    if (query.isEmpty) { return; }
+    if (query.isEmpty) {
+      return;
+    }
     final isNarrow = MediaQuery.of(context).size.width < 980;
 
     if (isNarrow) {

@@ -20,6 +20,14 @@ import 'package:cryptography/cryptography.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/crypto/fs_double_ratchet.dart';
+import '../../core/crypto/fs_handshake.dart';
+import '../../core/crypto/encryption_service.dart';
+import '../../core/crypto/fs_message_classification.dart';
+import '../../core/crypto/fs_opportunistic_controller.dart';
+import '../../core/crypto/fs_security_mode.dart';
+import '../../core/crypto/lmf_v2_decoder.dart';
+import '../../core/crypto/fs_session_manager.dart';
 import '../../core/crypto/message_record_cipher.dart';
 import '../../core/crypto/models.dart';
 import '../../core/crypto/passphrase_service.dart';
@@ -33,6 +41,15 @@ class DecryptedMessagePreview {
 
   final String text;
   final int timestamp;
+}
+
+class FsSendBlockedException implements Exception {
+  const FsSendBlockedException(this.messageKey);
+
+  final String messageKey;
+
+  @override
+  String toString() => messageKey;
 }
 
 class HomeController {
@@ -94,7 +111,7 @@ class HomeController {
     int? expireAfter,
     bool deleteAfterRead = false,
   }) async {
-    final encrypted = await encryptForRecipient(
+    final result = await encryptForRecipient(
       secretText: secretText,
       recipient: recipient,
       expireAfter: expireAfter,
@@ -103,10 +120,15 @@ class HomeController {
 
     return ref
         .read(stegoEncoderProvider)
-        .encodeBytes(coverText, encrypted.toRawBytes());
+        .encodeBytes(coverText, result.message.toRawBytes());
   }
 
-  Future<EncryptedMessage> encryptForRecipient({
+  Future<
+      ({
+        EncryptedMessage message,
+        bool isFsEncrypted,
+        FsMessageClassification classification
+      })> encryptForRecipient({
     required String secretText,
     required RemoteIdentity recipient,
     int? expireAfter,
@@ -118,6 +140,21 @@ class HomeController {
     final privateKey = await _activePrivateKey();
     if (local == null || privateKey == null) {
       throw StateError('Identity not initialized');
+    }
+
+    // Check Maximum/Strict FS policy before sending
+    if (!selfCopy) {
+      final strictController = ref.read(
+        fsStrictModeControllerProvider(recipient.identityId),
+      );
+      final deviceChanged =
+          _strictModeHasUnexpectedDevice(recipient.identityId);
+      if (!strictController.canSendMessage(deviceChanged: deviceChanged)) {
+        final reasonKey =
+            strictController.sendBlockReasonKey(deviceChanged: deviceChanged) ??
+                'security.fs.error.sending_blocked';
+        throw FsSendBlockedException(reasonKey);
+      }
     }
 
     final payload = PlaintextPayload(
@@ -136,12 +173,193 @@ class HomeController {
         ? pp.publicKeyBase64!
         : local.publicKeyBase64;
 
-    return ref.read(encryptionServiceProvider).encrypt(
-          senderPrivateKeyBase64: privateKey,
-          recipientPublicKeyBase64:
-              selfCopy ? selfPublic : recipient.publicKeyBase64,
-          payload: payload,
-        );
+    // Get FS extension for opportunistic Forward Secrecy handshake
+    Map<String, dynamic>? fsExtension;
+    RatchetState? ratchetState;
+    String? sessionId;
+    // §9.6: when the contact has multiple active device sessions, the content
+    // key is wrapped for all of them in a single multi-envelope message.
+    Map<String, RatchetState>? multiSessionRatchets;
+    bool includeLegacyFallback = false;
+
+    if (!selfCopy) {
+      final fsController = ref.read(
+        fsOpportunisticControllerProvider(recipient.identityId),
+      );
+      // CRITICAL: Use the controller's session manager to ensure we're using
+      // the same instance that the controller uses for state transitions.
+      // Using a separate provider could result in different instances.
+      final sessionManager = fsController.sessionManager;
+
+      // Prepare handshake payload based on current state
+      final securityMode = ref.read(fsSecurityModeServiceProvider).getModeSync(
+            contactId: recipient.identityId,
+            identityContext: fsController.identityContext,
+          );
+      fsController.securityMode = securityMode;
+      await _restorePersistedActiveFsSessionIfNeeded(
+        contactId: recipient.identityId,
+        fsController: fsController,
+      );
+      // Refresh state after possible restart hydration.
+      final effectiveState = sessionManager.state;
+      final outgoingExt = await _buildFsOutgoingExtension(
+        fsController: fsController,
+        sessionManager: sessionManager,
+        state: effectiveState,
+        recipient: recipient,
+        privateKey: privateKey,
+      );
+      if (outgoingExt?.json != null) {
+        fsExtension = outgoingExt!.json;
+      }
+
+      // If FS is active, get the ratchet state for encryption
+      if (securityMode != FsSecurityMode.base &&
+          (effectiveState == FsSessionState.fsActive ||
+              effectiveState == FsSessionState.strictFsActive)) {
+        sessionId = sessionManager.activeSessionId;
+        if (sessionId != null) {
+          ratchetState = ref.read(fsRatchetStateCacheProvider)[sessionId];
+          // If not in cache but session is active, try to load from persistence
+          if (ratchetState == null) {
+            ratchetState = await ref
+                .read(fsRatchetPersistenceServiceProvider)
+                .loadRatchetState(sessionId);
+            if (ratchetState != null) {
+              // Put it back in cache for future use
+              ref.read(fsRatchetStateCacheProvider.notifier).update((cache) => {
+                    ...cache,
+                    sessionId!: ratchetState!,
+                  });
+            } else {
+              // CRITICAL: Ratchet state is missing from both cache and persistence.
+              // This should never happen in normal operation - the session is inconsistent.
+              // Mark session as broken. Strict/Maximum FS must not silently
+              // fall back to legacy encryption when the ratchet is unavailable.
+              sessionManager.markBroken();
+              if (securityMode == FsSecurityMode.strict ||
+                  effectiveState == FsSessionState.strictFsActive) {
+                throw const FsSendBlockedException(
+                  'security.fs.error.device_repair_required',
+                );
+              }
+            }
+          }
+        } else {
+          // CRITICAL: State is fsActive but activeSessionId is null.
+          // This is an inconsistent state - the session activation failed or was lost.
+          // Mark session as broken to recover gracefully.
+          sessionManager.markBroken();
+          if (securityMode == FsSecurityMode.strict ||
+              effectiveState == FsSessionState.strictFsActive) {
+            throw const FsSendBlockedException(
+              'security.fs.error.device_repair_required',
+            );
+          }
+        }
+      }
+
+      // §9.6: collect active device sessions so one payload can be read by
+      // every known device. Single-session Advanced uses the smaller FS
+      // envelope plus legacy fallback instead of forcing fs_multi.
+      includeLegacyFallback = securityMode == FsSecurityMode.advanced &&
+          effectiveState == FsSessionState.fsActive;
+      if (ratchetState != null) {
+        final activeIds = fsController.allActiveSessionIds;
+        if (activeIds.length >= 2) {
+          final cache = ref.read(fsRatchetStateCacheProvider);
+          final persistence = ref.read(fsRatchetPersistenceServiceProvider);
+          final collected = <String, RatchetState>{};
+          for (final id in activeIds) {
+            final r = cache[id] ?? await persistence.loadRatchetState(id);
+            if (r != null) collected[id] = r;
+          }
+          if (collected.length >= 2) {
+            multiSessionRatchets = collected;
+          }
+        }
+      }
+
+      // Trigger UI refresh if FS state changed
+      ref.read(fsRegistryVersionProvider.notifier).state++;
+    }
+
+    final EncryptedMessage outMessage;
+    final bool isFsEncrypted;
+    if (multiSessionRatchets != null) {
+      // §9.6 multi-envelope path.
+      final multi =
+          await ref.read(encryptionServiceProvider).encryptMultiEnvelope(
+                senderPrivateKeyBase64: privateKey,
+                recipientPublicKeyBase64: recipient.publicKeyBase64,
+                payload: payload,
+                sessionRatchets: multiSessionRatchets,
+                fsExtension: fsExtension,
+                includeLegacyFallback: includeLegacyFallback,
+              );
+      final cacheNotifier = ref.read(fsRatchetStateCacheProvider.notifier);
+      final persistence = ref.read(fsRatchetPersistenceServiceProvider);
+      for (final entry in multi.newRatchetStates.entries) {
+        cacheNotifier.update((cache) => {...cache, entry.key: entry.value});
+        await persistence.saveRatchetState(entry.value);
+      }
+      outMessage = multi.message;
+      isFsEncrypted = true;
+    } else {
+      final result = await ref.read(encryptionServiceProvider).encrypt(
+            senderPrivateKeyBase64: privateKey,
+            recipientPublicKeyBase64:
+                selfCopy ? selfPublic : recipient.publicKeyBase64,
+            payload: payload,
+            fsExtension: fsExtension,
+            ratchetState: ratchetState,
+            includeLegacyFallback: includeLegacyFallback,
+          );
+
+      // Save updated ratchet state if FS was used
+      if (result.newRatchetState != null && sessionId != null) {
+        final newState = result.newRatchetState!;
+        final sid = sessionId; // Promote to non-nullable
+        ref.read(fsRatchetStateCacheProvider.notifier).update((cache) => {
+              ...cache,
+              sid: newState,
+            });
+
+        // Persist to storage
+        await ref
+            .read(fsRatchetPersistenceServiceProvider)
+            .saveRatchetState(newState);
+      }
+
+      outMessage = result.message;
+      isFsEncrypted = result.newRatchetState != null;
+    }
+
+    // §14.4: Classify the outgoing message.
+    final FsMessageClassification classification;
+    if (selfCopy) {
+      classification = isFsEncrypted
+          ? FsMessageClassification.fsOnly
+          : FsMessageClassification.legacy;
+    } else {
+      final fsController = ref.read(
+        fsOpportunisticControllerProvider(recipient.identityId),
+      );
+      classification = _classifyOutgoing(
+        isFsEncrypted: isFsEncrypted,
+        hasLegacyFallback: includeLegacyFallback,
+        hasFsExtension: fsExtension != null,
+        sessionState: fsController.sessionManager.state,
+        securityMode: fsController.securityMode,
+      );
+    }
+
+    return (
+      message: outMessage,
+      isFsEncrypted: isFsEncrypted,
+      classification: classification,
+    );
   }
 
   void clearSessionDecryptionCache() {
@@ -211,57 +429,209 @@ class HomeController {
     required MessageRecord message,
     required RemoteIdentity contact,
   }) async {
+    if (message.text != null) return message.text;
     if (message.ciphertextBase64 == null || message.nonceBase64 == null) {
       return null;
     }
 
-    final key = await _displayKeyForContact(contact);
-    if (key == null) return null;
+    // §12.3: Check in-memory cache first, then aux record persistence.
+    final fsController =
+        ref.read(fsOpportunisticControllerProvider(contact.identityId));
+    fsController.securityMode =
+        ref.read(fsSecurityModeServiceProvider).getModeSync(
+              contactId: contact.identityId,
+              identityContext: fsController.identityContext,
+            );
+    final cacheKey = '${contact.identityId}|${message.id}';
+    final cached = fsController.getCachedPlaintext(cacheKey);
+    if (cached != null) return cached;
 
-    final decrypted = await ref.read(encryptionServiceProvider).tryDecryptWithKey(
-          message: EncryptedMessage(
-            version: 1,
-            senderId: message.senderId,
-            recipientId: message.recipientId,
-            nonceBase64: message.nonceBase64 ?? '',
-            ciphertextBase64: message.ciphertextBase64 ?? '',
-          ),
-          key: key,
+    // FS messages have text=null in DB; plaintext lives in encrypted aux records.
+    if (message.isFsEncrypted) {
+      final ptService = ref.read(fsPlaintextPersistenceServiceProvider);
+      final persisted = await ptService.loadPlaintext(message.id);
+      if (persisted != null) {
+        // Warm the in-memory cache for subsequent reads
+        fsController.cachePlaintext(cacheKey, persisted);
+        return persisted;
+      }
+      // Aux record missing (identity reset wiped it) → unrecoverable
+      return null;
+    }
+
+    final privateKey = await _activePrivateKey();
+    if (privateKey == null) return null;
+
+    // §7.3: Get ratchet state for decryption — supports per-device sessions.
+    // Pass all known ratchets so the decrypt method can match by fs_session.
+    final allRatchets = ref.read(fsRatchetStateCacheProvider);
+    RatchetState? ratchetState;
+    final sessionManager = fsController.sessionManager;
+    final activeSessionId = sessionManager.activeSessionId;
+    if (activeSessionId != null) {
+      ratchetState = allRatchets[activeSessionId];
+    }
+
+    final encMessage = EncryptedMessage(
+      version: 1,
+      senderId: message.senderId,
+      recipientId: message.recipientId,
+      nonceBase64: message.nonceBase64 ?? '',
+      ciphertextBase64: message.ciphertextBase64 ?? '',
+    );
+
+    final result = await ref.read(encryptionServiceProvider).decrypt(
+          recipientPrivateKeyBase64: privateKey,
+          senderPublicKeyBase64: contact.publicKeyBase64,
+          message: encMessage,
+          ratchetState: ratchetState,
+          allRatchetStates: allRatchets,
+          isFsReplay: fsController.isMessageReplay,
         );
-    return decrypted?.text;
+
+    if (result.fsReplayDetected) return null;
+
+    // FS-encrypted but ratchet state is missing (identity reset / broken session)
+    if (result.fsDecryptFailed) {
+      return null;
+    }
+
+    final isFs = result.isFsEnvelope;
+
+    // Update ratchet state if it changed (e.g., received new message advanced counter)
+    if (result.newRatchetState != null) {
+      final newState = result.newRatchetState!;
+      ref.read(fsRatchetStateCacheProvider.notifier).update((cache) => {
+            ...cache,
+            newState.sessionId: newState,
+          });
+      // Persist updated state
+      await ref
+          .read(fsRatchetPersistenceServiceProvider)
+          .saveRatchetState(newState);
+
+      // Cache FS-decrypted plaintext (§12.3) — ratchet has already advanced
+      fsController.cachePlaintext(cacheKey, result.payload.text);
+
+      // Persist to encrypted aux record for restart survival
+      await ref.read(fsPlaintextPersistenceServiceProvider).savePlaintext(
+            messageId: message.id,
+            plaintext: result.payload.text,
+            contactId: contact.identityId,
+          );
+
+      // Record message counter in replay cache (§8.7)
+      fsController.recordMessageProcessed(
+        sessionId: newState.sessionId,
+        counter: newState.recvCounter - 1,
+      );
+    }
+
+    // Downgrade detection: record the security level (§7.6)
+    final chatDecryptLevel =
+        (isFs ? FsMessageClassification.fsOnly : FsMessageClassification.legacy)
+            .downgradeLevel;
+    if (chatDecryptLevel != null) {
+      fsController.recordSecurityLevel(
+        contactId: contact.identityId,
+        level: chatDecryptLevel,
+      );
+    }
+
+    return result.payload.text;
   }
 
   Future<DecryptedMessagePreview?> getLastDecryptableMessagePreview({
     required List<MessageRecord> messages,
     required RemoteIdentity contact,
   }) async {
-    final key = await _displayKeyForContact(contact);
-    if (key == null) return null;
+    final privateKey = await _activePrivateKey();
+    if (privateKey == null) return null;
+
+    // §7.3: Get ratchet state for decryption — supports per-device sessions.
+    final allRatchets = ref.read(fsRatchetStateCacheProvider);
+    final fsController =
+        ref.read(fsOpportunisticControllerProvider(contact.identityId));
+    final sessionManager = fsController.sessionManager;
+    final activeSessionId = sessionManager.activeSessionId;
+    RatchetState? ratchetState;
+    if (activeSessionId != null) {
+      ratchetState = allRatchets[activeSessionId];
+    }
 
     // Sort messages descending by timestamp to find the latest
     final sortedMessages = List<MessageRecord>.from(messages)
-      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      ..sort((a, b) {
+        final byTs = b.timestamp.compareTo(a.timestamp);
+        if (byTs != 0) return byTs;
+        return b.id.compareTo(a.id);
+      });
 
     for (final message in sortedMessages) {
+      if (message.text != null) {
+        return DecryptedMessagePreview(
+          text: message.text!,
+          timestamp: message.timestamp,
+        );
+      }
+
+      // FS message: try aux record cache
+      if (message.isFsEncrypted) {
+        final ptService = ref.read(fsPlaintextPersistenceServiceProvider);
+        final persisted = await ptService.loadPlaintext(message.id);
+        if (persisted != null) {
+          return DecryptedMessagePreview(
+            text: persisted,
+            timestamp: message.timestamp,
+          );
+        }
+        continue;
+      }
+
       if (message.ciphertextBase64 == null || message.nonceBase64 == null) {
         continue;
       }
 
-      final decrypted = await ref.read(encryptionServiceProvider).tryDecryptWithKey(
-            message: EncryptedMessage(
-              version: 1,
-              senderId: message.senderId,
-              recipientId: message.recipientId,
-              nonceBase64: message.nonceBase64 ?? '',
-              ciphertextBase64: message.ciphertextBase64 ?? '',
-            ),
-            key: key,
-          );
-      if (decrypted != null) {
+      try {
+        final result = await ref.read(encryptionServiceProvider).decrypt(
+              recipientPrivateKeyBase64: privateKey,
+              senderPublicKeyBase64: contact.publicKeyBase64,
+              message: EncryptedMessage(
+                version: 1,
+                senderId: message.senderId,
+                recipientId: message.recipientId,
+                nonceBase64: message.nonceBase64 ?? '',
+                ciphertextBase64: message.ciphertextBase64 ?? '',
+              ),
+              ratchetState: ratchetState,
+              allRatchetStates: allRatchets,
+              isFsReplay: fsController.isMessageReplay,
+            );
+
+        if (result.fsReplayDetected) continue;
+
+        // FS message whose ratchet is gone — skip to next message
+        if (result.fsDecryptFailed) continue;
+
+        // Update ratchet state if it changed
+        if (result.newRatchetState != null) {
+          final newState = result.newRatchetState!;
+          ratchetState = newState; // Update local var for next iteration
+          ref.read(fsRatchetStateCacheProvider.notifier).update((cache) => {
+                ...cache,
+                newState.sessionId: newState,
+              });
+          await ref
+              .read(fsRatchetPersistenceServiceProvider)
+              .saveRatchetState(newState);
+        }
+
         return DecryptedMessagePreview(
-          text: decrypted.text,
+          text: result.payload.text,
           timestamp: message.timestamp,
         );
+      } catch (_) {
+        continue;
       }
     }
 
@@ -305,23 +675,13 @@ class HomeController {
     // Extract raw byte candidates from stego or link.
     List<Uint8List> candidates;
 
-    if (source.startsWith('layergram://m/')) {
-      final encoded = source.substring('layergram://m/'.length);
-      final cleaned = encoded.replaceAll(RegExp(r'\s+'), '');
-      try {
-        final raw = Uint8List.fromList(base64Url.decode(_padBase64(cleaned)));
-        if (raw.length >= 28) {
-          candidates = [raw];
-        } else {
-          return null;
-        }
-      } catch (_) {
-        return null;
-      }
+    final linkCandidates = _decodeLinkRawCandidates(source);
+    if (linkCandidates.isNotEmpty) {
+      candidates = linkCandidates;
+    } else if (source.toLowerCase().contains('layergram://m/')) {
+      return null;
     } else {
-      candidates = ref
-          .read(stegoDecoderProvider)
-          .decodeByteCandidates(source);
+      candidates = ref.read(stegoDecoderProvider).decodeByteCandidates(source);
       if (candidates.isEmpty) return null;
     }
 
@@ -346,27 +706,139 @@ class HomeController {
 
       // Try each contact key.
       for (final contact in [selfRemote, ...orderedContacts]) {
+        // §7.3: Get ratchet state for decryption — supports per-device sessions.
+        final allRatchets = ref.read(fsRatchetStateCacheProvider);
+        RatchetState? ratchetState;
+        final fsController =
+            ref.read(fsOpportunisticControllerProvider(contact.identityId));
+        fsController.securityMode =
+            ref.read(fsSecurityModeServiceProvider).getModeSync(
+                  contactId: contact.identityId,
+                  identityContext: fsController.identityContext,
+                );
+        final sessionManager = fsController.sessionManager;
+        final activeSessionId = sessionManager.activeSessionId;
+        if (activeSessionId != null) {
+          ratchetState = allRatchets[activeSessionId];
+        }
+
+        // Try full decrypt (handles both legacy and FS-encrypted messages)
+        DecryptionResult? result;
+        try {
+          result = await encService.decrypt(
+            recipientPrivateKeyBase64: privateKey,
+            senderPublicKeyBase64: contact.publicKeyBase64,
+            message: msg,
+            ratchetState: ratchetState,
+            allRatchetStates: allRatchets,
+            isFsReplay: fsController.isMessageReplay,
+          );
+        } catch (_) {
+          // Wrong key - try next contact
+          continue;
+        }
+
+        if (result.fsReplayDetected) {
+          continue;
+        }
+
+        if (result.payload.recipientId != local.identityId ||
+            result.payload.senderId != contact.identityId) {
+          continue;
+        }
+
+        // Update ratchet state if it changed (e.g., received new message advanced counter)
+        final fsCtrl = ref.read(
+          fsOpportunisticControllerProvider(contact.identityId),
+        );
+        fsCtrl.securityMode =
+            ref.read(fsSecurityModeServiceProvider).getModeSync(
+                  contactId: contact.identityId,
+                  identityContext: fsCtrl.identityContext,
+                );
+        final isFs = result.isFsEnvelope;
+        if (result.newRatchetState != null) {
+          final newState = result.newRatchetState!;
+          ref.read(fsRatchetStateCacheProvider.notifier).update((cache) => {
+                ...cache,
+                newState.sessionId: newState,
+              });
+          await ref
+              .read(fsRatchetPersistenceServiceProvider)
+              .saveRatchetState(newState);
+
+          // Record message counter in replay cache (§8.7)
+          fsCtrl.recordMessageProcessed(
+            sessionId: newState.sessionId,
+            counter: newState.recvCounter - 1,
+          );
+        }
+
+        // Downgrade detection: record the incoming message security level (§7.6)
+        final incomingDowngradeLevel = (isFs
+                ? FsMessageClassification.fsOnly
+                : FsMessageClassification.legacy)
+            .downgradeLevel;
+        if (incomingDowngradeLevel != null) {
+          fsCtrl.recordSecurityLevel(
+            contactId: contact.identityId,
+            level: incomingDowngradeLevel,
+          );
+        }
+
+        // Process FS extension for opportunistic Forward Secrecy handshake
+        // We need to decrypt envelope separately to access FS extension
         final key = await encService.deriveSymmetricKey(
           localPrivateKeyBase64: privateKey,
           remotePublicKeyBase64: contact.publicKeyBase64,
         );
-        final payload = await encService.tryDecryptWithKey(
+        final envelope = await encService.tryDecryptEnvelopeWithKey(
           message: msg,
           key: key,
         );
-        if (payload == null) continue;
+        if (envelope != null) {
+          final fsResult = await fsCtrl.processIncomingEnvelope(
+            envelope,
+            remoteContactId: contact.identityId,
+            remoteIdentityPublicKey: contact.publicKeyBase64,
+          );
+          // Trigger UI refresh if FS state changed
+          if (fsResult.type != FsIncomingType.noExtension) {
+            ref.read(fsRegistryVersionProvider.notifier).state++;
+          }
+        }
+
+        // FS-encrypted but ratchet state is missing (identity reset)
+        if (result.fsDecryptFailed) {
+          return const DecodeOutcome.fsLost();
+        }
+
+        // §14.4: Classify the incoming message.
+        final hasFsExt = envelope != null &&
+            LmfV2Decoder.extractFsExtension(envelope) != null;
+        final incomingClassification = _classifyIncoming(
+          isFsEncrypted: isFs,
+          fsDecryptFailed: false,
+          hasLegacyFallback: result.hasLegacyFallback,
+          hasFsExtension: hasFsExt,
+          sessionState: fsCtrl.sessionManager.state,
+          securityMode: fsCtrl.securityMode,
+        );
 
         // Decryption succeeded!
         return _persistAndReturn(
-          payload: payload,
+          payload: result.payload,
           encryptedMessage: msg,
           rawSource: source,
           senderContact: contact,
+          isFsEncrypted: isFs,
+          classification: incomingClassification,
         );
       }
     }
 
-    return null; // no candidate decrypted successfully
+    return const DecodeOutcome
+        .notForMe(); // candidates existed, but none decrypted
   }
 
   // ── Persist decoded message and return success ──────────────────────────
@@ -376,6 +848,8 @@ class HomeController {
     required EncryptedMessage encryptedMessage,
     required String rawSource,
     required RemoteIdentity senderContact,
+    bool isFsEncrypted = false,
+    FsMessageClassification? classification,
   }) async {
     final nowTs = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     if (payload.expireAfter != null && payload.expireAfter! < nowTs) {
@@ -386,6 +860,26 @@ class HomeController {
     final recordId = DateTime.now().microsecondsSinceEpoch.toString();
     final keyTag = await currentKeyTag();
     final storageKey = await currentStorageKey();
+
+    // §12.3: FS plaintext must NOT be stored in MessageRecord.text.
+    // Instead, persist it as an opaque encrypted auxiliary record.
+    if (isFsEncrypted && payload.text.isNotEmpty) {
+      final ptService = ref.read(fsPlaintextPersistenceServiceProvider);
+      await ptService.savePlaintext(
+        messageId: recordId,
+        plaintext: payload.text,
+        contactId: senderContact.identityId,
+      );
+      // Also cache in memory for immediate display
+      final fsController = ref.read(
+        fsOpportunisticControllerProvider(senderContact.identityId),
+      );
+      fsController.cachePlaintext(
+        '${senderContact.identityId}|$recordId',
+        payload.text,
+      );
+    }
+
     await ref.read(messagesRepositoryProvider).add(
           MessageRecord(
             id: recordId,
@@ -393,12 +887,15 @@ class HomeController {
             recipientId: payload.recipientId,
             direction: 'incoming',
             timestamp: recordTs,
+            text: isFsEncrypted ? null : payload.text,
             ciphertextBase64: encryptedMessage.ciphertextBase64,
             nonceBase64: encryptedMessage.nonceBase64,
             rawSource: rawSource,
             expireAfter: payload.expireAfter,
             deleteAfterRead: payload.deleteAfterRead,
             keyTag: keyTag,
+            isFsEncrypted: isFsEncrypted,
+            fsClassification: classification,
           ),
           storageKey: storageKey,
         );
@@ -410,7 +907,87 @@ class HomeController {
     return DecodeOutcome.success(payload);
   }
 
-  // ── Contact priority ordering ───────────────────────────────────────────
+  bool _strictModeHasUnexpectedDevice(String contactId) {
+    final fsController = ref.read(fsOpportunisticControllerProvider(contactId));
+    final states = ref.read(fsContactSecurityRegistryProvider).forContact(
+          contactId: contactId,
+          identityContext: fsController.identityContext,
+        );
+    final activeStates = states.where((entry) => entry.isActive);
+    final hasStrictSession = activeStates.any((entry) => entry.isStrict);
+    if (!hasStrictSession) return false;
+
+    return activeStates.any((entry) =>
+        entry.sessionId != null &&
+        entry.fsState != FsSessionState.strictFsActive);
+  }
+
+  // ── Message classification (§14.4) ─────────────────────────────────────────
+
+  static FsMessageClassification _classifyOutgoing({
+    required bool isFsEncrypted,
+    required bool hasLegacyFallback,
+    required bool hasFsExtension,
+    required FsSessionState sessionState,
+    required FsSecurityMode securityMode,
+  }) {
+    if (isFsEncrypted) {
+      if (hasLegacyFallback) {
+        return FsMessageClassification.fsWithFallback;
+      }
+
+      if (securityMode == FsSecurityMode.strict &&
+          sessionState == FsSessionState.strictFsActive) {
+        return FsMessageClassification.strictFs;
+      }
+      // §9.5: a single-envelope FS message is only encrypted with the ratchet.
+      // Multi-envelope messages with legacy fallback are classified above as
+      // fs_with_fallback.
+      return FsMessageClassification.fsOnly;
+    }
+    if (hasFsExtension) {
+      return FsMessageClassification.fsNegotiation;
+    }
+    if (sessionState == FsSessionState.legacyOnly) {
+      return FsMessageClassification.preFs;
+    }
+    return FsMessageClassification.legacy;
+  }
+
+  static FsMessageClassification _classifyIncoming({
+    required bool isFsEncrypted,
+    required bool fsDecryptFailed,
+    required bool hasLegacyFallback,
+    required bool hasFsExtension,
+    required FsSessionState sessionState,
+    required FsSecurityMode securityMode,
+  }) {
+    if (fsDecryptFailed) {
+      return FsMessageClassification.fsFailed;
+    }
+    if (isFsEncrypted) {
+      if (hasLegacyFallback) {
+        return FsMessageClassification.fsWithFallback;
+      }
+
+      if (securityMode == FsSecurityMode.strict &&
+          sessionState == FsSessionState.strictFsActive) {
+        return FsMessageClassification.strictFs;
+      }
+      // §9.5: FS-encrypted messages are FS-only on the wire (not dual-encrypted
+      // with the legacy key). See _classifyOutgoing.
+      return FsMessageClassification.fsOnly;
+    }
+    if (hasFsExtension) {
+      return FsMessageClassification.fsNegotiation;
+    }
+    if (sessionState == FsSessionState.legacyOnly) {
+      return FsMessageClassification.preFs;
+    }
+    return FsMessageClassification.legacy;
+  }
+
+  // ── Contact priority ordering ───────────────────────────────────────────────
 
   /// Returns contacts sorted by priority for trial decryption:
   /// 1. [hintContactId] contact (if provided)
@@ -459,6 +1036,41 @@ class HomeController {
     return input.padRight(input.length + (4 - rem), '=');
   }
 
+  List<Uint8List> _decodeLinkRawCandidates(String source) {
+    final prefix = RegExp('layergram://m/', caseSensitive: false);
+    final match = prefix.firstMatch(source);
+    if (match == null) return const [];
+
+    final tail = source.substring(match.end);
+    final tokenMatches = RegExp(r'[A-Za-z0-9_-]+={0,2}').allMatches(tail);
+    final candidates = <Uint8List>[];
+    final seen = <String>{};
+    final buffer = StringBuffer();
+    var expectedStart = 0;
+
+    for (final token in tokenMatches) {
+      final separator = tail.substring(expectedStart, token.start);
+      if (separator.isNotEmpty && !RegExp(r'^\s+$').hasMatch(separator)) {
+        break;
+      }
+
+      buffer.write(token.group(0)!);
+      expectedStart = token.end;
+      final encoded = buffer.toString();
+      if (!seen.add(encoded)) continue;
+
+      try {
+        final raw = Uint8List.fromList(base64Url.decode(_padBase64(encoded)));
+        if (raw.length >= 28) {
+          candidates.add(raw);
+        }
+      } catch (_) {
+        // Keep collecting; a wrapped link may only decode after later tokens.
+      }
+    }
+
+    return candidates;
+  }
 
   RemoteIdentity parseIdentityBlock(String text) {
     final scoped = _withinIdentityBlock(text);
@@ -503,6 +1115,261 @@ class HomeController {
         .firstWhere((line) => line.trim().isNotEmpty, orElse: () => '')
         .trim();
   }
+
+  Future<void> _restorePersistedActiveFsSessionIfNeeded({
+    required String contactId,
+    required FsOpportunisticController fsController,
+  }) async {
+    if (fsController.sessionManager.state != FsSessionState.legacyOnly ||
+        fsController.sessionManager.activeSessionId != null) {
+      return;
+    }
+
+    final entries = ref
+        .read(fsContactSecurityRegistryProvider)
+        .forContact(
+          contactId: contactId,
+          identityContext: fsController.identityContext,
+        )
+        .where((entry) =>
+            entry.sessionId != null &&
+            (entry.fsState == FsSessionState.fsActive ||
+                entry.fsState == FsSessionState.strictFsActive ||
+                entry.fsState == FsSessionState.strictRequested ||
+                entry.fsState == FsSessionState.fsConfirmed ||
+                entry.fsState == FsSessionState.fsConfirmSent))
+        .toList()
+      ..sort((a, b) => _restoredSessionPriority(a.fsState)
+          .compareTo(_restoredSessionPriority(b.fsState)));
+    if (entries.isEmpty) return;
+
+    final cache = ref.read(fsRatchetStateCacheProvider);
+    final persistence = ref.read(fsRatchetPersistenceServiceProvider);
+    var restoredAny = false;
+    for (final entry in entries) {
+      final sessionId = entry.sessionId!;
+      var ratchet = cache[sessionId];
+      if (ratchet == null) {
+        ratchet = await persistence.loadRatchetState(sessionId);
+        if (ratchet != null) {
+          ref.read(fsRatchetStateCacheProvider.notifier).update(
+                (current) => {...current, sessionId: ratchet!},
+              );
+        }
+      }
+      if (ratchet == null) continue;
+      final restoredState = _restoredSessionState(entry.fsState);
+      fsController.restorePersistedActiveSession(
+        sessionId: sessionId,
+        state: restoredState,
+      );
+      if (restoredState != entry.fsState) {
+        final repaired = entry.copyWith(fsState: restoredState);
+        ref.read(fsContactSecurityRegistryProvider).upsert(repaired);
+        await ref.read(fsStatePersistenceServiceProvider).saveState(repaired);
+      }
+      restoredAny = true;
+    }
+
+    if (restoredAny) {
+      ref.read(fsRegistryVersionProvider.notifier).state++;
+    }
+  }
+
+  int _restoredSessionPriority(FsSessionState state) {
+    switch (state) {
+      case FsSessionState.strictFsActive:
+        return 0;
+      case FsSessionState.fsActive:
+        return 1;
+      case FsSessionState.strictRequested:
+        return 2;
+      case FsSessionState.fsConfirmed:
+      case FsSessionState.fsConfirmSent:
+        return 3;
+      case FsSessionState.legacyOnly:
+      case FsSessionState.fsInitSent:
+      case FsSessionState.fsInitSeen:
+      case FsSessionState.fsReplySent:
+      case FsSessionState.fsReplySeen:
+      case FsSessionState.fsSuspended:
+      case FsSessionState.fsBroken:
+        return 99;
+    }
+  }
+
+  FsSessionState _restoredSessionState(FsSessionState state) {
+    switch (state) {
+      case FsSessionState.fsConfirmed:
+      case FsSessionState.fsConfirmSent:
+        return FsSessionState.fsActive;
+      case FsSessionState.strictFsActive:
+      case FsSessionState.fsActive:
+      case FsSessionState.strictRequested:
+        return state;
+      case FsSessionState.legacyOnly:
+      case FsSessionState.fsInitSent:
+      case FsSessionState.fsInitSeen:
+      case FsSessionState.fsReplySent:
+      case FsSessionState.fsReplySeen:
+      case FsSessionState.fsSuspended:
+      case FsSessionState.fsBroken:
+        throw ArgumentError('Cannot restore non-active FS state: $state');
+    }
+  }
+
+  // ── Forward Secrecy handshake payload preparation ───────────────────────
+
+  /// Prepares the appropriate handshake payload for the current FS state.
+  ///
+  /// This generates FS_INIT, FS_REPLY, or FS_CONFIRM payloads based on the
+  /// session state. Only FS_INIT generation is fully implemented here;
+  /// FS_REPLY and FS_CONFIRM require state from previous handshake messages
+  /// that should be stored in the session manager.
+  Future<FsOutgoingExtension?> _startFsInit({
+    required FsOpportunisticController fsController,
+    required FsSessionManager sessionManager,
+    required String privateKey,
+  }) async {
+    final identityManager = ref.read(identityManagerProvider);
+    final local = await identityManager.getLocalIdentity();
+    if (local == null) return null;
+
+    // Derive device key from identity key. The public protocol still treats it
+    // as a device key, even when restored devices share the identity seed.
+    final ikPrivBytes = base64Decode(privateKey);
+    final dkPrivBytes = ikPrivBytes;
+    final initPayload = await FsHandshake.generateFsInit(
+      ikAPriv: ikPrivBytes,
+      dkAPriv: dkPrivBytes,
+    );
+
+    sessionManager.setPendingInitEphemeralPriv(initPayload.ekAPrivBytes);
+    return fsController.buildOutgoingExtension(pendingInit: initPayload);
+  }
+
+  Future<FsOutgoingExtension?> _buildFsOutgoingExtension({
+    required FsOpportunisticController fsController,
+    required FsSessionManager sessionManager,
+    required FsSessionState state,
+    required RemoteIdentity recipient,
+    required String privateKey,
+  }) async {
+    switch (state) {
+      case FsSessionState.legacyOnly:
+        return _startFsInit(
+          fsController: fsController,
+          sessionManager: sessionManager,
+          privateKey: privateKey,
+        );
+
+      case FsSessionState.fsInitSent:
+        // Copy/paste transports can lose either FS_INIT or the matching
+        // FS_REPLY. Retry with a fresh initId so the peer can replace a stale
+        // fsReplySent handshake instead of leaving this chat orange forever.
+        sessionManager.reset();
+        return _startFsInit(
+          fsController: fsController,
+          sessionManager: sessionManager,
+          privateKey: privateKey,
+        );
+
+      case FsSessionState.fsInitSeen:
+        // Generate FS_REPLY in response to received FS_INIT
+        final initMessage = sessionManager.storedInitMessage;
+        if (initMessage == null) {
+          return await fsController.buildOutgoingExtension();
+        }
+
+        // Decode remote identity public key
+        final remoteIkPub = base64Decode(recipient.publicKeyBase64);
+
+        // Use local identity keys (simplified: derive device key from identity key)
+        final ikPrivBytes = base64Decode(privateKey);
+        final dkPrivBytes =
+            ikPrivBytes; // In production, derive separate device key
+
+        try {
+          final replyPayload = await FsHandshake.processFsInitAsResponder(
+            ikBPriv: ikPrivBytes,
+            dkBPriv: dkPrivBytes,
+            ikAPub: remoteIkPub,
+            init: initMessage,
+          );
+
+          // Store the ratchet private key and raw root secret for later use
+          sessionManager.setPendingReplyEphemeralPriv(
+            replyPayload.responderInitialRatchetPriv,
+          );
+          // Store raw root secret and transcript hash for FS_CONFIRM verification
+          if (replyPayload.partialState.rawRootSecret != null) {
+            sessionManager.setPendingRawRootSecret(
+              replyPayload.partialState.rawRootSecret!,
+            );
+          }
+          sessionManager.setPendingTranscriptHash(
+            replyPayload.partialState.transcriptHash,
+          );
+
+          return await fsController.buildOutgoingExtension(
+              pendingReply: replyPayload);
+        } catch (e) {
+          // Failed to generate reply, skip FS extension this message
+          return await fsController.buildOutgoingExtension();
+        }
+
+      case FsSessionState.fsReplySeen:
+        // Generate FS_CONFIRM in response to received FS_REPLY
+        final replyMessage = sessionManager.storedReplyMessage;
+        final ekAPriv = sessionManager.pendingInitEphemeralPriv;
+        if (replyMessage == null || ekAPriv == null) {
+          return await fsController.buildOutgoingExtension();
+        }
+
+        // Decode remote identity public key
+        final remoteIkPub = base64Decode(recipient.publicKeyBase64);
+
+        // Use local identity and device keys
+        final ikPrivBytes = base64Decode(privateKey);
+        final dkPrivBytes =
+            ikPrivBytes; // In production, derive separate device key
+
+        // Retrieve the init message we originally sent
+        final sentInit = sessionManager.storedSentInitMessage;
+        if (sentInit == null) {
+          return await fsController.buildOutgoingExtension();
+        }
+
+        try {
+          // Generate FS_CONFIRM using stored ephemeral key and received reply
+          final confirmPayload = await FsHandshake.processFsReplyAsInitiator(
+            ikAPriv: ikPrivBytes,
+            dkAPriv: dkPrivBytes,
+            ekAPrivBytes: ekAPriv,
+            ikBPub: remoteIkPub,
+            sentInit: sentInit,
+            reply: replyMessage,
+          );
+
+          return await fsController.buildOutgoingExtension(
+              pendingConfirm: confirmPayload);
+        } catch (e) {
+          // Failed to generate confirm, skip FS extension this message
+          return await fsController.buildOutgoingExtension();
+        }
+
+      case FsSessionState.fsActive:
+      case FsSessionState.strictFsActive:
+      case FsSessionState.strictRequested:
+      case FsSessionState.fsReplySent:
+      case FsSessionState.fsConfirmSent:
+      case FsSessionState.fsConfirmed:
+      case FsSessionState.fsSuspended:
+      case FsSessionState.fsBroken:
+        // No handshake message needed in these states
+        return await fsController.buildOutgoingExtension();
+    }
+  }
 }
 
 class DecodeOutcome {
@@ -516,6 +1383,7 @@ class DecodeOutcome {
   const DecodeOutcome.notForMe() : this._(kind: DecodeKind.notForMe);
   const DecodeOutcome.unknownSender() : this._(kind: DecodeKind.unknownSender);
   const DecodeOutcome.expired() : this._(kind: DecodeKind.expired);
+  const DecodeOutcome.fsLost() : this._(kind: DecodeKind.fsLost);
   const DecodeOutcome.error(String code)
       : this._(kind: DecodeKind.error, errorCode: code);
 
@@ -524,7 +1392,15 @@ class DecodeOutcome {
   final String? errorCode;
 }
 
-enum DecodeKind { success, noData, notForMe, unknownSender, expired, error }
+enum DecodeKind {
+  success,
+  noData,
+  notForMe,
+  unknownSender,
+  expired,
+  fsLost,
+  error
+}
 
 final homeControllerProvider = Provider<HomeController>((ref) {
   final controller = HomeController(ref);
@@ -551,6 +1427,8 @@ final homeControllerProvider = Provider<HomeController>((ref) {
   return controller;
 });
 final encodeRecipientProvider = StateProvider<RemoteIdentity?>((_) => null);
+
 /// Stores composer handoff state during narrow↔wide layout transitions.
 /// Survives HomeView State disposal/recreation.
-final pendingComposerStateProvider = StateProvider<Map<String, dynamic>?>((_) => null);
+final pendingComposerStateProvider =
+    StateProvider<Map<String, dynamic>?>((_) => null);

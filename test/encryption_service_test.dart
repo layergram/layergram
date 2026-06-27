@@ -25,25 +25,25 @@ void main() {
       deleteAfterRead: true,
     );
 
-    final encrypted = await service.encrypt(
+    final encResult = await service.encrypt(
       senderPrivateKeyBase64: base64Encode(alicePrivate),
       recipientPublicKeyBase64: base64Encode(bobPublic),
       payload: payload,
     );
 
-    final decrypted = await service.decrypt(
+    final decResult = await service.decrypt(
       recipientPrivateKeyBase64: base64Encode(bobPrivate),
       senderPublicKeyBase64: base64Encode(alicePublic),
-      message: encrypted,
+      message: encResult.message,
     );
 
-    expect(decrypted.senderId, payload.senderId);
-    expect(decrypted.recipientId, payload.recipientId);
-    expect(decrypted.text, payload.text);
-    expect(decrypted.timestamp, payload.timestamp);
-    expect(decrypted.senderDisplayName, payload.senderDisplayName);
-    expect(decrypted.expireAfter, payload.expireAfter);
-    expect(decrypted.deleteAfterRead, payload.deleteAfterRead);
+    expect(decResult.payload.senderId, payload.senderId);
+    expect(decResult.payload.recipientId, payload.recipientId);
+    expect(decResult.payload.text, payload.text);
+    expect(decResult.payload.timestamp, payload.timestamp);
+    expect(decResult.payload.senderDisplayName, payload.senderDisplayName);
+    expect(decResult.payload.expireAfter, payload.expireAfter);
+    expect(decResult.payload.deleteAfterRead, payload.deleteAfterRead);
   });
 
   test('decrypt accepts base64url (no padding) nonce/ciphertext', () async {
@@ -65,11 +65,12 @@ void main() {
       deleteAfterRead: true,
     );
 
-    final encrypted = await service.encrypt(
+    final encResult = await service.encrypt(
       senderPrivateKeyBase64: base64Encode(alicePrivate),
       recipientPublicKeyBase64: base64Encode(bobPublic),
       payload: payload,
     );
+    final encrypted = encResult.message;
 
     String toBase64UrlNoPad(String input) {
       return input.replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
@@ -83,18 +84,18 @@ void main() {
       ciphertextBase64: toBase64UrlNoPad(encrypted.ciphertextBase64),
     );
 
-    final decrypted = await service.decrypt(
+    final decResult = await service.decrypt(
       recipientPrivateKeyBase64: base64Encode(bobPrivate),
       senderPublicKeyBase64: base64Encode(alicePublic),
       message: urlMessage,
     );
 
-    expect(decrypted.senderId, payload.senderId);
-    expect(decrypted.recipientId, payload.recipientId);
-    expect(decrypted.text, payload.text);
-    expect(decrypted.timestamp, payload.timestamp);
-    expect(decrypted.senderDisplayName, payload.senderDisplayName);
-    expect(decrypted.expireAfter, payload.expireAfter);
-    expect(decrypted.deleteAfterRead, payload.deleteAfterRead);
+    expect(decResult.payload.senderId, payload.senderId);
+    expect(decResult.payload.recipientId, payload.recipientId);
+    expect(decResult.payload.text, payload.text);
+    expect(decResult.payload.timestamp, payload.timestamp);
+    expect(decResult.payload.senderDisplayName, payload.senderDisplayName);
+    expect(decResult.payload.expireAfter, payload.expireAfter);
+    expect(decResult.payload.deleteAfterRead, payload.deleteAfterRead);
   });
 }

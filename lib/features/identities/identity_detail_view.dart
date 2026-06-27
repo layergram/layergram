@@ -18,6 +18,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/crypto/models.dart';
 import '../../core/providers.dart';
 import '../../l10n/app_strings.dart';
+import '../../ui/fs_contact_security_card.dart';
 import '../contact_verification/contact_verification_view.dart';
 import '../home/chat_view.dart';
 import '../home/home_controller.dart';
@@ -229,6 +230,8 @@ class _IdentityDetailViewState extends ConsumerState<IdentityDetailView> {
                         ),
                       ],
                     ),
+                    if (!isMe) const SizedBox(height: 16),
+                    if (!isMe) FsContactSecurityCard(contactId: _identity.identityId),
                   ],
                 ),
               ),

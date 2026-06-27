@@ -21,7 +21,6 @@ import 'core/storage/local_database.dart';
 import 'core/storage/local_identity_vault.dart';
 import 'core/storage/local_storage_security_service.dart';
 import 'core/storage/secure_storage.dart';
-import 'features/identity_migration_notice/identity_migration_notice_strings.dart';
 import 'l10n/app_strings.dart';
 
 void main() async {
@@ -29,14 +28,12 @@ void main() async {
   await EasyLocalization.ensureInitialized();
   await LocalDatabase.init();
   final secureStorage = SecureStorageService();
-  final localIdentityVault =
-      LocalIdentityVault(secureStorage: secureStorage);
+  final localIdentityVault = LocalIdentityVault(secureStorage: secureStorage);
   final localStorageSecurity = LocalStorageSecurityService(
     secureStorage: secureStorage,
     localIdentityVault: localIdentityVault,
   );
   await localStorageSecurity.ensureCurrentLayout();
-  registerIdentityMigrationNoticeStrings();
   runApp(
     EasyLocalization(
       supportedLocales: AppStrings.supportedLocales,

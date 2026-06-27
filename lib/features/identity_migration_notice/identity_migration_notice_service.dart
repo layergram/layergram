@@ -1,48 +1,27 @@
-import '../../core/config/app_flags.dart';
 import '../../core/crypto/models.dart';
-import '../../core/crypto/seed_service.dart';
 import '../../core/storage/secure_storage.dart';
 
 class IdentityMigrationNoticeService {
   IdentityMigrationNoticeService(
-    this._storage, {
+    SecureStorageService storage, {
     bool Function()? isFeatureEnabled,
-  }) : _isFeatureEnabled = isFeatureEnabled ?? (() => showLegacyIdentityMigrationNotice);
+  });
 
-  static const acknowledgedKey = 'legacy_identity_notice_acknowledged';
-
-  final SecureStorageService _storage;
-  final bool Function() _isFeatureEnabled;
-
+  // Kept only for compatibility with older callers/tests while the legacy
+  // identity notice is retired. New code must not persist acknowledgement
+  // state for this feature.
   Future<bool> isAcknowledged() async {
-    return (await _storage.read(acknowledgedKey)) == '1';
+    return false;
   }
 
-  Future<void> markAcknowledged() {
-    return _storage.write(acknowledgedKey, '1');
-  }
+  Future<void> markAcknowledged() async {}
 
-  Future<void> remindLater() {
-    return _storage.delete(acknowledgedKey);
-  }
+  Future<void> remindLater() async {}
 
-  Future<void> synchronizeIdentityState(LocalIdentity? identity) async {
-    if (identity == null || identity.derivationVersion == IdentityDerivationVersion.v2) {
-      await markAcknowledged();
-    }
-  }
+  Future<void> synchronizeIdentityState(LocalIdentity? identity) async {}
 
   Future<bool> shouldShowForIdentity(LocalIdentity? identity) async {
-    if (!_isFeatureEnabled()) {
-      return false;
-    }
-    await synchronizeIdentityState(identity);
-    final acknowledged = await isAcknowledged();
-    return shouldShowLegacyIdentityNotice(
-      identity,
-      acknowledged,
-      featureEnabled: true,
-    );
+    return false;
   }
 
   bool shouldShowLegacyIdentityNotice(
@@ -50,15 +29,6 @@ class IdentityMigrationNoticeService {
     bool acknowledged, {
     required bool featureEnabled,
   }) {
-    if (!featureEnabled) {
-      return false;
-    }
-    if (identity == null) {
-      return false;
-    }
-    if (identity.derivationVersion != IdentityDerivationVersion.v1) {
-      return false;
-    }
-    return !acknowledged;
+    return false;
   }
 }

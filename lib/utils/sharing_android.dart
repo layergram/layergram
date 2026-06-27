@@ -93,10 +93,11 @@ const List<AndroidShareApp> _kCommonShareApps = [
 class AndroidAppSelectorDialog extends StatefulWidget {
   final String text;
 
-  const AndroidAppSelectorDialog({required this.text});
+  const AndroidAppSelectorDialog({super.key, required this.text});
 
   @override
-  State<AndroidAppSelectorDialog> createState() => _AndroidAppSelectorDialogState();
+  State<AndroidAppSelectorDialog> createState() =>
+      _AndroidAppSelectorDialogState();
 }
 
 class _AndroidAppSelectorDialogState extends State<AndroidAppSelectorDialog> {
@@ -134,7 +135,8 @@ class _AndroidAppSelectorDialogState extends State<AndroidAppSelectorDialog> {
     // as fallback - better to show apps that might not be installed than to hide installed ones
     if (installedApps.length <= 2) {
       // Add all messaging apps as fallback (user will get "app not installed" if they tap)
-      final installedPackageNames = installedApps.map((a) => a.packageName).toSet();
+      final installedPackageNames =
+          installedApps.map((a) => a.packageName).toSet();
       for (final app in _kCommonShareApps) {
         if (app.packageName != 'clipboard' &&
             app.packageName != 'standard' &&
@@ -222,7 +224,8 @@ class _AndroidAppSelectorDialogState extends State<AndroidAppSelectorDialog> {
                 children: [
                   ListTile(
                     leading: const Icon(Icons.content_copy),
-                    title: Text(AppStrings.t(context, 'shareAppCopyToClipboard')),
+                    title:
+                        Text(AppStrings.t(context, 'shareAppCopyToClipboard')),
                     onTap: () {
                       Navigator.of(context).pop(
                         const AndroidShareApp(
@@ -258,7 +261,8 @@ class _AndroidAppSelectorDialogState extends State<AndroidAppSelectorDialog> {
                 final app = apps[index];
                 return ListTile(
                   leading: Icon(app.icon),
-                  title: Text(AppStrings.t(context, _getTranslationKey(app.packageName))),
+                  title: Text(AppStrings.t(
+                      context, _getTranslationKey(app.packageName))),
                   onTap: () {
                     Navigator.of(context).pop(app);
                   },

@@ -19,7 +19,7 @@ import 'dart:typed_data';
 import 'package:characters/characters.dart';
 import 'package:cryptography/cryptography.dart';
 
-import 'compression_zstd.dart';
+import 'compression_gzip.dart';
 import 'stego_alphabet_v2.dart';
 
 /// LMF v2 message encoder.
@@ -27,7 +27,7 @@ import 'stego_alphabet_v2.dart';
 /// Encoding flow:
 /// 1. Build v2 JSON with required fields
 /// 2. UTF-8 encode JSON
-/// 3. Optionally compress with zstd (policy-based)
+/// 3. Optionally compress with gzip (policy-based)
 /// 4. Wrap into LMFv2Inner container (formatVersion=0x02, flags, reserved, payloadBytes)
 /// 5. Encrypt with AES-GCM-256 (12-byte nonce || ciphertext || 16-byte tag)
 /// 6. Map encrypted bytes to v2 payload alphabet
@@ -42,7 +42,7 @@ class LmfV2Encoder {
   static const int formatVersion = 0x02;
 
   /// Flags bitmask:
-  /// - bit 0 = 1 if payloadBytes is zstd-compressed
+  /// - bit 0 = 1 if payloadBytes is gzip-compressed
   /// - bit 0 = 0 if payloadBytes is plain UTF-8 JSON
   static const int flagCompressed = 0x01;
 
@@ -52,6 +52,12 @@ class LmfV2Encoder {
   // ── JSON envelope fields ────────────────────────────────────────────────
 
   /// Build the v2 JSON envelope with required fields.
+  ///
+  /// [fsExtension] is an optional Forward Secrecy control block embedded under
+  /// the `x.fs` key.  Old clients that do not understand `x` will ignore it
+  /// (spec §5.3 — unknown fields must be ignored by legacy decoders).
+  /// The value must be the result of [FsInitMessage.toJson],
+  /// [FsReplyMessage.toJson], or [FsConfirmMessage.toJson].
   static Map<String, dynamic> buildJsonEnvelope({
     required String senderId,
     required String recipientId,
@@ -60,6 +66,7 @@ class LmfV2Encoder {
     String? senderDisplayName,
     int? expireAfter,
     bool deleteAfterRead = false,
+    Map<String, dynamic>? fsExtension,
   }) {
     return {
       'v': 2,
@@ -70,6 +77,7 @@ class LmfV2Encoder {
       if (senderDisplayName != null) 'senderDisplayName': senderDisplayName,
       if (expireAfter != null) 'expireAfter': expireAfter,
       'deleteAfterRead': deleteAfterRead,
+      if (fsExtension != null) 'x': {'fs': fsExtension},
     };
   }
 
@@ -90,8 +98,8 @@ class LmfV2Encoder {
     // 1. UTF-8 encode JSON
     final jsonBytes = utf8.encode(jsonEncode(jsonEnvelope));
 
-    // 2. Optionally compress with zstd
-    final (compressedBytes, wasCompressed) = CompressionZstd.compress(
+    // 2. Optionally compress with gzip
+    final (compressedBytes, wasCompressed) = CompressionGzip.compress(
       Uint8List.fromList(jsonBytes),
     );
 
@@ -158,7 +166,8 @@ class LmfV2Encoder {
     final visChars = Characters(normalizedCover).toList();
 
     if (visChars.isEmpty) {
-      throw ArgumentError('Cover text must contain at least one visible character');
+      throw ArgumentError(
+          'Cover text must contain at least one visible character');
     }
 
     if (payloadRunes.isEmpty) {
@@ -228,7 +237,8 @@ class LmfV2Encoder {
 
     // Mixed block: payload at random positions, noise elsewhere
     final positions = List.generate(targetSize, (i) => i)..shuffle(_rng);
-    final payloadPositions = positions.take(payloadRunes.length).toList()..sort();
+    final payloadPositions = positions.take(payloadRunes.length).toList()
+      ..sort();
 
     final block = List<String>.filled(targetSize, '');
 

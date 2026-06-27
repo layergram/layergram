@@ -8,8 +8,8 @@ For a complete description of what Layergram protects against, what is explicitl
 
 | Version | Supported |
 |---------|-----------|
-| 1.1.x   | Yes |
-| < 1.1.0 | No |
+| 1.3.x   | Yes |
+| < 1.3.0 | No |
 
 ## Reporting a Vulnerability
 

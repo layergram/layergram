@@ -81,7 +81,8 @@ class _DecodeViewState extends ConsumerState<DecodeView> {
                     if (!context.mounted) return;
                     if (sender != null) {
                       await Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => ChatView(contact: sender)),
+                        MaterialPageRoute(
+                            builder: (_) => ChatView(contact: sender)),
                       );
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -119,6 +120,10 @@ class _OutcomeView extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = AppStrings.t;
 
+    if (outcome.kind == DecodeKind.fsLost) {
+      return SelectableText(t(context, 'security.fs.message_lost'));
+    }
+
     if (outcome.kind != DecodeKind.success || outcome.payload == null) {
       return SelectableText(t(context, 'noMessageFoundDesc'));
     }
@@ -131,7 +136,8 @@ class _OutcomeView extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.all(12),
           decoration: ShapeDecoration(
-            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
+            color:
+                Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
             shape: ContinuousRectangleBorder(
               borderRadius: BorderRadius.circular(28),
               side: BorderSide(
@@ -142,7 +148,8 @@ class _OutcomeView extends StatelessWidget {
           child: SelectableText(payload.text),
         ),
         const SizedBox(height: 8),
-        Text('${t(context, 'sender')}: ${payload.senderDisplayName ?? payload.senderId}'),
+        Text(
+            '${t(context, 'sender')}: ${payload.senderDisplayName ?? payload.senderId}'),
         const SizedBox(height: 12),
         FilledButton.icon(
           onPressed: onReply,

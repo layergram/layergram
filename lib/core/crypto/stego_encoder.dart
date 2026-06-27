@@ -84,6 +84,20 @@ class StegoEncoder {
     return 12 + 4 + jsonEnvelopeBytes + secretJsonBytes + 16;
   }
 
+  // Cover composer messages may carry production-length identity ids,
+  // sender metadata, and Advanced FS envelope fields. The legacy 256-byte JSON
+  // estimate is intentionally kept for LMF v2 core tests; composer UI needs a
+  // conservative preflight estimate so copy/share does not fail after the user
+  // added the advertised missing cover characters.
+  static const int coverComposerJsonEnvelopeBytes = 512;
+
+  static int estimatedCoverMessagePayloadBytes(String secretText) {
+    return estimatedEncryptedPayloadBytes(
+      secretText,
+      jsonEnvelopeBytes: coverComposerJsonEnvelopeBytes,
+    );
+  }
+
   static String normalizeCoverText(String coverText) {
     return coverText.trimRight();
   }
@@ -147,12 +161,44 @@ class StegoEncoder {
     if (byteCount <= 0) return 0;
     final visChars = normalizeCoverText(coverText).characters.toList();
     final minCoverLength = minCoverLengthForBytes(byteCount);
-    final visibleDeficit = minCoverLength - visChars.length;
-    if (visibleDeficit > 0) return visibleDeficit;
     final requiredCarrierSlots = requiredCarrierSlotsForBytes(byteCount);
-    final carrierDeficit =
-        requiredCarrierSlots - _eligibleCarrierSlotIndexes(visChars).length;
-    return carrierDeficit > 0 ? carrierDeficit : 0;
+    final existingCarrierSlots = _eligibleCarrierSlotIndexes(visChars).length;
+    if (visChars.length >= minCoverLength &&
+        existingCarrierSlots >= requiredCarrierSlots) {
+      return 0;
+    }
+
+    final currentLastCarrierSafe =
+        visChars.isNotEmpty && _isCarrierSafeGrapheme(visChars.last);
+
+    bool canEmbedAfterAppending(int addedChars) {
+      final totalVisibleChars = visChars.length + addedChars;
+      final totalCarrierSlots =
+          existingCarrierSlots +
+          _eligibleCarrierSlotsAddedBySafeAppend(
+            currentVisibleLength: visChars.length,
+            currentLastCarrierSafe: currentLastCarrierSafe,
+            addedChars: addedChars,
+          );
+      return totalVisibleChars >= minCoverLength &&
+          totalCarrierSlots >= requiredCarrierSlots;
+    }
+
+    var high = max(0, minCoverLength - visChars.length);
+    while (!canEmbedAfterAppending(high)) {
+      high = high == 0 ? 1 : high * 2;
+    }
+
+    var low = 0;
+    while (low < high) {
+      final mid = low + ((high - low) >> 1);
+      if (canEmbedAfterAppending(mid)) {
+        high = mid;
+      } else {
+        low = mid + 1;
+      }
+    }
+    return low;
   }
 
   // ── V2 binary encoder ─────────────────────────────────────────────────────
@@ -214,10 +260,11 @@ class StegoEncoder {
 
     final baseEligibleSlotIndexes = _eligibleCarrierSlotIndexes(visChars);
     if (baseEligibleSlotIndexes.length < requiredCarrierSlots) {
+      final missing = missingCoverCapacityForBytes(coverText, payload.length);
       throw ArgumentError.value(
         coverText,
         'coverText',
-        'Cover text cannot safely carry the payload. Add more plain visible text.',
+        'Cover text cannot safely carry the payload. Add at least $missing more plain visible ASCII characters.',
       );
     }
 
@@ -453,6 +500,34 @@ class StegoEncoder {
       }
     }
     return safeSlots;
+  }
+
+  static int _eligibleCarrierSlotsAddedBySafeAppend({
+    required int currentVisibleLength,
+    required bool currentLastCarrierSafe,
+    required int addedChars,
+  }) {
+    if (addedChars <= 0) return 0;
+
+    const firstEligibleSlot = previewSafePrefixMinChars - 1;
+    var addedSlots = 0;
+
+    if (currentVisibleLength > 0 &&
+        currentVisibleLength - 1 >= firstEligibleSlot &&
+        currentLastCarrierSafe) {
+      addedSlots += 1;
+    }
+
+    final firstAppendedPairSlot = currentVisibleLength;
+    final lastAppendedPairSlot = currentVisibleLength + addedChars - 2;
+    final firstEligibleAppendedPairSlot =
+        max(firstAppendedPairSlot, firstEligibleSlot);
+    if (lastAppendedPairSlot >= firstEligibleAppendedPairSlot) {
+      addedSlots +=
+          lastAppendedPairSlot - firstEligibleAppendedPairSlot + 1;
+    }
+
+    return addedSlots;
   }
 
   static bool _isCarrierSafeGrapheme(String grapheme) {

@@ -34,6 +34,10 @@ import 'security/preview_service.dart';
 import 'security/session_decryption_cache_service.dart';
 import 'crypto/stego_decoder.dart';
 import 'crypto/stego_encoder.dart';
+import 'crypto/fs_state_persistence_service.dart';
+import 'crypto/fs_ratchet_persistence_service.dart';
+import 'crypto/fs_double_ratchet.dart' show RatchetState;
+import 'storage/aux_record_repository.dart';
 import 'storage/identities_repository.dart';
 import 'storage/chat_meta_repository.dart';
 import 'storage/local_identity_vault.dart';
@@ -43,8 +47,20 @@ import 'storage/secure_storage.dart';
 import 'utils/clipboard_service.dart';
 import 'crypto/message_record_cipher.dart';
 import '../features/contact_verification/contact_sas_service.dart';
-import '../features/identity_migration_notice/identity_migration_notice_controller.dart';
-import '../features/identity_migration_notice/identity_migration_notice_service.dart';
+import 'crypto/fs_contact_security_state.dart';
+import 'crypto/fs_dos_resistance.dart';
+import 'crypto/fs_downgrade_detector.dart';
+import 'crypto/fs_opportunistic_controller.dart';
+import 'crypto/fs_plaintext_cache.dart';
+import 'crypto/fs_plaintext_persistence_service.dart';
+import 'crypto/fs_history_mode_enforcement.dart';
+import 'crypto/fs_passphrase_preferences.dart';
+import 'crypto/fs_passphrase_timeout_controller.dart';
+import 'crypto/fs_security_mode.dart';
+import 'crypto/fs_replay_cache.dart';
+import 'crypto/fs_session_manager.dart';
+import 'crypto/fs_state_mutex.dart';
+import 'crypto/fs_strict_mode_controller.dart';
 
 final seedServiceProvider = Provider((_) => SeedService());
 final stegoEncoderProvider = Provider((_) => StegoEncoder());
@@ -61,6 +77,7 @@ final localStorageSecurityProvider = Provider((ref) {
     localIdentityVault: ref.watch(localIdentityVaultProvider),
   );
 });
+
 /// Identity currently active in the UI.
 ///
 /// OSS sets this to the single local identity id. Premium can override/switch.
@@ -82,19 +99,19 @@ final identitiesRepositoryProvider = Provider<IdentitiesRepository>((ref) {
       return;
     }
 
-    final context =
-        await ref.read(localStorageSecurityProvider).contextForIdentity(identityId);
+    final context = await ref
+        .read(localStorageSecurityProvider)
+        .contextForIdentity(identityId);
     final local = await ref.read(identityManagerProvider).getLocalIdentity();
-    final selfIdentity =
-        local != null && local.identityId == identityId
-            ? RemoteIdentity(
-                identityId: local.identityId,
-                publicKeyBase64: local.publicKeyBase64,
-                fingerprint: local.fingerprint,
-                displayName: local.displayName,
-                verified: true,
-              )
-            : null;
+    final selfIdentity = local != null && local.identityId == identityId
+        ? RemoteIdentity(
+            identityId: local.identityId,
+            publicKeyBase64: local.publicKeyBase64,
+            fingerprint: local.fingerprint,
+            displayName: local.displayName,
+            verified: true,
+          )
+        : null;
 
     await repo.setActiveContext(
       scopeToken: context?.scopeToken,
@@ -123,8 +140,9 @@ final messagesRepositoryProvider = Provider<MessagesRepository>((ref) {
       return;
     }
 
-    final context =
-        await ref.read(localStorageSecurityProvider).contextForIdentity(identityId);
+    final context = await ref
+        .read(localStorageSecurityProvider)
+        .contextForIdentity(identityId);
     final pp = ref.read(passphraseProvider);
     if (keyTag == null) {
       await repo.setActiveContext(
@@ -138,7 +156,8 @@ final messagesRepositoryProvider = Provider<MessagesRepository>((ref) {
     if (pp.isActive && pp.privateKeyBase64 != null) {
       privateKeyB64 = pp.privateKeyBase64;
     } else {
-      privateKeyB64 = await ref.read(identityManagerProvider).getLocalPrivateKeyBase64();
+      privateKeyB64 =
+          await ref.read(identityManagerProvider).getLocalPrivateKeyBase64();
     }
     if (privateKeyB64 == null) {
       await repo.setActiveContext(
@@ -148,7 +167,8 @@ final messagesRepositoryProvider = Provider<MessagesRepository>((ref) {
       return;
     }
     final keyBytes = Uint8List.fromList(base64Decode(privateKeyB64));
-    final storageKey = await MessageRecordCipher.deriveKey(keyBytes, keyTag: keyTag);
+    final storageKey =
+        await MessageRecordCipher.deriveKey(keyBytes, keyTag: keyTag);
     await repo.setActiveContext(
       scopeToken: context?.scopeToken,
       storageKey: storageKey,
@@ -178,8 +198,9 @@ final chatMetaRepositoryProvider = Provider<ChatMetaRepository>((ref) {
       await repo.setActiveContext(scopeToken: null, encryptionKey: null);
       return;
     }
-    final context =
-        await ref.read(localStorageSecurityProvider).contextForIdentity(activeId);
+    final context = await ref
+        .read(localStorageSecurityProvider)
+        .contextForIdentity(activeId);
     await repo.setActiveContext(
       scopeToken: context?.scopeToken,
       encryptionKey: context?.chatMetaKey,
@@ -256,15 +277,6 @@ final previewServiceProvider = Provider((ref) {
 final sessionDecryptionCacheServiceProvider = Provider((ref) {
   return SessionDecryptionCacheService(ref.watch(secureStorageProvider));
 });
-final identityMigrationNoticeServiceProvider = Provider((ref) {
-  return IdentityMigrationNoticeService(ref.watch(secureStorageProvider));
-});
-final identityMigrationNoticeControllerProvider = Provider((ref) {
-  return IdentityMigrationNoticeController(
-    service: ref.watch(identityMigrationNoticeServiceProvider),
-    loadIdentity: () => ref.read(identityManagerProvider).getLocalIdentity(),
-  );
-});
 final coverMessageLengthLimitProvider =
     StateProvider<int?>((_) => CoverMessageLengthLimitService.defaultLimit);
 final hideChatPreviewProvider = StateProvider<bool>((_) => false);
@@ -317,3 +329,307 @@ final effectiveKeyTagProvider = Provider<String?>((ref) {
 final isPassphraseActiveProvider = Provider<bool>((ref) {
   return ref.watch(passphraseProvider).isActive;
 });
+
+// ---------------------------------------------------------------------------
+// Forward Secrecy runtime singletons (§7.7, §7.6, §12.3, §20.1, §20.3)
+// ---------------------------------------------------------------------------
+
+/// Shared replay cache for FS handshake IDs and message counters (§8.7).
+final fsReplayCacheProvider = Provider<FsReplayCache>((_) => FsReplayCache());
+
+/// Shared DoS guard for handshake rate limiting (§20.3).
+final fsDoSGuardProvider = Provider<FsDoSGuard>((_) => FsDoSGuard());
+
+/// Shared mutex for serializing per-contact FS state transitions (§20.1).
+final fsStateMutexProvider = Provider<FsStateMutex>((_) => FsStateMutex());
+
+/// Shared downgrade detector for tracking highest security levels (§7.6).
+final fsDowngradeDetectorProvider =
+    Provider<FsDowngradeDetector>((_) => FsDowngradeDetector());
+
+/// In-memory plaintext cache for FS-decrypted messages (§12.3).
+final fsPlaintextCacheProvider =
+    Provider<FsPlaintextCache>((_) => FsPlaintextCache());
+
+/// Per-contact [FsSessionManager] instances, keyed by contactId.
+///
+/// Each contact gets its own state machine. These are RAM-only; the caller
+/// is responsible for persisting state to aux records.
+final fsSessionManagerProvider =
+    Provider.family<FsSessionManager, String>((ref, contactId) {
+  return FsSessionManager();
+});
+
+/// Per-contact [FsStrictModeController], keyed by contactId.
+///
+/// Uses the primary identity context (`'primary'`) for non-passphrase use.
+final fsStrictModeControllerProvider =
+    Provider.family<FsStrictModeController, String>((ref, contactId) {
+  return FsStrictModeController(
+    contactId: contactId,
+    identityContext: 'primary',
+    sessionManager: ref.watch(fsSessionManagerProvider(contactId)),
+    registry: ref.watch(fsContactSecurityRegistryProvider),
+    persistenceService: ref.watch(fsStatePersistenceServiceProvider),
+  );
+});
+
+/// Per-contact [FsOpportunisticController], keyed by contactId.
+///
+/// Orchestrates the opportunistic FS handshake (FS_INIT → FS_REPLY → FS_CONFIRM).
+final fsOpportunisticControllerProvider =
+    Provider.family<FsOpportunisticController, String>((ref, contactId) {
+  return FsOpportunisticController(
+    localContactId: contactId,
+    identityContext: 'primary',
+    sessionManager: ref.watch(fsSessionManagerProvider(contactId)),
+    registry: ref.watch(fsContactSecurityRegistryProvider),
+    persistenceService: ref.watch(fsStatePersistenceServiceProvider),
+    ratchetPersistenceService: ref.watch(fsRatchetPersistenceServiceProvider),
+    replayCache: ref.watch(fsReplayCacheProvider),
+    dosGuard: ref.watch(fsDoSGuardProvider),
+    stateMutex: ref.watch(fsStateMutexProvider),
+    downgradeDetector: ref.watch(fsDowngradeDetectorProvider),
+    plaintextCache: ref.watch(fsPlaintextCacheProvider),
+    onRatchetInitialized: (ratchetState) {
+      // Update the cache when ratchet is initialized after handshake
+      ref.read(fsRatchetStateCacheProvider.notifier).update((cache) => {
+            ...cache,
+            ratchetState.sessionId: ratchetState,
+          });
+    },
+  );
+});
+
+/// Single in-memory registry of FS contact security states.
+///
+/// Scoped to the app lifetime. Controllers call [FsContactSecurityRegistry.upsert]
+/// to update state; widgets watch [fsStateForContactProvider] to read it.
+final fsContactSecurityRegistryProvider =
+    Provider<FsContactSecurityRegistry>((_) => FsContactSecurityRegistry());
+
+/// Notifier that widgets use to trigger a UI refresh after an FS state change.
+///
+/// Increment this whenever [FsContactSecurityRegistry.upsert] is called so that
+/// [fsStateForContactProvider] family providers re-evaluate.
+final fsRegistryVersionProvider = StateProvider<int>((_) => 0);
+
+/// Returns the most-prominent [FsSessionState] for [contactId] in the primary
+/// identity context.
+///
+/// Priority order (highest wins):
+///   strictFsActive > fsActive > strictRequested > handshake-in-progress > legacyOnly
+///
+/// Returns [FsSessionState.legacyOnly] when no entry exists.
+final fsStateForContactProvider =
+    Provider.family<FsSessionState, String>((ref, contactId) {
+  ref.watch(fsRegistryVersionProvider); // rebuild when registry changes
+  final registry = ref.watch(fsContactSecurityRegistryProvider);
+  final entries = registry.forContactAllContexts(contactId);
+  if (entries.isEmpty) return FsSessionState.legacyOnly;
+
+  const priority = [
+    FsSessionState.fsBroken,
+    FsSessionState.strictFsActive,
+    FsSessionState.fsActive,
+    FsSessionState.strictRequested,
+    FsSessionState.fsConfirmed,
+    FsSessionState.fsConfirmSent,
+    FsSessionState.fsReplySeen,
+    FsSessionState.fsReplySent,
+    FsSessionState.fsInitSeen,
+    FsSessionState.fsInitSent,
+    FsSessionState.fsSuspended,
+    FsSessionState.legacyOnly,
+  ];
+
+  FsSessionState best = FsSessionState.legacyOnly;
+  for (final e in entries) {
+    final pi = priority.indexOf(e.fsState);
+    final bi = priority.indexOf(best);
+    if (pi < bi) best = e.fsState;
+  }
+  return best;
+});
+
+/// [AuxRecordRepository] singleton for persisting sealed auxiliary records.
+///
+/// Used by FS state persistence and other auxiliary data storage.
+final auxRecordRepositoryProvider =
+    Provider<AuxRecordRepository>((_) => AuxRecordRepository());
+
+/// [FsStatePersistenceService] singleton for persisting FS contact security state.
+///
+/// Saves and loads [FsContactSecurityState] entries to/from auxiliary records,
+/// making FS state survive app restarts.
+///
+/// Call [loadPersistedState] after identity context is initialized.
+final fsStatePersistenceServiceProvider =
+    Provider<FsStatePersistenceService>((ref) {
+  return FsStatePersistenceService(
+    auxRepository: ref.watch(auxRecordRepositoryProvider),
+    registry: ref.watch(fsContactSecurityRegistryProvider),
+  );
+});
+
+/// [FsRatchetPersistenceService] singleton for persisting Double Ratchet state.
+///
+/// Saves and loads [RatchetState] to/from auxiliary records,
+/// making active FS encryption sessions survive app restarts.
+///
+/// Call [loadAllRatchetStates] after identity context is initialized.
+final fsRatchetPersistenceServiceProvider =
+    Provider<FsRatchetPersistenceService>((ref) {
+  return FsRatchetPersistenceService(
+    auxRepository: ref.watch(auxRecordRepositoryProvider),
+  );
+});
+
+/// In-memory cache of loaded ratchet states.
+///
+/// Key: sessionId → RatchetState
+/// This is populated at app startup and updated when sessions are created.
+final fsRatchetStateCacheProvider =
+    StateProvider<Map<String, RatchetState>>((_) => {});
+
+/// [FsPlaintextPersistenceService] singleton for persisting FS-decrypted
+/// plaintext as encrypted auxiliary records (§12.3).
+///
+/// FS messages have `text: null` in [MessageRecord]. The decrypted plaintext
+/// is stored in an opaque aux record, indistinguishable from FS state records.
+/// On identity reset, [removeAll] deletes all persisted FS plaintext.
+final fsPlaintextPersistenceServiceProvider =
+    Provider<FsPlaintextPersistenceService>((ref) {
+  return FsPlaintextPersistenceService(
+    auxRepository: ref.watch(auxRecordRepositoryProvider),
+  );
+});
+
+/// Per-contact security mode service (§14.3).
+///
+/// Persists the user's choice of Base/Advanced/Strict per contact as
+/// encrypted aux records (`kind: fs_mode_v1`).
+final fsSecurityModeServiceProvider = Provider<FsSecurityModeService>((ref) {
+  return FsSecurityModeService(
+    auxRepository: ref.watch(auxRecordRepositoryProvider),
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Passphrase preferences & timeout (§11.2–§11.5, §14.2)
+// ---------------------------------------------------------------------------
+
+/// [FsPassphrasePreferencesService] singleton for persisting per-passphrase-
+/// context preferences (timeout, screen lock, history mode, FS persistence).
+final fsPassphrasePreferencesServiceProvider =
+    Provider<FsPassphrasePreferencesService>((ref) {
+  return FsPassphrasePreferencesService(
+    auxRepository: ref.watch(auxRecordRepositoryProvider),
+  );
+});
+
+/// Reactive passphrase preferences notifier.
+///
+/// Widgets watch this for the current passphrase-context preferences.
+/// Returns hardcoded defaults when no passphrase is active (§11.3.1).
+final passphrasePreferencesProvider =
+    StateNotifierProvider<PassphrasePreferencesNotifier, PassphrasePreferences>(
+        (ref) {
+  return PassphrasePreferencesNotifier(
+    preferencesService: ref.watch(fsPassphrasePreferencesServiceProvider),
+    passphraseState: ref.watch(passphraseProvider),
+  );
+});
+
+/// Passphrase timeout controller (§11.3, §11.4).
+///
+/// Manages the automatic expulsion timer. Call [start] when passphrase
+/// activates, [stop] on deactivation.
+final fsPassphraseTimeoutControllerProvider =
+    Provider<FsPassphraseTimeoutController>((ref) {
+  return FsPassphraseTimeoutController(
+    onExpel: () {
+      final pp = ref.read(passphraseProvider);
+      final prefs = ref.read(passphrasePreferencesProvider);
+      final keyTag = pp.keyTag;
+      if (keyTag != null) {
+        ref.read(fsHistoryModeEnforcementProvider).onPassphraseExpelled(
+              historyMode: prefs.historyMode,
+              fsPersistence: prefs.fsPersistence,
+              identityContext: keyTag,
+            );
+      }
+      ref.read(passphraseProvider.notifier).deactivate();
+    },
+  );
+});
+
+/// [FsHistoryModeEnforcement] singleton for enforcing history mode
+/// cleanup on passphrase expulsion (§12.2, §6.4–§6.7, §11.5).
+final fsHistoryModeEnforcementProvider =
+    Provider<FsHistoryModeEnforcement>((ref) {
+  return FsHistoryModeEnforcement(
+    plaintextCache: ref.watch(fsPlaintextCacheProvider),
+    plaintextPersistence: ref.watch(fsPlaintextPersistenceServiceProvider),
+    statePersistence: ref.watch(fsStatePersistenceServiceProvider),
+    ratchetPersistence: ref.watch(fsRatchetPersistenceServiceProvider),
+    securityRegistry: ref.watch(fsContactSecurityRegistryProvider),
+  );
+});
+
+/// Reactive notifier for passphrase preferences.
+///
+/// Loads preferences from [FsPassphrasePreferencesService] when a passphrase
+/// becomes active, and syncs changes back to storage.
+class PassphrasePreferencesNotifier
+    extends StateNotifier<PassphrasePreferences> {
+  PassphrasePreferencesNotifier({
+    required FsPassphrasePreferencesService preferencesService,
+    required PassphraseState passphraseState,
+  })  : _preferencesService = preferencesService,
+        _passphraseState = passphraseState,
+        super(const PassphrasePreferences()) {
+    _loadIfActive();
+  }
+
+  final FsPassphrasePreferencesService _preferencesService;
+  final PassphraseState _passphraseState;
+
+  void _loadIfActive() {
+    final tag = _passphraseState.keyTag;
+    if (tag == null || !_passphraseState.isActive) {
+      state = const PassphrasePreferences();
+      return;
+    }
+    state = _preferencesService.getPreferences(tag);
+  }
+
+  Future<void> updateTimeout(PassphraseTimeout timeout) async {
+    state = state.copyWith(timeout: timeout);
+    await _persist();
+  }
+
+  Future<void> updateExpelOnScreenLock(bool value) async {
+    state = state.copyWith(expelOnScreenLock: value);
+    await _persist();
+  }
+
+  Future<void> updateHistoryMode(PassphraseHistoryMode mode) async {
+    state = state.copyWith(historyMode: mode);
+    await _persist();
+  }
+
+  Future<void> updateFsPersistence(PassphraseFsPersistence mode) async {
+    state = state.copyWith(fsPersistence: mode);
+    await _persist();
+  }
+
+  Future<void> _persist() async {
+    final tag = _passphraseState.keyTag;
+    if (tag == null || !_passphraseState.isActive) return;
+    await _preferencesService.savePreferences(
+      contextTag: tag,
+      prefs: state,
+    );
+  }
+}

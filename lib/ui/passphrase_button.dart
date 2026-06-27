@@ -77,6 +77,15 @@ class PassphraseButton extends ConsumerWidget {
     if (mnemonic == null) return;
 
     await ref.read(passphraseProvider.notifier).activate(mnemonic, result);
+
+    // Start the passphrase timeout controller (§11.3)
+    final prefs = ref.read(passphrasePreferencesProvider);
+    final tc = ref.read(fsPassphraseTimeoutControllerProvider);
+    tc.configure(
+      timeout: prefs.timeout,
+      expelOnScreenLock: prefs.expelOnScreenLock,
+    );
+    tc.start();
   }
 
   Future<void> _confirmDeactivate(BuildContext context, WidgetRef ref) async {
@@ -100,6 +109,20 @@ class PassphraseButton extends ConsumerWidget {
     );
 
     if (confirmed == true) {
+      ref.read(fsPassphraseTimeoutControllerProvider).stop();
+
+      // Enforce history mode on manual deactivation (§12.2)
+      final pp = ref.read(passphraseProvider);
+      final prefs = ref.read(passphrasePreferencesProvider);
+      final keyTag = pp.keyTag;
+      if (keyTag != null) {
+        await ref.read(fsHistoryModeEnforcementProvider).onPassphraseExpelled(
+              historyMode: prefs.historyMode,
+              fsPersistence: prefs.fsPersistence,
+              identityContext: keyTag,
+            );
+      }
+
       ref.read(passphraseProvider.notifier).deactivate();
     }
   }

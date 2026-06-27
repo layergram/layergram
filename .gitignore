@@ -83,6 +83,9 @@ SCREENPROTECTOR.md
 layergram-project-overview.md
 layergram-to-do.md
 
+# Private security specs — do NOT commit
+specs/private/
+
 # Environment / secrets
 .env
 .env.*

@@ -10,7 +10,8 @@ import '../crypto/sealed_map_cipher.dart';
 import 'local_database.dart';
 
 class MessagesRepositoryCore {
-  MessagesRepositoryCore() : _box = Hive.box<Map>(LocalDatabase.messagesBoxName) {
+  MessagesRepositoryCore()
+      : _box = Hive.box<Map>(LocalDatabase.messagesBoxName) {
     _loadFuture = _reloadFromBox();
   }
 
@@ -103,8 +104,7 @@ class MessagesRepositoryCore {
   }
 
   Future<Map<String, dynamic>?> _decryptPersistedRecord(
-    Map<dynamic, dynamic> persisted,
-    {
+    Map<dynamic, dynamic> persisted, {
     required SecretKey? storageKey,
   }) async {
     final encryptedRecord = persisted['encryptedRecord'] as String?;
@@ -138,7 +138,8 @@ class MessagesRepositoryCore {
 
   void _sortAndPrune() {
     _messages.removeWhere((m) => m.deletedAt != null);
-    _messages.removeWhere((m) => m.expireAfter != null && m.expireAfter! < _now);
+    _messages
+        .removeWhere((m) => m.expireAfter != null && m.expireAfter! < _now);
     _messages.sort(_compareNewestFirst);
   }
 
@@ -150,11 +151,14 @@ class MessagesRepositoryCore {
 
   bool _hasPrunableMessages() {
     return _messages.any(
-      (m) => m.deletedAt != null || (m.expireAfter != null && m.expireAfter! < _now),
+      (m) =>
+          m.deletedAt != null ||
+          (m.expireAfter != null && m.expireAfter! < _now),
     );
   }
 
-  bool _isDuplicateIncomingMessage(MessageRecord existing, MessageRecord candidate) {
+  bool _isDuplicateIncomingMessage(
+      MessageRecord existing, MessageRecord candidate) {
     if (existing.direction != 'incoming' || candidate.direction != 'incoming') {
       return false;
     }
@@ -187,9 +191,11 @@ class MessagesRepositoryCore {
     await _ensureLoaded();
     if (!_hasScope) return;
 
-    final keysToDelete = _box.keys.where(_isScopedKey).toList();
-    for (final key in keysToDelete) {
-      await _box.delete(key);
+    // Rewrite only the visible message aggregate. Opaque encrypted residual
+    // records in the same scope may be aux records or future archive formats;
+    // normal message operations must preserve them.
+    if (_visibleRecordKey != null) {
+      await _box.delete(_visibleRecordKey);
     }
     for (final entry in _hiddenPersistedRecords.entries) {
       await _box.put(entry.key, entry.value);
@@ -274,8 +280,8 @@ class MessagesRepositoryCore {
 
   Future<void> deleteAllForContact(String contactId) async {
     await _ensureLoaded();
-    _messages.removeWhere((m) =>
-        m.senderId == contactId || m.recipientId == contactId);
+    _messages.removeWhere(
+        (m) => m.senderId == contactId || m.recipientId == contactId);
     _sortAndPrune();
     await _persistAll();
     _controller.add(List.unmodifiable(_messages));
@@ -355,7 +361,8 @@ class MessagesRepositoryCore {
     return List.unmodifiable(_messages);
   }
 
-  Stream<List<MessageRecord>> watchThread(String contactId, {int limit = 50}) async* {
+  Stream<List<MessageRecord>> watchThread(String contactId,
+      {int limit = 50}) async* {
     await _ensureLoaded();
     final hadPrunableMessages = _hasPrunableMessages();
     _sortAndPrune();
@@ -378,6 +385,31 @@ class MessagesRepositoryCore {
 
     await for (final _ in _controller.stream) {
       yield List.unmodifiable(getFiltered());
+    }
+  }
+
+  /// Strips persisted plaintext from all encrypted messages (§12.3).
+  ///
+  /// Called on identity reset to ensure FS messages cannot be read after
+  /// the ratchet keys have been destroyed.  We strip ALL encrypted messages
+  /// (not just those flagged `isFsEncrypted`) because messages exchanged
+  /// before the flag was introduced lack the marker.  After identity restore,
+  /// legacy messages will be re-decrypted on demand (same keys), while FS
+  /// messages will fail inner-layer decryption (ratchet gone) and show a
+  /// placeholder.
+  Future<void> stripEncryptedPlaintext() async {
+    await _ensureLoaded();
+    var changed = false;
+    for (var i = 0; i < _messages.length; i++) {
+      final m = _messages[i];
+      if (m.text != null && m.ciphertextBase64 != null) {
+        _messages[i] = m.copyWith(clearText: true);
+        changed = true;
+      }
+    }
+    if (changed) {
+      await _persistAll();
+      _controller.add(List.unmodifiable(_messages));
     }
   }
 

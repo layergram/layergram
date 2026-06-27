@@ -14,6 +14,8 @@
 
 import 'dart:async';
 import 'dart:collection';
+import 'dart:convert';
+import 'dart:typed_data';
 import 'dart:ui' show FrameTiming;
 
 import 'package:easy_localization/easy_localization.dart';
@@ -21,6 +23,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/capabilities/chat_folders_capability.dart';
+import 'core/crypto/aux_record_cipher.dart';
+import 'core/crypto/fs_double_ratchet.dart';
+import 'core/crypto/fs_passphrase_preferences.dart';
 import 'core/providers.dart';
 import 'core/security/app_lock_idle_controller.dart';
 import 'features/identities/add_identity_view.dart';
@@ -58,8 +63,8 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
   ProviderSubscription<bool>? _appLockEnabledSub;
   ProviderSubscription<int>? _appLockTimeoutSub;
   ProviderSubscription<bool>? _appNeedsUnlockSub;
+  ProviderSubscription<PassphrasePreferences>? _passphrasePreferencesSub;
   bool _checkingPendingShare = false;
-  bool _identityMigrationNoticeCheckQueued = false;
   final ListQueue<bool> _recentSlowFrames = ListQueue<bool>();
   final Set<String> _sharedTextsInFlight = <String>{};
   final Map<String, DateTime> _recentSharedTexts = <String, DateTime>{};
@@ -85,8 +90,7 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
         _reloadIdentity();
         setState(() {});
       },
-    )
-      ..read();
+    )..read();
     _appLockEnabledSub = ref.listenManual<bool>(
       appLockEnabledProvider,
       (prev, next) {
@@ -95,8 +99,7 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
           timeoutSeconds: ref.read(appLockTimeoutProvider),
         );
       },
-    )
-      ..read();
+    )..read();
     _appLockTimeoutSub = ref.listenManual<int>(
       appLockTimeoutProvider,
       (prev, next) {
@@ -105,8 +108,7 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
           timeoutSeconds: next,
         );
       },
-    )
-      ..read();
+    )..read();
     _appNeedsUnlockSub = ref.listenManual<bool>(
       appNeedsUnlockProvider,
       (prev, next) {
@@ -117,8 +119,23 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
           unawaited(ref.read(homeControllerProvider).warmSessionDisplayKeys());
         }
       },
-    )
-      ..read();
+    )..read();
+    _passphrasePreferencesSub = ref.listenManual<PassphrasePreferences>(
+      passphrasePreferencesProvider,
+      (prev, next) {
+        final tc = ref.read(fsPassphraseTimeoutControllerProvider);
+        tc.configure(
+          timeout: next.timeout,
+          expelOnScreenLock: next.expelOnScreenLock,
+        );
+        final pp = ref.read(passphraseProvider);
+        if (pp.isActive && !tc.isActive) {
+          tc.start();
+        } else if (!pp.isActive && tc.isActive) {
+          tc.stop();
+        }
+      },
+    )..read();
     _loadLockState();
     _loadScreenProtectionState();
     _loadTooltipState();
@@ -227,7 +244,8 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
   }
 
   Future<void> _loadPendingSharedText() async {
-    if ((!AppPlatform.isAndroid && !AppPlatform.isIOS) || _checkingPendingShare) {
+    if ((!AppPlatform.isAndroid && !AppPlatform.isIOS) ||
+        _checkingPendingShare) {
       return;
     }
 
@@ -387,7 +405,9 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
         final senderId = outcome.payload?.senderId;
         final sender = senderId == null
             ? null
-            : await ref.read(identitiesRepositoryProvider).getRemoteById(senderId);
+            : await ref
+                .read(identitiesRepositoryProvider)
+                .getRemoteById(senderId);
         if (!mounted) return;
 
         final ctx = _navKey.currentContext;
@@ -434,34 +454,11 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
     );
   }
 
-  void _queueIdentityMigrationNoticeCheck() {
-    if (_identityMigrationNoticeCheckQueued) {
-      return;
-    }
-    _identityMigrationNoticeCheckQueued = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      _identityMigrationNoticeCheckQueued = false;
-      if (!mounted || ref.read(appNeedsUnlockProvider)) {
-        return;
-      }
-      final context = _navKey.currentContext;
-      if (context == null || !context.mounted) {
-        return;
-      }
-      await ref
-          .read(identityMigrationNoticeControllerProvider)
-          .checkAndShowIfNeeded(context);
-    });
-  }
-
   void _reloadIdentity() {
     _identityFuture = ref
         .read(identityManagerProvider)
         .getLocalIdentity()
         .then((identity) async {
-      await ref
-          .read(identityMigrationNoticeServiceProvider)
-          .synchronizeIdentityState(identity);
       final nextId = identity?.identityId;
       final currentId = ref.read(activeIdentityIdProvider);
       if (currentId != nextId) {
@@ -470,8 +467,47 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
       if (nextId != null && !ref.read(appNeedsUnlockProvider)) {
         unawaited(ref.read(homeControllerProvider).warmSessionDisplayKeys());
       }
+      // Load persisted FS state after identity is loaded
+      await _loadPersistedFsState();
       return identity;
     });
+  }
+
+  Future<void> _loadPersistedFsState() async {
+    try {
+      // Get the private key (identity or passphrase-derived)
+      final privateKeyB64 =
+          await ref.read(identityManagerProvider).getLocalPrivateKeyBase64();
+      if (privateKeyB64 == null) {
+        return;
+      }
+
+      // Derive aux storage key
+      final keyBytes = Uint8List.fromList(base64Decode(privateKeyB64));
+      final auxKey = await AuxRecordCipher.deriveAuxStorageKey(keyBytes);
+
+      // Set up aux repository context
+      final auxRepo = ref.read(auxRecordRepositoryProvider);
+      auxRepo.setActiveContext(
+        scopeToken: 'primary',
+        auxStorageKey: auxKey,
+      );
+
+      // Load persisted FS states
+      await ref.read(fsStatePersistenceServiceProvider).loadPersistedState();
+
+      // Load persisted ratchet states into cache
+      final ratchetStates = await ref
+          .read(fsRatchetPersistenceServiceProvider)
+          .loadAllRatchetStates();
+      final cache = <String, RatchetState>{};
+      for (final state in ratchetStates) {
+        cache[state.sessionId] = state;
+      }
+      ref.read(fsRatchetStateCacheProvider.notifier).state = cache;
+    } catch (_) {
+      // Silently fail - FS state will start fresh (legacyOnly)
+    }
   }
 
   @override
@@ -495,6 +531,11 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
       ref.read(homeControllerProvider).clearSessionDecryptionCache();
     }
 
+    // Passphrase timeout controller lifecycle (§11.3)
+    ref
+        .read(fsPassphraseTimeoutControllerProvider)
+        .onAppLifecycleChanged(state);
+
     final lockEnabled = ref.read(appLockEnabledProvider);
     if (!lockEnabled) return;
     _appLockIdleController.onAppLifecycleChanged(state);
@@ -508,6 +549,8 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
     _appLockEnabledSub?.close();
     _appLockTimeoutSub?.close();
     _appNeedsUnlockSub?.close();
+    _passphrasePreferencesSub?.close();
+    ref.read(fsPassphraseTimeoutControllerProvider).dispose();
     _appLockIdleController.dispose();
     WidgetsBinding.instance.removeTimingsCallback(_handleFrameTimings);
     WidgetsBinding.instance.removeObserver(this);
@@ -521,7 +564,8 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
     final screenProtectionEnabled = ref.watch(screenProtectionEnabledProvider);
     final privacyShieldVisible = ref.watch(privacyShieldVisibleProvider);
     final reducedEffects = ref.watch(reducedEffectsProvider);
-    final backgroundAnimationPaused = ref.watch(backgroundAnimationPausedProvider);
+    final backgroundAnimationPaused =
+        ref.watch(backgroundAnimationPausedProvider);
     final tooltipsEnabled = ref.watch(tooltipsEnabledProvider);
     final tooltipsVisible =
         AppPlatform.supportsHoverTooltips && tooltipsEnabled;
@@ -578,7 +622,8 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
           behavior: HitTestBehavior.translucent,
           onPointerDown: (_) => _appLockIdleController.onUserInteraction(),
           onPointerSignal: (_) => _appLockIdleController.onUserInteraction(),
-          onPointerPanZoomStart: (_) => _appLockIdleController.onUserInteraction(),
+          onPointerPanZoomStart: (_) =>
+              _appLockIdleController.onUserInteraction(),
           child: TooltipVisibility(
             visible: tooltipsVisible,
             child: Stack(
@@ -620,7 +665,8 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
                       ? (ref.read(chatFoldersProvider).valueOrNull ?? const [])
                       : const <ChatFolder>[];
                   final myIdentityIndex = 1 + extraFolders.length + 1;
-                  ref.read(appShellInitialIndexProvider.notifier).state = myIdentityIndex;
+                  ref.read(appShellInitialIndexProvider.notifier).state =
+                      myIdentityIndex;
                 }
                 setState(() {});
               },
@@ -633,7 +679,6 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
               },
             );
           }
-          _queueIdentityMigrationNoticeCheck();
           return const AppShell();
         },
       ),

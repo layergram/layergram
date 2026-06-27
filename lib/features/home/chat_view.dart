@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' show max;
 
 import 'package:dotted_border/dotted_border.dart';
 import 'package:flutter/material.dart';
@@ -7,11 +8,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/crypto/fs_security_mode.dart';
 import '../../core/crypto/models.dart';
 import '../../core/crypto/stego_encoder.dart';
 import '../../core/providers.dart';
 import '../../core/storage/messages_repository.dart';
 import '../../l10n/app_strings.dart';
+import '../../ui/fs_info_sheet.dart';
+import '../../ui/fs_message_classification_icon.dart';
+import '../../ui/fs_status_icon.dart';
 import '../../ui/passphrase_button.dart';
 import '../../utils/app_platform.dart';
 import '../../utils/sharing.dart';
@@ -98,10 +103,13 @@ class ChatViewState extends ConsumerState<ChatView> {
     },
   );
   String _searchQuery = '';
-  List<String> _searchMatchIds = []; // message IDs matching search, newest first
+  List<String> _searchMatchIds =
+      []; // message IDs matching search, newest first
   final Map<String, String> _decryptedCache = {}; // messageId -> decrypted text
-  final Map<String, Future<String?>> _decryptFutures = {}; // messageId -> cached Future
-  Map<String, GlobalKey> _searchResultKeys = {}; // messageId -> GlobalKey for scrolling
+  final Map<String, Future<String?>> _decryptFutures =
+      {}; // messageId -> cached Future
+  Map<String, GlobalKey> _searchResultKeys =
+      {}; // messageId -> GlobalKey for scrolling
   int _searchGeneration = 0;
   bool _searchInProgress = false;
   bool _needsSearchOnDataLoad = false;
@@ -144,6 +152,7 @@ class ChatViewState extends ConsumerState<ChatView> {
   String _encryptedOutput = '';
   bool _dirtySinceEncode = true;
   bool _sending = false;
+  int? _exactCoverMissingCount;
   bool _handoffScheduled = false;
   bool _decryptionPrimed = false;
   Timer? _decryptionPrimeTimer;
@@ -154,8 +163,7 @@ class ChatViewState extends ConsumerState<ChatView> {
   bool get _isContactVerifiedNow =>
       widget.contact.verified || _verifiedThisSession;
 
-  bool get _showUnverifiedBanner =>
-      !_isContactVerifiedNow && !_bannerDismissed;
+  bool get _showUnverifiedBanner => !_isContactVerifiedNow && !_bannerDismissed;
 
   Future<void> _startContactVerification() async {
     final result =
@@ -171,8 +179,7 @@ class ChatViewState extends ConsumerState<ChatView> {
     final theme = Theme.of(context);
     final tileColor =
         theme.colorScheme.tertiaryContainer.withValues(alpha: 0.45);
-    final subtitleColor =
-        theme.colorScheme.onSurface.withValues(alpha: 0.85);
+    final subtitleColor = theme.colorScheme.onSurface.withValues(alpha: 0.85);
     return Material(
       color: tileColor,
       child: Padding(
@@ -217,7 +224,7 @@ class ChatViewState extends ConsumerState<ChatView> {
   }
 
   int get _estimatedPayloadBytes {
-    return StegoEncoder.estimatedEncryptedPayloadBytes(_secretCtrl.text);
+    return _estimatedPayloadBytesForSecret(_secretCtrl.text);
   }
 
   int? get _coverLengthLimit {
@@ -225,7 +232,21 @@ class ChatViewState extends ConsumerState<ChatView> {
   }
 
   int _estimatedPayloadBytesForSecret(String secretText) {
+    if (_usesFsCoverPayloadBudget) {
+      return StegoEncoder.estimatedCoverMessagePayloadBytes(secretText);
+    }
     return StegoEncoder.estimatedEncryptedPayloadBytes(secretText);
+  }
+
+  bool get _usesFsCoverPayloadBudget {
+    final fsController = ref.read(
+      fsOpportunisticControllerProvider(widget.contact.identityId),
+    );
+    final mode = ref.read(fsSecurityModeServiceProvider).getModeSync(
+          contactId: widget.contact.identityId,
+          identityContext: fsController.identityContext,
+        );
+    return mode != FsSecurityMode.base;
   }
 
   int _estimatedLinkLengthForSecret(String secretText) {
@@ -298,7 +319,7 @@ class ChatViewState extends ConsumerState<ChatView> {
       coverText: currentCover,
       secretText: currentSecret,
     );
-    final currentLength = _linkMode 
+    final currentLength = _linkMode
         ? _estimatedLinkLengthForSecret(currentSecret)
         : _minimumStegoCharacterCount(
             coverText: currentCover,
@@ -363,7 +384,8 @@ class ChatViewState extends ConsumerState<ChatView> {
       return;
     }
     final holdCount = ref.read(backgroundAnimationHoldCountProvider);
-    ref.read(backgroundAnimationHoldCountProvider.notifier).state = holdCount + 1;
+    ref.read(backgroundAnimationHoldCountProvider.notifier).state =
+        holdCount + 1;
     _backgroundHoldActive = true;
   }
 
@@ -781,7 +803,9 @@ class ChatViewState extends ConsumerState<ChatView> {
         return;
       }
       unawaited(
-        ref.read(homeControllerProvider).primeDisplayKey(contact: widget.contact),
+        ref
+            .read(homeControllerProvider)
+            .primeDisplayKey(contact: widget.contact),
       );
       if (!_decryptionPrimed) {
         _decryptionPrimeTimer = Timer(const Duration(milliseconds: 120), () {
@@ -797,6 +821,16 @@ class ChatViewState extends ConsumerState<ChatView> {
         _releaseBackgroundHold();
       }
       _messagesRepo.purgeReadDeleteAfterReadFor(widget.contact.identityId);
+    });
+
+    // Listen for identity reload/reset events and clear decryption cache
+    // This ensures FS-encrypted messages cannot be decrypted after identity reset
+    // (FS ratchet keys are cleared on reset, so cached decryptions are invalid)
+    ref.listenManual<int>(identityReloadTokenProvider, (previous, next) {
+      if (previous != next) {
+        _decryptedCache.clear();
+        _decryptFutures.clear();
+      }
     });
   }
 
@@ -838,15 +872,16 @@ class ChatViewState extends ConsumerState<ChatView> {
   void _onFieldChanged() {
     setState(() {
       _dirtySinceEncode = true;
+      _exactCoverMissingCount = null;
     });
   }
 
   Future<String?> _getDecryptFuture(MessageRecord m) {
     return _decryptFutures.putIfAbsent(m.id, () async {
       final result = await ref.read(homeControllerProvider).decryptForDisplay(
-        message: m,
-        contact: widget.contact,
-      );
+            message: m,
+            contact: widget.contact,
+          );
       if (result != null) {
         _decryptedCache[m.id] = result;
       }
@@ -957,7 +992,8 @@ class ChatViewState extends ConsumerState<ChatView> {
 
   void _navigateSearch(int delta) {
     if (_searchMatchIds.isEmpty) return;
-    final newIndex = (_searchIndex + delta).clamp(0, _searchMatchIds.length - 1);
+    final newIndex =
+        (_searchIndex + delta).clamp(0, _searchMatchIds.length - 1);
     if (newIndex == _searchIndex) return;
     setState(() => _searchIndex = newIndex);
     _scrollToSearchResult();
@@ -998,6 +1034,7 @@ class ChatViewState extends ConsumerState<ChatView> {
         });
       }
     }
+
     WidgetsBinding.instance.addPostFrameCallback((_) => tryEnsureVisible());
   }
 
@@ -1098,7 +1135,8 @@ class ChatViewState extends ConsumerState<ChatView> {
             context: menuContext,
             builder: (context) => AlertDialog(
               title: Text(t(context, 'delete')),
-              content: Text(t(context, 'deleteChatConfirm')), // Using existing key for confirmation
+              content: Text(t(context,
+                  'deleteChatConfirm')), // Using existing key for confirmation
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(false),
@@ -1247,8 +1285,17 @@ class ChatViewState extends ConsumerState<ChatView> {
     });
   }
 
+  void refreshAfterDecodedMessage() {
+    _decryptFutures.clear();
+    if (mounted) {
+      setState(() {});
+      _scrollToBottom();
+    }
+  }
+
   bool get _coverTooShort {
     if (_linkMode || _secretCtrl.text.trim().isEmpty) return false;
+    if (_exactCoverMissingCount != null) return true;
     return !StegoEncoder.canEmbedBytes(_coverCtrl.text, _estimatedPayloadBytes);
   }
 
@@ -1256,6 +1303,7 @@ class ChatViewState extends ConsumerState<ChatView> {
     if (_linkMode || _secretCtrl.text.trim().isEmpty) {
       return 0;
     }
+    if (_exactCoverMissingCount != null) return _exactCoverMissingCount!;
     return StegoEncoder.missingCoverCapacityForBytes(
       _coverCtrl.text,
       _estimatedPayloadBytes,
@@ -1325,40 +1373,85 @@ class ChatViewState extends ConsumerState<ChatView> {
           : (DateTime.now().millisecondsSinceEpoch ~/ 1000) +
               (expiresMinutes * 60);
 
-      final encrypted =
+      final encResult =
           await ref.read(homeControllerProvider).encryptForRecipient(
                 secretText: _secretCtrl.text,
                 recipient: recipient,
                 expireAfter: expireAfter,
                 deleteAfterRead: _deleteAfterRead,
               );
+      final encrypted = encResult.message;
+      final rawBytes = encrypted.toRawBytes();
+      if (!_linkMode &&
+          !StegoEncoder.canEmbedBytes(_coverCtrl.text, rawBytes.length)) {
+        final missing = StegoEncoder.missingCoverCapacityForBytes(
+          _coverCtrl.text,
+          rawBytes.length,
+        );
+        if (mounted) {
+          setState(() => _exactCoverMissingCount = missing);
+          _showTouchComposerSnackbar(
+            AppStrings.t(context, 'coverTooShort')
+                .replaceAll('{n}', '$missing'),
+          );
+        }
+        return null;
+      }
 
       final output = _linkMode
           ? ref.read(homeControllerProvider).buildLinkPayload(encrypted)
-          : ref
-              .read(stegoEncoderProvider)
-              .encodeBytes(
+          : ref.read(stegoEncoderProvider).encodeBytes(
                 _coverCtrl.text,
-                encrypted.toRawBytes(),
+                rawBytes,
                 maxTotalCharacters: _coverLengthLimit,
               );
 
       final controller = ref.read(homeControllerProvider);
       final keyTag = await controller.currentKeyTag();
       final storageKey = await controller.currentStorageKey();
+      final recordId = DateTime.now().microsecondsSinceEpoch.toString();
+
+      // §12.3: FS plaintext stored as encrypted aux record, not in DB.
+      if (encResult.isFsEncrypted && _secretCtrl.text.isNotEmpty) {
+        await ref.read(fsPlaintextPersistenceServiceProvider).savePlaintext(
+              messageId: recordId,
+              plaintext: _secretCtrl.text,
+              contactId: recipient.identityId,
+            );
+        // Warm in-memory cache for immediate display
+        final fsController = ref.read(
+          fsOpportunisticControllerProvider(recipient.identityId),
+        );
+        fsController.cachePlaintext(
+          '${recipient.identityId}|$recordId',
+          _secretCtrl.text,
+        );
+      }
+
+      // Ensure outgoing timestamp is never earlier than the newest message
+      // in the thread. Prevents ordering issues when device clocks differ
+      // (e.g., incoming message has a future timestamp from the sender).
+      final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final latestInThread =
+          _cachedThread.isEmpty ? nowSec : _cachedThread.last.timestamp;
+      final outgoingTs = max(nowSec, latestInThread);
+
       await ref.read(messagesRepositoryProvider).add(
             MessageRecord(
-              id: DateTime.now().microsecondsSinceEpoch.toString(),
+              id: recordId,
               senderId: 'me',
               recipientId: recipient.identityId,
               direction: 'outgoing',
-              timestamp: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+              timestamp: outgoingTs,
+              text: encResult.isFsEncrypted ? null : _secretCtrl.text,
               ciphertextBase64: encrypted.ciphertextBase64,
               nonceBase64: encrypted.nonceBase64,
               rawSource: output,
               expireAfter: expireAfter,
               deleteAfterRead: _deleteAfterRead,
               keyTag: keyTag,
+              isFsEncrypted: encResult.isFsEncrypted,
+              fsClassification: encResult.classification,
             ),
             storageKey: storageKey,
           );
@@ -1370,6 +1463,11 @@ class ChatViewState extends ConsumerState<ChatView> {
       });
       _scrollToBottom();
       return output;
+    } on FsSendBlockedException catch (e) {
+      if (mounted) {
+        _showTouchComposerSnackbar(AppStrings.t(context, e.messageKey));
+      }
+      return null;
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -1395,7 +1493,8 @@ class ChatViewState extends ConsumerState<ChatView> {
                 Row(
                   children: [
                     ToggleButtons(
-                      constraints: const BoxConstraints(minHeight: 32, minWidth: 32),
+                      constraints:
+                          const BoxConstraints(minHeight: 32, minWidth: 32),
                       isSelected: [_linkMode == false, _linkMode == true],
                       onPressed: (index) {
                         _setComposerMode(index == 1);
@@ -1403,11 +1502,13 @@ class ChatViewState extends ConsumerState<ChatView> {
                       borderRadius: const BorderRadius.all(Radius.circular(12)),
                       children: const [
                         Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding:
+                              EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           child: Icon(Icons.chat_bubble_outline, size: 18),
                         ),
                         Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding:
+                              EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           child: Icon(Icons.link, size: 18),
                         ),
                       ],
@@ -1417,24 +1518,29 @@ class ChatViewState extends ConsumerState<ChatView> {
                       width: 120,
                       child: Row(
                         children: [
-                          Icon(Icons.hourglass_bottom_outlined, size: 16,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant),
+                          Icon(Icons.hourglass_bottom_outlined,
+                              size: 16,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant),
                           const SizedBox(width: 2),
                           Expanded(
                             child: DropdownButton<int?>(
                               isExpanded: true,
                               isDense: true,
                               value: _selectedExpiryMinutes,
-                              items: _expiryOptions.map((opt) =>
-                                DropdownMenuItem<int?>(
-                                  value: opt.minutes,
-                                  child: Text(
-                                    _expiryLabel(context, opt),
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(fontSize: 12),
-                                  ),
-                                ),
-                              ).toList(),
+                              items: _expiryOptions
+                                  .map(
+                                    (opt) => DropdownMenuItem<int?>(
+                                      value: opt.minutes,
+                                      child: Text(
+                                        _expiryLabel(context, opt),
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(fontSize: 12),
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
                               onChanged: (val) {
                                 _setComposerExpiry(val);
                               },
@@ -1449,15 +1555,24 @@ class ChatViewState extends ConsumerState<ChatView> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.visibility_outlined, size: 12,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant),
+                          Icon(Icons.visibility_outlined,
+                              size: 12,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant),
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.arrow_right_alt, size: 8,
-                                color: Theme.of(context).colorScheme.onSurfaceVariant),
-                              Icon(Icons.delete_outline, size: 8,
-                                color: Theme.of(context).colorScheme.onSurfaceVariant),
+                              Icon(Icons.arrow_right_alt,
+                                  size: 8,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant),
+                              Icon(Icons.delete_outline,
+                                  size: 8,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant),
                             ],
                           ),
                         ],
@@ -1478,12 +1593,20 @@ class ChatViewState extends ConsumerState<ChatView> {
                           ? null
                           : () async {
                               final output = await _encodeAndPersist();
-                              if (output == null || !context.mounted) { return; }
+                              if (output == null || !context.mounted) {
+                                return;
+                              }
                               final messenger = ScaffoldMessenger.of(context);
-                              await ref.read(clipboardServiceProvider).writeText(output);
-                              if (!context.mounted) { return; }
+                              await ref
+                                  .read(clipboardServiceProvider)
+                                  .writeText(output);
+                              if (!context.mounted) {
+                                return;
+                              }
                               messenger.showSnackBar(
-                                SnackBar(content: Text(t(context, 'messageCopiedClipboard'))),
+                                SnackBar(
+                                    content: Text(
+                                        t(context, 'messageCopiedClipboard'))),
                               );
                             },
                     ),
@@ -1494,8 +1617,11 @@ class ChatViewState extends ConsumerState<ChatView> {
                           ? null
                           : () async {
                               final output = await _encodeAndPersist();
-                              if (output == null || !context.mounted) { return; }
-                              await shareTextExternally(context, output, forceStegoCover: true);
+                              if (output == null || !context.mounted) {
+                                return;
+                              }
+                              await shareTextExternally(context, output,
+                                  forceStegoCover: true);
                             },
                     ),
                   ],
@@ -1516,14 +1642,18 @@ class ChatViewState extends ConsumerState<ChatView> {
                           style: const TextStyle(fontSize: 13),
                           decoration: InputDecoration(
                             isDense: true,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 8),
                             labelText: t(context, 'coverText'),
                             labelStyle: const TextStyle(fontSize: 12),
                             helperText: _coverTooShort
-                                ? t(context, 'coverTooShort').replaceAll('{n}', '$_coverMissingCount')
+                                ? t(context, 'coverTooShort')
+                                    .replaceAll('{n}', '$_coverMissingCount')
                                 : null,
                             helperStyle: _coverTooShort
-                                ? TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 10)
+                                ? TextStyle(
+                                    color: Theme.of(context).colorScheme.error,
+                                    fontSize: 10)
                                 : null,
                           ),
                         ),
@@ -1542,7 +1672,8 @@ class ChatViewState extends ConsumerState<ChatView> {
                         style: const TextStyle(fontSize: 13),
                         decoration: InputDecoration(
                           isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 8),
                           labelText: t(context, 'secretText'),
                           labelStyle: const TextStyle(fontSize: 12),
                           counterText: _coverLimitCounterText(coverLengthLimit),
@@ -1590,8 +1721,8 @@ class ChatViewState extends ConsumerState<ChatView> {
     // opening must not flip the layout, otherwise TextFields lose focus and
     // the keyboard immediately closes again (oscillation).
     final mqData = MediaQuery.of(context);
-    final tightLandscape = mqData.orientation == Orientation.landscape
-        && mqData.size.height < 500;
+    final tightLandscape =
+        mqData.orientation == Orientation.landscape && mqData.size.height < 500;
     final portraitComposerMaxHeight = mqData.size.height >= 780
         ? 320.0
         : mqData.size.height >= 640
@@ -1616,7 +1747,33 @@ class ChatViewState extends ConsumerState<ChatView> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
-        title: Text(widget.contact.displayName),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                widget.contact.displayName,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 6),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () {
+                final fsState = ref.read(
+                  fsStateForContactProvider(widget.contact.identityId),
+                );
+                showFsInfoSheet(context, fsState);
+              },
+              child: FsStatusIcon(
+                fsState: ref.watch(
+                  fsStateForContactProvider(widget.contact.identityId),
+                ),
+                size: 14,
+              ),
+            ),
+          ],
+        ),
         actions: [
           IconButton(
             tooltip: t(context, 'search'),
@@ -1637,7 +1794,8 @@ class ChatViewState extends ConsumerState<ChatView> {
                   await ref.read(clipboardServiceProvider).readText();
               final outcome = await ref
                   .read(homeControllerProvider)
-                  .decodeHiddenMessage(source, hintContactId: widget.contact.identityId);
+                  .decodeHiddenMessage(source,
+                      hintContactId: widget.contact.identityId);
               if (!mounted) {
                 return;
               }
@@ -1659,7 +1817,7 @@ class ChatViewState extends ConsumerState<ChatView> {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(content: Text(t(context, 'messageDecoded'))),
                       );
-                      _scrollToBottom();
+                      refreshAfterDecodedMessage();
                     } else {
                       await Navigator.of(context).pushReplacement(
                         MaterialPageRoute(
@@ -1713,6 +1871,16 @@ class ChatViewState extends ConsumerState<ChatView> {
                     SnackBar(content: Text(t(context, 'decodeError'))),
                   );
                   break;
+                case DecodeKind.fsLost:
+                  if (!context.mounted) {
+                    return;
+                  }
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(t(context, 'security.fs.message_lost')),
+                    ),
+                  );
+                  break;
               }
             },
           ),
@@ -1733,7 +1901,8 @@ class ChatViewState extends ConsumerState<ChatView> {
                         focusNode: _searchFocusNode,
                         decoration: InputDecoration(
                           isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
                           hintText: t(context, 'search'),
                           prefixIcon: const Icon(Icons.search, size: 20),
                           border: OutlineInputBorder(
@@ -1751,7 +1920,8 @@ class ChatViewState extends ConsumerState<ChatView> {
                     const SizedBox(width: 4),
                     if (_searchInProgress)
                       const SizedBox(
-                        width: 20, height: 20,
+                        width: 20,
+                        height: 20,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     else if (_searchMatchIds.isNotEmpty)
@@ -1766,24 +1936,31 @@ class ChatViewState extends ConsumerState<ChatView> {
                       ),
                     IconButton(
                       icon: const Icon(Icons.keyboard_arrow_up, size: 20),
-                      onPressed: _searchMatchIds.isEmpty ? null : () => _navigateSearch(1),
+                      onPressed: _searchMatchIds.isEmpty
+                          ? null
+                          : () => _navigateSearch(1),
                       visualDensity: VisualDensity.compact,
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                      constraints:
+                          const BoxConstraints(minWidth: 32, minHeight: 32),
                     ),
                     IconButton(
                       icon: const Icon(Icons.keyboard_arrow_down, size: 20),
-                      onPressed: _searchMatchIds.isEmpty ? null : () => _navigateSearch(-1),
+                      onPressed: _searchMatchIds.isEmpty
+                          ? null
+                          : () => _navigateSearch(-1),
                       visualDensity: VisualDensity.compact,
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                      constraints:
+                          const BoxConstraints(minWidth: 32, minHeight: 32),
                     ),
                     IconButton(
                       icon: const Icon(Icons.close, size: 20),
                       onPressed: _stopSearch,
                       visualDensity: VisualDensity.compact,
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                      constraints:
+                          const BoxConstraints(minWidth: 32, minHeight: 32),
                     ),
                   ],
                 ),
@@ -1793,9 +1970,9 @@ class ChatViewState extends ConsumerState<ChatView> {
           if (showMessageList)
             Expanded(
               child: StreamBuilder<List<MessageRecord>>(
-                stream: ref
-                    .read(messagesRepositoryProvider)
-                    .watchThread(widget.contact.identityId, limit: _isSearching ? 999999 : _messageLimit),
+                stream: ref.read(messagesRepositoryProvider).watchThread(
+                    widget.contact.identityId,
+                    limit: _isSearching ? 999999 : _messageLimit),
                 builder: (context, snapshot) {
                   final all = snapshot.data ?? const <MessageRecord>[];
                   final effectiveTag = ref.watch(effectiveKeyTagProvider);
@@ -1803,7 +1980,11 @@ class ChatViewState extends ConsumerState<ChatView> {
                     if (effectiveTag == null) return true;
                     return m.keyTag == effectiveTag;
                   }).toList()
-                    ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+                    ..sort((a, b) {
+                      final byTs = a.timestamp.compareTo(b.timestamp);
+                      if (byTs != 0) return byTs;
+                      return a.id.compareTo(b.id);
+                    });
 
                   _cachedThread = thread;
 
@@ -1815,7 +1996,8 @@ class ChatViewState extends ConsumerState<ChatView> {
                   }
 
                   final newestTs = thread.isEmpty ? 0 : thread.last.timestamp;
-                  if (newestTs > _lastNewestTimestamp && _lastNewestTimestamp > 0) {
+                  if (newestTs > _lastNewestTimestamp &&
+                      _lastNewestTimestamp > 0) {
                     _scrollToBottom();
                   }
                   _lastNewestTimestamp = newestTs;
@@ -1839,8 +2021,8 @@ class ChatViewState extends ConsumerState<ChatView> {
                     itemBuilder: (context, index) {
                       final m = thread[thread.length - 1 - index];
                       final incoming = m.direction == 'incoming';
-                      final when =
-                          DateTime.fromMillisecondsSinceEpoch(m.timestamp * 1000);
+                      final when = DateTime.fromMillisecondsSinceEpoch(
+                          m.timestamp * 1000);
                       final nowSec =
                           DateTime.now().millisecondsSinceEpoch ~/ 1000;
                       final expired =
@@ -1851,7 +2033,8 @@ class ChatViewState extends ConsumerState<ChatView> {
                       return FutureBuilder<String?>(
                         future: _decryptionPrimed ? _getDecryptFuture(m) : null,
                         builder: (context, snapshot) {
-                          final decrypted = snapshot.data ?? _decryptedCache[m.id];
+                          final decrypted =
+                              snapshot.data ?? _decryptedCache[m.id];
 
                           if (isEncrypted && !_decryptionPrimed) {
                             return Align(
@@ -1859,7 +2042,8 @@ class ChatViewState extends ConsumerState<ChatView> {
                                   ? Alignment.centerLeft
                                   : Alignment.centerRight,
                               child: Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 4),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 4),
                                 child: Container(
                                   width: 132,
                                   height: 44,
@@ -1881,9 +2065,59 @@ class ChatViewState extends ConsumerState<ChatView> {
                             );
                           }
 
-                          if (isEncrypted && decrypted == null &&
-                              snapshot.connectionState == ConnectionState.done) {
-                            return const SizedBox.shrink();
+                          if (isEncrypted &&
+                              decrypted == null &&
+                              snapshot.connectionState ==
+                                  ConnectionState.done) {
+                            // Encrypted message whose plaintext could not be
+                            // recovered (FS ratchet gone, or old FS message
+                            // without the isFsEncrypted flag).
+                            return Align(
+                              alignment: incoming
+                                  ? Alignment.centerLeft
+                                  : Alignment.centerRight,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 4, horizontal: 8),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 8),
+                                  decoration: ShapeDecoration(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .surfaceContainerHighest
+                                        .withValues(alpha: 0.5),
+                                    shape: ContinuousRectangleBorder(
+                                      borderRadius: BorderRadius.circular(28),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.lock_outline,
+                                          size: 14,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant),
+                                      const SizedBox(width: 6),
+                                      Flexible(
+                                        child: Text(
+                                          t(context,
+                                              'security.fs.message_expired_fs'),
+                                          style: TextStyle(
+                                            fontStyle: FontStyle.italic,
+                                            fontSize: 13,
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .onSurfaceVariant,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
                           }
                           if (isEncrypted && decrypted == null) {
                             return const SizedBox.shrink();
@@ -1905,11 +2139,13 @@ class ChatViewState extends ConsumerState<ChatView> {
                           final displayText =
                               _stripZeroWidth(displayTextRaw.trimRight());
 
-                          final isSearchMatch = _isSearching && _searchMatchIds.contains(m.id);
+                          final isSearchMatch =
+                              _isSearching && _searchMatchIds.contains(m.id);
                           final isCurrentMatch = isSearchMatch &&
                               _searchIndex < _searchMatchIds.length &&
                               _searchMatchIds[_searchIndex] == m.id;
-                          final searchKey = isSearchMatch ? _searchResultKeys[m.id] : null;
+                          final searchKey =
+                              isSearchMatch ? _searchResultKeys[m.id] : null;
 
                           return Align(
                             key: searchKey,
@@ -1927,13 +2163,11 @@ class ChatViewState extends ConsumerState<ChatView> {
                                     }
                                   : null,
                               onLongPressStart: (details) {
-                                _showMessageContextMenu(
-                                    context, m, displayText,
+                                _showMessageContextMenu(context, m, displayText,
                                     position: details.globalPosition);
                               },
                               onSecondaryTapDown: (details) {
-                                _showMessageContextMenu(
-                                    context, m, displayText,
+                                _showMessageContextMenu(context, m, displayText,
                                     position: details.globalPosition);
                               },
                               child: LayoutBuilder(
@@ -1946,31 +2180,35 @@ class ChatViewState extends ConsumerState<ChatView> {
                                           : 520.0;
 
                                   final baseBubbleColor = incoming
-                                          ? Theme.of(context)
-                                              .colorScheme
-                                              .surfaceContainerHighest
-                                          : Theme.of(context)
-                                              .colorScheme
-                                              .primary
-                                              .withValues(alpha: 0.22);
+                                      ? Theme.of(context)
+                                          .colorScheme
+                                          .surfaceContainerHighest
+                                      : Theme.of(context)
+                                          .colorScheme
+                                          .primary
+                                          .withValues(alpha: 0.22);
                                   final bubbleColor = isCurrentMatch
-                                      ? Theme.of(context).colorScheme.primaryContainer
+                                      ? Theme.of(context)
+                                          .colorScheme
+                                          .primaryContainer
                                       : baseBubbleColor;
 
                                   final bubbleShape = ContinuousRectangleBorder(
-                                        borderRadius: BorderRadius.circular(28),
-                                        side: isCurrentMatch
-                                            ? BorderSide(
-                                                color: Theme.of(context).colorScheme.primary,
-                                                width: 2,
-                                              )
-                                            : BorderSide.none,
-                                      );
+                                    borderRadius: BorderRadius.circular(28),
+                                    side: isCurrentMatch
+                                        ? BorderSide(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .primary,
+                                            width: 2,
+                                          )
+                                        : BorderSide.none,
+                                  );
 
                                   Widget bubbleContent = Container(
                                     padding: const EdgeInsets.all(12),
-                                    constraints:
-                                        BoxConstraints(maxWidth: bubbleMaxWidth),
+                                    constraints: BoxConstraints(
+                                        maxWidth: bubbleMaxWidth),
                                     decoration: ShapeDecoration(
                                       color: bubbleColor,
                                       shape: bubbleShape,
@@ -1983,29 +2221,51 @@ class ChatViewState extends ConsumerState<ChatView> {
                                         _shouldLinkify(displayText)
                                             ? Linkify(
                                                 onOpen: (link) async {
-                                                  final url = Uri.parse(link.url);
+                                                  final url =
+                                                      Uri.parse(link.url);
                                                   if (await canLaunchUrl(url)) {
-                                                    await launchUrl(url, mode: LaunchMode.externalApplication);
+                                                    await launchUrl(url,
+                                                        mode: LaunchMode
+                                                            .externalApplication);
                                                   }
                                                 },
                                                 text: displayText,
-                                                style: Theme.of(context).textTheme.bodyMedium,
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .bodyMedium,
                                                 linkStyle: TextStyle(
-                                                  color: Theme.of(context).colorScheme.primary,
-                                                  decoration: TextDecoration.underline,
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .primary,
+                                                  decoration:
+                                                      TextDecoration.underline,
                                                 ),
-                                                options: const LinkifyOptions(humanize: false),
+                                                options: const LinkifyOptions(
+                                                    humanize: false),
                                               )
                                             : Text(
                                                 displayText,
-                                                style: Theme.of(context).textTheme.bodyMedium,
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .bodyMedium,
                                               ),
                                         const SizedBox(height: 6),
-                                        Text(
-                                          '${when.hour.toString().padLeft(2, '0')}:${when.minute.toString().padLeft(2, '0')}',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodySmall,
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            FsMessageClassificationIcon(
+                                              classification:
+                                                  m.effectiveClassification,
+                                              size: 11,
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              '${when.hour.toString().padLeft(2, '0')}:${when.minute.toString().padLeft(2, '0')}',
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .bodySmall,
+                                            ),
+                                          ],
                                         ),
                                       ],
                                     ),
@@ -2014,17 +2274,21 @@ class ChatViewState extends ConsumerState<ChatView> {
                                   if (revealed) {
                                     bubbleContent = DottedBorder(
                                       options: CustomPathDottedBorderOptions(
-                                        color: Theme.of(context).colorScheme.outline,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .outline,
                                         strokeWidth: 2,
                                         dashPattern: const [6, 4],
-                                        customPath: (size) => bubbleShape.getOuterPath(Offset.zero & size),
+                                        customPath: (size) => bubbleShape
+                                            .getOuterPath(Offset.zero & size),
                                       ),
                                       child: bubbleContent,
                                     );
                                   }
 
                                   return Padding(
-                                    padding: const EdgeInsets.symmetric(vertical: 4),
+                                    padding:
+                                        const EdgeInsets.symmetric(vertical: 4),
                                     child: bubbleContent,
                                   );
                                 },
@@ -2040,7 +2304,8 @@ class ChatViewState extends ConsumerState<ChatView> {
             ),
           if (showComposer)
             if (tightLandscape)
-              Expanded(child: _buildCompactComposer(context, t, coverLengthLimit))
+              Expanded(
+                  child: _buildCompactComposer(context, t, coverLengthLimit))
             else
               SafeArea(
                 top: false,
@@ -2054,328 +2319,433 @@ class ChatViewState extends ConsumerState<ChatView> {
                         child: FocusTraversalGroup(
                           policy: OrderedTraversalPolicy(),
                           child: SingleChildScrollView(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                        ConstrainedBox(
-                          constraints: BoxConstraints(
-                              maxHeight: portraitComposerMaxHeight),
-                          child: SingleChildScrollView(
                             child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
-                                LayoutBuilder(
-                                  builder: (context, constraints) {
-                                    final singleRow = constraints.maxWidth >= 360;
-                                    final compactControls = constraints.maxWidth < 400;
-                                    final optionSpacing = compactControls ? 8.0 : 12.0;
-                                    final toggleMinSize = compactControls ? 32.0 : 36.0;
-                                    final togglePadding = compactControls
-                                        ? const EdgeInsets.symmetric(
-                                            horizontal: 6,
-                                            vertical: 3,
-                                          )
-                                        : const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 4,
-                                          );
-                                    final toggleIconSize = compactControls ? 18.0 : 20.0;
-                                    final expiryWidth = compactControls ? 122.0 : 140.0;
-                                    final expiryIconSize = compactControls ? 18.0 : 20.0;
-                                    final deleteIconColumnWidth = compactControls ? 18.0 : 20.0;
-                                    final deletePrimaryIconSize = compactControls ? 12.0 : 14.0;
-                                    final deleteSecondaryIconSize = compactControls ? 8.0 : 10.0;
-                                    final toggle = FocusTraversalOrder(
-                                      order: const NumericFocusOrder(5),
-                                      child: ToggleButtons(
-                                        constraints: BoxConstraints(
-                                          minHeight: toggleMinSize,
-                                          minWidth: toggleMinSize,
-                                        ),
-                                        isSelected: [
-                                          _linkMode == false,
-                                          _linkMode == true
-                                        ],
-                                        onPressed: (index) {
-                                          _setComposerMode(index == 1);
-                                        },
-                                        borderRadius: const BorderRadius.all(
-                                            Radius.circular(12)),
-                                        children: [
-                                          Padding(
-                                            padding: togglePadding,
-                                            child: Icon(Icons.chat_bubble_outline,
-                                                size: toggleIconSize),
-                                          ),
-                                          Padding(
-                                            padding: togglePadding,
-                                            child: Icon(Icons.link, size: toggleIconSize),
-                                          ),
-                                        ],
-                                      ),
-                                    );
-
-                                    final expiry = FocusTraversalOrder(
-                                      order: const NumericFocusOrder(6),
-                                      child: SizedBox(
-                                        width: expiryWidth,
-                                        child: Row(
-                                          children: [
-                                            Icon(
-                                              Icons.hourglass_bottom_outlined,
-                                              size: expiryIconSize,
-                                              color: Theme.of(context)
-                                                  .colorScheme
-                                                  .onSurfaceVariant,
-                                            ),
-                                            SizedBox(width: compactControls ? 2 : 4),
-                                            Expanded(
-                                              child: DropdownButton<int?>(
-                                                isExpanded: true,
-                                                isDense: true,
-                                                value: _selectedExpiryMinutes,
-                                                items: _expiryOptions
-                                                    .map(
-                                                      (opt) =>
-                                                          DropdownMenuItem<int?>(
-                                                        value: opt.minutes,
-                                                        child: Text(
-                                                          _expiryLabel(
-                                                              context, opt),
-                                                          overflow:
-                                                              TextOverflow.ellipsis,
-                                                          style: TextStyle(
-                                                            fontSize: compactControls ? 13 : null,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    )
-                                                    .toList(),
-                                                onChanged: (val) {
-                                                  _setComposerExpiry(val);
-                                                },
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    );
-
-                                    final deleteSwitch = FocusTraversalOrder(
-                                      order: const NumericFocusOrder(7),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        mainAxisAlignment: MainAxisAlignment.end,
-                                        children: [
-                                          SizedBox(
-                                            width: deleteIconColumnWidth,
-                                            child: Column(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(
-                                                  Icons.visibility_outlined,
-                                                  size: deletePrimaryIconSize,
-                                                  color: Theme.of(context)
-                                                      .colorScheme
-                                                      .onSurfaceVariant,
+                                ConstrainedBox(
+                                  constraints: BoxConstraints(
+                                      maxHeight: portraitComposerMaxHeight),
+                                  child: SingleChildScrollView(
+                                    child: Column(
+                                      children: [
+                                        LayoutBuilder(
+                                          builder: (context, constraints) {
+                                            final singleRow =
+                                                constraints.maxWidth >= 360;
+                                            final compactControls =
+                                                constraints.maxWidth < 400;
+                                            final optionSpacing =
+                                                compactControls ? 8.0 : 12.0;
+                                            final toggleMinSize =
+                                                compactControls ? 32.0 : 36.0;
+                                            final togglePadding =
+                                                compactControls
+                                                    ? const EdgeInsets
+                                                        .symmetric(
+                                                        horizontal: 6,
+                                                        vertical: 3,
+                                                      )
+                                                    : const EdgeInsets
+                                                        .symmetric(
+                                                        horizontal: 8,
+                                                        vertical: 4,
+                                                      );
+                                            final toggleIconSize =
+                                                compactControls ? 18.0 : 20.0;
+                                            final expiryWidth =
+                                                compactControls ? 122.0 : 140.0;
+                                            final expiryIconSize =
+                                                compactControls ? 18.0 : 20.0;
+                                            final deleteIconColumnWidth =
+                                                compactControls ? 18.0 : 20.0;
+                                            final deletePrimaryIconSize =
+                                                compactControls ? 12.0 : 14.0;
+                                            final deleteSecondaryIconSize =
+                                                compactControls ? 8.0 : 10.0;
+                                            final toggle = FocusTraversalOrder(
+                                              order: const NumericFocusOrder(5),
+                                              child: ToggleButtons(
+                                                constraints: BoxConstraints(
+                                                  minHeight: toggleMinSize,
+                                                  minWidth: toggleMinSize,
                                                 ),
-                                                Row(
-                                                  mainAxisSize: MainAxisSize.min,
-                                                  mainAxisAlignment:
-                                                      MainAxisAlignment.center,
+                                                isSelected: [
+                                                  _linkMode == false,
+                                                  _linkMode == true
+                                                ],
+                                                onPressed: (index) {
+                                                  _setComposerMode(index == 1);
+                                                },
+                                                borderRadius:
+                                                    const BorderRadius.all(
+                                                        Radius.circular(12)),
+                                                children: [
+                                                  Padding(
+                                                    padding: togglePadding,
+                                                    child: Icon(
+                                                        Icons
+                                                            .chat_bubble_outline,
+                                                        size: toggleIconSize),
+                                                  ),
+                                                  Padding(
+                                                    padding: togglePadding,
+                                                    child: Icon(Icons.link,
+                                                        size: toggleIconSize),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+
+                                            final expiry = FocusTraversalOrder(
+                                              order: const NumericFocusOrder(6),
+                                              child: SizedBox(
+                                                width: expiryWidth,
+                                                child: Row(
                                                   children: [
                                                     Icon(
-                                                      Icons.arrow_right_alt,
-                                                      size: deleteSecondaryIconSize,
+                                                      Icons
+                                                          .hourglass_bottom_outlined,
+                                                      size: expiryIconSize,
                                                       color: Theme.of(context)
                                                           .colorScheme
                                                           .onSurfaceVariant,
                                                     ),
-                                                    Icon(
-                                                      Icons.delete_outline,
-                                                      size: deleteSecondaryIconSize,
-                                                      color: Theme.of(context)
-                                                          .colorScheme
-                                                          .onSurfaceVariant,
+                                                    SizedBox(
+                                                        width: compactControls
+                                                            ? 2
+                                                            : 4),
+                                                    Expanded(
+                                                      child:
+                                                          DropdownButton<int?>(
+                                                        isExpanded: true,
+                                                        isDense: true,
+                                                        value:
+                                                            _selectedExpiryMinutes,
+                                                        items: _expiryOptions
+                                                            .map(
+                                                              (opt) =>
+                                                                  DropdownMenuItem<
+                                                                      int?>(
+                                                                value:
+                                                                    opt.minutes,
+                                                                child: Text(
+                                                                  _expiryLabel(
+                                                                      context,
+                                                                      opt),
+                                                                  overflow:
+                                                                      TextOverflow
+                                                                          .ellipsis,
+                                                                  style:
+                                                                      TextStyle(
+                                                                    fontSize:
+                                                                        compactControls
+                                                                            ? 13
+                                                                            : null,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            )
+                                                            .toList(),
+                                                        onChanged: (val) {
+                                                          _setComposerExpiry(
+                                                              val);
+                                                        },
+                                                      ),
                                                     ),
                                                   ],
                                                 ),
+                                              ),
+                                            );
+
+                                            final deleteSwitch =
+                                                FocusTraversalOrder(
+                                              order: const NumericFocusOrder(7),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.end,
+                                                children: [
+                                                  SizedBox(
+                                                    width:
+                                                        deleteIconColumnWidth,
+                                                    child: Column(
+                                                      mainAxisSize:
+                                                          MainAxisSize.min,
+                                                      children: [
+                                                        Icon(
+                                                          Icons
+                                                              .visibility_outlined,
+                                                          size:
+                                                              deletePrimaryIconSize,
+                                                          color: Theme.of(
+                                                                  context)
+                                                              .colorScheme
+                                                              .onSurfaceVariant,
+                                                        ),
+                                                        Row(
+                                                          mainAxisSize:
+                                                              MainAxisSize.min,
+                                                          mainAxisAlignment:
+                                                              MainAxisAlignment
+                                                                  .center,
+                                                          children: [
+                                                            Icon(
+                                                              Icons
+                                                                  .arrow_right_alt,
+                                                              size:
+                                                                  deleteSecondaryIconSize,
+                                                              color: Theme.of(
+                                                                      context)
+                                                                  .colorScheme
+                                                                  .onSurfaceVariant,
+                                                            ),
+                                                            Icon(
+                                                              Icons
+                                                                  .delete_outline,
+                                                              size:
+                                                                  deleteSecondaryIconSize,
+                                                              color: Theme.of(
+                                                                      context)
+                                                                  .colorScheme
+                                                                  .onSurfaceVariant,
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  SizedBox(
+                                                      width: compactControls
+                                                          ? 2
+                                                          : 4),
+                                                  Switch.adaptive(
+                                                    value: _deleteAfterRead,
+                                                    materialTapTargetSize:
+                                                        MaterialTapTargetSize
+                                                            .shrinkWrap,
+                                                    onChanged: (v) {
+                                                      _setDeleteAfterRead(v);
+                                                    },
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+
+                                            if (singleRow) {
+                                              return Row(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.center,
+                                                children: [
+                                                  toggle,
+                                                  const Spacer(),
+                                                  expiry,
+                                                  SizedBox(
+                                                      width: optionSpacing),
+                                                  deleteSwitch,
+                                                ],
+                                              );
+                                            }
+
+                                            return Wrap(
+                                              spacing: optionSpacing,
+                                              runSpacing: 8,
+                                              crossAxisAlignment:
+                                                  WrapCrossAlignment.center,
+                                              alignment:
+                                                  WrapAlignment.spaceBetween,
+                                              children: [
+                                                toggle,
+                                                expiry,
+                                                deleteSwitch,
                                               ],
+                                            );
+                                          },
+                                        ),
+                                        const SizedBox(height: 8),
+                                        if (!_linkMode) ...[
+                                          FocusTraversalOrder(
+                                            order: const NumericFocusOrder(1),
+                                            child: TextField(
+                                              controller: _coverCtrl,
+                                              maxLines: 2,
+                                              focusNode: _coverFocusNode,
+                                              onTapOutside:
+                                                  _dismissMessageInputFocus,
+                                              inputFormatters:
+                                                  _coverLimitInputFormatters(
+                                                isCoverField: true,
+                                              ),
+                                              decoration: InputDecoration(
+                                                labelText:
+                                                    t(context, 'coverText'),
+                                                helperText: _coverTooShort
+                                                    ? t(context,
+                                                            'coverTooShort')
+                                                        .replaceAll('{n}',
+                                                            '$_coverMissingCount')
+                                                    : null,
+                                                helperStyle: _coverTooShort
+                                                    ? TextStyle(
+                                                        color: Theme.of(context)
+                                                            .colorScheme
+                                                            .error,
+                                                      )
+                                                    : null,
+                                              ),
                                             ),
                                           ),
-                                          SizedBox(width: compactControls ? 2 : 4),
-                                          Switch.adaptive(
-                                            value: _deleteAfterRead,
-                                            materialTapTargetSize:
-                                                MaterialTapTargetSize.shrinkWrap,
-                                            onChanged: (v) {
-                                              _setDeleteAfterRead(v);
-                                            },
+                                          const SizedBox(height: 8),
+                                        ],
+                                        FocusTraversalOrder(
+                                          order: const NumericFocusOrder(2),
+                                          child: TextField(
+                                            controller: _secretCtrl,
+                                            maxLines: 2,
+                                            focusNode: _secretFocusNode,
+                                            onTapOutside:
+                                                _dismissMessageInputFocus,
+                                            inputFormatters:
+                                                _coverLimitInputFormatters(
+                                              isCoverField: false,
+                                            ),
+                                            decoration: InputDecoration(
+                                              labelText:
+                                                  t(context, 'secretText'),
+                                              counterText:
+                                                  _coverLimitCounterText(
+                                                coverLengthLimit,
+                                              ),
+                                              counterStyle:
+                                                  _coverLengthLimitExceeded
+                                                      ? TextStyle(
+                                                          color:
+                                                              Theme.of(context)
+                                                                  .colorScheme
+                                                                  .error,
+                                                        )
+                                                      : null,
+                                            ),
                                           ),
-                                        ],
-                                      ),
-                                    );
-
-                                    if (singleRow) {
-                                      return Row(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.center,
-                                        children: [
-                                          toggle,
-                                          const Spacer(),
-                                          expiry,
-                                          SizedBox(width: optionSpacing),
-                                          deleteSwitch,
-                                        ],
-                                      );
-                                    }
-
-                                    return Wrap(
-                                      spacing: optionSpacing,
-                                      runSpacing: 8,
-                                      crossAxisAlignment:
-                                          WrapCrossAlignment.center,
-                                      alignment: WrapAlignment.spaceBetween,
-                                      children: [
-                                        toggle,
-                                        expiry,
-                                        deleteSwitch,
+                                        ),
                                       ],
-                                    );
-                                  },
+                                    ),
+                                  ),
                                 ),
                                 const SizedBox(height: 8),
-                                if (!_linkMode) ...[
-                                  FocusTraversalOrder(
-                                    order: const NumericFocusOrder(1),
-                                    child: TextField(
-                                      controller: _coverCtrl,
-                                      maxLines: 2,
-                                      focusNode: _coverFocusNode,
-                                      onTapOutside: _dismissMessageInputFocus,
-                                      inputFormatters: _coverLimitInputFormatters(
-                                        isCoverField: true,
-                                      ),
-                                      decoration: InputDecoration(
-                                        labelText: t(context, 'coverText'),
-                                        helperText: _coverTooShort
-                                            ? t(context, 'coverTooShort')
-                                                .replaceAll('{n}', '$_coverMissingCount')
-                                            : null,
-                                        helperStyle: _coverTooShort
-                                            ? TextStyle(
-                                                color: Theme.of(context)
-                                                    .colorScheme
-                                                    .error,
-                                              )
-                                            : null,
+                                Row(
+                                  children: [
+                                    const PassphraseButton(),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Align(
+                                        alignment: Alignment.centerRight,
+                                        child: ConstrainedBox(
+                                          constraints: const BoxConstraints(
+                                              maxWidth: 260),
+                                          child: Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.end,
+                                            children: [
+                                              Expanded(
+                                                child: FocusTraversalOrder(
+                                                  order:
+                                                      const NumericFocusOrder(
+                                                          3),
+                                                  child: OutlinedButton.icon(
+                                                    onPressed:
+                                                        (!_isInputValid ||
+                                                                _sending)
+                                                            ? null
+                                                            : () async {
+                                                                final output =
+                                                                    await _encodeAndPersist();
+                                                                if (output ==
+                                                                        null ||
+                                                                    !context
+                                                                        .mounted) {
+                                                                  return;
+                                                                }
+                                                                final messenger =
+                                                                    ScaffoldMessenger.of(
+                                                                        context);
+                                                                await ref
+                                                                    .read(
+                                                                        clipboardServiceProvider)
+                                                                    .writeText(
+                                                                        output);
+                                                                if (!context
+                                                                    .mounted) {
+                                                                  return;
+                                                                }
+                                                                messenger
+                                                                    .showSnackBar(
+                                                                  SnackBar(
+                                                                    content: Text(t(
+                                                                        context,
+                                                                        'messageCopiedClipboard')),
+                                                                  ),
+                                                                );
+                                                              },
+                                                    icon: const Icon(
+                                                        Icons.copy_outlined,
+                                                        size: 18),
+                                                    label: FittedBox(
+                                                        fit: BoxFit.scaleDown,
+                                                        child: Text(t(
+                                                            context, 'copy'))),
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: FocusTraversalOrder(
+                                                  order:
+                                                      const NumericFocusOrder(
+                                                          4),
+                                                  child: OutlinedButton.icon(
+                                                    onPressed:
+                                                        (!_isInputValid ||
+                                                                _sending)
+                                                            ? null
+                                                            : () async {
+                                                                final output =
+                                                                    await _encodeAndPersist();
+                                                                if (output ==
+                                                                        null ||
+                                                                    !context
+                                                                        .mounted) {
+                                                                  return;
+                                                                }
+                                                                await shareTextExternally(
+                                                                    context,
+                                                                    output,
+                                                                    forceStegoCover:
+                                                                        true);
+                                                              },
+                                                    icon: const Icon(
+                                                        Icons
+                                                            .ios_share_outlined,
+                                                        size: 18),
+                                                    label: FittedBox(
+                                                        fit: BoxFit.scaleDown,
+                                                        child: Text(t(
+                                                            context, 'share'))),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                ],
-                                FocusTraversalOrder(
-                                  order: const NumericFocusOrder(2),
-                                  child: TextField(
-                                    controller: _secretCtrl,
-                                    maxLines: 2,
-                                    focusNode: _secretFocusNode,
-                                    onTapOutside: _dismissMessageInputFocus,
-                                    inputFormatters: _coverLimitInputFormatters(
-                                      isCoverField: false,
-                                    ),
-                                    decoration: InputDecoration(
-                                      labelText: t(context, 'secretText'),
-                                      counterText: _coverLimitCounterText(
-                                        coverLengthLimit,
-                                      ),
-                                      counterStyle: _coverLengthLimitExceeded
-                                          ? TextStyle(
-                                              color: Theme.of(context)
-                                                  .colorScheme
-                                                  .error,
-                                            )
-                                          : null,
-                                    ),
-                                  ),
+                                  ],
                                 ),
                               ],
                             ),
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            const PassphraseButton(),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Align(
-                                alignment: Alignment.centerRight,
-                                child: ConstrainedBox(
-                                  constraints: const BoxConstraints(maxWidth: 260),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.end,
-                                    children: [
-                                      Expanded(
-                                        child: FocusTraversalOrder(
-                                          order: const NumericFocusOrder(3),
-                                          child: OutlinedButton.icon(
-                                            onPressed: (!_isInputValid || _sending)
-                                                ? null
-                                                : () async {
-                                                    final output =
-                                                        await _encodeAndPersist();
-                                                    if (output == null || !context.mounted) { return; }
-                                                    final messenger =
-                                                        ScaffoldMessenger.of(context);
-                                                    await ref
-                                                        .read(clipboardServiceProvider)
-                                                        .writeText(output);
-                                                    if (!context.mounted) {
-                                                      return;
-                                                    }
-                                                    messenger.showSnackBar(
-                                                      SnackBar(
-                                                        content: Text(t(context,
-                                                            'messageCopiedClipboard')),
-                                                      ),
-                                                    );
-                                                  },
-                                            icon: const Icon(Icons.copy_outlined, size: 18),
-                                            label: FittedBox(fit: BoxFit.scaleDown, child: Text(t(context, 'copy'))),
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: FocusTraversalOrder(
-                                          order: const NumericFocusOrder(4),
-                                          child: OutlinedButton.icon(
-                                            onPressed: (!_isInputValid || _sending)
-                                                ? null
-                                                : () async {
-                                                    final output =
-                                                        await _encodeAndPersist();
-                                                    if (output == null || !context.mounted) { return; }
-                                                    await shareTextExternally(context, output, forceStegoCover: true);
-                                                  },
-                                            icon: const Icon(Icons.ios_share_outlined, size: 18),
-                                            label: FittedBox(fit: BoxFit.scaleDown, child: Text(t(context, 'share'))),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        ],
                       ),
-                    ),
-                    ),
-                    ),
                     ),
                   ),
                 ),
