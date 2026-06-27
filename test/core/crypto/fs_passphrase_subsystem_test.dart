@@ -14,6 +14,7 @@
 library;
 
 import 'dart:io';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
@@ -883,11 +884,7 @@ void main() {
   // ────────────────────────────────────────────────────────────────────────────
 
   group('Localization keys coverage', () {
-    test('all 6 languages have passphrase settings keys', () {
-      // Import is in the test setup via FsStringsBundle
-      // We verify by checking the bundle map exists and has the right keys
-      // This is a structural test — if the keys are missing, the UI will
-      // show raw key strings instead of translations
+    test('all translation files have passphrase settings keys', () {
       const requiredKeys = [
         'security.pp.section_title',
         'security.pp.section_subtitle',
@@ -911,12 +908,30 @@ void main() {
         'security.pp.expel_now',
       ];
 
-      // We can't easily import FsStringsBundle here without widget test
-      // infrastructure, so we just verify the enum key counts match
+      for (final file in _translationFiles()) {
+        final locale = file.uri.pathSegments.last;
+        final data =
+            jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
+        for (final key in requiredKeys) {
+          expect(data, contains(key), reason: '$locale missing key: $key');
+          expect((data[key] as String).trim(), isNotEmpty,
+              reason: '$locale has empty value for: $key');
+        }
+      }
+
       expect(requiredKeys.length, 20);
       expect(PassphraseTimeout.values.length, 6);
       expect(PassphraseHistoryMode.values.length, 3);
       expect(PassphraseFsPersistence.values.length, 2);
     });
   });
+}
+
+List<File> _translationFiles() {
+  return Directory('assets/translations')
+      .listSync()
+      .whereType<File>()
+      .where((file) => file.path.endsWith('.json'))
+      .toList()
+    ..sort((a, b) => a.path.compareTo(b.path));
 }

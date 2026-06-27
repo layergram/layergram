@@ -1463,6 +1463,11 @@ class ChatViewState extends ConsumerState<ChatView> {
       });
       _scrollToBottom();
       return output;
+    } on FsSendBlockedException catch (e) {
+      if (mounted) {
+        _showTouchComposerSnackbar(AppStrings.t(context, e.messageKey));
+      }
+      return null;
     } finally {
       if (mounted) setState(() => _sending = false);
     }

@@ -450,6 +450,23 @@ Future<void> _setStrictModeForKnownSessions({
   fixture.container.read(fsRegistryVersionProvider.notifier).state++;
 }
 
+Future<void> _promoteKnownSessionsToStrict({
+  required _Fixture fixture,
+  required String contactId,
+}) async {
+  final fsController =
+      fixture.container.read(fsOpportunisticControllerProvider(contactId));
+  final modeService = fixture.container.read(fsSecurityModeServiceProvider);
+  await modeService.setMode(
+    contactId: contactId,
+    identityContext: fsController.identityContext,
+    mode: FsSecurityMode.strict,
+  );
+  fsController.securityMode = FsSecurityMode.strict;
+  await fsController.activateStrictForKnownActiveSessions();
+  fixture.container.read(fsRegistryVersionProvider.notifier).state++;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -2206,11 +2223,11 @@ void main() {
         expect(disp2FsForA.allActiveSessionIds, hasLength(2));
         expect(disp2FsForA.allActiveSessionIds, contains(disp1SessionId));
 
-        await _setStrictModeForKnownSessions(
+        await _promoteKnownSessionsToStrict(
           fixture: disp1Fixture,
           contactId: disp2Id,
         );
-        await _setStrictModeForKnownSessions(
+        await _promoteKnownSessionsToStrict(
           fixture: disp2Fixture,
           contactId: disp1Id,
         );
@@ -2489,10 +2506,10 @@ void main() {
               recipient: contact,
             ),
         throwsA(
-          isA<StateError>().having(
-            (e) => e.message,
-            'message',
-            contains('Unexpected device detected'),
+          isA<FsSendBlockedException>().having(
+            (e) => e.messageKey,
+            'messageKey',
+            'security.fs.error.unexpected_device',
           ),
         ),
       );
@@ -2543,7 +2560,13 @@ void main() {
           secretText: 'Strict FS must not downgrade',
           recipient: contact,
         ),
-        throwsA(isA<StateError>()),
+        throwsA(
+          isA<FsSendBlockedException>().having(
+            (e) => e.messageKey,
+            'messageKey',
+            'security.fs.error.device_repair_required',
+          ),
+        ),
       );
       expect(sessionManager.state, FsSessionState.fsBroken);
     });

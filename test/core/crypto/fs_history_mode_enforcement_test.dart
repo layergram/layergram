@@ -10,6 +10,7 @@
 library;
 
 import 'dart:io';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
@@ -26,7 +27,6 @@ import 'package:layergram/core/crypto/fs_session_manager.dart';
 import 'package:layergram/core/crypto/fs_state_persistence_service.dart';
 import 'package:layergram/core/storage/aux_record_repository.dart';
 import 'package:layergram/core/storage/local_database.dart';
-import 'package:layergram/l10n/fs_strings_bundle.dart';
 
 void main() {
   late Directory tmpDir;
@@ -457,16 +457,27 @@ void main() {
       'security.cleanup.done',
     ];
 
-    for (final lang in ['en', 'it', 'es', 'de', 'fr', 'pt']) {
+    for (final file in _translationFiles()) {
+      final lang = file.uri.pathSegments.last;
       test('$lang has all §14.5 + §13.7 keys', () {
-        final bundle = FsStringsBundle.bundle[lang]!;
+        final bundle =
+            jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
         for (final key in requiredKeys) {
           expect(bundle.containsKey(key), isTrue,
               reason: '$lang missing key: $key');
-          expect(bundle[key]!.isNotEmpty, isTrue,
+          expect((bundle[key] as String).isNotEmpty, isTrue,
               reason: '$lang has empty value for key: $key');
         }
       });
     }
   });
+}
+
+List<File> _translationFiles() {
+  return Directory('assets/translations')
+      .listSync()
+      .whereType<File>()
+      .where((file) => file.path.endsWith('.json'))
+      .toList()
+    ..sort((a, b) => a.path.compareTo(b.path));
 }

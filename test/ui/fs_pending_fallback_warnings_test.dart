@@ -8,15 +8,16 @@
 ///  3. Localization coverage: the new keys
 ///     `security.fs.status.strict_pending` and
 ///     `security.fs.warning.fallback_body` exist and are non-empty in all
-///     6 supported languages.
+///     all translation JSON files.
 ///  4. The pending status text is distinct from the upgrading text per
 ///     language (so the icon clearly communicates pending vs negotiating).
 library;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:layergram/core/crypto/fs_session_manager.dart';
-import 'package:layergram/l10n/fs_strings_bundle.dart';
 import 'package:layergram/ui/fs_info_sheet.dart';
 
 void main() {
@@ -73,19 +74,22 @@ void main() {
       'security.fs.warning.fallback_body',
     ];
 
-    for (final lang in ['en', 'it', 'es', 'de', 'fr', 'pt']) {
+    for (final file in _translationFiles()) {
+      final lang = file.uri.pathSegments.last;
       test('$lang has all new pending/fallback keys', () {
-        final bundle = FsStringsBundle.bundle[lang]!;
+        final bundle =
+            jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
         for (final key in requiredKeys) {
           expect(bundle.containsKey(key), isTrue,
               reason: '$lang missing key: $key');
-          expect(bundle[key]!.isNotEmpty, isTrue,
+          expect((bundle[key] as String).isNotEmpty, isTrue,
               reason: '$lang has empty value for key: $key');
         }
       });
 
       test('$lang pending text differs from upgrading text', () {
-        final bundle = FsStringsBundle.bundle[lang]!;
+        final bundle =
+            jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
         final pending = bundle['security.fs.status.strict_pending'];
         final upgrading = bundle['security.fs.status.upgrading'];
         expect(pending, isNotNull);
@@ -95,15 +99,26 @@ void main() {
       });
     }
 
-    test('all 6 languages have the strict_pending key', () {
-      for (final lang in ['en', 'it', 'es', 'de', 'fr', 'pt']) {
+    test('all translation files have the strict_pending key', () {
+      for (final file in _translationFiles()) {
+        final lang = file.uri.pathSegments.last;
+        final bundle =
+            jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
         expect(
-          FsStringsBundle.bundle[lang]!
-              .containsKey('security.fs.status.strict_pending'),
+          bundle.containsKey('security.fs.status.strict_pending'),
           isTrue,
           reason: '$lang missing strict_pending',
         );
       }
     });
   });
+}
+
+List<File> _translationFiles() {
+  return Directory('assets/translations')
+      .listSync()
+      .whereType<File>()
+      .where((file) => file.path.endsWith('.json'))
+      .toList()
+    ..sort((a, b) => a.path.compareTo(b.path));
 }

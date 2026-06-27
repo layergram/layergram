@@ -11,7 +11,7 @@
 //  T11.7  Passphrase context isolation: strict state per (contactId, context).
 //  T11.8  activateStrict without prior requestMaximum → notRequested.
 //  T11.9  canSendMessage in strictFsActive without device change → true.
-//  T11.10 sendBlockReason explains the block reason correctly.
+//  T11.10 sendBlockReasonKey explains the block reason correctly.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:layergram/core/crypto/fs_contact_security_state.dart';
@@ -156,7 +156,10 @@ void main() {
       isFalse,
       reason: 'A new pending session must not silently bypass Maximum FS',
     );
-    expect(ctrl.sendBlockReason(), contains('Maximum Forward Secrecy'));
+    expect(
+      ctrl.sendBlockReasonKey(),
+      equals('security.fs.error.device_repair_required'),
+    );
   });
 
   // T11.6 — Disable Maximum FS → fsActive, fallback allowed.
@@ -249,24 +252,27 @@ void main() {
     expect(ctrl.canSendMessage(), isTrue);
   });
 
-  // T11.10 — sendBlockReason provides meaningful message.
-  test('T11.10: sendBlockReason explains why sending is blocked', () async {
+  // T11.10 — sendBlockReasonKey provides localizable message keys.
+  test('T11.10: sendBlockReasonKey explains why sending is blocked', () async {
     final (ctrl, mgr, _) = _build();
     mgr.setStateForTesting(FsSessionState.fsActive, sessionId: 'session-1');
     await ctrl.requestMaximum('session-1');
     await ctrl.activateStrict('session-1');
 
     // Device changed → block with reason.
-    final reason = ctrl.sendBlockReason(deviceChanged: true);
+    final reason = ctrl.sendBlockReasonKey(deviceChanged: true);
     expect(reason, isNotNull);
-    expect(reason, contains('Unexpected device'));
+    expect(reason, equals('security.fs.error.unexpected_device'));
 
     // No device change → no reason.
-    expect(ctrl.sendBlockReason(deviceChanged: false), isNull);
+    expect(ctrl.sendBlockReasonKey(deviceChanged: false), isNull);
 
     // Broken state → also blocked.
     mgr.markBroken();
-    expect(ctrl.sendBlockReason(), isNotNull);
+    expect(
+      ctrl.sendBlockReasonKey(),
+      equals('security.fs.error.session_broken'),
+    );
   });
 
   // T11.11 — Maximum FS cannot be enabled globally: no global flag.

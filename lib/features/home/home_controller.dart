@@ -43,6 +43,15 @@ class DecryptedMessagePreview {
   final int timestamp;
 }
 
+class FsSendBlockedException implements Exception {
+  const FsSendBlockedException(this.messageKey);
+
+  final String messageKey;
+
+  @override
+  String toString() => messageKey;
+}
+
 class HomeController {
   HomeController(this.ref);
 
@@ -141,10 +150,10 @@ class HomeController {
       final deviceChanged =
           _strictModeHasUnexpectedDevice(recipient.identityId);
       if (!strictController.canSendMessage(deviceChanged: deviceChanged)) {
-        final reason =
-            strictController.sendBlockReason(deviceChanged: deviceChanged) ??
-                'Maximum Forward Secrecy prevents sending in current state';
-        throw StateError(reason);
+        final reasonKey =
+            strictController.sendBlockReasonKey(deviceChanged: deviceChanged) ??
+                'security.fs.error.sending_blocked';
+        throw FsSendBlockedException(reasonKey);
       }
     }
 
@@ -231,8 +240,8 @@ class HomeController {
               sessionManager.markBroken();
               if (securityMode == FsSecurityMode.strict ||
                   effectiveState == FsSessionState.strictFsActive) {
-                throw StateError(
-                  'Maximum Forward Secrecy requires device repair before sending',
+                throw const FsSendBlockedException(
+                  'security.fs.error.device_repair_required',
                 );
               }
             }
@@ -244,8 +253,8 @@ class HomeController {
           sessionManager.markBroken();
           if (securityMode == FsSecurityMode.strict ||
               effectiveState == FsSessionState.strictFsActive) {
-            throw StateError(
-              'Maximum Forward Secrecy requires device repair before sending',
+            throw const FsSendBlockedException(
+              'security.fs.error.device_repair_required',
             );
           }
         }

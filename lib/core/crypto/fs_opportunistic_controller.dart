@@ -978,7 +978,8 @@ class FsOpportunisticController {
 
   /// Disables Strict FS on every known active strict session for this contact.
   Future<void> disableStrictForKnownActiveSessions() async {
-    for (final sessionId in allActiveSessionIds) {
+    final activeSessionIds = allActiveSessionIds;
+    for (final sessionId in activeSessionIds) {
       final manager = _deviceRouter.sessionForId(sessionId);
       if (manager == null) continue;
       if (manager.state != FsSessionState.strictFsActive &&
@@ -990,6 +991,31 @@ class FsOpportunisticController {
       await _updateRegistry(
         sessionId: sessionId,
         state: manager.state,
+      );
+    }
+
+    final pendingStrictEntries = _registry
+        .forContact(
+          contactId: _localContactId,
+          identityContext: _identityContext,
+        )
+        .where((entry) =>
+            entry.fsState == FsSessionState.strictRequested &&
+            (entry.sessionId == null ||
+                !activeSessionIds.contains(entry.sessionId)))
+        .toList(growable: false);
+    if (pendingStrictEntries.isEmpty) {
+      _sessionManager.disableStrict();
+      return;
+    }
+
+    _sessionManager.disableStrict();
+    for (final entry in pendingStrictEntries) {
+      await _updateRegistry(
+        sessionId: entry.sessionId,
+        state: entry.sessionId == null
+            ? FsSessionState.legacyOnly
+            : FsSessionState.fsActive,
       );
     }
   }

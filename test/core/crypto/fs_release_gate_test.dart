@@ -113,7 +113,7 @@ void main() {
       mgr.markBroken();
       expect(ctrl.canSendMessage(), isFalse,
           reason: 'Broken strict session must block sending');
-      expect(ctrl.sendBlockReason(), isNotNull);
+      expect(ctrl.sendBlockReasonKey(), isNotNull);
     });
 
     // G.6 — Opportunistic mode drops oversized payloads.
@@ -125,12 +125,13 @@ void main() {
     });
 
     // G.7 — All FsSessionState values are handled by FsStringsBundle.
-    test('G.7: FsStringsBundle covers all 6 status states', () async {
+    test('G.7: FsStringsBundle covers all status states', () async {
       const expected = [
         'security.fs.status.legacy',
         'security.fs.status.upgrading',
         'security.fs.status.active',
         'security.fs.status.strict',
+        'security.fs.status.strict_pending',
         'security.fs.status.suspended',
         'security.fs.status.broken',
       ];

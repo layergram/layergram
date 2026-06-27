@@ -15,10 +15,13 @@
 ///     messages are FS-only on the wire, never fs_with_fallback).
 ///  9. Incoming classification logic: fsFailed on decrypt failure.
 /// 10. Plausible deniability: stored classification is an opaque integer.
-/// 11. Localization: all 8 label+desc keys exist for all 6 languages.
+/// 11. Localization: all 8 label+desc keys exist in every translation file.
 /// 12. Downgrade detector: classifications that return null don't affect the
 ///     downgrade tracking.
 library;
+
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
@@ -26,7 +29,6 @@ import 'package:layergram/core/crypto/fs_message_classification.dart';
 import 'package:layergram/core/crypto/fs_security_mode.dart';
 import 'package:layergram/core/crypto/fs_session_manager.dart';
 import 'package:layergram/core/crypto/models.dart';
-import 'package:layergram/l10n/fs_strings_bundle.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -655,23 +657,26 @@ void main() {
       'security.fs.cls.unknown.desc',
     ];
 
-    for (final lang in ['en', 'it', 'es', 'de', 'fr', 'pt']) {
+    for (final file in _translationFiles()) {
+      final lang = file.uri.pathSegments.last;
       test('$lang has all 8 label keys', () {
-        final strings = FsStringsBundle.bundle[lang]!;
+        final strings =
+            jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
         for (final key in labelKeys) {
           expect(strings.containsKey(key), isTrue,
               reason: '$lang missing key: $key');
-          expect(strings[key]!.isNotEmpty, isTrue,
+          expect((strings[key] as String).isNotEmpty, isTrue,
               reason: '$lang has empty value for: $key');
         }
       });
 
       test('$lang has all 8 description keys', () {
-        final strings = FsStringsBundle.bundle[lang]!;
+        final strings =
+            jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
         for (final key in descKeys) {
           expect(strings.containsKey(key), isTrue,
               reason: '$lang missing key: $key');
-          expect(strings[key]!.isNotEmpty, isTrue,
+          expect((strings[key] as String).isNotEmpty, isTrue,
               reason: '$lang has empty value for: $key');
         }
       });
@@ -791,4 +796,13 @@ void main() {
           equals(FsMessageClassification.fsOnly));
     });
   });
+}
+
+List<File> _translationFiles() {
+  return Directory('assets/translations')
+      .listSync()
+      .whereType<File>()
+      .where((file) => file.path.endsWith('.json'))
+      .toList()
+    ..sort((a, b) => a.path.compareTo(b.path));
 }

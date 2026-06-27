@@ -179,17 +179,18 @@ class FsStrictModeController {
     return state != FsSessionState.fsBroken;
   }
 
-  /// Returns the reason why [canSendMessage] returned false, or null.
-  String? sendBlockReason({bool deviceChanged = false}) {
+  /// Returns the localization key for why [canSendMessage] returned false, or
+  /// null when sending is allowed.
+  String? sendBlockReasonKey({bool deviceChanged = false}) {
     final state = _sessionManager.state;
     if (state == FsSessionState.fsBroken) {
-      return 'Session is broken and cannot be used';
+      return 'security.fs.error.session_broken';
     }
     if (_hasActiveStrictConsentForAnotherState(state)) {
-      return 'Maximum Forward Secrecy requires device repair before sending';
+      return 'security.fs.error.device_repair_required';
     }
     if (state == FsSessionState.strictFsActive && deviceChanged) {
-      return 'Unexpected device detected — repair required before sending';
+      return 'security.fs.error.unexpected_device';
     }
     return null;
   }

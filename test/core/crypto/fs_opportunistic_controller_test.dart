@@ -594,4 +594,118 @@ void main() {
     expect(alice.state, equals(FsSessionState.strictFsActive),
         reason: 'Passphrase strict mode initiator must reach strictFsActive');
   });
+
+  test(
+      'disableStrictForKnownActiveSessions reverts current and previous strict sessions',
+      () async {
+    final (alice, registry, aliceMgr) = _buildAlice();
+
+    aliceMgr.setStateForTesting(
+      FsSessionState.strictFsActive,
+      sessionId: 'current-session',
+    );
+    final previousMgr = FsSessionManager(clock: _FakeClock());
+    previousMgr.setStateForTesting(
+      FsSessionState.strictFsActive,
+      sessionId: 'previous-session',
+    );
+    alice.deviceRouter.addPreviousSessionForTesting(
+      'previous-session',
+      previousMgr,
+    );
+
+    registry
+      ..upsert(
+        const FsContactSecurityState(
+          contactId: 'alice',
+          identityContext: 'primary',
+          sessionId: 'current-session',
+          fsState: FsSessionState.strictFsActive,
+        ),
+      )
+      ..upsert(
+        const FsContactSecurityState(
+          contactId: 'alice',
+          identityContext: 'primary',
+          sessionId: 'previous-session',
+          fsState: FsSessionState.strictFsActive,
+        ),
+      );
+
+    await alice.disableStrictForKnownActiveSessions();
+
+    expect(aliceMgr.state, equals(FsSessionState.fsActive));
+    expect(previousMgr.state, equals(FsSessionState.fsActive));
+    expect(
+      registry
+          .lookup(
+            contactId: 'alice',
+            identityContext: 'primary',
+            sessionId: 'current-session',
+          )
+          ?.fsState,
+      equals(FsSessionState.fsActive),
+    );
+    expect(
+      registry
+          .lookup(
+            contactId: 'alice',
+            identityContext: 'primary',
+            sessionId: 'previous-session',
+          )
+          ?.fsState,
+      equals(FsSessionState.fsActive),
+    );
+  });
+
+  test(
+      'disableStrictForKnownActiveSessions cancels pending strict rekey before a session exists',
+      () async {
+    final (alice, registry, aliceMgr) = _buildAlice();
+
+    await alice.resetForStrictRekey();
+    expect(aliceMgr.state, equals(FsSessionState.legacyOnly));
+    expect(alice.allActiveSessionIds, isEmpty);
+    expect(
+      registry
+          .lookup(
+            contactId: 'alice',
+            identityContext: 'primary',
+            sessionId: null,
+          )
+          ?.fsState,
+      equals(FsSessionState.strictRequested),
+    );
+
+    await alice.disableStrictForKnownActiveSessions();
+
+    expect(aliceMgr.state, equals(FsSessionState.legacyOnly));
+    expect(
+      registry
+          .lookup(
+            contactId: 'alice',
+            identityContext: 'primary',
+            sessionId: null,
+          )
+          ?.fsState,
+      equals(FsSessionState.legacyOnly),
+    );
+
+    await alice.buildOutgoingExtension(pendingInit: _initPayload());
+    await alice.processIncomingEnvelope(
+      {
+        'v': 2,
+        'senderId': 'bob',
+        'x': {'fs': _replyPayload().toMessage().toJson()}
+      },
+      remoteContactId: 'bob',
+    );
+    await alice.buildOutgoingExtension(pendingConfirm: _confirmPayload());
+
+    expect(
+      alice.state,
+      equals(FsSessionState.fsActive),
+      reason: 'Disabling a pending Maximum FS rekey must clear the strict flag',
+    );
+  });
 }

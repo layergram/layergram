@@ -571,9 +571,13 @@ class FsSessionManager {
   /// Called when the user explicitly disables Maximum FS, allowing legacy
   /// fallback again.
   void disableStrict() {
-    if (_state == FsSessionState.strictFsActive ||
-        _state == FsSessionState.strictRequested) {
+    _strictRequestedBeforeHandshake = false;
+    if (_state == FsSessionState.strictFsActive) {
       _state = FsSessionState.fsActive;
+    } else if (_state == FsSessionState.strictRequested) {
+      _state = activeSessionId == null
+          ? FsSessionState.legacyOnly
+          : FsSessionState.fsActive;
     }
   }
 

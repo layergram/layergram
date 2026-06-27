@@ -1,13 +1,10 @@
-// Tests for FsStringsBundle and FsStatusIcon API — Phase 9.
+// Tests for Forward Secrecy localization coverage.
 //
-// Mandatory tests (roadmap §12 Phase 9):
-//
-//  T9.1  All keys in non-English locales exist in the English (source) bundle.
-//  T9.2  All mandatory key groups are present in the English bundle.
-//  T9.3  Named args placeholders ({contact}, {sessionId}) present in relevant keys.
-//  T9.4  No hardcoded English strings in FsStatusIcon (uses key lookup).
-//  T9.5  AppStrings.registerStrings accepts the bundle without throwing.
+// The app must load user-facing Forward Secrecy strings from the main
+// `assets/translations/*.json` files. `FsStringsBundle` is kept only as the
+// English source inventory for required keys and release gates.
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -15,171 +12,156 @@ import 'package:layergram/l10n/app_strings.dart';
 import 'package:layergram/l10n/fs_strings_bundle.dart';
 
 void main() {
-  // Required key groups (spec §9.5).
   const mandatoryKeyPrefixes = [
     'security.fs.status.',
     'security.fs.warning.',
     'security.fs.action.',
+    'security.fs.error.',
     'security.fs.info.',
     'security.fs.maximum.',
     'security.passphrase.',
     'security.contact.state.',
   ];
 
-  const en0 = FsStringsBundle.bundle;
+  final source = FsStringsBundle.bundle['en']!;
 
-  // T9.1 — All keys in non-English locales also exist in English.
-  test('T9.1: all non-English locale keys have an English fallback', () {
-    final enKeys = (en0['en'] ?? {}).keys.toSet();
-    for (final entry in en0.entries) {
-      if (entry.key == 'en') continue;
-      for (final key in entry.value.keys) {
-        expect(enKeys, contains(key),
-            reason:
-                'Key "$key" in locale "${entry.key}" has no English fallback');
-      }
-    }
+  test('T9.1: FsStringsBundle is only the English source inventory', () {
+    expect(FsStringsBundle.bundle.keys, ['en']);
   });
 
-  // T9.2 — All mandatory key groups present in English bundle.
-  test('T9.2: all mandatory key groups present in English bundle', () {
-    final enKeys = (en0['en'] ?? {}).keys.toList();
+  test('T9.2: all mandatory key groups present in English source', () {
+    final enKeys = source.keys.toList();
     for (final prefix in mandatoryKeyPrefixes) {
-      final matching = enKeys.where((k) => k.startsWith(prefix)).toList();
+      final matching = enKeys.where((key) => key.startsWith(prefix)).toList();
       expect(matching, isNotEmpty,
           reason: 'No English keys found for group "$prefix"');
     }
   });
 
-  // T9.3 — Named placeholders are present where expected.
-  test('T9.3: named placeholder {contact} in maximum.pending_notice', () {
-    final en = en0['en']!;
+  test('T9.3: named placeholders are present where expected', () {
     expect(
-      en['security.fs.maximum.pending_notice'],
+      source['security.fs.maximum.pending_notice'],
       contains('{contact}'),
-      reason: 'pending_notice must contain {contact} placeholder',
     );
     expect(
-      en['security.contact.state.session_id'],
+      source['security.contact.state.session_id'],
       contains('{sessionId}'),
-      reason: 'session_id must contain {sessionId} placeholder',
+    );
+    expect(
+      source['security.fs.progress.exchanges_remaining'],
+      contains('{n}'),
+    );
+    expect(
+      source['security.fs.mode.current_label'],
+      contains('{mode}'),
     );
   });
 
-  // T9.4 — Key completeness: all status states covered.
-  test('T9.4: all FS status keys are present in English bundle', () {
-    final en = en0['en']!;
+  test('T9.4: all FS status keys are present in English source', () {
     const statusKeys = [
       'security.fs.status.legacy',
       'security.fs.status.upgrading',
       'security.fs.status.active',
       'security.fs.status.strict',
+      'security.fs.status.strict_pending',
       'security.fs.status.suspended',
       'security.fs.status.broken',
     ];
     for (final key in statusKeys) {
-      expect(en, contains(key), reason: 'Missing status key: $key');
-      expect(en[key], isNotEmpty, reason: 'Empty value for: $key');
+      expect(source, contains(key), reason: 'Missing status key: $key');
+      expect(source[key], isNotEmpty, reason: 'Empty value for: $key');
     }
   });
 
-  // T9.5 — AppStrings.registerStrings accepts the bundle without throwing.
-  test('T9.5: AppStrings.registerStrings accepts FsStringsBundle without error',
+  test('T9.5: every supported locale has a main translation file', () {
+    final expected = _supportedLocaleFileNames();
+    final actual = _translationFiles()
+        .map((file) => file.uri.pathSegments.last.replaceAll('.json', ''))
+        .toSet();
+
+    expect(actual, containsAll(expected));
+    expect(expected, containsAll(actual));
+  });
+
+  test('T9.6: every translation file contains every FS source key', () {
+    for (final file in _translationFiles()) {
+      final locale = file.uri.pathSegments.last;
+      final data = _readTranslation(file);
+      for (final key in source.keys) {
+        expect(data, contains(key), reason: '$locale missing key: $key');
+        expect((data[key] as String).trim(), isNotEmpty,
+            reason: '$locale has empty value for: $key');
+      }
+    }
+  });
+
+  test('T9.7: placeholders match the English source in every translation', () {
+    for (final file in _translationFiles()) {
+      final locale = file.uri.pathSegments.last;
+      final data = _readTranslation(file);
+      for (final entry in source.entries) {
+        expect(
+          _placeholders(data[entry.key] as String),
+          _placeholders(entry.value),
+          reason: '$locale placeholder mismatch for ${entry.key}',
+        );
+      }
+    }
+  });
+
+  test('T9.8: no FS translation is a passthrough key', () {
+    for (final file in _translationFiles()) {
+      final locale = file.uri.pathSegments.last;
+      final data = _readTranslation(file);
+      for (final key in source.keys) {
+        expect(data[key], isNot(equals(key)),
+            reason: '$locale value equals key: $key');
+      }
+    }
+  });
+
+  test('T9.9: all security keys referenced by app code are translated', () {
+    final referenced = _securityKeysReferencedByApp();
+    expect(referenced, isNotEmpty);
+    for (final key in referenced) {
+      expect(source, contains(key),
+          reason: 'Referenced key missing from FS source inventory: $key');
+    }
+
+    for (final file in _translationFiles()) {
+      final locale = file.uri.pathSegments.last;
+      final data = _readTranslation(file);
+      for (final key in referenced) {
+        expect(data, contains(key), reason: '$locale missing key: $key');
+      }
+    }
+  });
+
+  test('T9.10: notForMe copy does not reveal payload existence or identity fit',
       () {
-    expect(
-      () => AppStrings.registerStrings(FsStringsBundle.bundle),
-      returnsNormally,
-      reason: 'registerStrings must accept the FS bundle without throwing',
-    );
-  });
-
-  // T9.6 — Warning keys are non-empty in English.
-  test('T9.6: all warning keys are non-empty in English', () {
-    final en = en0['en']!;
-    const warningKeys = [
-      'security.fs.warning.recoverability',
-      'security.fs.warning.device_bound',
-      'security.fs.warning.pending_activation',
-      'security.fs.warning.fallback_allowed',
-      'security.fs.warning.no_silent_downgrade',
-    ];
-    for (final key in warningKeys) {
-      expect(en, contains(key), reason: 'Missing warning key: $key');
-      expect(
-        (en[key] ?? '').length,
-        greaterThan(20),
-        reason: 'Warning key "$key" is suspiciously short',
-      );
-    }
-  });
-
-  // T9.7 — Info modal keys present.
-  test('T9.7: info modal keys present in English bundle', () {
-    final en = en0['en']!;
-    const infoKeys = [
-      'security.fs.info.title',
-      'security.fs.info.legacy_description',
-      'security.fs.info.active_description',
-      'security.fs.info.active_advantage',
-      'security.fs.info.strict_description',
-      'security.fs.info.broken_description',
-      'security.fs.info.upgrading_description',
-    ];
-    for (final key in infoKeys) {
-      expect(en, contains(key), reason: 'Missing info key: $key');
-    }
-  });
-
-  // T9.8 — All locale entries are present in the bundle map.
-  test('T9.8: bundle contains expected locale codes', () {
-    const expectedLocales = ['en', 'it', 'es', 'de', 'fr', 'pt'];
-    for (final locale in expectedLocales) {
-      expect(
-        FsStringsBundle.bundle,
-        contains(locale),
-        reason: 'Missing locale: $locale',
-      );
-    }
-  });
-
-  // T9.9 — No key value equals the key itself (placeholder check).
-  test('T9.9: no English value equals its key (not a passthrough)', () {
-    final en = en0['en']!;
-    for (final entry in en.entries) {
-      expect(
-        entry.value,
-        isNot(equals(entry.key)),
-        reason: 'Value equals key (untranslated): ${entry.key}',
-      );
-    }
-  });
-
-  // T9.10 — Decode failures must not reveal payload existence or identity fit.
-  test('T9.10: notForMe copy is indistinguishable from generic no-data', () {
-    final en = en0['en']!;
-    final it = en0['it']!;
+    final en = _readTranslation(File('assets/translations/en.json'));
+    final it = _readTranslation(File('assets/translations/it.json'));
 
     expect(
       en['security.message_not_for_me'],
       equals('No decodable Layergram message found.'),
     );
     expect(
-      it['security.message_not_for_me'],
-      equals('Nessun messaggio Layergram decifrabile trovato.'),
+      (it['security.message_not_for_me'] as String).toLowerCase(),
+      contains('layergram'),
     );
 
-    for (final value in [
-      en['security.message_not_for_me']!,
-      it['security.message_not_for_me']!,
-    ]) {
-      expect(value.toLowerCase(), isNot(contains('found, but')));
-      expect(value.toLowerCase(), isNot(contains('not encrypted')));
-      expect(value.toLowerCase(), isNot(contains('questa identità')));
-      expect(value.toLowerCase(), isNot(contains('stessa impronta')));
+    for (final file in _translationFiles()) {
+      final value =
+          (_readTranslation(file)['security.message_not_for_me'] as String)
+              .toLowerCase();
+      expect(value, isNot(contains('found, but')));
+      expect(value, isNot(contains('not encrypted')));
+      expect(value, isNot(contains('questa identità')));
+      expect(value, isNot(contains('stessa impronta')));
     }
   });
 
-  // T9.11 — Public decode surfaces must not reintroduce the old oracle text.
   test('T9.11: public decode UI does not leak notForMe details', () {
     const publicDecodeFiles = [
       'lib/app.dart',
@@ -200,12 +182,87 @@ void main() {
     for (final path in publicDecodeFiles) {
       final source = File(path).readAsStringSync();
       for (final fragment in forbiddenFragments) {
-        expect(
-          source,
-          isNot(contains(fragment)),
-          reason: '$path must not expose "$fragment"',
-        );
+        expect(source, isNot(contains(fragment)),
+            reason: '$path must not expose "$fragment"');
       }
     }
   });
+
+  test('T9.12: app startup does not register the FS bundle at runtime', () {
+    final main = File('lib/main.dart').readAsStringSync();
+    expect(main, isNot(contains('FsStringsBundle')));
+    expect(main, isNot(contains('registerStrings(FsStringsBundle.bundle)')));
+  });
+
+  test('T9.13: send-blocking FS messages are localizable keys', () {
+    const forbiddenRuntimeFragments = [
+      'Maximum Forward Secrecy prevents sending in current state',
+      'Maximum Forward Secrecy requires device repair before sending',
+      'Unexpected device detected — repair required before sending',
+      'Session is broken and cannot be used',
+    ];
+
+    for (final file in _dartLibFiles()) {
+      final path = file.path;
+      if (path.endsWith('lib/l10n/fs_strings_bundle.dart')) continue;
+      final contents = file.readAsStringSync();
+      for (final fragment in forbiddenRuntimeFragments) {
+        expect(contents, isNot(contains(fragment)),
+            reason: '$path contains hardcoded FS copy: $fragment');
+      }
+    }
+  });
+}
+
+Map<String, dynamic> _readTranslation(File file) {
+  return jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
+}
+
+List<File> _translationFiles() {
+  return Directory('assets/translations')
+      .listSync()
+      .whereType<File>()
+      .where((file) => file.path.endsWith('.json'))
+      .toList()
+    ..sort((a, b) => a.path.compareTo(b.path));
+}
+
+Set<String> _supportedLocaleFileNames() {
+  return AppStrings.supportedLocales.map((locale) {
+    final country = locale.countryCode;
+    if (country == null || country.isEmpty) {
+      return locale.languageCode;
+    }
+    return '${locale.languageCode}_$country';
+  }).toSet();
+}
+
+Set<String> _placeholders(String value) {
+  return RegExp(r'\{[A-Za-z0-9_]+\}')
+      .allMatches(value)
+      .map((match) => match.group(0)!)
+      .toSet();
+}
+
+Set<String> _securityKeysReferencedByApp() {
+  final keyPattern = RegExp(
+    r"'(security\.(?:fs|passphrase|pp|warn|cleanup|contact\.state|message_not_for_me)[^']*)'",
+  );
+  final keys = <String>{};
+  for (final file in _dartLibFiles()) {
+    if (file.path.endsWith('lib/l10n/fs_strings_bundle.dart')) continue;
+    final source = file.readAsStringSync();
+    for (final match in keyPattern.allMatches(source)) {
+      keys.add(match.group(1)!);
+    }
+  }
+  return keys;
+}
+
+List<File> _dartLibFiles() {
+  return Directory('lib')
+      .listSync(recursive: true)
+      .whereType<File>()
+      .where((file) => file.path.endsWith('.dart'))
+      .toList();
 }
