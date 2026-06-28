@@ -4,7 +4,7 @@ This document describes the Forward Secrecy (FS) model implemented in Layergram,
 preserves Layergram's existing properties (no server, no account, no public-key
 redistribution, plausible deniability), and the hardening notes required by the FS
 specification v1.18 — in particular the **secure memory handling limitations** (§20.2) and
-the **implementation review gate** (§20.4).
+the **release hardening review** (§20.4).
 
 It complements [../THREAT_MODEL.md](../THREAT_MODEL.md) (user-facing threat wording) and the
 message/identity specs under [./](.).
@@ -206,11 +206,11 @@ copies produced by the garbage collector or by intermediate APIs may persist unt
 Layergram therefore treats memory zeroization as best-effort and relies on minimizing secret
 lifetime plus OS-level protections, not on guaranteed erasure.
 
-## Implementation review gate (§20.4)
+## Release hardening review (§20.4)
 
-Before enabling FS for normal users, the implementation must pass a security review covering the
-items below. This checklist is the release gate; any divergence from the specification must be
-documented (see "Divergences") before release.
+Forward Secrecy is integrated into Layergram. The implementation passed the security review items
+below before being promoted from implementation work into an app feature. Any future divergence
+from the specification must be documented (see "Divergences") before release.
 
 - [x] handshake transcript construction;
 - [x] DH computation order;
@@ -226,9 +226,8 @@ documented (see "Divergences") before release.
 - [x] memory-wipe best effort and documented limitations;
 - [x] local DoS behavior.
 
-The checklist above reflects the dedicated review performed on this branch. It does not imply
-that FS is already present in public store builds or in the official public release
-description.
+The checklist above reflects the dedicated review performed before treating Forward Secrecy as an
+available Layergram feature.
 
 ## Divergences from the specification
 

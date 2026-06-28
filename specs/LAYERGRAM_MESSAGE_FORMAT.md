@@ -1,20 +1,20 @@
 # Layergram Message Format (LMF) Specification
 
 **Version:** 2.1
-**Status:** Forward Secrecy branch draft; LMF v2 base format stable
+**Status:** Stable; includes integrated Forward Secrecy extensions
 
 This document defines the **Layergram Message Format (LMF)**, the protocol used by Layergram to embed end-to-end encrypted messages within standard, visually innocuous text messages.
 
 ## Version History
 
-- **LMF v2.1 (Forward Secrecy branch draft)**: Adds optional Forward Secrecy envelope fields and `x.fs` control extensions while preserving the raw-binary outer transport.
+- **LMF v2.1 (Forward Secrecy)**: Adds optional Forward Secrecy envelope fields and `x.fs` control extensions while preserving the raw-binary outer transport.
 - **LMF v2.0 (Stable base)**: Introduces structured inner container, gzip compression, hardened Unicode alphabet. Always encode with v2; decode supports v2 then v1 fallback.
 - **LMF v1.1 (Legacy)**: Original format with raw JSON encryption. Decode-only support for backward compatibility.
 
-The stable LMF v2.0 base format is implemented by the public Layergram application and by
-official Layergram builds released through the project's official channels. The v2.1 Forward
-Secrecy additions are implemented in the FS branch until they are promoted into an official
-release.
+The stable LMF v2 format is implemented by the public Layergram application and by official
+Layergram builds released through the project's official channels. LMF v2.1 extends that format
+with integrated Forward Secrecy metadata while preserving v2 raw-binary outer transport and
+decode compatibility with older v2/v1 messages.
 
 ---
 
