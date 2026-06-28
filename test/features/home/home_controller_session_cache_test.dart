@@ -562,7 +562,7 @@ void main() {
     });
 
     test(
-      'Advanced FS includes fallback readable by same identity without ratchet',
+      'Advanced FS omits fallback and is unreadable without ratchet',
       () async {
         final fixture = await _createFixture();
         addTearDown(() {
@@ -584,16 +584,29 @@ void main() {
         };
 
         final controller = fixture.container.read(homeControllerProvider);
-        const secret = 'Advanced FS stays readable from a restored device';
+        const secret = 'Advanced FS requires a matching ratchet';
         final result = await controller.encryptForRecipient(
           secretText: secret,
           recipient: contact,
         );
 
         expect(result.isFsEncrypted, isTrue);
-        expect(result.classification, FsMessageClassification.fsWithFallback);
+        expect(result.classification, FsMessageClassification.fsOnly);
 
         final contactKeys = fixture.contactKeysById[contact.identityId]!;
+        final outerKey = await fixture.encryptionService.deriveSymmetricKey(
+          localPrivateKeyBase64: contactKeys.privateKeyBase64,
+          remotePublicKeyBase64: fixture.localKeys.publicKeyBase64,
+        );
+        final envelope =
+            await fixture.encryptionService.tryDecryptEnvelopeWithKey(
+          message: result.message,
+          key: outerKey,
+        );
+        expect(envelope, isNotNull);
+        expect(envelope!.containsKey('text'), isFalse);
+        expect(envelope.containsKey('mc_fallback_key'), isFalse);
+
         final decoded = await fixture.encryptionService.decrypt(
           recipientPrivateKeyBase64: contactKeys.privateKeyBase64,
           senderPublicKeyBase64: fixture.localKeys.publicKeyBase64,
@@ -601,16 +614,16 @@ void main() {
           allRatchetStates: const {},
         );
 
-        expect(decoded.fsDecryptFailed, isFalse);
+        expect(decoded.fsDecryptFailed, isTrue);
         expect(decoded.isFsEnvelope, isTrue);
-        expect(decoded.hasLegacyFallback, isTrue);
-        expect(decoded.payload.text, secret);
+        expect(decoded.hasLegacyFallback, isFalse);
+        expect(decoded.payload.text, isEmpty);
         expect(decoded.newRatchetState, isNull);
       },
     );
 
     test(
-      'Advanced hidden message decodes on same identity device without ratchet',
+      'Advanced hidden message is not readable on same identity without ratchet',
       () async {
         final senderFixture = await _createFixture();
         final recipient = senderFixture.contacts.first;
@@ -661,30 +674,16 @@ void main() {
           hintContactId: 'me',
         );
 
-        expect(outcome.kind, DecodeKind.success);
-        expect(outcome.payload?.senderId, 'me');
-        expect(outcome.payload?.text, secret);
+        expect(outcome.kind, DecodeKind.fsLost);
+        expect(outcome.payload, isNull);
 
         final thread = await receiverFixture.messagesRepository.getThread('me');
-        final received =
-            thread.singleWhere((message) => message.rawSource == hidden);
-        expect(received.direction, 'incoming');
-        expect(received.senderId, 'me');
-        expect(received.recipientId, recipient.identityId);
-        expect(received.isFsEncrypted, isTrue);
-        expect(received.text, isNull);
-        expect(
-          await receiverController.decryptForDisplay(
-            message: received,
-            contact: receiverFixture.contacts.single,
-          ),
-          secret,
-        );
+        expect(thread, isEmpty);
       },
     );
 
     test(
-      'Advanced FS out-of-order links decode on same identity without ratchet',
+      'Advanced FS out-of-order links are not readable without ratchet',
       () async {
         final senderFixture = await _createFixture();
         final recipient = senderFixture.contacts.first;
@@ -729,11 +728,11 @@ void main() {
         );
         expect(
           firstEncrypted.classification,
-          FsMessageClassification.fsWithFallback,
+          FsMessageClassification.fsOnly,
         );
         expect(
           secondEncrypted.classification,
-          FsMessageClassification.fsWithFallback,
+          FsMessageClassification.fsOnly,
         );
         final firstLink =
             senderController.buildLinkPayload(firstEncrypted.message);
@@ -751,11 +750,10 @@ void main() {
           hintContactId: 'me',
         );
 
-        expect(secondOutcome.kind, DecodeKind.success);
-        expect(
-            secondOutcome.payload?.text, 'Second Advanced FS copied message');
-        expect(firstOutcome.kind, DecodeKind.success);
-        expect(firstOutcome.payload?.text, 'First Advanced FS copied message');
+        expect(secondOutcome.kind, DecodeKind.fsLost);
+        expect(secondOutcome.payload, isNull);
+        expect(firstOutcome.kind, DecodeKind.fsLost);
+        expect(firstOutcome.payload, isNull);
       },
     );
 
@@ -994,12 +992,18 @@ void main() {
         expect(fsMessage.isFsEncrypted, isTrue);
         expect(
           fsMessage.classification,
-          FsMessageClassification.fsWithFallback,
+          FsMessageClassification.fsOnly,
         );
         expect(
           disp3Fixture.container.read(fsStateForContactProvider(disp2Id)),
           FsSessionState.fsActive,
         );
+        final fsOutcome = await disp2Controller.decodeHiddenMessage(
+          disp3Controller.buildLinkPayload(fsMessage.message),
+          hintContactId: disp1Id,
+        );
+        expect(fsOutcome.kind, DecodeKind.success);
+        expect(fsOutcome.payload?.text, 'disp3 FS payload after confirm');
       },
     );
 
@@ -2150,8 +2154,85 @@ void main() {
           );
 
       expect(result.isFsEncrypted, isTrue);
-      expect(result.classification, FsMessageClassification.fsWithFallback);
+      expect(result.classification, FsMessageClassification.fsOnly);
       expect(sessionManager.state, FsSessionState.fsActive);
+    });
+
+    test('Advanced send uses archived active session when current is stale',
+        () async {
+      final fixture = await _createFixture();
+      addTearDown(() {
+        fixture.identitiesRepository.dispose();
+        fixture.messagesRepository.dispose();
+        fixture.container.dispose();
+      });
+
+      final contact = fixture.contacts.first;
+      const activeSessionId = 'session-advanced-archived-active';
+      const staleSessionId = 'session-advanced-current-stale';
+      final fsController = fixture.container.read(
+        fsOpportunisticControllerProvider(contact.identityId),
+      );
+      final currentSession = fixture.container.read(
+        fsSessionManagerProvider(contact.identityId),
+      );
+      currentSession.setStateForTesting(
+        FsSessionState.fsSuspended,
+        sessionId: staleSessionId,
+      );
+      final archivedSession = FsSessionManager();
+      archivedSession.setStateForTesting(
+        FsSessionState.fsActive,
+        sessionId: activeSessionId,
+      );
+      fsController.deviceRouter.addPreviousSessionForTesting(
+        activeSessionId,
+        archivedSession,
+      );
+
+      final registry =
+          fixture.container.read(fsContactSecurityRegistryProvider);
+      registry.upsert(
+        FsContactSecurityState(
+          contactId: contact.identityId,
+          identityContext: fsController.identityContext,
+          sessionId: staleSessionId,
+          fsState: FsSessionState.fsSuspended,
+        ),
+      );
+      registry.upsert(
+        FsContactSecurityState(
+          contactId: contact.identityId,
+          identityContext: fsController.identityContext,
+          sessionId: activeSessionId,
+          fsState: FsSessionState.fsActive,
+        ),
+      );
+      fixture.container.read(fsRatchetStateCacheProvider.notifier).state = {
+        staleSessionId: _testRatchet(staleSessionId),
+        activeSessionId: _testRatchet(activeSessionId),
+      };
+
+      final result = await fixture.container
+          .read(homeControllerProvider)
+          .encryptForRecipient(
+            secretText: 'reply through archived active session',
+            recipient: contact,
+          );
+
+      expect(result.isFsEncrypted, isTrue);
+      expect(result.classification, FsMessageClassification.fsOnly);
+
+      final key = await fixture.encryptionService.deriveSymmetricKey(
+        localPrivateKeyBase64: fixture.localKeys.privateKeyBase64,
+        remotePublicKeyBase64: contact.publicKeyBase64,
+      );
+      final envelope =
+          await fixture.encryptionService.tryDecryptEnvelopeWithKey(
+        message: result.message,
+        key: key,
+      );
+      expect(envelope?['fs_session'], activeSessionId);
     });
 
     test(
@@ -2377,6 +2458,81 @@ void main() {
       );
     });
 
+    test('Advanced reset clears all stale contact sessions before rekey',
+        () async {
+      final fixture = await _createFixture();
+      addTearDown(() {
+        fixture.identitiesRepository.dispose();
+        fixture.messagesRepository.dispose();
+        fixture.container.dispose();
+      });
+
+      final contact = fixture.contacts.first;
+      const activeSessionId = 'session-advanced-current-green';
+      const staleActiveSessionId = 'session-advanced-stale-green';
+      const staleInitSessionId = 'session-advanced-stale-init';
+      final fsController = fixture.container.read(
+        fsOpportunisticControllerProvider(contact.identityId),
+      );
+      final sessionManager = fixture.container.read(
+        fsSessionManagerProvider(contact.identityId),
+      );
+      sessionManager.setStateForTesting(
+        FsSessionState.fsActive,
+        sessionId: activeSessionId,
+      );
+      fixture.container.read(fsRatchetStateCacheProvider.notifier).state = {
+        activeSessionId: _testRatchet(activeSessionId),
+        staleActiveSessionId: _testRatchet(staleActiveSessionId),
+      };
+
+      final registry =
+          fixture.container.read(fsContactSecurityRegistryProvider);
+      for (final entry in [
+        FsContactSecurityState(
+          contactId: contact.identityId,
+          identityContext: 'primary',
+          sessionId: activeSessionId,
+          fsState: FsSessionState.fsActive,
+        ),
+        FsContactSecurityState(
+          contactId: contact.identityId,
+          identityContext: 'primary',
+          sessionId: staleActiveSessionId,
+          fsState: FsSessionState.fsActive,
+        ),
+        FsContactSecurityState(
+          contactId: contact.identityId,
+          identityContext: 'primary',
+          sessionId: staleInitSessionId,
+          fsState: FsSessionState.fsInitSent,
+        ),
+      ]) {
+        registry.upsert(entry);
+      }
+
+      final removedSessionIds = await fsController.resetForAdvancedRekey();
+      fixture.container.read(fsRatchetStateCacheProvider.notifier).update(
+        (cache) {
+          final next = {...cache};
+          for (final sessionId in removedSessionIds) {
+            next.remove(sessionId);
+          }
+          return next;
+        },
+      );
+
+      final states = registry.forContact(
+        contactId: contact.identityId,
+        identityContext: fsController.identityContext,
+      );
+      expect(states, hasLength(1));
+      expect(states.single.sessionId, isNull);
+      expect(states.single.fsState, FsSessionState.legacyOnly);
+      expect(fsController.allActiveSessionIds, isEmpty);
+      expect(fixture.container.read(fsRatchetStateCacheProvider), isEmpty);
+    });
+
     test('Composer-safe cover estimate fits Advanced FS payload', () async {
       final x25519 = X25519();
       final localKeys = await _keyMaterial(await x25519.newKeyPair());
@@ -2514,6 +2670,91 @@ void main() {
         ),
       );
     });
+
+    test(
+      'Maximum FS rejects same-identity device plaintext without strict session',
+      () async {
+        final receiverFixture = await _createFixture();
+        final disp1Contact = receiverFixture.contacts.first;
+        final disp1Keys =
+            receiverFixture.contactKeysById[disp1Contact.identityId]!;
+        final disp3Fixture = await _createFixtureFor(
+          localIdentityId: disp1Contact.identityId,
+          localDisplayName: disp1Contact.displayName,
+          localKeys: disp1Keys,
+          contactKeysById: {'me': receiverFixture.localKeys},
+        );
+        addTearDown(() {
+          receiverFixture.identitiesRepository.dispose();
+          receiverFixture.messagesRepository.dispose();
+          receiverFixture.container.dispose();
+          disp3Fixture.identitiesRepository.dispose();
+          disp3Fixture.messagesRepository.dispose();
+          disp3Fixture.container.dispose();
+        });
+
+        const strictSessionId = 'session-strict-disp1-disp2';
+        final receiverSessionManager = receiverFixture.container.read(
+          fsSessionManagerProvider(disp1Contact.identityId),
+        );
+        receiverSessionManager.setStateForTesting(
+          FsSessionState.fsActive,
+          sessionId: strictSessionId,
+        );
+        receiverFixture.container
+            .read(fsRatchetStateCacheProvider.notifier)
+            .state = {strictSessionId: _testRatchet(strictSessionId)};
+
+        final receiverFsController = receiverFixture.container.read(
+          fsOpportunisticControllerProvider(disp1Contact.identityId),
+        );
+        await receiverFixture.container
+            .read(fsSecurityModeServiceProvider)
+            .setMode(
+              contactId: disp1Contact.identityId,
+              identityContext: receiverFsController.identityContext,
+              mode: FsSecurityMode.strict,
+            );
+        receiverFsController.securityMode = FsSecurityMode.strict;
+        final strictController = receiverFixture.container.read(
+          fsStrictModeControllerProvider(disp1Contact.identityId),
+        );
+        expect(
+          (await strictController.requestMaximum(strictSessionId)).success,
+          isTrue,
+        );
+        expect(
+          (await strictController.activateStrict(strictSessionId)).success,
+          isTrue,
+        );
+
+        final disp3Controller =
+            disp3Fixture.container.read(homeControllerProvider);
+        final fromDisp3 = await disp3Controller.encryptForRecipient(
+          secretText: 'disp3 must not bypass Maximum FS',
+          recipient: disp3Fixture.contacts.single,
+        );
+        expect(fromDisp3.isFsEncrypted, isFalse);
+        expect(fromDisp3.classification, FsMessageClassification.fsNegotiation);
+
+        final receiverController =
+            receiverFixture.container.read(homeControllerProvider);
+        final outcome = await receiverController.decodeHiddenMessage(
+          disp3Controller.buildLinkPayload(fromDisp3.message),
+          hintContactId: disp1Contact.identityId,
+        );
+
+        expect(outcome.kind, DecodeKind.fsLost);
+        expect(outcome.payload, isNull);
+        expect(
+          await receiverFixture.messagesRepository.getThread(
+            disp1Contact.identityId,
+          ),
+          isEmpty,
+        );
+        expect(receiverSessionManager.state, FsSessionState.strictFsActive);
+      },
+    );
 
     test('Strict FS blocks sending when local ratchet is missing', () async {
       final fixture = await _createFixture();

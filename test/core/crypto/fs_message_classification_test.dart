@@ -4,7 +4,7 @@
 ///  1. All 8 classification enum values exist.
 ///  2. Downgrade level mapping: each classification maps correctly to
 ///     the 3-level FsMessageSecurity hierarchy (or null).
-///  3. isFsProtected: only FS-encrypted classifications return true.
+///  3. isFsProtected: only ratchet-only FS classifications return true.
 ///  4. Storage round-trip: storageIndex ↔ fromStorageIndex.
 ///  5. fromLegacyFlag backward compatibility: isFsEncrypted=true → fsOnly (§9.5),
 ///     isFsEncrypted=false → legacy.
@@ -106,16 +106,16 @@ void main() {
   // ────────────────────────────────────────────────────────────────────────────
 
   group('isFsProtected', () {
-    test('FS-encrypted classifications return true', () {
-      expect(FsMessageClassification.fsWithFallback.isFsProtected, isTrue);
+    test('ratchet-only FS classifications return true', () {
       expect(FsMessageClassification.fsOnly.isFsProtected, isTrue);
       expect(FsMessageClassification.strictFs.isFsProtected, isTrue);
     });
 
-    test('non-FS classifications return false', () {
+    test('non-FS and degraded classifications return false', () {
       expect(FsMessageClassification.legacy.isFsProtected, isFalse);
       expect(FsMessageClassification.preFs.isFsProtected, isFalse);
       expect(FsMessageClassification.fsNegotiation.isFsProtected, isFalse);
+      expect(FsMessageClassification.fsWithFallback.isFsProtected, isFalse);
       expect(FsMessageClassification.fsFailed.isFsProtected, isFalse);
       expect(FsMessageClassification.unknown.isFsProtected, isFalse);
     });
@@ -613,14 +613,14 @@ void main() {
       expect(FsMessageClassification.fsOnly.isFsProtected, isTrue);
     });
 
-    test('fsWithFallback remains defined (reserved for multi-envelope §9.6)',
-        () {
+    test('fsWithFallback remains defined for historic degraded messages', () {
       // The value still exists for forward compatibility even though the live
       // classifier never emits it.
       expect(FsMessageClassification.values,
           contains(FsMessageClassification.fsWithFallback));
       expect(FsMessageClassification.fsWithFallback.downgradeLevel,
           equals(FsMessageSecurity.fsWithFallback));
+      expect(FsMessageClassification.fsWithFallback.isFsProtected, isFalse);
     });
 
     test('downgrade level recorded for an FS-encrypted message is fsOnly', () {

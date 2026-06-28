@@ -20,9 +20,9 @@ import '../storage/aux_record_repository.dart';
 ///
 /// - [base]: Legacy encryption only. FS negotiation is suppressed.
 /// - [advanced]: Opportunistic FS (default). FS upgrades automatically when
-///   both sides support it; legacy fallback is allowed.
-/// - [strict]: Maximum FS. After a verified session, legacy fallback is
-///   blocked. Requires explicit user consent (§14.6.2).
+///   both sides support it; active FS messages are ratchet-only.
+/// - [strict]: Maximum FS. After a verified session, sending is device-bound
+///   and silent downgrade is blocked. Requires explicit user consent (§14.6.2).
 ///
 /// The mode is persisted as an opaque encrypted auxiliary record
 /// (`kind: fs_mode_v1`) so it survives app restarts and maintains
@@ -34,6 +34,7 @@ enum FsSecurityMode {
   base,
 
   /// §6.2 — Opportunistic FS (default). FS when available, legacy otherwise.
+  /// Active FS messages are not sent with a legacy plaintext/content fallback.
   advanced,
 
   /// §6.3 — Strict FS. FS-only after verified session; no legacy fallback.

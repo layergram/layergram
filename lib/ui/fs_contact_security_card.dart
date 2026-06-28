@@ -161,22 +161,7 @@ class FsContactSecurityCard extends ConsumerWidget {
                     label: t(context, 'security.fs.action.retry'),
                     icon: Icons.refresh,
                     onPressed: () async {
-                      final sm = ref.read(
-                        fsSessionManagerProvider(contactId),
-                      );
-                      sm.reset();
-                      // Update registry so UI reflects legacyOnly immediately
-                      final registry =
-                          ref.read(fsContactSecurityRegistryProvider);
-                      final ctrl = ref.read(
-                        fsOpportunisticControllerProvider(contactId),
-                      );
-                      registry.upsert(FsContactSecurityState(
-                        contactId: contactId,
-                        identityContext: ctrl.identityContext,
-                        sessionId: null,
-                        fsState: FsSessionState.legacyOnly,
-                      ));
+                      await _resetForAdvancedRekey(ref, contactId);
                       ref.read(fsRegistryVersionProvider.notifier).state++;
                     },
                   ),
@@ -185,34 +170,9 @@ class FsContactSecurityCard extends ConsumerWidget {
                     label: t(context, 'security.fs.action.reset'),
                     icon: Icons.lock_reset,
                     onPressed: () async {
-                      final sm = ref.read(
-                        fsSessionManagerProvider(contactId),
-                      );
-                      final oldSessionId = sm.activeSessionId;
-                      sm.reset();
-                      // Remove orphaned ratchet state from cache
-                      if (oldSessionId != null) {
-                        ref
-                            .read(fsRatchetStateCacheProvider.notifier)
-                            .update((cache) {
-                          final c = {...cache};
-                          c.remove(oldSessionId);
-                          return c;
-                        });
-                      }
-                      // Update registry so UI reflects legacyOnly immediately
-                      final registry =
-                          ref.read(fsContactSecurityRegistryProvider);
-                      final ctrl = ref.read(
-                        fsOpportunisticControllerProvider(contactId),
-                      );
-                      registry.upsert(FsContactSecurityState(
-                        contactId: contactId,
-                        identityContext: ctrl.identityContext,
-                        sessionId: null,
-                        fsState: FsSessionState.legacyOnly,
-                      ));
+                      await _resetForAdvancedRekey(ref, contactId);
                       ref.read(fsRegistryVersionProvider.notifier).state++;
+                      if (!context.mounted) return;
                       // Snackbar confirmation
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
@@ -299,29 +259,6 @@ class FsContactSecurityCard extends ConsumerWidget {
                       ],
                     ),
                   ),
-                // §14.6.4 — Fallback warning for Advanced mode
-                if (_showFallbackWarning(ref, contactId, topState))
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.info_outline,
-                          size: 14,
-                          color: Colors.amber.shade700,
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            t(context, 'security.fs.warning.fallback_body'),
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: Colors.amber.shade800,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
               ],
             ),
           ],
@@ -329,21 +266,19 @@ class FsContactSecurityCard extends ConsumerWidget {
       ),
     );
   }
+}
 
-  static bool _showFallbackWarning(
-    WidgetRef ref,
-    String contactId,
-    FsSessionState topState,
-  ) {
-    if (topState != FsSessionState.fsActive) return false;
-    final modeService = ref.read(fsSecurityModeServiceProvider);
-    final ctrl = ref.read(fsOpportunisticControllerProvider(contactId));
-    final mode = modeService.getModeSync(
-      contactId: contactId,
-      identityContext: ctrl.identityContext,
-    );
-    return mode == FsSecurityMode.advanced;
-  }
+Future<void> _resetForAdvancedRekey(WidgetRef ref, String contactId) async {
+  final fsCtrl = ref.read(fsOpportunisticControllerProvider(contactId));
+  final removedSessionIds = await fsCtrl.resetForAdvancedRekey();
+
+  ref.read(fsRatchetStateCacheProvider.notifier).update((cache) {
+    final next = {...cache};
+    for (final sessionId in removedSessionIds) {
+      next.remove(sessionId);
+    }
+    return next;
+  });
 }
 
 Future<void> _resetForStrictRekey(WidgetRef ref, String contactId) async {
@@ -590,9 +525,7 @@ class _SessionRow extends StatelessWidget {
       'security.fs.device.session_label',
     ).replaceAll('{n}', '$index');
 
-    final fallbackLabel = session.fsState == FsSessionState.strictFsActive
-        ? t(context, 'security.fs.device.fallback_not_allowed')
-        : t(context, 'security.fs.device.fallback_allowed');
+    final fallbackLabel = t(context, 'security.fs.device.fallback_not_allowed');
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),

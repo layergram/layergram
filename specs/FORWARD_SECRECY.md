@@ -4,7 +4,7 @@ This document describes the Forward Secrecy (FS) model implemented in Layergram,
 preserves Layergram's existing properties (no server, no account, no public-key
 redistribution, plausible deniability), and the hardening notes required by the FS
 specification v1.18 — in particular the **secure memory handling limitations** (§20.2) and
-the **implementation review gate** (§20.4).
+the **release hardening review** (§20.4).
 
 It complements [../THREAT_MODEL.md](../THREAT_MODEL.md) (user-facing threat wording) and the
 message/identity specs under [./](.).
@@ -74,21 +74,25 @@ ratchet, so one sent payload is readable in FS by all of them. Decryption picks 
 matching one of the recipient's sessions, unwraps the content key (advancing only that device's
 ratchet), then decrypts the single ciphertext.
 
-A legacy fallback (`mc_fallback_key`, the content key carried in the identity-encrypted outer
-layer) is **optional and off by default**, so multi-envelope messages stay full FS
-(`fs_only`/`strict_fs`). When included, the message is classified `fs_with_fallback` and is no
-longer full FS; **Strict mode must never include it**. Conversations with a single active
-session keep using the single-envelope path unchanged.
+Legacy content fallback (`mc_fallback_key`, the content key carried in the identity-encrypted
+outer layer) is deprecated and MUST NOT be emitted by current senders. It weakens FS because a
+later compromise of the long-term identity key can recover the duplicated content key. Advanced
+and Strict/Maximum FS both send ratchet-only user content: a recipient device can read the
+message only if one `fs_wraps[]` entry, or the single-envelope FS fields, matches one of its FS
+sessions. If a receiver sees fallback material in a historic envelope, it classifies the message
+as `fs_with_fallback` but must not use that fallback to recover plaintext without a matching FS
+ratchet. Conversations with a single active session keep using the single-envelope path
+unchanged.
 
 ## Security modes
 
 Each contact has a per-contact security mode (`lib/core/crypto/fs_security_mode.dart`):
 
 - **Base** — FS negotiation is suppressed entirely; legacy model only.
-- **Advanced** — opportunistic FS with compatibility fallback allowed. While FS is active the
-  contact card shows an amber fallback warning, because some messages may still use the legacy
-  model (spec §14.6.4).
-- **Strict (Maximum FS)** — contact-level mode with no legacy fallback. Requires
+- **Advanced** — opportunistic FS. FS upgrades automatically, supports multiple active device
+  sessions through per-device wraps, and never duplicates active FS user content through a
+  legacy plaintext/content-key fallback.
+- **Strict (Maximum FS)** — contact-level mode with device-bound send enforcement. Requires
   explicit mutual consent; while requested but not yet confirmed the UI shows a distinct
   "Maximum FS requested" pending state, not active Strict (spec §14.6.3).
   When enabled for a contact, every already-known active device session for that identity is
@@ -103,8 +107,11 @@ Each contact has a per-contact security mode (`lib/core/crypto/fs_security_mode.
 
 Every message carries one of eight opaque classifications
 (`lib/core/crypto/fs_message_classification.dart`): `legacy`, `pre_fs`, `fs_negotiation`,
-`fs_with_fallback`, `fs_only`, `strict_fs`, `fs_failed`, `unknown`. The chat shows only a small
-icon; the message-details panel explains the classification.
+`fs_with_fallback`, `fs_only`, `strict_fs`, `fs_failed`, `unknown`. Current senders should emit
+`fs_only` for Advanced active FS and `strict_fs` for Maximum FS. `fs_with_fallback` is retained
+only to identify historic/degraded envelopes that carried fallback material; it is not treated
+as full Forward Secrecy. The chat shows only a small icon; the message-details panel explains
+the classification.
 
 ## Storage and plausible deniability
 
@@ -199,11 +206,11 @@ copies produced by the garbage collector or by intermediate APIs may persist unt
 Layergram therefore treats memory zeroization as best-effort and relies on minimizing secret
 lifetime plus OS-level protections, not on guaranteed erasure.
 
-## Implementation review gate (§20.4)
+## Release hardening review (§20.4)
 
-Before enabling FS for normal users, the implementation must pass a security review covering the
-items below. This checklist is the release gate; any divergence from the specification must be
-documented (see "Divergences") before release.
+Forward Secrecy is integrated into Layergram. The implementation passed the security review items
+below before being promoted from implementation work into an app feature. Any future divergence
+from the specification must be documented (see "Divergences") before release.
 
 - [x] handshake transcript construction;
 - [x] DH computation order;
@@ -219,9 +226,8 @@ documented (see "Divergences") before release.
 - [x] memory-wipe best effort and documented limitations;
 - [x] local DoS behavior.
 
-The checklist above reflects the dedicated review performed on this branch. It does not imply
-that FS is already present in public store builds or in the official public release
-description.
+The checklist above reflects the dedicated review performed before treating Forward Secrecy as an
+available Layergram feature.
 
 ## Divergences from the specification
 

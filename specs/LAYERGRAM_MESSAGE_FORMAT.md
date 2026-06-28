@@ -1,20 +1,20 @@
 # Layergram Message Format (LMF) Specification
 
 **Version:** 2.1
-**Status:** Forward Secrecy branch draft; LMF v2 base format stable
+**Status:** Stable; includes integrated Forward Secrecy extensions
 
 This document defines the **Layergram Message Format (LMF)**, the protocol used by Layergram to embed end-to-end encrypted messages within standard, visually innocuous text messages.
 
 ## Version History
 
-- **LMF v2.1 (Forward Secrecy branch draft)**: Adds optional Forward Secrecy envelope fields and `x.fs` control extensions while preserving the raw-binary outer transport.
+- **LMF v2.1 (Forward Secrecy)**: Adds optional Forward Secrecy envelope fields and `x.fs` control extensions while preserving the raw-binary outer transport.
 - **LMF v2.0 (Stable base)**: Introduces structured inner container, gzip compression, hardened Unicode alphabet. Always encode with v2; decode supports v2 then v1 fallback.
 - **LMF v1.1 (Legacy)**: Original format with raw JSON encryption. Decode-only support for backward compatibility.
 
-The stable LMF v2.0 base format is implemented by the public Layergram application and by
-official Layergram builds released through the project's official channels. The v2.1 Forward
-Secrecy additions are implemented in the FS branch until they are promoted into an official
-release.
+The stable LMF v2 format is implemented by the public Layergram application and by official
+Layergram builds released through the project's official channels. LMF v2.1 extends that format
+with integrated Forward Secrecy metadata while preserving v2 raw-binary outer transport and
+decode compatibility with older v2/v1 messages.
 
 ---
 
@@ -117,15 +117,18 @@ once with a fresh content key and wrap that key separately for each device ratch
 | `mc_cipher` | string | Base64-encoded content ciphertext plus MAC |
 | `mc_nonce` | string | Base64-encoded content nonce |
 | `fs_wraps` | array | Per-session FS wraps for the content key |
-| `mc_fallback_key` | string? | Optional legacy fallback content key; forbidden in Strict/Maximum FS |
+| `mc_fallback_key` | string? | Deprecated legacy fallback content key; current senders MUST NOT emit it |
 
 Each `fs_wraps[]` entry uses the same FS fields as a single-envelope message
 (`fs_session`, `fs_ratchet_pub`, `fs_counter`, `fs_cipher`, `fs_nonce`), but its plaintext is
 the content key rather than the user message. The receiver selects the wrap matching one of its
 known sessions and advances only that ratchet.
 
-`mc_fallback_key` is off by default because it weakens Forward Secrecy. If present, the message
-classification is `fs_with_fallback`; Strict/Maximum FS messages must not include it.
+`mc_fallback_key` weakens Forward Secrecy by making the content key readable from the
+identity-encrypted outer wrapper. Current senders MUST NOT include it in any FS message,
+including Advanced and Strict/Maximum FS. If a receiver sees it in a historic message, the
+message classification is `fs_with_fallback`, but the fallback key MUST NOT be used to recover
+plaintext without a matching FS ratchet.
 
 ### 2.2 Raw Binary Ciphertext
 
@@ -324,8 +327,8 @@ minCoverLength = 64 + requiredCarrierSlots
 For exact user-facing validation, `rawPayloadBytes` means the final byte array
 that will be embedded after the complete message has been constructed and
 encrypted. This includes all optional protocol fields and envelopes, including
-forward-secrecy metadata such as `fs_*` fields, `x.fs`, `fs_multi`, `fs_wraps`,
-and `mc_fallback_key` when present. A pre-encryption estimate based only on the
+forward-secrecy metadata such as `fs_*` fields, `x.fs`, `fs_multi`, and `fs_wraps`.
+A pre-encryption estimate based only on the
 secret text length is therefore only a UI estimate; send/copy/share actions MUST
 re-check cover capacity against the final `rawPayloadBytes.length`.
 

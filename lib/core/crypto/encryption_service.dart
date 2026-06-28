@@ -76,12 +76,11 @@ class DecryptionResult {
   final bool fsReplayDetected;
 
   /// `true` when the decoded envelope carried FS ciphertext or FS wraps.
-  ///
-  /// This is independent from [newRatchetState]: an FS-with-fallback message
-  /// may be read by a device that has the identity key but no ratchet state.
   final bool isFsEnvelope;
 
   /// `true` when the FS envelope also carried a legacy identity-key fallback.
+  /// New senders must not emit this; receivers mark it as degraded metadata and
+  /// never use it to recover plaintext without a matching FS ratchet.
   final bool hasLegacyFallback;
 }
 
@@ -103,6 +102,12 @@ class EncryptionService {
     RatchetState? ratchetState,
     bool includeLegacyFallback = false,
   }) async {
+    if (includeLegacyFallback) {
+      throw ArgumentError(
+        'Legacy fallback is disabled for Forward Secrecy messages',
+      );
+    }
+
     // If we have an active ratchet state, use double ratchet encryption
     if (ratchetState != null) {
       final (:message, :newState) = await FsDoubleRatchet.encrypt(
@@ -123,7 +128,6 @@ class EncryptionService {
         'fs_counter': message.counter,
         'fs_cipher': base64Encode(message.ciphertext),
         'fs_nonce': base64Encode(message.nonce),
-        if (includeLegacyFallback) 'text': payload.text,
         if (payload.senderDisplayName != null)
           'senderDisplayName': payload.senderDisplayName,
         if (payload.expireAfter != null) 'expireAfter': payload.expireAfter,
@@ -203,10 +207,8 @@ class EncryptionService {
   /// A fresh random content key encrypts the payload text a single time
   /// (`mc_cipher`). That content key is then wrapped (ratchet-encrypted) once
   /// per session, so each of the contact's devices can recover it with its own
-  /// ratchet. When [includeLegacyFallback] is true, the content key is also
-  /// included in the identity-encrypted outer envelope (`mc_fallback_key`) so a
-  /// device without an FS session can still read it — this makes the message
-  /// `fs_with_fallback`, never full FS. Strict callers must pass `false`.
+  /// ratchet. Legacy content-key fallback is intentionally disabled: every
+  /// recipient device must have a matching FS session wrap to read the message.
   Future<MultiEnvelopeEncryptionResult> encryptMultiEnvelope({
     required String senderPrivateKeyBase64,
     required String recipientPublicKeyBase64,
@@ -215,6 +217,12 @@ class EncryptionService {
     Map<String, dynamic>? fsExtension,
     bool includeLegacyFallback = false,
   }) async {
+    if (includeLegacyFallback) {
+      throw ArgumentError(
+        'Legacy fallback is disabled for Forward Secrecy messages',
+      );
+    }
+
     if (sessionRatchets.isEmpty) {
       throw ArgumentError('sessionRatchets must not be empty');
     }
@@ -258,8 +266,6 @@ class EncryptionService {
       'mc_cipher': base64Encode([...mcBox.cipherText, ...mcBox.mac.bytes]),
       'mc_nonce': base64Encode(mcNonce),
       'fs_wraps': wraps,
-      if (includeLegacyFallback)
-        'mc_fallback_key': base64Encode(contentKeyBytes),
       if (payload.senderDisplayName != null)
         'senderDisplayName': payload.senderDisplayName,
       if (payload.expireAfter != null) 'expireAfter': payload.expireAfter,
@@ -343,22 +349,6 @@ class EncryptionService {
 
       final hasLegacyFallback = map['text'] is String;
       if (effectiveRatchet == null) {
-        if (hasLegacyFallback) {
-          return DecryptionResult(
-            payload: PlaintextPayload(
-              senderId: map['senderId'] as String,
-              recipientId: map['recipientId'] as String,
-              text: map['text'] as String,
-              timestamp: map['timestamp'] as int,
-              senderDisplayName: map['senderDisplayName'] as String?,
-              expireAfter: map['expireAfter'] as int?,
-              deleteAfterRead: (map['deleteAfterRead'] as bool?) ?? false,
-            ),
-            isFsEnvelope: true,
-            hasLegacyFallback: true,
-          );
-        }
-
         // The outer legacy layer was decrypted successfully, but the FS
         // inner payload requires the ratchet state which is gone (identity
         // reset, app reinstall, etc.).  Return metadata-only result so the
@@ -375,6 +365,7 @@ class EncryptionService {
           ),
           fsDecryptFailed: true,
           isFsEnvelope: true,
+          hasLegacyFallback: hasLegacyFallback,
         );
       }
 
@@ -451,8 +442,9 @@ class EncryptionService {
   ///
   /// Picks the wrap matching one of the recipient's sessions, unwraps the
   /// content key (advancing that session's ratchet), then decrypts the single
-  /// payload ciphertext. Falls back to `mc_fallback_key` when present and no
-  /// session matches; otherwise reports [DecryptionResult.fsDecryptFailed].
+  /// payload ciphertext. Historic envelopes may contain `mc_fallback_key`, but
+  /// this decoder never uses it to recover plaintext without a matching FS
+  /// session.
   Future<DecryptionResult> _decryptMultiEnvelope({
     required Map<String, dynamic> map,
     RatchetState? ratchetState,
@@ -515,14 +507,10 @@ class EncryptionService {
       );
       contentKeyBytes = Uint8List.fromList(plaintext);
       newState = ns;
-    } else if (hasLegacyFallback) {
-      // Legacy fallback: content key is readable via the identity-key outer
-      // layer (already decrypted to reach `map`).
-      contentKeyBytes = base64Decode(map['mc_fallback_key'] as String);
     }
 
     if (contentKeyBytes == null) {
-      // No matching session and no fallback — inner content unrecoverable.
+      // No matching session — inner content unrecoverable.
       return DecryptionResult(
         payload: buildPayload(''),
         fsDecryptFailed: true,

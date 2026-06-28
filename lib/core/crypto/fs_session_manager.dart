@@ -54,7 +54,7 @@ enum FsSessionState {
   /// Remote requested Strict FS mode; waiting for local consent.
   strictRequested,
 
-  /// Strict FS is fully active (no legacy fallback allowed).
+  /// Strict FS is fully active (device-bound send policy).
   strictFsActive,
 
   /// Session is broken and cannot be recovered without re-keying.
@@ -568,8 +568,8 @@ class FsSessionManager {
 
   /// Disables Maximum FS and reverts to [FsSessionState.fsActive].
   ///
-  /// Called when the user explicitly disables Maximum FS, allowing legacy
-  /// fallback again.
+  /// Called when the user explicitly disables Maximum FS and returns to the
+  /// non-device-bound active FS policy.
   void disableStrict() {
     _strictRequestedBeforeHandshake = false;
     if (_state == FsSessionState.strictFsActive) {

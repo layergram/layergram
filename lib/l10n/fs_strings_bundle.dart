@@ -55,7 +55,7 @@ class FsStringsBundle {
     'security.fs.warning.pending_activation':
         'Forward Secrecy upgrade is pending. Send a message to complete the handshake.',
     'security.fs.warning.fallback_allowed':
-        'If Forward Secrecy negotiation fails, this conversation will fall back to standard encryption.',
+        'Forward Secrecy messages are ratchet-only. Messages are not duplicated with the legacy identity key.',
     'security.fs.warning.no_silent_downgrade':
         'Maximum Forward Secrecy is active. Messages cannot be sent without a confirmed secure channel.',
 
@@ -178,15 +178,15 @@ class FsStringsBundle {
         'Maximum FS is not active yet. Layergram is waiting for a confirmed secure session. '
             'Until confirmation, this contact is not yet using Maximum Forward Secrecy.',
 
-    // Fallback warning (§14.6.4)
+    // Historic fallback warning (§14.6.4)
     'security.fs.warning.fallback_body':
-        'Compatibility fallback is allowed for this contact. Some messages may use the previous Layergram encryption model instead of full Forward Secrecy.',
+        'Legacy FS fallback is disabled. If an older message contains fallback material, Layergram will not use it without a matching FS session.',
 
     // Per-device/session labels (§14.4)
     'security.fs.device.session_label': 'Session {n}',
     'security.fs.device.unknown': 'Unknown session',
-    'security.fs.device.fallback_allowed': 'Fallback: allowed',
-    'security.fs.device.fallback_not_allowed': 'Fallback: not allowed',
+    'security.fs.device.fallback_allowed': 'Fallback: disabled',
+    'security.fs.device.fallback_not_allowed': 'Fallback: disabled',
     'security.fs.device.mode_base': 'Mode: Base',
     'security.fs.device.mode_advanced': 'Mode: Advanced',
     'security.fs.device.mode_strict': 'Mode: Strict',
@@ -213,7 +213,7 @@ class FsStringsBundle {
     'security.fs.mode.base_desc': 'Standard encryption. Maximum compatibility.',
     'security.fs.mode.advanced_title': 'Advanced',
     'security.fs.mode.advanced_desc':
-        'Automatic Forward Secrecy when supported. Legacy fallback allowed.',
+        'Automatic Forward Secrecy when supported. No legacy content fallback.',
     'security.fs.mode.strict_title': 'Maximum',
     'security.fs.mode.strict_desc':
         'Strongest protection. Device-bound, no fallback.',
@@ -239,9 +239,9 @@ class FsStringsBundle {
     'security.fs.cls.negotiation': 'FS negotiation',
     'security.fs.cls.negotiation.desc':
         'This message was part of the Forward Secrecy handshake negotiation.',
-    'security.fs.cls.fs_fallback': 'Forward Secrecy',
+    'security.fs.cls.fs_fallback': 'Degraded FS',
     'security.fs.cls.fs_fallback.desc':
-        'This message is protected by Forward Secrecy with compatibility fallback allowed.',
+        'This older message included legacy fallback material and is not treated as full Forward Secrecy.',
     'security.fs.cls.fs_only': 'FS only',
     'security.fs.cls.fs_only.desc':
         'This message is protected by Forward Secrecy only. It cannot be decrypted with the legacy key.',

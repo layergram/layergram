@@ -35,14 +35,13 @@ enum FsMessageClassification {
   /// negotiation payload.
   fsNegotiation,
 
-  /// FS encrypted *and also* legacy identity-key encrypted (same content
-  /// wrapped both ways), so the message is decryptable via either the FS
-  /// ratchet or the long-term identity key.
+  /// Historic/degraded FS envelope that also carried legacy identity-key
+  /// fallback material, so the content was not protected against later
+  /// compromise of the long-term identity key.
   ///
-  /// Per §9.5 this is the only case that must NOT be treated as full FS.
-  /// It corresponds to a multi-envelope message (§9.6) that includes the
-  /// optional legacy fallback (`mc_fallback_key`). Advanced mode emits this
-  /// classification; Strict / Maximum FS must not.
+  /// Current senders must not emit this. Receivers may classify old messages
+  /// this way when fallback material is present, but must not use that fallback
+  /// to recover plaintext without a matching FS ratchet.
   fsWithFallback,
 
   /// FS encrypted only; not decryptable by the legacy identity key.
@@ -86,17 +85,17 @@ extension FsMessageClassificationExt on FsMessageClassification {
     }
   }
 
-  /// Whether this classification represents a message whose plaintext
-  /// was protected by Forward Secrecy.
+  /// Whether this classification represents a message whose plaintext was
+  /// protected against later compromise of the long-term identity key.
   bool get isFsProtected {
     switch (this) {
-      case FsMessageClassification.fsWithFallback:
       case FsMessageClassification.fsOnly:
       case FsMessageClassification.strictFs:
         return true;
       case FsMessageClassification.legacy:
       case FsMessageClassification.preFs:
       case FsMessageClassification.fsNegotiation:
+      case FsMessageClassification.fsWithFallback:
       case FsMessageClassification.fsFailed:
       case FsMessageClassification.unknown:
         return false;

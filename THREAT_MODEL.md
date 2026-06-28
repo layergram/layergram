@@ -47,7 +47,7 @@ Layergram is honest about its limits. The following concerns are explicitly out 
 
 This section adopts the threat-model wording recommended by the Forward Secrecy specification (§18). The full protocol and implementation hardening notes live in [specs/FORWARD_SECRECY.md](specs/FORWARD_SECRECY.md).
 
-**Forward Secrecy.** Layergram supports opportunistic Forward Secrecy for established device-to-device sessions. Forward Secrecy is negotiated inside ordinary Layergram messages and does not require users to redistribute their public contact keys. Until a compatible session is confirmed, Layergram continues to use the existing identity-based encryption model for compatibility.
+**Forward Secrecy.** Layergram supports opportunistic Forward Secrecy for established device-to-device sessions. Forward Secrecy is negotiated inside ordinary Layergram messages and does not require users to redistribute their public contact keys. Until a compatible session is confirmed, Layergram continues to use the existing identity-based encryption model for compatibility. Once FS is active, user content is ratchet-only and is not duplicated in an identity-key fallback copy.
 
 **Maximum Forward Secrecy.** When Strict/Maximum FS is active for a contact, Layergram must not silently fall back to legacy encryption. If the active strict session is replaced by a new pending session or an unexpected device appears, sending is paused until the user repairs the session or disables Maximum FS.
 

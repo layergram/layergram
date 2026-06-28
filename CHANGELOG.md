@@ -7,7 +7,12 @@ The format is inspired by Keep a Changelog and reflects the public GitHub Releas
 ## [Unreleased]
 
 ### Added
-- No unreleased changes yet.
+- Integrated Forward Secrecy support with Advanced opportunistic FS and Maximum device-bound FS.
+- Added LMF v2.1 Forward Secrecy envelope fields, control extensions, and multi-envelope support.
+
+### Changed
+- Active Forward Secrecy messages are ratchet-only and no longer include legacy identity-key content fallback.
+- Updated Forward Secrecy documentation and localized security copy for the integrated no-fallback behavior.
 
 ## [1.3.0+19] - 2026-04-23
 

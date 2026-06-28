@@ -1,5 +1,5 @@
 /// Tests for §14.6.3 (pending activation indicator) and §14.6.4
-/// (fallback warning) — Gap #7.
+/// (historic/degraded fallback wording) — Gap #7.
 ///
 /// Verifies:
 ///  1. strictRequested maps to a distinct "strict_pending" status key,
@@ -68,7 +68,7 @@ void main() {
     });
   });
 
-  group('Localization coverage (§14.6.3 + §14.6.4)', () {
+  group('Localization coverage (§14.6.3 + historic §14.6.4)', () {
     final requiredKeys = [
       'security.fs.status.strict_pending',
       'security.fs.warning.fallback_body',

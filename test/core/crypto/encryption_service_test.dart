@@ -236,6 +236,28 @@ void main() {
       return (aRatchet, bRatchet);
     }
 
+    Future<EncryptedMessage> encryptEnvelopeWithKey({
+      required Map<String, dynamic> envelope,
+      required SecretKey key,
+      required String senderId,
+      required String recipientId,
+    }) async {
+      final algo = AesGcm.with256bits();
+      final nonce = algo.newNonce();
+      final box = await algo.encrypt(
+        utf8.encode(jsonEncode(envelope)),
+        secretKey: key,
+        nonce: nonce,
+      );
+      return EncryptedMessage(
+        version: 2,
+        senderId: senderId,
+        recipientId: recipientId,
+        nonceBase64: base64Encode(nonce),
+        ciphertextBase64: base64Encode([...box.cipherText, ...box.mac.bytes]),
+      );
+    }
+
     test('FS-encrypted message can be decrypted by recipient', () async {
       final service = EncryptionService();
       final alice = await _keyMaterial(await x255190.newKeyPair());
@@ -307,6 +329,81 @@ void main() {
         ),
         throwsA(anything),
       );
+    });
+
+    test('FS encryption rejects legacy fallback generation', () async {
+      final service = EncryptionService();
+      final alice = await _keyMaterial(await x255190.newKeyPair());
+      final bob = await _keyMaterial(await x255190.newKeyPair());
+      final (aRatchet, _) = await buildRatchets();
+
+      expect(
+        () => service.encrypt(
+          senderPrivateKeyBase64: alice.privateKeyBase64,
+          recipientPublicKeyBase64: bob.publicKeyBase64,
+          payload: const PlaintextPayload(
+            senderId: 'alice',
+            recipientId: 'bob',
+            text: 'fallback must not be generated',
+            timestamp: 1700000000,
+          ),
+          ratchetState: aRatchet,
+          includeLegacyFallback: true,
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('historic single-envelope fallback is not used without ratchet',
+        () async {
+      final service = EncryptionService();
+      final alice = await _keyMaterial(await x255190.newKeyPair());
+      final bob = await _keyMaterial(await x255190.newKeyPair());
+      final (aRatchet, _) = await buildRatchets();
+      const secretText = 'fallback text must be ignored';
+
+      final encResult = await service.encrypt(
+        senderPrivateKeyBase64: alice.privateKeyBase64,
+        recipientPublicKeyBase64: bob.publicKeyBase64,
+        payload: const PlaintextPayload(
+          senderId: 'alice',
+          recipientId: 'bob',
+          text: secretText,
+          timestamp: 1700000000,
+        ),
+        ratchetState: aRatchet,
+      );
+
+      final key = await service.deriveSymmetricKey(
+        localPrivateKeyBase64: bob.privateKeyBase64,
+        remotePublicKeyBase64: alice.publicKeyBase64,
+      );
+      final envelope = await service.tryDecryptEnvelopeWithKey(
+        message: encResult.message,
+        key: key,
+      );
+      expect(envelope, isNotNull);
+      final historicEnvelope = <String, dynamic>{
+        ...envelope!,
+        'text': secretText,
+      };
+      final historicMessage = await encryptEnvelopeWithKey(
+        envelope: historicEnvelope,
+        key: key,
+        senderId: 'alice',
+        recipientId: 'bob',
+      );
+
+      final decoded = await service.decrypt(
+        recipientPrivateKeyBase64: bob.privateKeyBase64,
+        senderPublicKeyBase64: alice.publicKeyBase64,
+        message: historicMessage,
+      );
+
+      expect(decoded.fsDecryptFailed, isTrue);
+      expect(decoded.isFsEnvelope, isTrue);
+      expect(decoded.hasLegacyFallback, isTrue);
+      expect(decoded.payload.text, isEmpty);
     });
 
     test('sender cannot re-decrypt own FS-encrypted message', () async {
