@@ -13,11 +13,13 @@
 // limitations under the License.
 
 import 'dart:convert';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../core/providers.dart';
 import '../../l10n/app_strings.dart';
@@ -70,6 +72,125 @@ class _MyIdentityViewState extends ConsumerState<MyIdentityView> {
     }
   }
 
+  Future<Uint8List?> _qrPngBytes(String data) async {
+    final painter = QrPainter(
+      data: data,
+      version: QrVersions.auto,
+      errorCorrectionLevel: QrErrorCorrectLevel.M,
+      gapless: false,
+      eyeStyle: const QrEyeStyle(
+        eyeShape: QrEyeShape.square,
+        color: Colors.black,
+      ),
+      dataModuleStyle: const QrDataModuleStyle(
+        dataModuleShape: QrDataModuleShape.square,
+        color: Colors.black,
+      ),
+    );
+    const size = Size.square(1024);
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()..color = Colors.white,
+    );
+    painter.paint(canvas, size);
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(
+      size.width.toInt(),
+      size.height.toInt(),
+    );
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    return byteData?.buffer.asUint8List();
+  }
+
+  Future<void> _shareQrImage(String data) async {
+    final messenger = ScaffoldMessenger.of(context);
+    if (data.trim().isEmpty) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(AppStrings.t(context, 'identityQrImageUnavailable')),
+        ),
+      );
+      return;
+    }
+
+    final container = ProviderScope.containerOf(context);
+    container.read(isSharingProvider.notifier).state = true;
+    try {
+      final bytes = await _qrPngBytes(data);
+      if (bytes == null || bytes.isEmpty) {
+        if (!mounted) return;
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(AppStrings.t(context, 'identityQrImageShareFailed')),
+          ),
+        );
+        return;
+      }
+      if (!mounted) return;
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [
+            XFile.fromData(
+              bytes,
+              mimeType: 'image/png',
+              name: 'layergram-identity-qr.png',
+            ),
+          ],
+          text: AppStrings.t(context, 'identityQrImageShareText'),
+          subject: AppStrings.t(context, 'identityQrImageShareSubject'),
+          sharePositionOrigin: sharePositionOriginForContext(context),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(AppStrings.t(context, 'identityQrImageShareFailed')),
+        ),
+      );
+    } finally {
+      container.read(isSharingProvider.notifier).state = false;
+    }
+  }
+
+  Future<void> _showQrActions(String data) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        final t = AppStrings.t;
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  t(sheetContext, 'identityQrActionsTitle'),
+                  style: Theme.of(sheetContext).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                Text(t(sheetContext, 'identityQrActionsSubtitle')),
+                const SizedBox(height: 12),
+                ListTile(
+                  leading: const Icon(Icons.file_download_outlined),
+                  title: Text(t(sheetContext, 'shareOrSaveQrImage')),
+                  onTap: () async {
+                    Navigator.of(sheetContext).pop();
+                    await _shareQrImage(data);
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Watch the passphrase state so the view rebuilds when the active key changes
@@ -89,8 +210,9 @@ class _MyIdentityViewState extends ConsumerState<MyIdentityView> {
             return Center(
               child: FilledButton(
                 onPressed: () async {
-                  final created =
-                      await ref.read(identityManagerProvider).createNewIdentity();
+                  final created = await ref
+                      .read(identityManagerProvider)
+                      .createNewIdentity();
                   ref.read(activeIdentityIdProvider.notifier).state =
                       created.identityId;
                   ref.read(identityReloadTokenProvider.notifier).state++;
@@ -136,11 +258,14 @@ class _MyIdentityViewState extends ConsumerState<MyIdentityView> {
                             focusNode: _nameFocus,
                             onSubmitted: (_) => _saveDisplayName(),
                             decoration: InputDecoration(
-                              labelText: AppStrings.t(context, 'displayNameLabel'),
-                              hintText: AppStrings.t(context, 'displayNameHint'),
+                              labelText:
+                                  AppStrings.t(context, 'displayNameLabel'),
+                              hintText:
+                                  AppStrings.t(context, 'displayNameHint'),
                               border: const OutlineInputBorder(),
                               suffixIcon: IconButton(
-                                tooltip: AppStrings.t(context, 'saveDisplayName'),
+                                tooltip:
+                                    AppStrings.t(context, 'saveDisplayName'),
                                 icon: const Icon(Icons.check_circle_outline),
                                 onPressed: () {
                                   _saveDisplayName();
@@ -176,16 +301,58 @@ class _MyIdentityViewState extends ConsumerState<MyIdentityView> {
                           final payload = payloadSnap.data;
                           final data =
                               payload == null ? '' : jsonEncode(payload);
-                          return QrImageView(
-                            data: data,
-                            size: 220,
-                            eyeStyle: QrEyeStyle(
-                                eyeShape: QrEyeShape.square,
-                                color: Theme.of(context).colorScheme.onSurface),
-                            dataModuleStyle: QrDataModuleStyle(
-                                dataModuleShape: QrDataModuleShape.square,
-                                color: Theme.of(context).colorScheme.onSurface),
-                            backgroundColor: Colors.transparent,
+                          return Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Tooltip(
+                                message: AppStrings.t(
+                                    context, 'identityQrActionHint'),
+                                child: Semantics(
+                                  button: true,
+                                  label: AppStrings.t(
+                                      context, 'identityQrActionHint'),
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(18),
+                                    onTap: data.isEmpty
+                                        ? null
+                                        : () => _showQrActions(data),
+                                    onLongPress: data.isEmpty
+                                        ? null
+                                        : () => _showQrActions(data),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(8),
+                                      child: QrImageView(
+                                        data: data,
+                                        size: 220,
+                                        eyeStyle: QrEyeStyle(
+                                          eyeShape: QrEyeShape.square,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurface,
+                                        ),
+                                        dataModuleStyle: QrDataModuleStyle(
+                                          dataModuleShape:
+                                              QrDataModuleShape.square,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurface,
+                                        ),
+                                        backgroundColor: Colors.transparent,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              TextButton.icon(
+                                onPressed: data.isEmpty
+                                    ? null
+                                    : () => _showQrActions(data),
+                                icon: const Icon(Icons.file_download_outlined),
+                                label: Text(AppStrings.t(
+                                    context, 'shareOrSaveQrImage')),
+                              ),
+                            ],
                           );
                         },
                       );
@@ -204,8 +371,10 @@ class _MyIdentityViewState extends ConsumerState<MyIdentityView> {
                                     ),
                                   ),
                                   onPressed: () async {
-                                    final messenger = ScaffoldMessenger.of(context);
-                                    final successMsg = AppStrings.t(context, 'identityLinkCopied');
+                                    final messenger =
+                                        ScaffoldMessenger.of(context);
+                                    final successMsg = AppStrings.t(
+                                        context, 'identityLinkCopied');
                                     final link = await ref
                                         .read(myIdentityControllerProvider)
                                         .identityShareLink();
@@ -219,12 +388,14 @@ class _MyIdentityViewState extends ConsumerState<MyIdentityView> {
                                       ),
                                     );
                                   },
-                                  child: Text(AppStrings.t(context, 'copyIdentityAsLink')),
+                                  child: Text(AppStrings.t(
+                                      context, 'copyIdentityAsLink')),
                                 ),
                               ),
                               const SizedBox(width: 8),
                               Tooltip(
-                                message: AppStrings.t(context, 'shareContactTooltip'),
+                                message: AppStrings.t(
+                                    context, 'shareContactTooltip'),
                                 child: FilledButton.tonal(
                                   style: FilledButton.styleFrom(
                                     minimumSize: const Size.square(48),
@@ -237,7 +408,9 @@ class _MyIdentityViewState extends ConsumerState<MyIdentityView> {
                                     final link = await ref
                                         .read(myIdentityControllerProvider)
                                         .identityShareLink();
-                                    if (link.isEmpty || !context.mounted) return;
+                                    if (link.isEmpty || !context.mounted) {
+                                      return;
+                                    }
                                     await shareTextExternally(context, link);
                                   },
                                   child: const Icon(Icons.ios_share_outlined),
@@ -292,7 +465,8 @@ class _MyIdentityViewState extends ConsumerState<MyIdentityView> {
                                 ),
                               );
                             },
-                            child: Text(AppStrings.t(context, 'showRecoveryPhrase')),
+                            child: Text(
+                                AppStrings.t(context, 'showRecoveryPhrase')),
                           ),
                         ],
                       );

@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import 'dart:math' as math;
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -20,6 +22,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/crypto/seed_service.dart';
 import '../../core/providers.dart';
 import '../../l10n/app_strings.dart';
+
+const _gettingStartedGuideUrl = 'https://layergram.app/gettingstarted/';
 
 class CreateOrRestoreView extends ConsumerStatefulWidget {
   const CreateOrRestoreView({super.key, required this.onCompleted});
@@ -69,6 +73,10 @@ class _CreateOrRestoreViewState extends ConsumerState<CreateOrRestoreView> {
     );
   }
 
+  Future<void> _openGettingStartedGuide() {
+    return _openExternalLink(_gettingStartedGuideUrl);
+  }
+
   void _dismissKeyboard() {
     FocusManager.instance.primaryFocus?.unfocus();
   }
@@ -99,7 +107,8 @@ class _CreateOrRestoreViewState extends ConsumerState<CreateOrRestoreView> {
 
       var nextIndex = -1;
       String? token;
-      if (termsIndex != -1 && (privacyIndex == -1 || termsIndex < privacyIndex)) {
+      if (termsIndex != -1 &&
+          (privacyIndex == -1 || termsIndex < privacyIndex)) {
         nextIndex = termsIndex;
         token = '{terms}';
       } else if (privacyIndex != -1) {
@@ -151,13 +160,12 @@ class _CreateOrRestoreViewState extends ConsumerState<CreateOrRestoreView> {
       _error = null;
     });
     try {
-      final created =
-          await ref.read(identityManagerProvider).createNewIdentity(displayName: name);
+      final mnemonic = ref.read(seedServiceProvider).generateMnemonic();
       if (!mounted) return;
 
-      final words = created.mnemonic.trim().split(RegExp(r'\s+'));
-      final targetIndex = words.length >= 7 ? 7 : words.length;
-      final expected = words[targetIndex - 1];
+      final words = mnemonic.trim().split(RegExp(r'\s+'));
+      final targetIndex = math.Random.secure().nextInt(words.length) + 1;
+      final expected = words[targetIndex - 1].toLowerCase();
 
       while (true) {
         _confirmWordCtrl.clear();
@@ -170,62 +178,28 @@ class _CreateOrRestoreViewState extends ConsumerState<CreateOrRestoreView> {
             return LayoutBuilder(
               builder: (context, constraints) {
                 return AlertDialog(
-                  title: Text(t(dialogContext, 'confirmRecoveryPhrase')),
+                  title: Text(t(dialogContext, 'recoveryPhraseDialogTitle')),
                   content: ConstrainedBox(
                     constraints: BoxConstraints(
                       maxHeight: constraints.maxHeight * 0.7,
                     ),
                     child: SingleChildScrollView(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            t(dialogContext, 'recoveryPhraseSaveWarning'),
-                            style: const TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          const SizedBox(height: 16),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: Theme.of(context).colorScheme.outlineVariant,
-                              ),
-                            ),
-                            child: SelectableText(
-                              created.mnemonic,
-                              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                fontFamily: 'monospace',
-                                fontWeight: FontWeight.w500,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            t(dialogContext, 'confirmWordPrompt')
-                                .replaceAll('{index}', '$targetIndex'),
-                          ),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: _confirmWordCtrl,
-                            decoration: InputDecoration(
-                              border: const OutlineInputBorder(),
-                              hintText: t(dialogContext, 'confirmSeventhWordHint'),
-                              labelText: t(dialogContext, 'confirmSeventhWordHint'),
-                            ),
-                          ),
-                        ],
+                      child: _RecoveryPhraseDialogContent(
+                        mnemonic: mnemonic,
+                        targetIndex: targetIndex,
+                        confirmWordController: _confirmWordCtrl,
                       ),
                     ),
                   ),
                   actions: [
+                    TextButton.icon(
+                      onPressed: _openGettingStartedGuide,
+                      icon: const Icon(Icons.open_in_new),
+                      label: Text(t(dialogContext, 'onboardingGuideCta')),
+                    ),
                     FilledButton(
                       onPressed: () => Navigator.of(dialogContext).pop(true),
-                      child: Text(t(dialogContext, 'continueLabel')),
+                      child: Text(t(dialogContext, 'recoveryPhraseSavedCta')),
                     ),
                   ],
                 );
@@ -235,6 +209,14 @@ class _CreateOrRestoreViewState extends ConsumerState<CreateOrRestoreView> {
         );
         if (confirm == true &&
             _confirmWordCtrl.text.trim().toLowerCase() == expected) {
+          await ref.read(identityManagerProvider).restoreIdentityFromMnemonic(
+                mnemonic,
+                displayName: name,
+                derivationVersion:
+                    SeedService.preferredIdentityDerivationVersion,
+              );
+          if (!mounted) return;
+          await _showIdentityCreatedDialog();
           widget.onCompleted(false);
           return;
         } else {
@@ -272,6 +254,42 @@ class _CreateOrRestoreViewState extends ConsumerState<CreateOrRestoreView> {
     }
   }
 
+  Future<void> _showIdentityCreatedDialog() async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        final t = AppStrings.t;
+        return AlertDialog(
+          title: Text(t(dialogContext, 'identityCreatedTitle')),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(t(dialogContext, 'identityCreatedBody')),
+              const SizedBox(height: 12),
+              _InlineInfoBanner(
+                icon: Icons.public,
+                child: Text(t(dialogContext, 'identityCreatedPublicKeyNote')),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton.icon(
+              onPressed: _openGettingStartedGuide,
+              icon: const Icon(Icons.open_in_new),
+              label: Text(t(dialogContext, 'onboardingGuideCta')),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(t(dialogContext, 'openMyIdentity')),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Future<void> _restore() async {
     final name = _displayNameCtrl.text.trim();
     if (name.isEmpty) {
@@ -299,6 +317,7 @@ class _CreateOrRestoreViewState extends ConsumerState<CreateOrRestoreView> {
   @override
   Widget build(BuildContext context) {
     final t = AppStrings.t;
+    final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(title: Text(t(context, 'onboardingTitle'))),
       body: GestureDetector(
@@ -312,6 +331,53 @@ class _CreateOrRestoreViewState extends ConsumerState<CreateOrRestoreView> {
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.enhanced_encryption_outlined,
+                        color: theme.colorScheme.primary,
+                        size: 34,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              t(context, 'onboardingHeading'),
+                              style: theme.textTheme.titleLarge,
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              t(context, 'onboardingIntro'),
+                              style: theme.textTheme.bodyMedium,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  _InlineInfoBanner(
+                    icon: Icons.help_outline,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(t(context, 'onboardingGuideHint')),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton.icon(
+                            onPressed: _openGettingStartedGuide,
+                            icon: const Icon(Icons.open_in_new),
+                            label: Text(t(context, 'onboardingGuideCta')),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
                   Text(
                     t(context, 'onboardingSubtitle'),
                     style: Theme.of(context).textTheme.bodyLarge,
@@ -339,7 +405,9 @@ class _CreateOrRestoreViewState extends ConsumerState<CreateOrRestoreView> {
                               if (_isRestoreMode && !newMode) {
                                 _savedMnemonic = _mnemonicCtrl.text.trim();
                                 _mnemonicCtrl.clear();
-                              } else if (!_isRestoreMode && newMode && _savedMnemonic != null) {
+                              } else if (!_isRestoreMode &&
+                                  newMode &&
+                                  _savedMnemonic != null) {
                                 _mnemonicCtrl.text = _savedMnemonic!;
                                 _savedMnemonic = null;
                               }
@@ -347,7 +415,19 @@ class _CreateOrRestoreViewState extends ConsumerState<CreateOrRestoreView> {
                             });
                           },
                   ),
+                  const SizedBox(height: 12),
+                  _ModeExplanationCard(isRestoreMode: _isRestoreMode),
                   const SizedBox(height: 16),
+                  Text(
+                    t(
+                      context,
+                      _isRestoreMode
+                          ? 'onboardingRestoreHelper'
+                          : 'onboardingCreateHelper',
+                    ),
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 8),
                   TextField(
                     controller: _displayNameCtrl,
                     enabled: !_busy,
@@ -384,7 +464,8 @@ class _CreateOrRestoreViewState extends ConsumerState<CreateOrRestoreView> {
                         onChanged: _busy
                             ? null
                             : (value) {
-                                setState(() => _acceptedLegalConsent = value ?? false);
+                                setState(() =>
+                                    _acceptedLegalConsent = value ?? false);
                               },
                       ),
                       Expanded(
@@ -405,17 +486,324 @@ class _CreateOrRestoreViewState extends ConsumerState<CreateOrRestoreView> {
                     onPressed: _busy || !_acceptedLegalConsent
                         ? null
                         : (_isRestoreMode ? _restore : _create),
-                    child: Text(t(context, _isRestoreMode ? 'restoreNow' : 'createNow')),
+                    child: Text(t(
+                        context, _isRestoreMode ? 'restoreNow' : 'createNow')),
                   ),
                   if (_error != null) ...[
                     const SizedBox(height: 12),
                     Text(_error!, style: const TextStyle(color: Colors.red)),
                   ],
+                  const SizedBox(height: 18),
+                  _OnboardingStepList(
+                    steps: [
+                      _OnboardingStepData(
+                        icon: Icons.person_add_alt_1_outlined,
+                        title: t(context, 'onboardingStepCreateTitle'),
+                        body: t(context, 'onboardingStepCreateBody'),
+                      ),
+                      _OnboardingStepData(
+                        icon: Icons.vpn_key_outlined,
+                        title: t(context, 'onboardingStepSaveTitle'),
+                        body: t(context, 'onboardingStepSaveBody'),
+                      ),
+                      _OnboardingStepData(
+                        icon: Icons.qr_code_2_outlined,
+                        title: t(context, 'onboardingStepShareTitle'),
+                        body: t(context, 'onboardingStepShareBody'),
+                      ),
+                      _OnboardingStepData(
+                        icon: Icons.person_search_outlined,
+                        title: t(context, 'onboardingStepContactTitle'),
+                        body: t(context, 'onboardingStepContactBody'),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ModeExplanationCard extends StatelessWidget {
+  const _ModeExplanationCard({required this.isRestoreMode});
+
+  final bool isRestoreMode;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final t = AppStrings.t;
+    final title = t(
+      context,
+      isRestoreMode
+          ? 'onboardingRestoreModeTitle'
+          : 'onboardingCreateModeTitle',
+    );
+    final body = t(
+      context,
+      isRestoreMode ? 'onboardingRestoreModeBody' : 'onboardingCreateModeBody',
+    );
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isRestoreMode
+            ? theme.colorScheme.tertiaryContainer.withValues(alpha: 0.36)
+            : theme.colorScheme.primaryContainer.withValues(alpha: 0.42),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: isRestoreMode
+              ? theme.colorScheme.tertiary.withValues(alpha: 0.22)
+              : theme.colorScheme.primary.withValues(alpha: 0.18),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            isRestoreMode ? Icons.restore : Icons.looks_one_outlined,
+            color: isRestoreMode
+                ? theme.colorScheme.tertiary
+                : theme.colorScheme.primary,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: theme.textTheme.titleSmall),
+                const SizedBox(height: 4),
+                Text(body, style: theme.textTheme.bodySmall),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RecoveryPhraseDialogContent extends StatelessWidget {
+  const _RecoveryPhraseDialogContent({
+    required this.mnemonic,
+    required this.targetIndex,
+    required this.confirmWordController,
+  });
+
+  final String mnemonic;
+  final int targetIndex;
+  final TextEditingController confirmWordController;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppStrings.t;
+    final theme = Theme.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          t(context, 'recoveryPhraseDialogBody'),
+          style: theme.textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 12),
+        _InlineInfoBanner(
+          icon: Icons.lock_outline,
+          child: Text(t(context, 'recoveryPhraseDialogPrivacyNote')),
+        ),
+        const SizedBox(height: 16),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: theme.colorScheme.outlineVariant,
+            ),
+          ),
+          child: SelectableText(
+            mnemonic,
+            style: theme.textTheme.bodyLarge?.copyWith(
+              fontFamily: 'monospace',
+              fontWeight: FontWeight.w500,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(t(context, 'confirmWordBody')),
+        const SizedBox(height: 8),
+        TextField(
+          controller: confirmWordController,
+          textInputAction: TextInputAction.done,
+          decoration: InputDecoration(
+            border: const OutlineInputBorder(),
+            hintText: t(
+              context,
+              'confirmWordFieldLabel',
+              namedArgs: {'index': '$targetIndex'},
+            ),
+            labelText: t(
+              context,
+              'confirmWordFieldLabel',
+              namedArgs: {'index': '$targetIndex'},
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _InlineInfoBanner extends StatelessWidget {
+  const _InlineInfoBanner({
+    required this.icon,
+    required this.child,
+  });
+
+  final IconData icon;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primaryContainer.withValues(alpha: 0.42),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.18),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 20, color: theme.colorScheme.primary),
+          const SizedBox(width: 10),
+          Expanded(child: child),
+        ],
+      ),
+    );
+  }
+}
+
+class _OnboardingStepData {
+  const _OnboardingStepData({
+    required this.icon,
+    required this.title,
+    required this.body,
+  });
+
+  final IconData icon;
+  final String title;
+  final String body;
+}
+
+class _OnboardingStepList extends StatelessWidget {
+  const _OnboardingStepList({required this.steps});
+
+  final List<_OnboardingStepData> steps;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wide = constraints.maxWidth >= 560;
+        if (!wide) {
+          return Column(
+            children: [
+              for (var i = 0; i < steps.length; i++) ...[
+                _OnboardingStep(step: steps[i], index: i + 1),
+                if (i != steps.length - 1) const SizedBox(height: 8),
+              ],
+            ],
+          );
+        }
+
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (var i = 0; i < steps.length; i++)
+              SizedBox(
+                width: (constraints.maxWidth - 8) / 2,
+                child: _OnboardingStep(step: steps[i], index: i + 1),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _OnboardingStep extends StatelessWidget {
+  const _OnboardingStep({
+    required this.step,
+    required this.index,
+  });
+
+  final _OnboardingStepData step;
+  final int index;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withValues(alpha: 0.54),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              Icon(step.icon, color: theme.colorScheme.primary, size: 30),
+              Positioned(
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  width: 16,
+                  height: 16,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Text(
+                    '$index',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onPrimary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(step.title, style: theme.textTheme.titleSmall),
+                const SizedBox(height: 3),
+                Text(step.body, style: theme.textTheme.bodySmall),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
