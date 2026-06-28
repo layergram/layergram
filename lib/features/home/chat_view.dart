@@ -148,7 +148,7 @@ class ChatViewState extends ConsumerState<ChatView> {
   int _lastNewestTimestamp = 0;
   double _composerHeight = 240.0;
   bool _deleteAfterRead = false;
-  bool _linkMode = false;
+  bool _linkMode = true;
   String _encryptedOutput = '';
   bool _dirtySinceEncode = true;
   bool _sending = false;
