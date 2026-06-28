@@ -160,12 +160,10 @@ class _CreateOrRestoreViewState extends ConsumerState<CreateOrRestoreView> {
       _error = null;
     });
     try {
-      final created = await ref
-          .read(identityManagerProvider)
-          .createNewIdentity(displayName: name);
+      final mnemonic = ref.read(seedServiceProvider).generateMnemonic();
       if (!mounted) return;
 
-      final words = created.mnemonic.trim().split(RegExp(r'\s+'));
+      final words = mnemonic.trim().split(RegExp(r'\s+'));
       final targetIndex = math.Random.secure().nextInt(words.length) + 1;
       final expected = words[targetIndex - 1].toLowerCase();
 
@@ -187,7 +185,7 @@ class _CreateOrRestoreViewState extends ConsumerState<CreateOrRestoreView> {
                     ),
                     child: SingleChildScrollView(
                       child: _RecoveryPhraseDialogContent(
-                        mnemonic: created.mnemonic,
+                        mnemonic: mnemonic,
                         targetIndex: targetIndex,
                         confirmWordController: _confirmWordCtrl,
                       ),
@@ -211,6 +209,13 @@ class _CreateOrRestoreViewState extends ConsumerState<CreateOrRestoreView> {
         );
         if (confirm == true &&
             _confirmWordCtrl.text.trim().toLowerCase() == expected) {
+          await ref.read(identityManagerProvider).restoreIdentityFromMnemonic(
+                mnemonic,
+                displayName: name,
+                derivationVersion:
+                    SeedService.preferredIdentityDerivationVersion,
+              );
+          if (!mounted) return;
           await _showIdentityCreatedDialog();
           widget.onCompleted(false);
           return;
