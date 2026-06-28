@@ -66,6 +66,10 @@ class _ExpiryOption {
 
 class ChatViewState extends ConsumerState<ChatView> {
   late final MessagesRepository _messagesRepo;
+  static const _coverClearButtonKey =
+      ValueKey<String>('chat_composer_clear_cover');
+  static const _secretClearButtonKey =
+      ValueKey<String>('chat_composer_clear_secret');
   static final RegExp _linkCandidatePattern = RegExp(
     r'(layergram://|https?://|www\.|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})',
     caseSensitive: false,
@@ -377,6 +381,35 @@ class ChatViewState extends ConsumerState<ChatView> {
 
   void _dismissMessageInputFocus(PointerDownEvent _) {
     FocusManager.instance.primaryFocus?.unfocus();
+  }
+
+  BoxConstraints _clearButtonConstraints({required bool compact}) {
+    return compact
+        ? const BoxConstraints.tightFor(width: 32, height: 32)
+        : const BoxConstraints.tightFor(width: 40, height: 40);
+  }
+
+  Widget? _buildTextFieldClearButton({
+    required TextEditingController controller,
+    required FocusNode focusNode,
+    required Key key,
+    required bool compact,
+  }) {
+    if (controller.text.isEmpty) return null;
+    final color = Theme.of(context).colorScheme.onSurfaceVariant;
+    return IconButton(
+      key: key,
+      tooltip: AppStrings.t(context, 'clear'),
+      icon: Icon(Icons.close_rounded, size: compact ? 16 : 18),
+      color: color,
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: _clearButtonConstraints(compact: compact),
+      onPressed: () {
+        controller.clear();
+        focusNode.requestFocus();
+      },
+    );
   }
 
   void _acquireBackgroundHold() {
@@ -1484,7 +1517,7 @@ class ChatViewState extends ConsumerState<ChatView> {
         padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
         child: Card(
           key: _composerKey,
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -1643,9 +1676,17 @@ class ChatViewState extends ConsumerState<ChatView> {
                           decoration: InputDecoration(
                             isDense: true,
                             contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 8),
+                                horizontal: 8, vertical: 4),
                             labelText: t(context, 'coverText'),
                             labelStyle: const TextStyle(fontSize: 12),
+                            suffixIcon: _buildTextFieldClearButton(
+                              controller: _coverCtrl,
+                              focusNode: _coverFocusNode,
+                              key: _coverClearButtonKey,
+                              compact: true,
+                            ),
+                            suffixIconConstraints:
+                                _clearButtonConstraints(compact: true),
                             helperText: _coverTooShort
                                 ? t(context, 'coverTooShort')
                                     .replaceAll('{n}', '$_coverMissingCount')
@@ -1673,9 +1714,17 @@ class ChatViewState extends ConsumerState<ChatView> {
                         decoration: InputDecoration(
                           isDense: true,
                           contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 8),
+                              horizontal: 8, vertical: 4),
                           labelText: t(context, 'secretText'),
                           labelStyle: const TextStyle(fontSize: 12),
+                          suffixIcon: _buildTextFieldClearButton(
+                            controller: _secretCtrl,
+                            focusNode: _secretFocusNode,
+                            key: _secretClearButtonKey,
+                            compact: true,
+                          ),
+                          suffixIconConstraints:
+                              _clearButtonConstraints(compact: true),
                           counterText: _coverLimitCounterText(coverLengthLimit),
                           counterStyle: _coverLengthLimitExceeded
                               ? TextStyle(
@@ -1722,7 +1771,7 @@ class ChatViewState extends ConsumerState<ChatView> {
     // the keyboard immediately closes again (oscillation).
     final mqData = MediaQuery.of(context);
     final tightLandscape =
-        mqData.orientation == Orientation.landscape && mqData.size.height < 500;
+        mqData.size.width > mqData.size.height && mqData.size.height < 500;
     final portraitComposerMaxHeight = mqData.size.height >= 780
         ? 320.0
         : mqData.size.height >= 640
@@ -2579,6 +2628,17 @@ class ChatViewState extends ConsumerState<ChatView> {
                                               decoration: InputDecoration(
                                                 labelText:
                                                     t(context, 'coverText'),
+                                                suffixIcon:
+                                                    _buildTextFieldClearButton(
+                                                  controller: _coverCtrl,
+                                                  focusNode: _coverFocusNode,
+                                                  key: _coverClearButtonKey,
+                                                  compact: false,
+                                                ),
+                                                suffixIconConstraints:
+                                                    _clearButtonConstraints(
+                                                  compact: false,
+                                                ),
                                                 helperText: _coverTooShort
                                                     ? t(context,
                                                             'coverTooShort')
@@ -2612,6 +2672,17 @@ class ChatViewState extends ConsumerState<ChatView> {
                                             decoration: InputDecoration(
                                               labelText:
                                                   t(context, 'secretText'),
+                                              suffixIcon:
+                                                  _buildTextFieldClearButton(
+                                                controller: _secretCtrl,
+                                                focusNode: _secretFocusNode,
+                                                key: _secretClearButtonKey,
+                                                compact: false,
+                                              ),
+                                              suffixIconConstraints:
+                                                  _clearButtonConstraints(
+                                                compact: false,
+                                              ),
                                               counterText:
                                                   _coverLimitCounterText(
                                                 coverLengthLimit,

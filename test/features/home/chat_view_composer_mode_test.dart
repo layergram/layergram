@@ -71,7 +71,87 @@ void main() {
     expect(_composerModeSelection(tester), equals([true, false]));
     expect(find.text('coverText'), findsOneWidget);
   });
+
+  testWidgets('secret clear button appears only with text and clears the field',
+      (tester) async {
+    await _pumpChat(
+      tester,
+      chatMetaRepository: _TestChatMetaRepository(),
+    );
+
+    final secretField = find.byType(TextField);
+    expect(find.byKey(_secretClearButtonKey), findsNothing);
+
+    await tester.enterText(secretField, 'A secret draft');
+    await tester.pump();
+
+    expect(find.byKey(_secretClearButtonKey), findsOneWidget);
+    await tester.tap(find.byKey(_secretClearButtonKey));
+    await tester.pump();
+
+    final field = tester.widget<TextField>(secretField);
+    expect(field.controller?.text, isEmpty);
+    expect(find.byKey(_secretClearButtonKey), findsNothing);
+  });
+
+  testWidgets(
+      'clear buttons fit compact landscape cover mode and clear independently',
+      (tester) async {
+    await _pumpChat(
+      tester,
+      size: const Size(844, 390),
+      initialLinkMode: false,
+      chatMetaRepository: _TestChatMetaRepository(),
+    );
+
+    expect(tester.takeException(), isNull);
+
+    final fields = find.byType(TextField);
+    expect(fields, findsNWidgets(2));
+    expect(tester.widget<TextField>(fields.at(0)).maxLines, 1);
+
+    await tester.enterText(fields.at(0), 'Cover draft');
+    await tester.enterText(fields.at(1), 'Secret draft');
+    await tester.pump();
+
+    expect(find.byKey(_coverClearButtonKey), findsOneWidget);
+    expect(find.byKey(_secretClearButtonKey), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byKey(_coverClearButtonKey));
+    await tester.pump();
+
+    final coverField = tester.widget<TextField>(fields.at(0));
+    final secretField = tester.widget<TextField>(fields.at(1));
+    expect(coverField.controller?.text, isEmpty);
+    expect(secretField.controller?.text, 'Secret draft');
+    expect(find.byKey(_coverClearButtonKey), findsNothing);
+    expect(find.byKey(_secretClearButtonKey), findsOneWidget);
+  });
+
+  testWidgets('clear buttons fit desktop cover mode', (tester) async {
+    await _pumpChat(
+      tester,
+      size: const Size(1200, 800),
+      initialLinkMode: false,
+      chatMetaRepository: _TestChatMetaRepository(),
+    );
+
+    final fields = find.byType(TextField);
+    expect(fields, findsNWidgets(2));
+
+    await tester.enterText(fields.at(0), 'Cover draft');
+    await tester.enterText(fields.at(1), 'Secret draft');
+    await tester.pump();
+
+    expect(find.byKey(_coverClearButtonKey), findsOneWidget);
+    expect(find.byKey(_secretClearButtonKey), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
+
+const _coverClearButtonKey = ValueKey<String>('chat_composer_clear_cover');
+const _secretClearButtonKey = ValueKey<String>('chat_composer_clear_secret');
 
 List<bool> _composerModeSelection(WidgetTester tester) {
   final toggle = tester.widget<ToggleButtons>(find.byType(ToggleButtons).first);
@@ -80,10 +160,16 @@ List<bool> _composerModeSelection(WidgetTester tester) {
 
 Future<void> _pumpChat(
   WidgetTester tester, {
+  Size size = const Size(390, 844),
   bool? initialLinkMode,
   required _TestChatMetaRepository chatMetaRepository,
 }) async {
-  await tester.binding.setSurfaceSize(const Size(390, 844));
+  addTearDown(() {
+    tester.view.resetPhysicalSize();
+    tester.view.resetDevicePixelRatio();
+  });
+  tester.view.devicePixelRatio = 1.0;
+  tester.view.physicalSize = size;
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
