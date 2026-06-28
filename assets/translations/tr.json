@@ -410,5 +410,13 @@
   "security.cleanup.dialog_body": "Bu, eski şifrelenmiş arşivleri, terk edilmiş kimlik verilerini, paroladan türetilen kayıtları, güvenlik oturumlarını ve Layergram'nun şu anda şifresini çözemediği diğer verileri kalıcı olarak silebilir.",
   "security.cleanup.confirm_checkbox": "Bu eylemin geri döndürülemez olduğunu anlıyorum.",
   "security.cleanup.confirm_button": "Şimdi temizle",
-  "security.cleanup.done": "Şifresi çözülemeyen veriler temizlendi."
+  "security.cleanup.done": "Şifresi çözülemeyen veriler temizlendi.",
+  "identityQrActionHint": "Tap or long-press the QR to share or save it as an image.",
+  "identityQrActionsTitle": "Identity QR",
+  "identityQrActionsSubtitle": "This image contains only your public identity. Use the system sheet to save it to Photos or Files, or send it.",
+  "shareOrSaveQrImage": "Share or save QR PNG",
+  "identityQrImageShareText": "My Layergram identity QR",
+  "identityQrImageShareSubject": "Layergram identity QR",
+  "identityQrImageUnavailable": "QR not available yet",
+  "identityQrImageShareFailed": "Could not share the QR image"
 }

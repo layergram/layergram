@@ -410,5 +410,13 @@
   "security.cleanup.dialog_body": "Detta kan permanent radera gamla krypterade arkiv, övergivna identitetsdata, lösenfrashärledda poster, säkerhetssessioner och annan data som Layergram för närvarande inte kan dekryptera.",
   "security.cleanup.confirm_checkbox": "Jag förstår att denna åtgärd är oåterkallelig.",
   "security.cleanup.confirm_button": "Rengör nu",
-  "security.cleanup.done": "Okrypterbar data rensad."
+  "security.cleanup.done": "Okrypterbar data rensad.",
+  "identityQrActionHint": "Tap or long-press the QR to share or save it as an image.",
+  "identityQrActionsTitle": "Identity QR",
+  "identityQrActionsSubtitle": "This image contains only your public identity. Use the system sheet to save it to Photos or Files, or send it.",
+  "shareOrSaveQrImage": "Share or save QR PNG",
+  "identityQrImageShareText": "My Layergram identity QR",
+  "identityQrImageShareSubject": "Layergram identity QR",
+  "identityQrImageUnavailable": "QR not available yet",
+  "identityQrImageShareFailed": "Could not share the QR image"
 }

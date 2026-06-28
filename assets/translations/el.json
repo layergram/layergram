@@ -410,5 +410,13 @@
   "security.cleanup.dialog_body": "Αυτό μπορεί να διαγράψει οριστικά παλιά κρυπτογραφημένα αρχεία, εγκαταλελειμμένα δεδομένα ταυτότητας, εγγραφές που προέρχονται από φράση πρόσβασης, περιόδους λειτουργίας ασφαλείας και άλλα δεδομένα που το Layergram δεν μπορεί επί του παρόντος να αποκρυπτογραφήσει.",
   "security.cleanup.confirm_checkbox": "Κατανοώ ότι αυτή η ενέργεια είναι μη αναστρέψιμη.",
   "security.cleanup.confirm_button": "Καθαρίστε τώρα",
-  "security.cleanup.done": "Τα μη αποκρυπτογραφημένα δεδομένα καθαρίστηκαν."
+  "security.cleanup.done": "Τα μη αποκρυπτογραφημένα δεδομένα καθαρίστηκαν.",
+  "identityQrActionHint": "Tap or long-press the QR to share or save it as an image.",
+  "identityQrActionsTitle": "Identity QR",
+  "identityQrActionsSubtitle": "This image contains only your public identity. Use the system sheet to save it to Photos or Files, or send it.",
+  "shareOrSaveQrImage": "Share or save QR PNG",
+  "identityQrImageShareText": "My Layergram identity QR",
+  "identityQrImageShareSubject": "Layergram identity QR",
+  "identityQrImageUnavailable": "QR not available yet",
+  "identityQrImageShareFailed": "Could not share the QR image"
 }

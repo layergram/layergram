@@ -410,5 +410,13 @@
   "security.cleanup.dialog_body": "Cela peut supprimer définitivement les anciennes archives chiffrées, les données d'identité abandonnées, les enregistrements dérivés de phrases secrètes, les sessions de sécurité et d'autres données que Layergram ne peut actuellement pas déchiffrer.",
   "security.cleanup.confirm_checkbox": "Je comprends que cette action est irréversible.",
   "security.cleanup.confirm_button": "Nettoyer maintenant",
-  "security.cleanup.done": "Données indéchiffrables nettoyées."
+  "security.cleanup.done": "Données indéchiffrables nettoyées.",
+  "identityQrActionHint": "Tap or long-press the QR to share or save it as an image.",
+  "identityQrActionsTitle": "Identity QR",
+  "identityQrActionsSubtitle": "This image contains only your public identity. Use the system sheet to save it to Photos or Files, or send it.",
+  "shareOrSaveQrImage": "Share or save QR PNG",
+  "identityQrImageShareText": "My Layergram identity QR",
+  "identityQrImageShareSubject": "Layergram identity QR",
+  "identityQrImageUnavailable": "QR not available yet",
+  "identityQrImageShareFailed": "Could not share the QR image"
 }

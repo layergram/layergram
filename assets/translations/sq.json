@@ -410,5 +410,13 @@
   "security.cleanup.dialog_body": "Kjo mund të fshijë përgjithmonë arkivat e vjetra të enkriptuara, të dhënat e braktisura të identitetit, të dhënat e nxjerra nga fraza e kalimit, seancat e sigurisë dhe të dhëna të tjera që Layergram nuk mund t'i deshifrojë aktualisht.",
   "security.cleanup.confirm_checkbox": "Unë e kuptoj se ky veprim është i pakthyeshëm.",
   "security.cleanup.confirm_button": "Pastro tani",
-  "security.cleanup.done": "Të dhënat e padekriptueshme u pastruan."
+  "security.cleanup.done": "Të dhënat e padekriptueshme u pastruan.",
+  "identityQrActionHint": "Tap or long-press the QR to share or save it as an image.",
+  "identityQrActionsTitle": "Identity QR",
+  "identityQrActionsSubtitle": "This image contains only your public identity. Use the system sheet to save it to Photos or Files, or send it.",
+  "shareOrSaveQrImage": "Share or save QR PNG",
+  "identityQrImageShareText": "My Layergram identity QR",
+  "identityQrImageShareSubject": "Layergram identity QR",
+  "identityQrImageUnavailable": "QR not available yet",
+  "identityQrImageShareFailed": "Could not share the QR image"
 }

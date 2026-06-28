@@ -410,5 +410,13 @@
   "security.cleanup.dialog_body": "This may permanently delete old encrypted archives, abandoned identity data, passphrase-derived records, security sessions, and other data that Layergram cannot currently decrypt.",
   "security.cleanup.confirm_checkbox": "이 조치는 되돌릴 수 없음을 이해합니다.",
   "security.cleanup.confirm_button": "지금 청소하세요",
-  "security.cleanup.done": "해독할 수 없는 데이터가 정리되었습니다."
+  "security.cleanup.done": "해독할 수 없는 데이터가 정리되었습니다.",
+  "identityQrActionHint": "Tap or long-press the QR to share or save it as an image.",
+  "identityQrActionsTitle": "Identity QR",
+  "identityQrActionsSubtitle": "This image contains only your public identity. Use the system sheet to save it to Photos or Files, or send it.",
+  "shareOrSaveQrImage": "Share or save QR PNG",
+  "identityQrImageShareText": "My Layergram identity QR",
+  "identityQrImageShareSubject": "Layergram identity QR",
+  "identityQrImageUnavailable": "QR not available yet",
+  "identityQrImageShareFailed": "Could not share the QR image"
 }

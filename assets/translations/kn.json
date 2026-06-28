@@ -410,5 +410,13 @@
   "security.cleanup.dialog_body": "ಇದು ಹಳೆಯ ಎನ್‌ಕ್ರಿಪ್ಟ್ ಮಾಡಿದ ಆರ್ಕೈವ್‌ಗಳು, ಕೈಬಿಟ್ಟ ಗುರುತಿನ ಡೇಟಾ, ಪಾಸ್‌ಫ್ರೇಸ್-ಪಡೆದ ದಾಖಲೆಗಳು, ಭದ್ರತಾ ಸೆಷನ್‌ಗಳು ಮತ್ತು Layergram ಪ್ರಸ್ತುತ ಡೀಕ್ರಿಪ್ಟ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗದ ಇತರ ಡೇಟಾವನ್ನು ಶಾಶ್ವತವಾಗಿ ಅಳಿಸಬಹುದು.",
   "security.cleanup.confirm_checkbox": "ಈ ಕ್ರಿಯೆಯನ್ನು ಬದಲಾಯಿಸಲಾಗದು ಎಂದು ನಾನು ಅರ್ಥಮಾಡಿಕೊಂಡಿದ್ದೇನೆ.",
   "security.cleanup.confirm_button": "ಈಗ ಸ್ವಚ್ಛಗೊಳಿಸಿ",
-  "security.cleanup.done": "ಡೀಕ್ರಿಪ್ಟ್ ಮಾಡಲಾಗದ ಡೇಟಾವನ್ನು ಸ್ವಚ್ಛಗೊಳಿಸಲಾಗಿದೆ."
+  "security.cleanup.done": "ಡೀಕ್ರಿಪ್ಟ್ ಮಾಡಲಾಗದ ಡೇಟಾವನ್ನು ಸ್ವಚ್ಛಗೊಳಿಸಲಾಗಿದೆ.",
+  "identityQrActionHint": "Tap or long-press the QR to share or save it as an image.",
+  "identityQrActionsTitle": "Identity QR",
+  "identityQrActionsSubtitle": "This image contains only your public identity. Use the system sheet to save it to Photos or Files, or send it.",
+  "shareOrSaveQrImage": "Share or save QR PNG",
+  "identityQrImageShareText": "My Layergram identity QR",
+  "identityQrImageShareSubject": "Layergram identity QR",
+  "identityQrImageUnavailable": "QR not available yet",
+  "identityQrImageShareFailed": "Could not share the QR image"
 }

@@ -410,5 +410,13 @@
   "security.cleanup.dialog_body": "Wannan na iya goge tsoffin rumbun adana bayanan da aka yi watsi da su, bayanan sirri da aka yi watsi da su, bayanan da aka samu daga kalmar wucewa, zaman tsaro, da sauran bayanan da Layergram ba zai iya rusa su ba a halin yanzu.",
   "security.cleanup.confirm_checkbox": "Na fahimci wannan aikin ba zai iya jurewa ba.",
   "security.cleanup.confirm_button": "Tsaftace yanzu",
-  "security.cleanup.done": "An goge bayanan da ba a iya ɓoyewa."
+  "security.cleanup.done": "An goge bayanan da ba a iya ɓoyewa.",
+  "identityQrActionHint": "Tap or long-press the QR to share or save it as an image.",
+  "identityQrActionsTitle": "Identity QR",
+  "identityQrActionsSubtitle": "This image contains only your public identity. Use the system sheet to save it to Photos or Files, or send it.",
+  "shareOrSaveQrImage": "Share or save QR PNG",
+  "identityQrImageShareText": "My Layergram identity QR",
+  "identityQrImageShareSubject": "Layergram identity QR",
+  "identityQrImageUnavailable": "QR not available yet",
+  "identityQrImageShareFailed": "Could not share the QR image"
 }

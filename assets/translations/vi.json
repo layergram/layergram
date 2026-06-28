@@ -410,5 +410,13 @@
   "security.cleanup.dialog_body": "Điều này có thể xóa vĩnh viễn các kho lưu trữ được mã hóa cũ, dữ liệu nhận dạng bị bỏ rơi, bản ghi bắt nguồn từ cụm mật khẩu, phiên bảo mật và dữ liệu khác mà Layergram hiện không thể giải mã.",
   "security.cleanup.confirm_checkbox": "Tôi hiểu hành động này là không thể thay đổi được.",
   "security.cleanup.confirm_button": "Dọn dẹp ngay bây giờ",
-  "security.cleanup.done": "Dữ liệu không thể giải mã được đã được làm sạch."
+  "security.cleanup.done": "Dữ liệu không thể giải mã được đã được làm sạch.",
+  "identityQrActionHint": "Tap or long-press the QR to share or save it as an image.",
+  "identityQrActionsTitle": "Identity QR",
+  "identityQrActionsSubtitle": "This image contains only your public identity. Use the system sheet to save it to Photos or Files, or send it.",
+  "shareOrSaveQrImage": "Share or save QR PNG",
+  "identityQrImageShareText": "My Layergram identity QR",
+  "identityQrImageShareSubject": "Layergram identity QR",
+  "identityQrImageUnavailable": "QR not available yet",
+  "identityQrImageShareFailed": "Could not share the QR image"
 }

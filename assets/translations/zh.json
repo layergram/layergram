@@ -410,5 +410,13 @@
   "security.cleanup.dialog_body": "这可能会永久删除旧的加密档案、废弃的身份数据、密码派生记录、安全会话以及 Layergram 当前无法解密的其他数据。",
   "security.cleanup.confirm_checkbox": "我了解此操作是不可逆转的。",
   "security.cleanup.confirm_button": "立即清洁",
-  "security.cleanup.done": "无法解密的数据已清除。"
+  "security.cleanup.done": "无法解密的数据已清除。",
+  "identityQrActionHint": "Tap or long-press the QR to share or save it as an image.",
+  "identityQrActionsTitle": "Identity QR",
+  "identityQrActionsSubtitle": "This image contains only your public identity. Use the system sheet to save it to Photos or Files, or send it.",
+  "shareOrSaveQrImage": "Share or save QR PNG",
+  "identityQrImageShareText": "My Layergram identity QR",
+  "identityQrImageShareSubject": "Layergram identity QR",
+  "identityQrImageUnavailable": "QR not available yet",
+  "identityQrImageShareFailed": "Could not share the QR image"
 }

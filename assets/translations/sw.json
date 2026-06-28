@@ -410,5 +410,13 @@
   "security.cleanup.dialog_body": "Hii inaweza kufuta kabisa kumbukumbu za zamani zilizosimbwa, data ya utambulisho iliyoachwa, rekodi zinazotokana na kaulisiri, vipindi vya usalama na data nyingine ambayo Layergram haiwezi kusimbua kwa sasa.",
   "security.cleanup.confirm_checkbox": "Ninaelewa kuwa kitendo hiki hakiwezi kutenduliwa.",
   "security.cleanup.confirm_button": "Safi sasa",
-  "security.cleanup.done": "Data isiyoweza kusimba imesafishwa."
+  "security.cleanup.done": "Data isiyoweza kusimba imesafishwa.",
+  "identityQrActionHint": "Tap or long-press the QR to share or save it as an image.",
+  "identityQrActionsTitle": "Identity QR",
+  "identityQrActionsSubtitle": "This image contains only your public identity. Use the system sheet to save it to Photos or Files, or send it.",
+  "shareOrSaveQrImage": "Share or save QR PNG",
+  "identityQrImageShareText": "My Layergram identity QR",
+  "identityQrImageShareSubject": "Layergram identity QR",
+  "identityQrImageUnavailable": "QR not available yet",
+  "identityQrImageShareFailed": "Could not share the QR image"
 }

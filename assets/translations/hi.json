@@ -410,5 +410,13 @@
   "security.cleanup.dialog_body": "यह पुराने एन्क्रिप्टेड अभिलेखागार, परित्यक्त पहचान डेटा, पासफ़्रेज़-व्युत्पन्न रिकॉर्ड, सुरक्षा सत्र और अन्य डेटा को स्थायी रूप से हटा सकता है जिसे Layergram वर्तमान में डिक्रिप्ट नहीं कर सकता है।",
   "security.cleanup.confirm_checkbox": "मैं समझता हूं कि यह कार्रवाई अपरिवर्तनीय है.",
   "security.cleanup.confirm_button": "अभी साफ़ करें",
-  "security.cleanup.done": "अनडिक्रिप्टेबल डेटा साफ किया गया।"
+  "security.cleanup.done": "अनडिक्रिप्टेबल डेटा साफ किया गया।",
+  "identityQrActionHint": "Tap or long-press the QR to share or save it as an image.",
+  "identityQrActionsTitle": "Identity QR",
+  "identityQrActionsSubtitle": "This image contains only your public identity. Use the system sheet to save it to Photos or Files, or send it.",
+  "shareOrSaveQrImage": "Share or save QR PNG",
+  "identityQrImageShareText": "My Layergram identity QR",
+  "identityQrImageShareSubject": "Layergram identity QR",
+  "identityQrImageUnavailable": "QR not available yet",
+  "identityQrImageShareFailed": "Could not share the QR image"
 }
