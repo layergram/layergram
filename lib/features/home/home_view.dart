@@ -1407,7 +1407,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
         'secret': result['secret'] as String? ?? '',
         'expiry': result['expiry'] as int?,
         'deleteAfterRead': (result['deleteAfterRead'] as bool?) ?? false,
-        'linkMode': (result['linkMode'] as bool?) ?? false,
+        'linkMode': (result['linkMode'] as bool?) ?? true,
         'isSearching': result['isSearching'] as bool? ?? false,
         'searchQuery': result['searchQuery'] as String? ?? '',
         'searchIndex': result['searchIndex'] as int?,

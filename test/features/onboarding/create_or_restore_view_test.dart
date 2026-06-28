@@ -163,6 +163,43 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('restore recovery phrase input disables autocorrect',
+      (tester) async {
+    await pumpOnboarding(tester, const Size(390, 844));
+
+    await tester.tap(find.text('Restore identity'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Restore from recovery phrase'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -240));
+    await tester.pumpAndSettle();
+
+    final mnemonicField = tester
+        .widgetList<TextField>(find.byType(TextField))
+        .firstWhere((field) => field.minLines == 2 && field.maxLines == 4);
+    expectMnemonicInputSettings(mnemonicField);
+  });
+
+  testWidgets('new identity confirmation word input disables autocorrect',
+      (tester) async {
+    final storage = _InMemorySecureStorageService();
+
+    await startCreateFlow(tester, storage);
+
+    final confirmWordField = tester.widget<TextField>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.textInputAction == TextInputAction.done,
+      ),
+    );
+    expectMnemonicInputSettings(confirmWordField);
+    expect(await storage.read(LocalIdentityVault.storageKey), isNull);
+  });
+
   testWidgets('does not persist a new identity before word confirmation',
       (tester) async {
     final storage = _InMemorySecureStorageService();
@@ -193,4 +230,12 @@ void main() {
     expect(find.text('Identity created'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+}
+
+void expectMnemonicInputSettings(TextField field) {
+  expect(field.autocorrect, isFalse);
+  expect(field.enableSuggestions, isFalse);
+  expect(field.smartDashesType, SmartDashesType.disabled);
+  expect(field.smartQuotesType, SmartQuotesType.disabled);
+  expect(field.textCapitalization, TextCapitalization.none);
 }

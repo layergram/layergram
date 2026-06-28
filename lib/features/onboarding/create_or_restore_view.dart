@@ -24,6 +24,10 @@ import '../../core/providers.dart';
 import '../../l10n/app_strings.dart';
 
 const _gettingStartedGuideUrl = 'https://layergram.app/gettingstarted/';
+const _mnemonicAutocorrect = false;
+const _mnemonicSuggestions = false;
+const _mnemonicSmartDashes = SmartDashesType.disabled;
+const _mnemonicSmartQuotes = SmartQuotesType.disabled;
 
 class CreateOrRestoreView extends ConsumerStatefulWidget {
   const CreateOrRestoreView({super.key, required this.onCompleted});
@@ -446,6 +450,11 @@ class _CreateOrRestoreViewState extends ConsumerState<CreateOrRestoreView> {
                     const SizedBox(height: 8),
                     TextField(
                       controller: _mnemonicCtrl,
+                      autocorrect: _mnemonicAutocorrect,
+                      enableSuggestions: _mnemonicSuggestions,
+                      smartDashesType: _mnemonicSmartDashes,
+                      smartQuotesType: _mnemonicSmartQuotes,
+                      textCapitalization: TextCapitalization.none,
                       minLines: 2,
                       maxLines: 4,
                       enabled: !_busy,
@@ -641,6 +650,11 @@ class _RecoveryPhraseDialogContent extends StatelessWidget {
         const SizedBox(height: 8),
         TextField(
           controller: confirmWordController,
+          autocorrect: _mnemonicAutocorrect,
+          enableSuggestions: _mnemonicSuggestions,
+          smartDashesType: _mnemonicSmartDashes,
+          smartQuotesType: _mnemonicSmartQuotes,
+          textCapitalization: TextCapitalization.none,
           textInputAction: TextInputAction.done,
           decoration: InputDecoration(
             border: const OutlineInputBorder(),
