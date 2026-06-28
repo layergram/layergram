@@ -909,6 +909,47 @@ class FsOpportunisticController {
   /// Returns all active session IDs across all device sessions.
   List<String> get allActiveSessionIds => _deviceRouter.allActiveSessionIds;
 
+  /// Clears every Advanced FS session for this contact/context.
+  ///
+  /// User-facing "Reset session" must remove all active, pending and stale
+  /// per-device sessions for the contact, not only the current session manager.
+  /// The next Advanced message starts a fresh opportunistic handshake.
+  ///
+  /// Returns the session IDs whose cached ratchets should be evicted by callers
+  /// that also maintain an in-memory ratchet cache.
+  Future<Set<String>> resetForAdvancedRekey() async {
+    final sessionIdsToForget = <String>{...allActiveSessionIds};
+    final entries = _registry.forContact(
+      contactId: _localContactId,
+      identityContext: _identityContext,
+    );
+
+    for (final entry in entries) {
+      final sessionId = entry.sessionId;
+      if (sessionId != null) {
+        sessionIdsToForget.add(sessionId);
+      }
+      _registry.remove(
+        contactId: entry.contactId,
+        identityContext: entry.identityContext,
+        sessionId: sessionId,
+      );
+      await _persistenceService?.removeState(entry.contactId, sessionId);
+    }
+
+    for (final sessionId in sessionIdsToForget) {
+      await _ratchetPersistenceService?.removeRatchetState(sessionId);
+    }
+
+    _deviceRouter.resetAll();
+    _sessionManager = _deviceRouter.currentSession;
+    await _updateRegistry(
+      sessionId: null,
+      state: FsSessionState.legacyOnly,
+    );
+    return sessionIdsToForget;
+  }
+
   /// Requests Maximum FS by clearing existing sessions and starting a fresh
   /// strict re-key for this contact.
   ///

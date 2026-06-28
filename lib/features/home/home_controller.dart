@@ -189,7 +189,7 @@ class HomeController {
       // CRITICAL: Use the controller's session manager to ensure we're using
       // the same instance that the controller uses for state transitions.
       // Using a separate provider could result in different instances.
-      final sessionManager = fsController.sessionManager;
+      var sessionManager = fsController.sessionManager;
 
       // Prepare handshake payload based on current state
       final securityMode = ref.read(fsSecurityModeServiceProvider).getModeSync(
@@ -202,7 +202,34 @@ class HomeController {
         fsController: fsController,
       );
       // Refresh state after possible restart hydration.
-      final effectiveState = sessionManager.state;
+      sessionManager = fsController.sessionManager;
+      var effectiveState = sessionManager.state;
+      final routedActiveSessionIds = fsController.allActiveSessionIds;
+      final registryActiveSessionIds = ref
+          .read(fsContactSecurityRegistryProvider)
+          .forContact(
+            contactId: recipient.identityId,
+            identityContext: fsController.identityContext,
+          )
+          .where((entry) => entry.isActive && entry.sessionId != null)
+          .map((entry) => entry.sessionId!)
+          .toSet();
+      final activeSessionIds = registryActiveSessionIds.isEmpty
+          ? routedActiveSessionIds
+          : [
+              for (final id in routedActiveSessionIds)
+                if (registryActiveSessionIds.contains(id)) id,
+            ];
+      final shouldSendWithArchivedActiveSession =
+          securityMode != FsSecurityMode.base &&
+              !_isActiveFsState(effectiveState) &&
+              _canSendWithArchivedActiveSession(effectiveState) &&
+              activeSessionIds.isNotEmpty;
+      if (shouldSendWithArchivedActiveSession) {
+        effectiveState = securityMode == FsSecurityMode.strict
+            ? FsSessionState.strictFsActive
+            : FsSessionState.fsActive;
+      }
       final outgoingExt = await _buildFsOutgoingExtension(
         fsController: fsController,
         sessionManager: sessionManager,
@@ -218,37 +245,31 @@ class HomeController {
       if (securityMode != FsSecurityMode.base &&
           (effectiveState == FsSessionState.fsActive ||
               effectiveState == FsSessionState.strictFsActive)) {
-        sessionId = sessionManager.activeSessionId;
-        if (sessionId != null) {
+        final preferredSessionIds = <String>[
+          if (!shouldSendWithArchivedActiveSession &&
+              sessionManager.activeSessionId != null)
+            sessionManager.activeSessionId!,
+          ...activeSessionIds
+              .where((id) => id != sessionManager.activeSessionId),
+        ];
+        for (final candidateSessionId in preferredSessionIds) {
+          sessionId = candidateSessionId;
           ratchetState = ref.read(fsRatchetStateCacheProvider)[sessionId];
-          // If not in cache but session is active, try to load from persistence
-          if (ratchetState == null) {
-            ratchetState = await ref
-                .read(fsRatchetPersistenceServiceProvider)
-                .loadRatchetState(sessionId);
-            if (ratchetState != null) {
-              // Put it back in cache for future use
-              ref.read(fsRatchetStateCacheProvider.notifier).update((cache) => {
-                    ...cache,
-                    sessionId!: ratchetState!,
-                  });
-            } else {
-              // CRITICAL: Ratchet state is missing from both cache and persistence.
-              // This should never happen in normal operation - the session is inconsistent.
-              // Mark session as broken. Strict/Maximum FS must not silently
-              // fall back to legacy encryption when the ratchet is unavailable.
-              sessionManager.markBroken();
-              if (securityMode == FsSecurityMode.strict ||
-                  effectiveState == FsSessionState.strictFsActive) {
-                throw const FsSendBlockedException(
-                  'security.fs.error.device_repair_required',
-                );
-              }
-            }
+          // If not in cache but session is active, try to load from persistence.
+          ratchetState ??= await ref
+              .read(fsRatchetPersistenceServiceProvider)
+              .loadRatchetState(sessionId);
+          if (ratchetState != null) {
+            ref.read(fsRatchetStateCacheProvider.notifier).update((cache) => {
+                  ...cache,
+                  candidateSessionId: ratchetState!,
+                });
+            break;
           }
-        } else {
-          // CRITICAL: State is fsActive but activeSessionId is null.
-          // This is an inconsistent state - the session activation failed or was lost.
+        }
+        if (ratchetState == null) {
+          // CRITICAL: an active session exists, but none of its ratchets are
+          // available from cache or persistence.
           // Mark session as broken to recover gracefully.
           sessionManager.markBroken();
           if (securityMode == FsSecurityMode.strict ||
@@ -264,7 +285,7 @@ class HomeController {
       // every known device that already has a matching FS ratchet. Advanced
       // never adds a legacy plaintext/content-key fallback.
       if (ratchetState != null) {
-        final activeIds = fsController.allActiveSessionIds;
+        final activeIds = activeSessionIds;
         if (activeIds.length >= 2) {
           final cache = ref.read(fsRatchetStateCacheProvider);
           final persistence = ref.read(fsRatchetPersistenceServiceProvider);
@@ -1244,6 +1265,16 @@ class HomeController {
       case FsSessionState.fsBroken:
         throw ArgumentError('Cannot restore non-active FS state: $state');
     }
+  }
+
+  bool _isActiveFsState(FsSessionState state) {
+    return state == FsSessionState.fsActive ||
+        state == FsSessionState.strictFsActive;
+  }
+
+  bool _canSendWithArchivedActiveSession(FsSessionState state) {
+    return state == FsSessionState.legacyOnly ||
+        state == FsSessionState.fsSuspended;
   }
 
   // ── Forward Secrecy handshake payload preparation ───────────────────────

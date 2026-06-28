@@ -998,6 +998,12 @@ void main() {
           disp3Fixture.container.read(fsStateForContactProvider(disp2Id)),
           FsSessionState.fsActive,
         );
+        final fsOutcome = await disp2Controller.decodeHiddenMessage(
+          disp3Controller.buildLinkPayload(fsMessage.message),
+          hintContactId: disp1Id,
+        );
+        expect(fsOutcome.kind, DecodeKind.success);
+        expect(fsOutcome.payload?.text, 'disp3 FS payload after confirm');
       },
     );
 
@@ -2152,6 +2158,83 @@ void main() {
       expect(sessionManager.state, FsSessionState.fsActive);
     });
 
+    test('Advanced send uses archived active session when current is stale',
+        () async {
+      final fixture = await _createFixture();
+      addTearDown(() {
+        fixture.identitiesRepository.dispose();
+        fixture.messagesRepository.dispose();
+        fixture.container.dispose();
+      });
+
+      final contact = fixture.contacts.first;
+      const activeSessionId = 'session-advanced-archived-active';
+      const staleSessionId = 'session-advanced-current-stale';
+      final fsController = fixture.container.read(
+        fsOpportunisticControllerProvider(contact.identityId),
+      );
+      final currentSession = fixture.container.read(
+        fsSessionManagerProvider(contact.identityId),
+      );
+      currentSession.setStateForTesting(
+        FsSessionState.fsSuspended,
+        sessionId: staleSessionId,
+      );
+      final archivedSession = FsSessionManager();
+      archivedSession.setStateForTesting(
+        FsSessionState.fsActive,
+        sessionId: activeSessionId,
+      );
+      fsController.deviceRouter.addPreviousSessionForTesting(
+        activeSessionId,
+        archivedSession,
+      );
+
+      final registry =
+          fixture.container.read(fsContactSecurityRegistryProvider);
+      registry.upsert(
+        FsContactSecurityState(
+          contactId: contact.identityId,
+          identityContext: fsController.identityContext,
+          sessionId: staleSessionId,
+          fsState: FsSessionState.fsSuspended,
+        ),
+      );
+      registry.upsert(
+        FsContactSecurityState(
+          contactId: contact.identityId,
+          identityContext: fsController.identityContext,
+          sessionId: activeSessionId,
+          fsState: FsSessionState.fsActive,
+        ),
+      );
+      fixture.container.read(fsRatchetStateCacheProvider.notifier).state = {
+        staleSessionId: _testRatchet(staleSessionId),
+        activeSessionId: _testRatchet(activeSessionId),
+      };
+
+      final result = await fixture.container
+          .read(homeControllerProvider)
+          .encryptForRecipient(
+            secretText: 'reply through archived active session',
+            recipient: contact,
+          );
+
+      expect(result.isFsEncrypted, isTrue);
+      expect(result.classification, FsMessageClassification.fsOnly);
+
+      final key = await fixture.encryptionService.deriveSymmetricKey(
+        localPrivateKeyBase64: fixture.localKeys.privateKeyBase64,
+        remotePublicKeyBase64: contact.publicKeyBase64,
+      );
+      final envelope =
+          await fixture.encryptionService.tryDecryptEnvelopeWithKey(
+        message: result.message,
+        key: key,
+      );
+      expect(envelope?['fs_session'], activeSessionId);
+    });
+
     test(
       'Strict FS between original devices still decodes after restored device also reaches green',
       () async {
@@ -2373,6 +2456,81 @@ void main() {
         fixture.container.read(fsRatchetStateCacheProvider),
         isNot(contains(staleActiveSessionId)),
       );
+    });
+
+    test('Advanced reset clears all stale contact sessions before rekey',
+        () async {
+      final fixture = await _createFixture();
+      addTearDown(() {
+        fixture.identitiesRepository.dispose();
+        fixture.messagesRepository.dispose();
+        fixture.container.dispose();
+      });
+
+      final contact = fixture.contacts.first;
+      const activeSessionId = 'session-advanced-current-green';
+      const staleActiveSessionId = 'session-advanced-stale-green';
+      const staleInitSessionId = 'session-advanced-stale-init';
+      final fsController = fixture.container.read(
+        fsOpportunisticControllerProvider(contact.identityId),
+      );
+      final sessionManager = fixture.container.read(
+        fsSessionManagerProvider(contact.identityId),
+      );
+      sessionManager.setStateForTesting(
+        FsSessionState.fsActive,
+        sessionId: activeSessionId,
+      );
+      fixture.container.read(fsRatchetStateCacheProvider.notifier).state = {
+        activeSessionId: _testRatchet(activeSessionId),
+        staleActiveSessionId: _testRatchet(staleActiveSessionId),
+      };
+
+      final registry =
+          fixture.container.read(fsContactSecurityRegistryProvider);
+      for (final entry in [
+        FsContactSecurityState(
+          contactId: contact.identityId,
+          identityContext: 'primary',
+          sessionId: activeSessionId,
+          fsState: FsSessionState.fsActive,
+        ),
+        FsContactSecurityState(
+          contactId: contact.identityId,
+          identityContext: 'primary',
+          sessionId: staleActiveSessionId,
+          fsState: FsSessionState.fsActive,
+        ),
+        FsContactSecurityState(
+          contactId: contact.identityId,
+          identityContext: 'primary',
+          sessionId: staleInitSessionId,
+          fsState: FsSessionState.fsInitSent,
+        ),
+      ]) {
+        registry.upsert(entry);
+      }
+
+      final removedSessionIds = await fsController.resetForAdvancedRekey();
+      fixture.container.read(fsRatchetStateCacheProvider.notifier).update(
+        (cache) {
+          final next = {...cache};
+          for (final sessionId in removedSessionIds) {
+            next.remove(sessionId);
+          }
+          return next;
+        },
+      );
+
+      final states = registry.forContact(
+        contactId: contact.identityId,
+        identityContext: fsController.identityContext,
+      );
+      expect(states, hasLength(1));
+      expect(states.single.sessionId, isNull);
+      expect(states.single.fsState, FsSessionState.legacyOnly);
+      expect(fsController.allActiveSessionIds, isEmpty);
+      expect(fixture.container.read(fsRatchetStateCacheProvider), isEmpty);
     });
 
     test('Composer-safe cover estimate fits Advanced FS payload', () async {

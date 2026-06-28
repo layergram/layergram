@@ -161,22 +161,7 @@ class FsContactSecurityCard extends ConsumerWidget {
                     label: t(context, 'security.fs.action.retry'),
                     icon: Icons.refresh,
                     onPressed: () async {
-                      final sm = ref.read(
-                        fsSessionManagerProvider(contactId),
-                      );
-                      sm.reset();
-                      // Update registry so UI reflects legacyOnly immediately
-                      final registry =
-                          ref.read(fsContactSecurityRegistryProvider);
-                      final ctrl = ref.read(
-                        fsOpportunisticControllerProvider(contactId),
-                      );
-                      registry.upsert(FsContactSecurityState(
-                        contactId: contactId,
-                        identityContext: ctrl.identityContext,
-                        sessionId: null,
-                        fsState: FsSessionState.legacyOnly,
-                      ));
+                      await _resetForAdvancedRekey(ref, contactId);
                       ref.read(fsRegistryVersionProvider.notifier).state++;
                     },
                   ),
@@ -185,34 +170,9 @@ class FsContactSecurityCard extends ConsumerWidget {
                     label: t(context, 'security.fs.action.reset'),
                     icon: Icons.lock_reset,
                     onPressed: () async {
-                      final sm = ref.read(
-                        fsSessionManagerProvider(contactId),
-                      );
-                      final oldSessionId = sm.activeSessionId;
-                      sm.reset();
-                      // Remove orphaned ratchet state from cache
-                      if (oldSessionId != null) {
-                        ref
-                            .read(fsRatchetStateCacheProvider.notifier)
-                            .update((cache) {
-                          final c = {...cache};
-                          c.remove(oldSessionId);
-                          return c;
-                        });
-                      }
-                      // Update registry so UI reflects legacyOnly immediately
-                      final registry =
-                          ref.read(fsContactSecurityRegistryProvider);
-                      final ctrl = ref.read(
-                        fsOpportunisticControllerProvider(contactId),
-                      );
-                      registry.upsert(FsContactSecurityState(
-                        contactId: contactId,
-                        identityContext: ctrl.identityContext,
-                        sessionId: null,
-                        fsState: FsSessionState.legacyOnly,
-                      ));
+                      await _resetForAdvancedRekey(ref, contactId);
                       ref.read(fsRegistryVersionProvider.notifier).state++;
+                      if (!context.mounted) return;
                       // Snackbar confirmation
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
@@ -306,6 +266,19 @@ class FsContactSecurityCard extends ConsumerWidget {
       ),
     );
   }
+}
+
+Future<void> _resetForAdvancedRekey(WidgetRef ref, String contactId) async {
+  final fsCtrl = ref.read(fsOpportunisticControllerProvider(contactId));
+  final removedSessionIds = await fsCtrl.resetForAdvancedRekey();
+
+  ref.read(fsRatchetStateCacheProvider.notifier).update((cache) {
+    final next = {...cache};
+    for (final sessionId in removedSessionIds) {
+      next.remove(sessionId);
+    }
+    return next;
+  });
 }
 
 Future<void> _resetForStrictRekey(WidgetRef ref, String contactId) async {
