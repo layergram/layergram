@@ -70,11 +70,11 @@ void main() {
     expect(find.text('Start with your Layergram identity'), findsOneWidget);
     expect(find.text('Create identity'), findsWidgets);
     await tester.scrollUntilVisible(
-      find.text('Save recovery phrase'),
+      find.text('Write recovery phrase'),
       200,
       scrollable: find.byType(Scrollable).first,
     );
-    expect(find.text('Save recovery phrase'), findsOneWidget);
+    expect(find.text('Write recovery phrase'), findsOneWidget);
     expect(find.text('Share public identity'), findsOneWidget);
     expect(find.text('Add first contact'), findsOneWidget);
     expect(tester.takeException(), isNull);
