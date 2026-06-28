@@ -180,7 +180,7 @@ class HomeController {
     // §9.6: when the contact has multiple active device sessions, the content
     // key is wrapped for all of them in a single multi-envelope message.
     Map<String, RatchetState>? multiSessionRatchets;
-    bool includeLegacyFallback = false;
+    const includeLegacyFallback = false;
 
     if (!selfCopy) {
       final fsController = ref.read(
@@ -261,10 +261,8 @@ class HomeController {
       }
 
       // §9.6: collect active device sessions so one payload can be read by
-      // every known device. Single-session Advanced uses the smaller FS
-      // envelope plus legacy fallback instead of forcing fs_multi.
-      includeLegacyFallback = securityMode == FsSecurityMode.advanced &&
-          effectiveState == FsSessionState.fsActive;
+      // every known device that already has a matching FS ratchet. Advanced
+      // never adds a legacy plaintext/content-key fallback.
       if (ratchetState != null) {
         final activeIds = fsController.allActiveSessionIds;
         if (activeIds.length >= 2) {
@@ -774,18 +772,6 @@ class HomeController {
           );
         }
 
-        // Downgrade detection: record the incoming message security level (§7.6)
-        final incomingDowngradeLevel = (isFs
-                ? FsMessageClassification.fsOnly
-                : FsMessageClassification.legacy)
-            .downgradeLevel;
-        if (incomingDowngradeLevel != null) {
-          fsCtrl.recordSecurityLevel(
-            contactId: contact.identityId,
-            level: incomingDowngradeLevel,
-          );
-        }
-
         // Process FS extension for opportunistic Forward Secrecy handshake
         // We need to decrypt envelope separately to access FS extension
         final key = await encService.deriveSymmetricKey(
@@ -796,8 +782,9 @@ class HomeController {
           message: msg,
           key: key,
         );
+        FsIncomingResult? fsResult;
         if (envelope != null) {
-          final fsResult = await fsCtrl.processIncomingEnvelope(
+          fsResult = await fsCtrl.processIncomingEnvelope(
             envelope,
             remoteContactId: contact.identityId,
             remoteIdentityPublicKey: contact.publicKeyBase64,
@@ -806,6 +793,15 @@ class HomeController {
           if (fsResult.type != FsIncomingType.noExtension) {
             ref.read(fsRegistryVersionProvider.notifier).state++;
           }
+        }
+
+        if (!isFs &&
+            _incomingPlaintextViolatesMaximumFs(
+              contactId: contact.identityId,
+              fsController: fsCtrl,
+              fsResult: fsResult,
+            )) {
+          return const DecodeOutcome.fsLost();
         }
 
         // FS-encrypted but ratchet state is missing (identity reset)
@@ -824,6 +820,13 @@ class HomeController {
           sessionState: fsCtrl.sessionManager.state,
           securityMode: fsCtrl.securityMode,
         );
+        final incomingDowngradeLevel = incomingClassification.downgradeLevel;
+        if (incomingDowngradeLevel != null) {
+          fsCtrl.recordSecurityLevel(
+            contactId: contact.identityId,
+            level: incomingDowngradeLevel,
+          );
+        }
 
         // Decryption succeeded!
         return _persistAndReturn(
@@ -922,6 +925,32 @@ class HomeController {
         entry.fsState != FsSessionState.strictFsActive);
   }
 
+  bool _incomingPlaintextViolatesMaximumFs({
+    required String contactId,
+    required FsOpportunisticController fsController,
+    required FsIncomingResult? fsResult,
+  }) {
+    if (fsResult?.rejectionReason == 'security.fs.error.unexpected_device') {
+      return true;
+    }
+
+    if (fsController.securityMode != FsSecurityMode.strict) {
+      return false;
+    }
+
+    if (fsController.sessionManager.state == FsSessionState.strictFsActive) {
+      return true;
+    }
+
+    return ref
+        .read(fsContactSecurityRegistryProvider)
+        .forContact(
+          contactId: contactId,
+          identityContext: fsController.identityContext,
+        )
+        .any((entry) => entry.fsState == FsSessionState.strictFsActive);
+  }
+
   // ── Message classification (§14.4) ─────────────────────────────────────────
 
   static FsMessageClassification _classifyOutgoing({
@@ -940,9 +969,8 @@ class HomeController {
           sessionState == FsSessionState.strictFsActive) {
         return FsMessageClassification.strictFs;
       }
-      // §9.5: a single-envelope FS message is only encrypted with the ratchet.
-      // Multi-envelope messages with legacy fallback are classified above as
-      // fs_with_fallback.
+      // §9.5: an FS message is only readable through a matching ratchet. Legacy
+      // fallback is not emitted by current senders.
       return FsMessageClassification.fsOnly;
     }
     if (hasFsExtension) {

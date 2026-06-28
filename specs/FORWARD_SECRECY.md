@@ -74,21 +74,25 @@ ratchet, so one sent payload is readable in FS by all of them. Decryption picks 
 matching one of the recipient's sessions, unwraps the content key (advancing only that device's
 ratchet), then decrypts the single ciphertext.
 
-A legacy fallback (`mc_fallback_key`, the content key carried in the identity-encrypted outer
-layer) is **optional and off by default**, so multi-envelope messages stay full FS
-(`fs_only`/`strict_fs`). When included, the message is classified `fs_with_fallback` and is no
-longer full FS; **Strict mode must never include it**. Conversations with a single active
-session keep using the single-envelope path unchanged.
+Legacy content fallback (`mc_fallback_key`, the content key carried in the identity-encrypted
+outer layer) is deprecated and MUST NOT be emitted by current senders. It weakens FS because a
+later compromise of the long-term identity key can recover the duplicated content key. Advanced
+and Strict/Maximum FS both send ratchet-only user content: a recipient device can read the
+message only if one `fs_wraps[]` entry, or the single-envelope FS fields, matches one of its FS
+sessions. If a receiver sees fallback material in a historic envelope, it classifies the message
+as `fs_with_fallback` but must not use that fallback to recover plaintext without a matching FS
+ratchet. Conversations with a single active session keep using the single-envelope path
+unchanged.
 
 ## Security modes
 
 Each contact has a per-contact security mode (`lib/core/crypto/fs_security_mode.dart`):
 
 - **Base** — FS negotiation is suppressed entirely; legacy model only.
-- **Advanced** — opportunistic FS with compatibility fallback allowed. While FS is active the
-  contact card shows an amber fallback warning, because some messages may still use the legacy
-  model (spec §14.6.4).
-- **Strict (Maximum FS)** — contact-level mode with no legacy fallback. Requires
+- **Advanced** — opportunistic FS. FS upgrades automatically, supports multiple active device
+  sessions through per-device wraps, and never duplicates active FS user content through a
+  legacy plaintext/content-key fallback.
+- **Strict (Maximum FS)** — contact-level mode with device-bound send enforcement. Requires
   explicit mutual consent; while requested but not yet confirmed the UI shows a distinct
   "Maximum FS requested" pending state, not active Strict (spec §14.6.3).
   When enabled for a contact, every already-known active device session for that identity is
@@ -103,8 +107,11 @@ Each contact has a per-contact security mode (`lib/core/crypto/fs_security_mode.
 
 Every message carries one of eight opaque classifications
 (`lib/core/crypto/fs_message_classification.dart`): `legacy`, `pre_fs`, `fs_negotiation`,
-`fs_with_fallback`, `fs_only`, `strict_fs`, `fs_failed`, `unknown`. The chat shows only a small
-icon; the message-details panel explains the classification.
+`fs_with_fallback`, `fs_only`, `strict_fs`, `fs_failed`, `unknown`. Current senders should emit
+`fs_only` for Advanced active FS and `strict_fs` for Maximum FS. `fs_with_fallback` is retained
+only to identify historic/degraded envelopes that carried fallback material; it is not treated
+as full Forward Secrecy. The chat shows only a small icon; the message-details panel explains
+the classification.
 
 ## Storage and plausible deniability
 

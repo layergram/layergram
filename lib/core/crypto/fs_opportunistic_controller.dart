@@ -914,8 +914,8 @@ class FsOpportunisticController {
   ///
   /// Maximum FS is a contact-level policy, but the secure channel is still
   /// bound to a concrete device/session handshake. Keeping old Advanced
-  /// sessions around after the user requests Maximum FS would leave fallback
-  /// paths visible and usable. This method therefore forgets every known
+  /// sessions around after the user requests Maximum FS would leave stale
+  /// non-device-bound sessions visible. This method therefore forgets every known
   /// session for the current contact/context, removes their ratchets, records a
   /// single `strictRequested` entry, and lets the next message start a new
   /// handshake that will become `strictFsActive` only after confirmation.
@@ -960,7 +960,7 @@ class FsOpportunisticController {
   ///
   /// Kept for non-UI callers that explicitly need the old in-place promotion
   /// semantics. User-facing Maximum FS activation uses [resetForStrictRekey]
-  /// so stale Advanced sessions cannot remain visible or fallback-capable.
+  /// so stale Advanced sessions cannot remain visible after the policy change.
   Future<void> activateStrictForKnownActiveSessions() async {
     for (final sessionId in allActiveSessionIds) {
       final manager = _deviceRouter.sessionForId(sessionId);

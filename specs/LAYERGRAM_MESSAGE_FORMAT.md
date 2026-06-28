@@ -117,15 +117,18 @@ once with a fresh content key and wrap that key separately for each device ratch
 | `mc_cipher` | string | Base64-encoded content ciphertext plus MAC |
 | `mc_nonce` | string | Base64-encoded content nonce |
 | `fs_wraps` | array | Per-session FS wraps for the content key |
-| `mc_fallback_key` | string? | Optional legacy fallback content key; forbidden in Strict/Maximum FS |
+| `mc_fallback_key` | string? | Deprecated legacy fallback content key; current senders MUST NOT emit it |
 
 Each `fs_wraps[]` entry uses the same FS fields as a single-envelope message
 (`fs_session`, `fs_ratchet_pub`, `fs_counter`, `fs_cipher`, `fs_nonce`), but its plaintext is
 the content key rather than the user message. The receiver selects the wrap matching one of its
 known sessions and advances only that ratchet.
 
-`mc_fallback_key` is off by default because it weakens Forward Secrecy. If present, the message
-classification is `fs_with_fallback`; Strict/Maximum FS messages must not include it.
+`mc_fallback_key` weakens Forward Secrecy by making the content key readable from the
+identity-encrypted outer wrapper. Current senders MUST NOT include it in any FS message,
+including Advanced and Strict/Maximum FS. If a receiver sees it in a historic message, the
+message classification is `fs_with_fallback`, but the fallback key MUST NOT be used to recover
+plaintext without a matching FS ratchet.
 
 ### 2.2 Raw Binary Ciphertext
 
@@ -324,8 +327,8 @@ minCoverLength = 64 + requiredCarrierSlots
 For exact user-facing validation, `rawPayloadBytes` means the final byte array
 that will be embedded after the complete message has been constructed and
 encrypted. This includes all optional protocol fields and envelopes, including
-forward-secrecy metadata such as `fs_*` fields, `x.fs`, `fs_multi`, `fs_wraps`,
-and `mc_fallback_key` when present. A pre-encryption estimate based only on the
+forward-secrecy metadata such as `fs_*` fields, `x.fs`, `fs_multi`, and `fs_wraps`.
+A pre-encryption estimate based only on the
 secret text length is therefore only a UI estimate; send/copy/share actions MUST
 re-check cover capacity against the final `rawPayloadBytes.length`.
 

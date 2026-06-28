@@ -7,7 +7,7 @@
 //  T11.3  requestMaximum in fsActive → strictRequested.
 //  T11.4  Alice/Bob handshake completes; activateStrict → strictFsActive.
 //  T11.5  New Bob device appears; canSendMessage returns false (pause).
-//  T11.6  Disable Maximum FS; state reverts to fsActive, fallback allowed.
+//  T11.6  Disable Maximum FS; state reverts to non-device-bound fsActive.
 //  T11.7  Passphrase context isolation: strict state per (contactId, context).
 //  T11.8  activateStrict without prior requestMaximum → notRequested.
 //  T11.9  canSendMessage in strictFsActive without device change → true.
@@ -162,9 +162,8 @@ void main() {
     );
   });
 
-  // T11.6 — Disable Maximum FS → fsActive, fallback allowed.
-  test('T11.6: disableStrict reverts to fsActive; legacy fallback allowed',
-      () async {
+  // T11.6 — Disable Maximum FS → fsActive, non-device-bound policy.
+  test('T11.6: disableStrict reverts to non-device-bound fsActive', () async {
     final (ctrl, mgr, registry) = _build();
     mgr.setStateForTesting(FsSessionState.fsActive, sessionId: 'session-1');
     await ctrl.requestMaximum('session-1');
@@ -184,7 +183,7 @@ void main() {
     );
     expect(state?.fsState, equals(FsSessionState.fsActive));
 
-    // Legacy fallback now allowed (no block on deviceChanged).
+    // Advanced policy is not device-bound (no block on deviceChanged).
     expect(ctrl.canSendMessage(deviceChanged: true), isTrue,
         reason: 'After disable, device change must not block sending');
   });

@@ -299,50 +299,12 @@ class FsContactSecurityCard extends ConsumerWidget {
                       ],
                     ),
                   ),
-                // §14.6.4 — Fallback warning for Advanced mode
-                if (_showFallbackWarning(ref, contactId, topState))
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.info_outline,
-                          size: 14,
-                          color: Colors.amber.shade700,
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            t(context, 'security.fs.warning.fallback_body'),
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: Colors.amber.shade800,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
               ],
             ),
           ],
         ),
       ),
     );
-  }
-
-  static bool _showFallbackWarning(
-    WidgetRef ref,
-    String contactId,
-    FsSessionState topState,
-  ) {
-    if (topState != FsSessionState.fsActive) return false;
-    final modeService = ref.read(fsSecurityModeServiceProvider);
-    final ctrl = ref.read(fsOpportunisticControllerProvider(contactId));
-    final mode = modeService.getModeSync(
-      contactId: contactId,
-      identityContext: ctrl.identityContext,
-    );
-    return mode == FsSecurityMode.advanced;
   }
 }
 
@@ -590,9 +552,7 @@ class _SessionRow extends StatelessWidget {
       'security.fs.device.session_label',
     ).replaceAll('{n}', '$index');
 
-    final fallbackLabel = session.fsState == FsSessionState.strictFsActive
-        ? t(context, 'security.fs.device.fallback_not_allowed')
-        : t(context, 'security.fs.device.fallback_allowed');
+    final fallbackLabel = t(context, 'security.fs.device.fallback_not_allowed');
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),

@@ -25,8 +25,8 @@ import 'fs_state_persistence_service.dart';
 /// - [FsSessionState.strictFsActive] is set only after a confirmed handshake.
 /// - Once [FsSessionState.strictFsActive], sending pauses if an unexpected
 ///   device is detected ([canSendMessage] returns false).
-/// - Disabling Maximum FS resets state to [FsSessionState.fsActive] and
-///   allows legacy fallback again.
+/// - Disabling Maximum FS resets state to [FsSessionState.fsActive]; active FS
+///   messages remain ratchet-only, while non-FS sends follow the selected mode.
 /// - Passphrase-context consent is stored only in opaque aux records (the
 ///   caller's responsibility; this class never persists anything).
 /// - No global Maximum FS flag exists: each `(contactId, identityContext)`
@@ -136,7 +136,7 @@ class FsStrictModeController {
   ///
   /// After this call:
   /// - [FsSessionState.fsActive] is restored.
-  /// - Legacy fallback is allowed again.
+  /// - The contact returns to the non-device-bound Advanced FS policy.
   /// - [_strictRequested] is cleared.
   Future<FsStrictModeResult> disableStrict(String sessionId) async {
     _strictRequested = false;
@@ -175,7 +175,7 @@ class FsStrictModeController {
       return true;
     }
 
-    // Legacy fallback allowed in non-strict states.
+    // Non-strict states may send according to their selected security mode.
     return state != FsSessionState.fsBroken;
   }
 

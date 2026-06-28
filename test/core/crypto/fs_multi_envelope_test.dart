@@ -15,9 +15,9 @@
 // §9.6 — Multi-envelope messages.
 //
 // A single payload is encrypted once with a per-message content key; that
-// content key is wrapped for every active device session of the contact (plus
-// an optional legacy fallback). This lets one sent message be read in FS by all
-// of the contact's devices.
+// content key is wrapped for every active device session of the contact. This
+// lets one sent message be read in FS by all devices that already have a
+// matching ratchet, without a legacy plaintext/content-key fallback.
 
 import 'dart:convert';
 import 'dart:typed_data';
@@ -113,6 +113,28 @@ Future<(RatchetState sender, RatchetState device)> _buildSession(
     sessionId: sessionId,
   );
   return (aRatchet, bRatchet);
+}
+
+Future<EncryptedMessage> _encryptEnvelopeWithKey({
+  required Map<String, dynamic> envelope,
+  required SecretKey key,
+  required String senderId,
+  required String recipientId,
+}) async {
+  final algo = AesGcm.with256bits();
+  final nonce = algo.newNonce();
+  final box = await algo.encrypt(
+    utf8.encode(jsonEncode(envelope)),
+    secretKey: key,
+    nonce: nonce,
+  );
+  return EncryptedMessage(
+    version: 2,
+    senderId: senderId,
+    recipientId: recipientId,
+    nonceBase64: base64Encode(nonce),
+    ciphertextBase64: base64Encode([...box.cipherText, ...box.mac.bytes]),
+  );
 }
 
 void main() {
@@ -274,7 +296,31 @@ void main() {
       expect(dec.payload.text, isEmpty);
     });
 
-    test('legacy fallback lets an FS-less device read (fs_with_fallback)',
+    test('legacy fallback generation is rejected', () async {
+      final service = EncryptionService();
+      final alice = await _identity();
+      final bob = await _identity();
+      final (aRatchetA, _) = await _buildSession('session-A');
+      final (aRatchetB, _) = await _buildSession('session-B');
+
+      expect(
+        () => service.encryptMultiEnvelope(
+          senderPrivateKeyBase64: alice.privateKeyBase64,
+          recipientPublicKeyBase64: bob.publicKeyBase64,
+          payload: const PlaintextPayload(
+            senderId: 'alice',
+            recipientId: 'bob',
+            text: text,
+            timestamp: 1700000000,
+          ),
+          sessionRatchets: {'session-A': aRatchetA, 'session-B': aRatchetB},
+          includeLegacyFallback: true,
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('historic mc_fallback_key is ignored without matching ratchet',
         () async {
       final service = EncryptionService();
       final alice = await _identity();
@@ -292,10 +338,7 @@ void main() {
           timestamp: 1700000000,
         ),
         sessionRatchets: {'session-A': aRatchetA, 'session-B': aRatchetB},
-        includeLegacyFallback: true,
       );
-
-      // Fallback key is present in the envelope.
       final outerKey = await service.deriveSymmetricKey(
         localPrivateKeyBase64: bob.privateKeyBase64,
         remotePublicKeyBase64: alice.publicKeyBase64,
@@ -304,18 +347,27 @@ void main() {
         message: result.message,
         key: outerKey,
       );
-      expect(env!.containsKey('mc_fallback_key'), isTrue);
+      expect(env, isNotNull);
+      final historicEnvelope = <String, dynamic>{
+        ...env!,
+        'mc_fallback_key': base64Encode(Uint8List(32)),
+      };
+      final historicMessage = await _encryptEnvelopeWithKey(
+        envelope: historicEnvelope,
+        key: outerKey,
+        senderId: 'alice',
+        recipientId: 'bob',
+      );
 
-      // A device with no FS session reads via the legacy fallback.
       final dec = await service.decrypt(
         recipientPrivateKeyBase64: bob.privateKeyBase64,
         senderPublicKeyBase64: alice.publicKeyBase64,
-        message: result.message,
+        message: historicMessage,
         allRatchetStates: const {},
       );
-      expect(dec.payload.text, equals(text));
-      expect(dec.fsDecryptFailed, isFalse);
-      // No ratchet advanced because the fallback path was used.
+      expect(dec.payload.text, isEmpty);
+      expect(dec.fsDecryptFailed, isTrue);
+      expect(dec.hasLegacyFallback, isTrue);
       expect(dec.newRatchetState, isNull);
     });
 
