@@ -47,16 +47,19 @@ void main() {
     await Hive.box<Map>(LocalDatabase.chatMetaBoxName).clear();
   });
 
-  test('pinned chats are isolated per opaque scope token and stored sealed', () async {
+  test('pinned chats are isolated per opaque scope token and stored sealed',
+      () async {
     final repoA = ChatMetaRepository(identityId: 'A');
     await initRepo(repoA, 'scope-a', 'A');
-    await repoA.setPinned(folderId: kAllChatsFolderId, chatId: 'X', pinned: true);
+    await repoA.setPinned(
+        folderId: kAllChatsFolderId, chatId: 'X', pinned: true);
     await repoA.setPinned(folderId: 'work', chatId: 'Y', pinned: true);
     repoA.dispose();
 
     final repoB = ChatMetaRepository(identityId: 'B');
     await initRepo(repoB, 'scope-b', 'B');
-    await repoB.setPinned(folderId: kAllChatsFolderId, chatId: 'Z', pinned: true);
+    await repoB.setPinned(
+        folderId: kAllChatsFolderId, chatId: 'Z', pinned: true);
     repoB.dispose();
 
     final box = Hive.box<Map>(LocalDatabase.chatMetaBoxName);
@@ -67,7 +70,8 @@ void main() {
 
     final repoA2 = ChatMetaRepository(identityId: 'A');
     await initRepo(repoA2, 'scope-a', 'A');
-    final aAll = await repoA2.watchPinnedChats(folderId: kAllChatsFolderId).first;
+    final aAll =
+        await repoA2.watchPinnedChats(folderId: kAllChatsFolderId).first;
     expect(aAll.keys, contains('X'));
     expect(aAll.keys, isNot(contains('Z')));
 
@@ -78,13 +82,15 @@ void main() {
 
     final repoB2 = ChatMetaRepository(identityId: 'B');
     await initRepo(repoB2, 'scope-b', 'B');
-    final bAll = await repoB2.watchPinnedChats(folderId: kAllChatsFolderId).first;
+    final bAll =
+        await repoB2.watchPinnedChats(folderId: kAllChatsFolderId).first;
     expect(bAll.keys, contains('Z'));
     expect(bAll.keys, isNot(contains('X')));
     repoB2.dispose();
   });
 
-  test('togglePinned and chat settings roundtrip through sealed storage', () async {
+  test('togglePinned and chat settings roundtrip through sealed storage',
+      () async {
     final repo = ChatMetaRepository(identityId: 'A');
     await initRepo(repo, 'scope-a', 'A');
 
@@ -96,12 +102,12 @@ void main() {
 
     await repo.saveChatSettings(
       chatId: 'X',
-      linkMode: true,
+      outputMode: 'text',
       expiryMinutes: 60,
       deleteAfterRead: true,
     );
     final settings = await repo.getChatSettings(chatId: 'X');
-    expect(settings?['linkMode'], isTrue);
+    expect(settings?['outputMode'], 'text');
     expect(settings?['expiryMinutes'], 60);
     expect(settings?['deleteAfterRead'], isTrue);
 

@@ -1706,6 +1706,121 @@ void main() {
       expect(outcome.payload?.text, secret);
     });
 
+    test('Direct text payload decodes when pasted alone or line wrapped',
+        () async {
+      final senderFixture = await _createFixture();
+      final recipient = senderFixture.contacts.first;
+      final recipientKeys =
+          senderFixture.contactKeysById[recipient.identityId]!;
+      final receiverFixture = await _createFixtureFor(
+        localIdentityId: recipient.identityId,
+        localDisplayName: recipient.displayName,
+        localKeys: recipientKeys,
+        contactKeysById: {'me': senderFixture.localKeys},
+      );
+      addTearDown(() {
+        senderFixture.identitiesRepository.dispose();
+        senderFixture.messagesRepository.dispose();
+        senderFixture.container.dispose();
+        receiverFixture.identitiesRepository.dispose();
+        receiverFixture.messagesRepository.dispose();
+        receiverFixture.container.dispose();
+      });
+
+      final senderController =
+          senderFixture.container.read(homeControllerProvider);
+      const secret = 'Direct text payload works without a deeplink';
+      final encrypted = await senderController.encryptForRecipient(
+        secretText: secret,
+        recipient: recipient,
+      );
+      final textPayload = senderController.buildTextPayload(encrypted.message);
+      expect(textPayload, isNot(startsWith('layergram://m/')));
+
+      final receiverController =
+          receiverFixture.container.read(homeControllerProvider);
+      final direct = await receiverController.decodeHiddenMessage(
+        textPayload,
+        hintContactId: 'me',
+      );
+      expect(direct.kind, DecodeKind.success);
+      expect(direct.payload?.text, secret);
+
+      final wrappedPayload =
+          '${textPayload.substring(0, 24)}\n${textPayload.substring(24, 61)} '
+          '${textPayload.substring(61)}';
+      final wrapped = await receiverController.decodeHiddenMessage(
+        wrappedPayload,
+        hintContactId: 'me',
+      );
+      expect(wrapped.kind, DecodeKind.success);
+      expect(wrapped.payload?.text, secret);
+    });
+
+    test('Direct text payload is not scanned out of surrounding text',
+        () async {
+      final senderFixture = await _createFixture();
+      final recipient = senderFixture.contacts.first;
+      final recipientKeys =
+          senderFixture.contactKeysById[recipient.identityId]!;
+      final receiverFixture = await _createFixtureFor(
+        localIdentityId: recipient.identityId,
+        localDisplayName: recipient.displayName,
+        localKeys: recipientKeys,
+        contactKeysById: {'me': senderFixture.localKeys},
+      );
+      addTearDown(() {
+        senderFixture.identitiesRepository.dispose();
+        senderFixture.messagesRepository.dispose();
+        senderFixture.container.dispose();
+        receiverFixture.identitiesRepository.dispose();
+        receiverFixture.messagesRepository.dispose();
+        receiverFixture.container.dispose();
+      });
+
+      final senderController =
+          senderFixture.container.read(homeControllerProvider);
+      final encrypted = await senderController.encryptForRecipient(
+        secretText: 'Surrounded direct text must stay inert',
+        recipient: recipient,
+      );
+      final textPayload = senderController.buildTextPayload(encrypted.message);
+
+      final receiverController =
+          receiverFixture.container.read(homeControllerProvider);
+      final outcome = await receiverController.decodeHiddenMessage(
+        'Forwarded message: $textPayload Thanks',
+        hintContactId: 'me',
+      );
+
+      expect(outcome.kind, DecodeKind.noData);
+      expect(
+          await receiverFixture.messagesRepository.getAllMessages(), isEmpty);
+    });
+
+    test('Invalid direct text payload does not persist or throw', () async {
+      final receiverFixture = await _createFixture();
+      addTearDown(() {
+        receiverFixture.identitiesRepository.dispose();
+        receiverFixture.messagesRepository.dispose();
+        receiverFixture.container.dispose();
+      });
+
+      final randomRaw = Uint8List.fromList(
+        List<int>.generate(96, (index) => (index * 37) % 256),
+      );
+      final randomPayload = base64Url.encode(randomRaw).replaceAll('=', '');
+      final controller = receiverFixture.container.read(homeControllerProvider);
+      final beforeCount =
+          (await receiverFixture.messagesRepository.getAllMessages()).length;
+      final outcome = await controller.decodeHiddenMessage(randomPayload);
+      final afterCount =
+          (await receiverFixture.messagesRepository.getAllMessages()).length;
+
+      expect(outcome.kind, isNot(DecodeKind.success));
+      expect(afterCount, beforeCount);
+    });
+
     test('Repeated pasted legacy link remains decodable', () async {
       final senderFixture = await _createFixture();
       final recipient = senderFixture.contacts.first;
@@ -2572,17 +2687,23 @@ void main() {
           );
       final legacyEstimatedBytes =
           StegoEncoder.estimatedEncryptedPayloadBytes(secret);
-      final composerEstimatedBytes =
+      final negotiationEstimatedBytes =
           StegoEncoder.estimatedCoverMessagePayloadBytes(secret);
+      final activeFsEstimatedBytes =
+          StegoEncoder.estimatedCoverMessagePayloadBytes(
+        secret,
+        fsActive: true,
+      );
       final actualBytes = result.message.toRawBytes().length;
       final coverAcceptedByLegacyEstimate =
           'A' * StegoEncoder.minCoverLengthForBytes(legacyEstimatedBytes);
       final coverAcceptedByComposerEstimate =
-          'A' * StegoEncoder.minCoverLengthForBytes(composerEstimatedBytes);
+          'A' * StegoEncoder.minCoverLengthForBytes(activeFsEstimatedBytes);
 
       expect(result.isFsEncrypted, isTrue);
       expect(actualBytes, greaterThan(legacyEstimatedBytes));
-      expect(composerEstimatedBytes, greaterThanOrEqualTo(actualBytes));
+      expect(activeFsEstimatedBytes, greaterThanOrEqualTo(actualBytes));
+      expect(activeFsEstimatedBytes, lessThan(negotiationEstimatedBytes));
       expect(
         StegoEncoder.canEmbedBytes(
           coverAcceptedByLegacyEstimate,

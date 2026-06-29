@@ -27,6 +27,7 @@ import '../../ui/passphrase_button.dart';
 import '../identities/identities_controller.dart';
 import 'chat_view.dart';
 import 'home_controller.dart';
+import 'message_output_mode.dart';
 
 class _GlobalChatHit {
   const _GlobalChatHit({
@@ -1070,7 +1071,9 @@ class _HomeViewState extends ConsumerState<HomeView> {
                 initialSecret: pending?['secret'] as String?,
                 initialExpiry: pending?['expiry'] as int?,
                 initialDeleteAfterRead: pending?['deleteAfterRead'] as bool?,
-                initialLinkMode: pending?['linkMode'] as bool?,
+                initialOutputMode: MessageOutputMode.fromStorageValue(
+                  pending?['outputMode'] as String?,
+                ),
                 initialIsSearching: pending?['isSearching'] as bool?,
                 initialSearchIndex: pending?['searchIndex'] as int?,
                 initialGlobalSearchQuery: (pending?['isSearching'] == true)
@@ -1383,7 +1386,9 @@ class _HomeViewState extends ConsumerState<HomeView> {
           initialSecret: pending?['secret'] as String?,
           initialExpiry: pending?['expiry'] as int?,
           initialDeleteAfterRead: pending?['deleteAfterRead'] as bool?,
-          initialLinkMode: pending?['linkMode'] as bool?,
+          initialOutputMode: MessageOutputMode.fromStorageValue(
+            pending?['outputMode'] as String?,
+          ),
           initialIsSearching: pending?['isSearching'] as bool?,
           initialSearchIndex: pending?['searchIndex'] as int?,
           initialGlobalSearchQuery: (pending?['isSearching'] == true)
@@ -1407,7 +1412,8 @@ class _HomeViewState extends ConsumerState<HomeView> {
         'secret': result['secret'] as String? ?? '',
         'expiry': result['expiry'] as int?,
         'deleteAfterRead': (result['deleteAfterRead'] as bool?) ?? false,
-        'linkMode': (result['linkMode'] as bool?) ?? true,
+        'outputMode': (result['outputMode'] as String?) ??
+            MessageOutputMode.defaultMode.storageValue,
         'isSearching': result['isSearching'] as bool? ?? false,
         'searchQuery': result['searchQuery'] as String? ?? '',
         'searchIndex': result['searchIndex'] as int?,

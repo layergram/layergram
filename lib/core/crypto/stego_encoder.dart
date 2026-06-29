@@ -54,9 +54,8 @@ class StegoEncoder {
 
   /// LMF v2 noise symbols (discarded by decoder).
   /// U+200E and U+200F are FORBIDDEN and never used.
-  static final List<String> _noise = StegoAlphabetV2.noiseRunes
-      .map((r) => String.fromCharCode(r))
-      .toList();
+  static final List<String> _noise =
+      StegoAlphabetV2.noiseRunes.map((r) => String.fromCharCode(r)).toList();
 
   static final _rng = Random.secure();
 
@@ -89,13 +88,40 @@ class StegoEncoder {
   // estimate is intentionally kept for LMF v2 core tests; composer UI needs a
   // conservative preflight estimate so copy/share does not fail after the user
   // added the advertised missing cover characters.
-  static const int coverComposerJsonEnvelopeBytes = 512;
+  static const int coverComposerNegotiationJsonEnvelopeBytes = 512;
 
-  static int estimatedCoverMessagePayloadBytes(String secretText) {
-    return estimatedEncryptedPayloadBytes(
-      secretText,
-      jsonEnvelopeBytes: coverComposerJsonEnvelopeBytes,
-    );
+  // Active FS no longer emits a legacy fallback. A single active session can
+  // therefore use a smaller preflight envelope than handshake/control messages.
+  // Multi-session FS still needs one wrap per active device.
+  static const int coverComposerSingleFsJsonEnvelopeBytes = 456;
+  static const int coverComposerMultiFsBaseJsonEnvelopeBytes = 352;
+  static const int coverComposerFsWrapJsonEnvelopeBytes = 256;
+
+  static int estimatedCoverMessagePayloadBytes(
+    String secretText, {
+    bool fsActive = false,
+    int fsWrapCount = 1,
+  }) {
+    if (!fsActive) {
+      return estimatedEncryptedPayloadBytes(
+        secretText,
+        jsonEnvelopeBytes: coverComposerNegotiationJsonEnvelopeBytes,
+      );
+    }
+
+    final plaintextBytes = utf8.encode(secretText).length;
+    final encryptedTextFieldBytes = _base64EncodedLength(plaintextBytes + 16);
+    final envelopeBytes = fsWrapCount <= 1
+        ? coverComposerSingleFsJsonEnvelopeBytes
+        : coverComposerMultiFsBaseJsonEnvelopeBytes +
+            (fsWrapCount * coverComposerFsWrapJsonEnvelopeBytes);
+
+    return 12 + envelopeBytes + encryptedTextFieldBytes + 16;
+  }
+
+  static int _base64EncodedLength(int byteCount) {
+    if (byteCount <= 0) return 0;
+    return ((byteCount + 2) ~/ 3) * 4;
   }
 
   static String normalizeCoverText(String coverText) {
@@ -130,7 +156,8 @@ class StegoEncoder {
   }
 
   static int minimumEncodedLengthForBytes(String coverText, int byteCount) {
-    return visibleCharacterCount(coverText) + minimumHiddenLengthForBytes(byteCount);
+    return visibleCharacterCount(coverText) +
+        minimumHiddenLengthForBytes(byteCount);
   }
 
   static bool canEncodeBytesWithinCharacterLimit(
@@ -173,8 +200,7 @@ class StegoEncoder {
 
     bool canEmbedAfterAppending(int addedChars) {
       final totalVisibleChars = visChars.length + addedChars;
-      final totalCarrierSlots =
-          existingCarrierSlots +
+      final totalCarrierSlots = existingCarrierSlots +
           _eligibleCarrierSlotsAddedBySafeAppend(
             currentVisibleLength: visChars.length,
             currentLastCarrierSafe: currentLastCarrierSafe,
@@ -523,8 +549,7 @@ class StegoEncoder {
     final firstEligibleAppendedPairSlot =
         max(firstAppendedPairSlot, firstEligibleSlot);
     if (lastAppendedPairSlot >= firstEligibleAppendedPairSlot) {
-      addedSlots +=
-          lastAppendedPairSlot - firstEligibleAppendedPairSlot + 1;
+      addedSlots += lastAppendedPairSlot - firstEligibleAppendedPairSlot + 1;
     }
 
     return addedSlots;
@@ -538,12 +563,9 @@ class StegoEncoder {
     return true;
   }
 
-  List<int> _pickCarrierSlotIndexes(
-    List<int> eligibleSlotIndexes,
-    int requiredCarrierSlots,
-    int payloadSymbolCount,
-    {bool exactRequiredCount = false}
-  ) {
+  List<int> _pickCarrierSlotIndexes(List<int> eligibleSlotIndexes,
+      int requiredCarrierSlots, int payloadSymbolCount,
+      {bool exactRequiredCount = false}) {
     if (requiredCarrierSlots <= 0) return const [];
     final maxCarrierSlots = min(eligibleSlotIndexes.length, payloadSymbolCount);
     final remainingFlex = maxCarrierSlots - requiredCarrierSlots;
@@ -609,7 +631,8 @@ class StegoEncoder {
     return counts;
   }
 
-  List<int> _allocateBalancedPayloadCounts(int payloadSymbolCount, int carrierCount) {
+  List<int> _allocateBalancedPayloadCounts(
+      int payloadSymbolCount, int carrierCount) {
     if (payloadSymbolCount <= 0 || carrierCount <= 0) return const [];
     final baseCount = payloadSymbolCount ~/ carrierCount;
     final extraCount = payloadSymbolCount % carrierCount;

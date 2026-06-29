@@ -7,7 +7,7 @@ It lets users encrypt sensitive content locally and share it through **any** exi
 
 Messages are hidden inside ordinary-looking text using zero-width Unicode steganography, making them visually indistinguishable from a normal conversation while keeping the cryptographic workflow fully local to the device.
 
-For transport channels that do not support invisible Unicode characters (or when steganography fails), Layergram also supports sending messages as **direct deep links** (`layergram://m/<payload>`). Note that deep links make the presence of a Layergram message visibly obvious to anyone seeing the link, unlike steganographic embedding which requires instrumental analysis to detect.
+For transport channels that do not support invisible Unicode characters (or when steganography fails), Layergram also supports sending messages as **direct text payloads** (`<payload>`) or **direct deep links** (`layergram://m/<payload>`). Direct text payloads are not clickable, but they avoid exposing the Layergram URI scheme. Deep links are useful where custom URI schemes are interpreted, but make the presence of a Layergram message visibly obvious to anyone seeing the link.
 
 ## Official Project Links
 
@@ -39,7 +39,7 @@ For transport channels that do not support invisible Unicode characters (or when
 ### Security
 - **End-to-end encryption** — X25519 key agreement + AES-GCM-256
 - **Forward Secrecy** — Advanced opportunistic FS and Maximum device-bound FS with Double Ratchet message keys, without a Layergram server or public-key redistribution
-- **Steganographic encoding** — encrypted payloads hidden inside zero-width Unicode characters (with deep link fallback for transports that don't support invisible characters)
+- **Steganographic encoding** — encrypted payloads hidden inside zero-width Unicode characters, with direct text and deep-link fallbacks for transports that don't support invisible characters
 - **App lock** — biometric unlock with PIN fallback support
 - **Secure local storage** — sensitive state protected at rest
 - **Screen protection** — optional privacy shielding where supported
