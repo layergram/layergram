@@ -26,7 +26,7 @@ The **Layergram Message Format (LMF)** decouples the encryption layer from the t
 
 This approach provides:
 
-1. **Transport Agnosticism:** Messages can be sent over WhatsApp, Telegram, Signal, iMessage, email — any channel that preserves Unicode. For channels that strip or normalize invisible characters, a **direct message link** format (`layergram://m/<payload>`) is available as a fallback (see Section 4.3).
+1. **Transport Agnosticism:** Messages can be sent over WhatsApp, Telegram, Signal, iMessage, email — any channel that preserves Unicode. For channels that strip or normalize invisible characters, **direct text payload** (`<payload>`) and **direct message link** (`layergram://m/<payload>`) formats are available as fallbacks (see Section 4.3).
 2. **Visual Deniability:** To an outside observer, automated filter, or platform moderator, the message looks like an ordinary conversation. The encrypted data does not contain any recognizable signature or prefix.
 3. **Resilience:** The encoding and distribution strategy is specifically designed to survive platform-specific character truncation.
 
@@ -381,31 +381,37 @@ To minimize decryption time, the client tries the keys in priority order:
 
 If AES-GCM decryption succeeds (the MAC validates), the payload is parsed as JSON and displayed.
 
-### 4.3 Direct Message Link (No Steganography)
+### 4.3 Direct Message Text and Link (No Steganography)
 
-As an alternative to steganographic embedding, LMF supports sharing the encrypted raw binary payload as a **direct deep link**:
+As alternatives to steganographic embedding, LMF supports sharing the encrypted raw binary payload as either direct text or a direct deep link:
+
+```
+<base64url_raw_bytes>
+```
 
 ```
 layergram://m/<base64url_raw_bytes>
 ```
 
-The `<base64url_raw_bytes>` is the entire `rawPayloadBytes` array, encoded in base64url without padding (`+`→`-`, `/`→`_`, `=` stripped).
+The `<base64url_raw_bytes>` is the entire `rawPayloadBytes` array, encoded in base64url without padding (`+`→`-`, `/`→`_`, `=` stripped). The direct text form omits the URI scheme and the `m/` marker. It is intended for transports that preserve visible text but do not interpret custom URI schemes, such as messaging apps that deliberately keep `layergram://` inert.
 
 **Decoding:**
-1. Strip the `layergram://m/` prefix.
-2. base64url-decode the remainder to get `rawPayloadBytes`.
-3. Proceed with the Multi-Key Trial Decryption (Section 4.2).
+1. If the input is a direct deep link, strip the `layergram://m/` prefix.
+2. If the input is direct text, accept it only when the whole trimmed input is base64url payload text, optionally split by whitespace. Clients must not scan arbitrary surrounding prose for bare payload substrings.
+3. base64url-decode the payload to get `rawPayloadBytes`.
+4. Proceed with the Multi-Key Trial Decryption (Section 4.2).
 
 #### Trade-Off and When to Use
 
-Direct message links sacrifice **visual deniability**: the link is clearly identifiable as a Layergram encrypted message, making the presence of encrypted communication obvious to anyone who sees the link.
+Direct message text and links sacrifice **visual deniability** compared with steganographic cover messages: both expose an opaque ciphertext-sized blob. Direct text avoids the Layergram URI scheme and is less self-identifying than a link, but it is not clickable. Direct message links are clearly identifiable as Layergram encrypted messages, making the presence of encrypted communication obvious to anyone who sees the link.
 
-**When to use deep links instead of steganography:**
+**When to use direct text or deep links instead of steganography:**
 - Transport platforms that strip or normalize zero-width Unicode characters (some email gateways, certain web forms)
-- Situations where the recipient needs an obvious, clickable entry point to the message
+- Direct text: transports that preserve visible text but do not open custom URI schemes
+- Deep links: situations where the recipient needs an obvious, clickable entry point to the message
 - When the user prefers explicit sharing over hidden embedding
 
-**Important:** Unlike steganographic embedding, deep links do not hide the existence of encrypted communication — they advertise it. Use steganography when you want the message to look like an ordinary conversation; use deep links when transport compatibility or usability is more important than hiding the message's existence.
+**Important:** Unlike steganographic embedding, direct text and deep links do not hide the existence of an opaque encrypted blob. Deep links additionally advertise Layergram through the URI scheme. Use steganography when you want the message to look like an ordinary conversation; use direct text or deep links when transport compatibility or usability is more important than hiding the message's existence.
 
 ---
 

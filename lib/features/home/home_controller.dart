@@ -61,6 +61,10 @@ class HomeController {
 
   static const int _maxRetainedDisplayKeys = 12;
   static const int _sessionWarmContactLimit = 6;
+  static const int _minRawMessageBytes = 28;
+  static const int _minDirectPayloadChars = 38;
+  static const int _maxDirectPayloadChars = 65536;
+  static final RegExp _directPayloadPattern = RegExp(r'^[A-Za-z0-9_-]+={0,2}$');
 
   // ── Passphrase helpers ──────────────────────────────────────────────────
 
@@ -100,8 +104,13 @@ class HomeController {
 
   /// V2: link payload is base64url of raw bytes (nonce + ciphertext).
   String buildLinkPayload(EncryptedMessage encrypted) {
+    return 'layergram://m/${buildTextPayload(encrypted)}';
+  }
+
+  /// V2 direct text payload is base64url of raw bytes, without a URI scheme.
+  String buildTextPayload(EncryptedMessage encrypted) {
     final raw = encrypted.toRawBytes();
-    return 'layergram://m/${base64Url.encode(raw).replaceAll('=', '')}';
+    return base64Url.encode(raw).replaceAll('=', '');
   }
 
   Future<String> generateHiddenMessage({
@@ -691,7 +700,7 @@ class HomeController {
     required String privateKey,
     String? hintContactId,
   }) async {
-    // Extract raw byte candidates from stego or link.
+    // Extract raw byte candidates from stego, deep link, or direct text.
     List<Uint8List> candidates;
 
     final linkCandidates = _decodeLinkRawCandidates(source);
@@ -700,7 +709,10 @@ class HomeController {
     } else if (source.toLowerCase().contains('layergram://m/')) {
       return null;
     } else {
-      candidates = ref.read(stegoDecoderProvider).decodeByteCandidates(source);
+      final textCandidates = _decodeDirectTextRawCandidates(source);
+      candidates = textCandidates.isNotEmpty
+          ? textCandidates
+          : ref.read(stegoDecoderProvider).decodeByteCandidates(source);
       if (candidates.isEmpty) return null;
     }
 
@@ -1085,6 +1097,38 @@ class HomeController {
     return input.padRight(input.length + (4 - rem), '=');
   }
 
+  List<Uint8List> _decodeDirectTextRawCandidates(String source) {
+    final encoded = _normalizeDirectTextPayload(source);
+    if (encoded == null) return const [];
+    final raw = _decodeRawPayload(encoded);
+    return raw == null ? const [] : <Uint8List>[raw];
+  }
+
+  String? _normalizeDirectTextPayload(String source) {
+    final normalized = source.trim();
+    if (normalized.isEmpty) return null;
+    if (normalized.toLowerCase().contains('layergram://')) return null;
+    if (normalized.length > _maxDirectPayloadChars * 2) return null;
+
+    final compact = normalized.replaceAll(RegExp(r'\s+'), '');
+    if (compact.length < _minDirectPayloadChars ||
+        compact.length > _maxDirectPayloadChars) {
+      return null;
+    }
+    if (!_directPayloadPattern.hasMatch(compact)) return null;
+    return compact;
+  }
+
+  Uint8List? _decodeRawPayload(String encoded) {
+    try {
+      final raw = Uint8List.fromList(base64Url.decode(_padBase64(encoded)));
+      if (raw.length < _minRawMessageBytes) return null;
+      return raw;
+    } catch (_) {
+      return null;
+    }
+  }
+
   List<Uint8List> _decodeLinkRawCandidates(String source) {
     final prefix = RegExp('layergram://m/', caseSensitive: false);
     final match = prefix.firstMatch(source);
@@ -1107,13 +1151,12 @@ class HomeController {
       expectedStart = token.end;
       final encoded = buffer.toString();
       if (!seen.add(encoded)) continue;
+      if (encoded.length > _maxDirectPayloadChars) break;
 
-      try {
-        final raw = Uint8List.fromList(base64Url.decode(_padBase64(encoded)));
-        if (raw.length >= 28) {
-          candidates.add(raw);
-        }
-      } catch (_) {
+      final raw = _decodeRawPayload(encoded);
+      if (raw != null) {
+        candidates.add(raw);
+      } else {
         // Keep collecting; a wrapped link may only decode after later tokens.
       }
     }

@@ -11,6 +11,7 @@ import 'package:layergram/core/storage/chat_meta_repository.dart';
 import 'package:layergram/core/storage/local_database.dart';
 import 'package:layergram/core/storage/messages_repository.dart';
 import 'package:layergram/features/home/chat_view.dart';
+import 'package:layergram/features/home/message_output_mode.dart';
 
 void main() {
   late Directory tmpDir;
@@ -33,13 +34,13 @@ void main() {
     await Hive.box<Map>(LocalDatabase.messagesBoxName).clear();
   });
 
-  testWidgets('new chats default to link mode', (tester) async {
+  testWidgets('new chats default to text mode', (tester) async {
     await _pumpChat(
       tester,
       chatMetaRepository: _TestChatMetaRepository(),
     );
 
-    expect(_composerModeSelection(tester), equals([false, true]));
+    expect(_composerModeSelection(tester), equals([false, true, false]));
     expect(find.text('coverText'), findsNothing);
   });
 
@@ -47,11 +48,11 @@ void main() {
       (tester) async {
     await _pumpChat(
       tester,
-      initialLinkMode: false,
+      initialOutputMode: MessageOutputMode.cover,
       chatMetaRepository: _TestChatMetaRepository(),
     );
 
-    expect(_composerModeSelection(tester), equals([true, false]));
+    expect(_composerModeSelection(tester), equals([true, false, false]));
     expect(find.text('coverText'), findsOneWidget);
   });
 
@@ -61,15 +62,43 @@ void main() {
       tester,
       chatMetaRepository: _TestChatMetaRepository(
         settings: const {
-          'linkMode': false,
+          'outputMode': 'cover',
           'expiryMinutes': null,
           'deleteAfterRead': false,
         },
       ),
     );
 
-    expect(_composerModeSelection(tester), equals([true, false]));
+    expect(_composerModeSelection(tester), equals([true, false, false]));
     expect(find.text('coverText'), findsOneWidget);
+  });
+
+  testWidgets('manual mode selection is saved per chat', (tester) async {
+    final repo = _TestChatMetaRepository();
+    await _pumpChat(
+      tester,
+      chatMetaRepository: repo,
+    );
+
+    expect(_composerModeSelection(tester), equals([false, true, false]));
+
+    await tester.tap(find.byIcon(Icons.link).first);
+    await tester.pump();
+    expect(_composerModeSelection(tester), equals([false, false, true]));
+    expect(repo.savedOutputMode, 'link');
+    expect(find.text('coverText'), findsNothing);
+
+    await tester.tap(find.byIcon(Icons.chat_bubble_outline).first);
+    await tester.pump();
+    expect(_composerModeSelection(tester), equals([true, false, false]));
+    expect(repo.savedOutputMode, 'cover');
+    expect(find.text('coverText'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.text_snippet_outlined).first);
+    await tester.pump();
+    expect(_composerModeSelection(tester), equals([false, true, false]));
+    expect(repo.savedOutputMode, 'text');
+    expect(find.text('coverText'), findsNothing);
   });
 
   testWidgets('secret clear button appears only with text and clears the field',
@@ -100,11 +129,12 @@ void main() {
     await _pumpChat(
       tester,
       size: const Size(844, 390),
-      initialLinkMode: false,
+      initialOutputMode: MessageOutputMode.cover,
       chatMetaRepository: _TestChatMetaRepository(),
     );
 
     expect(tester.takeException(), isNull);
+    expect(_composerModeSelection(tester), equals([true, false, false]));
 
     final fields = find.byType(TextField);
     expect(fields, findsNWidgets(2));
@@ -133,7 +163,7 @@ void main() {
     await _pumpChat(
       tester,
       size: const Size(1200, 800),
-      initialLinkMode: false,
+      initialOutputMode: MessageOutputMode.cover,
       chatMetaRepository: _TestChatMetaRepository(),
     );
 
@@ -161,7 +191,7 @@ List<bool> _composerModeSelection(WidgetTester tester) {
 Future<void> _pumpChat(
   WidgetTester tester, {
   Size size = const Size(390, 844),
-  bool? initialLinkMode,
+  MessageOutputMode? initialOutputMode,
   required _TestChatMetaRepository chatMetaRepository,
 }) async {
   addTearDown(() {
@@ -181,7 +211,7 @@ Future<void> _pumpChat(
         home: ChatView(
           contact: _contact,
           embedded: true,
-          initialLinkMode: initialLinkMode,
+          initialOutputMode: initialOutputMode,
         ),
       ),
     ),
@@ -203,6 +233,7 @@ class _TestChatMetaRepository extends ChatMetaRepository {
         super(identityId: 'me');
 
   final Map<String, dynamic>? _settings;
+  String? savedOutputMode;
 
   @override
   Future<Map<String, dynamic>?> getChatSettings({
@@ -216,10 +247,12 @@ class _TestChatMetaRepository extends ChatMetaRepository {
   @override
   Future<void> saveChatSettings({
     required String chatId,
-    required bool linkMode,
+    required String outputMode,
     required int? expiryMinutes,
     required bool deleteAfterRead,
-  }) async {}
+  }) async {
+    savedOutputMode = outputMode;
+  }
 }
 
 class _EmptyMessagesRepository extends MessagesRepository {

@@ -170,7 +170,8 @@ class ChatMetaRepository {
     _controller.add(null);
   }
 
-  Future<void> togglePinned({required String folderId, required String chatId}) {
+  Future<void> togglePinned(
+      {required String folderId, required String chatId}) {
     final pinned = isPinned(folderId: folderId, chatId: chatId);
     return setPinned(folderId: folderId, chatId: chatId, pinned: !pinned);
   }
@@ -202,7 +203,8 @@ class ChatMetaRepository {
     _controller.add(null);
   }
 
-  Future<Map<String, dynamic>?> getChatSettings({required String chatId}) async {
+  Future<Map<String, dynamic>?> getChatSettings(
+      {required String chatId}) async {
     await _ensureLoaded();
     if (!_hasIdentityScope) return null;
     final settings = _settingsByChatId[chatId];
@@ -212,14 +214,14 @@ class ChatMetaRepository {
 
   Future<void> saveChatSettings({
     required String chatId,
-    required bool linkMode,
+    required String outputMode,
     required int? expiryMinutes,
     required bool deleteAfterRead,
   }) async {
     await _ensureLoaded();
     if (!_hasIdentityScope) return;
     _settingsByChatId[chatId] = {
-      'linkMode': linkMode,
+      'outputMode': outputMode,
       'expiryMinutes': expiryMinutes,
       'deleteAfterRead': deleteAfterRead,
     };
@@ -227,7 +229,7 @@ class ChatMetaRepository {
   }
 
   /// Clean up resources and close stream controller.
-  /// 
+  ///
   /// This method should be called when the repository is no longer needed
   /// to prevent memory leaks from the stream controller.
   void dispose() {

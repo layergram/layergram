@@ -22,6 +22,7 @@ import '../../utils/app_platform.dart';
 import '../../utils/sharing.dart';
 import '../contact_verification/contact_verification_view.dart';
 import 'home_controller.dart';
+import 'message_output_mode.dart';
 
 class ChatView extends ConsumerStatefulWidget {
   const ChatView({
@@ -31,7 +32,7 @@ class ChatView extends ConsumerStatefulWidget {
     this.initialSecret,
     this.initialExpiry,
     this.initialDeleteAfterRead,
-    this.initialLinkMode,
+    this.initialOutputMode,
     this.embedded = false,
     this.initialIsSearching = false,
     this.initialSearchIndex,
@@ -44,7 +45,7 @@ class ChatView extends ConsumerStatefulWidget {
   final String? initialSecret;
   final int? initialExpiry;
   final bool? initialDeleteAfterRead;
-  final bool? initialLinkMode;
+  final MessageOutputMode? initialOutputMode;
   final bool embedded;
   final bool? initialIsSearching;
   final int? initialSearchIndex;
@@ -125,7 +126,7 @@ class ChatViewState extends ConsumerState<ChatView> {
         'secret': _secretCtrl.text,
         'expiry': _selectedExpiryMinutes,
         'deleteAfterRead': _deleteAfterRead,
-        'linkMode': _linkMode,
+        'outputMode': _outputMode.storageValue,
         'isSearching': _isSearching,
         'searchQuery': _searchQuery,
         'searchIndex': _searchIndex,
@@ -152,7 +153,7 @@ class ChatViewState extends ConsumerState<ChatView> {
   int _lastNewestTimestamp = 0;
   double _composerHeight = 240.0;
   bool _deleteAfterRead = false;
-  bool _linkMode = true;
+  MessageOutputMode _outputMode = MessageOutputMode.defaultMode;
   String _encryptedOutput = '';
   bool _dirtySinceEncode = true;
   bool _sending = false;
@@ -168,6 +169,10 @@ class ChatViewState extends ConsumerState<ChatView> {
       widget.contact.verified || _verifiedThisSession;
 
   bool get _showUnverifiedBanner => !_isContactVerifiedNow && !_bannerDismissed;
+
+  bool get _isCoverMode => _outputMode == MessageOutputMode.cover;
+
+  bool get _isLinkMode => _outputMode == MessageOutputMode.link;
 
   Future<void> _startContactVerification() async {
     final result =
@@ -253,17 +258,23 @@ class ChatViewState extends ConsumerState<ChatView> {
     return mode != FsSecurityMode.base;
   }
 
-  int _estimatedLinkLengthForSecret(String secretText) {
+  int _estimatedDirectPayloadLengthForSecret(String secretText) {
     if (secretText.trim().isEmpty) return 0;
     // Estimate based on typical encrypted message size
-    // V2 link format: layergram://m/[base64url_encoded_data]
+    // V2 direct text format: base64url_encoded_data
     final estimatedPayloadBytes = _estimatedPayloadBytesForSecret(secretText);
     // Raw bytes = nonce (12) + ciphertext (~payloadBytes + 16 for GCM tag)
     final rawBytesLength = 12 + estimatedPayloadBytes + 16;
     // Base64url encoding increases size by ~4/3, minus padding removal
-    final encodedLength = (rawBytesLength * 4 + 2) ~/ 3; // ceil division
-    // Total link length = prefix + encoded data
-    return 'layergram://m/'.length + encodedLength;
+    return (rawBytesLength * 4 + 2) ~/ 3; // ceil division
+  }
+
+  int _estimatedDirectOutputLengthForSecret(String secretText) {
+    final encodedLength = _estimatedDirectPayloadLengthForSecret(secretText);
+    if (_isLinkMode && encodedLength > 0) {
+      return 'layergram://m/'.length + encodedLength;
+    }
+    return encodedLength;
   }
 
   int _minimumStegoCharacterCount({
@@ -287,9 +298,9 @@ class ChatViewState extends ConsumerState<ChatView> {
   }) {
     final limit = _coverLengthLimit;
     if (limit == null) return true;
-    if (_linkMode) {
+    if (!_isCoverMode) {
       final effectiveSecret = secretText ?? _secretCtrl.text;
-      return _estimatedLinkLengthForSecret(effectiveSecret) <= limit;
+      return _estimatedDirectOutputLengthForSecret(effectiveSecret) <= limit;
     }
     return _minimumStegoCharacterCount(
           coverText: coverText,
@@ -323,14 +334,14 @@ class ChatViewState extends ConsumerState<ChatView> {
       coverText: currentCover,
       secretText: currentSecret,
     );
-    final currentLength = _linkMode
-        ? _estimatedLinkLengthForSecret(currentSecret)
+    final currentLength = !_isCoverMode
+        ? _estimatedDirectOutputLengthForSecret(currentSecret)
         : _minimumStegoCharacterCount(
             coverText: currentCover,
             secretText: currentSecret,
           );
-    final nextLength = _linkMode
-        ? _estimatedLinkLengthForSecret(nextSecret)
+    final nextLength = !_isCoverMode
+        ? _estimatedDirectOutputLengthForSecret(nextSecret)
         : _minimumStegoCharacterCount(
             coverText: nextCover,
             secretText: nextSecret,
@@ -338,6 +349,10 @@ class ChatViewState extends ConsumerState<ChatView> {
 
     if (currentFits && nextLength > currentLength) {
       return oldValue;
+    }
+
+    if (!_isCoverMode) {
+      return nextLength <= currentLength ? newValue : oldValue;
     }
 
     final limit = _coverLengthLimit!;
@@ -358,8 +373,8 @@ class ChatViewState extends ConsumerState<ChatView> {
 
   String? _coverLimitCounterText(int? coverLengthLimit) {
     if (coverLengthLimit == null) return null;
-    if (_linkMode) {
-      return '${_estimatedLinkLengthForSecret(_secretCtrl.text)}/$coverLengthLimit';
+    if (!_isCoverMode) {
+      return '${_estimatedDirectOutputLengthForSecret(_secretCtrl.text)}/$coverLengthLimit';
     }
     return '${_minimumStegoCharacterCount()}/$coverLengthLimit';
   }
@@ -814,8 +829,8 @@ class ChatViewState extends ConsumerState<ChatView> {
     if (widget.initialDeleteAfterRead != null) {
       _deleteAfterRead = widget.initialDeleteAfterRead!;
     }
-    if (widget.initialLinkMode != null) {
-      _linkMode = widget.initialLinkMode!;
+    if (widget.initialOutputMode != null) {
+      _outputMode = widget.initialOutputMode!;
     }
     _loadPersistedChatSettings();
     // Handle initial search from global search or handoff
@@ -882,7 +897,7 @@ class ChatViewState extends ConsumerState<ChatView> {
     final metaRepo = ref.read(chatMetaRepositoryProvider);
     metaRepo.saveChatSettings(
       chatId: widget.contact.identityId,
-      linkMode: _linkMode,
+      outputMode: _outputMode.storageValue,
       expiryMinutes: _selectedExpiryMinutes,
       deleteAfterRead: _deleteAfterRead,
     );
@@ -894,7 +909,9 @@ class ChatViewState extends ConsumerState<ChatView> {
         await metaRepo.getChatSettings(chatId: widget.contact.identityId);
     if (!mounted || settings == null) return;
     setState(() {
-      _linkMode = settings['linkMode'] as bool? ?? _linkMode;
+      _outputMode = MessageOutputMode.fromStorageValue(
+        settings['outputMode'] as String?,
+      );
       _selectedExpiryMinutes =
           settings['expiryMinutes'] as int? ?? _selectedExpiryMinutes;
       _deleteAfterRead =
@@ -1239,23 +1256,88 @@ class ChatViewState extends ConsumerState<ChatView> {
     );
   }
 
-  void _setComposerMode(bool linkMode) {
-    if (_linkMode == linkMode) {
+  void _setComposerMode(MessageOutputMode mode) {
+    if (_outputMode == mode) {
       return;
     }
     setState(() {
-      _linkMode = linkMode;
+      _outputMode = mode;
       _encryptedOutput = '';
       _dirtySinceEncode = true;
+      _exactCoverMissingCount = null;
     });
     _saveSettings();
     final t = AppStrings.t;
     _showTouchComposerSnackbar(
-      t(
-        context,
-        linkMode
-            ? 'touchComposerLinkModeEnabled'
-            : 'touchComposerMessageModeEnabled',
+      t(context, _composerModeSnackbarKey(mode)),
+    );
+  }
+
+  String _composerModeSnackbarKey(MessageOutputMode mode) {
+    switch (mode) {
+      case MessageOutputMode.cover:
+        return 'touchComposerCoverModeEnabled';
+      case MessageOutputMode.text:
+        return 'touchComposerTextModeEnabled';
+      case MessageOutputMode.link:
+        return 'touchComposerLinkModeEnabled';
+    }
+  }
+
+  Widget _buildOutputModeToggle({
+    required BuildContext context,
+    required double minSize,
+    required double iconSize,
+    required EdgeInsetsGeometry padding,
+  }) {
+    final t = AppStrings.t;
+    final modes = MessageOutputMode.values;
+    return ToggleButtons(
+      constraints: BoxConstraints(
+        minHeight: minSize,
+        minWidth: minSize,
+      ),
+      isSelected: [
+        for (final mode in modes) _outputMode == mode,
+      ],
+      onPressed: (index) {
+        _setComposerMode(modes[index]);
+      },
+      borderRadius: const BorderRadius.all(Radius.circular(12)),
+      children: [
+        _buildOutputModeButton(
+          icon: Icons.chat_bubble_outline,
+          label: t(context, 'composerModeCover'),
+          iconSize: iconSize,
+          padding: padding,
+        ),
+        _buildOutputModeButton(
+          icon: Icons.text_snippet_outlined,
+          label: t(context, 'composerModeText'),
+          iconSize: iconSize,
+          padding: padding,
+        ),
+        _buildOutputModeButton(
+          icon: Icons.link,
+          label: t(context, 'composerModeLink'),
+          iconSize: iconSize,
+          padding: padding,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildOutputModeButton({
+    required IconData icon,
+    required String label,
+    required double iconSize,
+    required EdgeInsetsGeometry padding,
+  }) {
+    return Tooltip(
+      message: label,
+      child: Padding(
+        padding: padding,
+        child: Icon(icon, size: iconSize, semanticLabel: label),
       ),
     );
   }
@@ -1327,13 +1409,13 @@ class ChatViewState extends ConsumerState<ChatView> {
   }
 
   bool get _coverTooShort {
-    if (_linkMode || _secretCtrl.text.trim().isEmpty) return false;
+    if (!_isCoverMode || _secretCtrl.text.trim().isEmpty) return false;
     if (_exactCoverMissingCount != null) return true;
     return !StegoEncoder.canEmbedBytes(_coverCtrl.text, _estimatedPayloadBytes);
   }
 
   int get _coverMissingCount {
-    if (_linkMode || _secretCtrl.text.trim().isEmpty) {
+    if (!_isCoverMode || _secretCtrl.text.trim().isEmpty) {
       return 0;
     }
     if (_exactCoverMissingCount != null) return _exactCoverMissingCount!;
@@ -1344,7 +1426,6 @@ class ChatViewState extends ConsumerState<ChatView> {
   }
 
   bool get _coverLengthLimitExceeded {
-    if (_linkMode) return false;
     return !_fitsWithinCoverLengthLimit();
   }
 
@@ -1381,8 +1462,8 @@ class ChatViewState extends ConsumerState<ChatView> {
   }
 
   bool get _isInputValid {
-    if (_linkMode) {
-      return _secretCtrl.text.trim().isNotEmpty;
+    if (!_isCoverMode) {
+      return !_coverLengthLimitExceeded && _secretCtrl.text.trim().isNotEmpty;
     }
     return !_coverTooShort &&
         !_coverLengthLimitExceeded &&
@@ -1415,7 +1496,7 @@ class ChatViewState extends ConsumerState<ChatView> {
               );
       final encrypted = encResult.message;
       final rawBytes = encrypted.toRawBytes();
-      if (!_linkMode &&
+      if (_isCoverMode &&
           !StegoEncoder.canEmbedBytes(_coverCtrl.text, rawBytes.length)) {
         final missing = StegoEncoder.missingCoverCapacityForBytes(
           _coverCtrl.text,
@@ -1431,13 +1512,17 @@ class ChatViewState extends ConsumerState<ChatView> {
         return null;
       }
 
-      final output = _linkMode
-          ? ref.read(homeControllerProvider).buildLinkPayload(encrypted)
-          : ref.read(stegoEncoderProvider).encodeBytes(
-                _coverCtrl.text,
-                rawBytes,
-                maxTotalCharacters: _coverLengthLimit,
-              );
+      final output = switch (_outputMode) {
+        MessageOutputMode.cover => ref.read(stegoEncoderProvider).encodeBytes(
+              _coverCtrl.text,
+              rawBytes,
+              maxTotalCharacters: _coverLengthLimit,
+            ),
+        MessageOutputMode.text =>
+          ref.read(homeControllerProvider).buildTextPayload(encrypted),
+        MessageOutputMode.link =>
+          ref.read(homeControllerProvider).buildLinkPayload(encrypted),
+      };
 
       final controller = ref.read(homeControllerProvider);
       final keyTag = await controller.currentKeyTag();
@@ -1525,26 +1610,17 @@ class ChatViewState extends ConsumerState<ChatView> {
               children: [
                 Row(
                   children: [
-                    ToggleButtons(
-                      constraints:
-                          const BoxConstraints(minHeight: 32, minWidth: 32),
-                      isSelected: [_linkMode == false, _linkMode == true],
-                      onPressed: (index) {
-                        _setComposerMode(index == 1);
-                      },
-                      borderRadius: const BorderRadius.all(Radius.circular(12)),
-                      children: const [
-                        Padding(
-                          padding:
-                              EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          child: Icon(Icons.chat_bubble_outline, size: 18),
+                    FocusTraversalOrder(
+                      order: const NumericFocusOrder(3),
+                      child: _buildOutputModeToggle(
+                        context: context,
+                        minSize: 32,
+                        iconSize: 18,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
                         ),
-                        Padding(
-                          padding:
-                              EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          child: Icon(Icons.link, size: 18),
-                        ),
-                      ],
+                      ),
                     ),
                     const SizedBox(width: 8),
                     SizedBox(
@@ -1653,8 +1729,11 @@ class ChatViewState extends ConsumerState<ChatView> {
                               if (output == null || !context.mounted) {
                                 return;
                               }
-                              await shareTextExternally(context, output,
-                                  forceStegoCover: true);
+                              await shareTextExternally(
+                                context,
+                                output,
+                                forceStegoCover: _isCoverMode,
+                              );
                             },
                     ),
                   ],
@@ -1662,7 +1741,7 @@ class ChatViewState extends ConsumerState<ChatView> {
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    if (!_linkMode) ...[
+                    if (_isCoverMode) ...[
                       Expanded(
                         child: TextField(
                           controller: _coverCtrl,
@@ -2414,35 +2493,11 @@ class ChatViewState extends ConsumerState<ChatView> {
                                                 compactControls ? 8.0 : 10.0;
                                             final toggle = FocusTraversalOrder(
                                               order: const NumericFocusOrder(5),
-                                              child: ToggleButtons(
-                                                constraints: BoxConstraints(
-                                                  minHeight: toggleMinSize,
-                                                  minWidth: toggleMinSize,
-                                                ),
-                                                isSelected: [
-                                                  _linkMode == false,
-                                                  _linkMode == true
-                                                ],
-                                                onPressed: (index) {
-                                                  _setComposerMode(index == 1);
-                                                },
-                                                borderRadius:
-                                                    const BorderRadius.all(
-                                                        Radius.circular(12)),
-                                                children: [
-                                                  Padding(
-                                                    padding: togglePadding,
-                                                    child: Icon(
-                                                        Icons
-                                                            .chat_bubble_outline,
-                                                        size: toggleIconSize),
-                                                  ),
-                                                  Padding(
-                                                    padding: togglePadding,
-                                                    child: Icon(Icons.link,
-                                                        size: toggleIconSize),
-                                                  ),
-                                                ],
+                                              child: _buildOutputModeToggle(
+                                                context: context,
+                                                minSize: toggleMinSize,
+                                                iconSize: toggleIconSize,
+                                                padding: togglePadding,
                                               ),
                                             );
 
@@ -2612,7 +2667,7 @@ class ChatViewState extends ConsumerState<ChatView> {
                                           },
                                         ),
                                         const SizedBox(height: 8),
-                                        if (!_linkMode) ...[
+                                        if (_isCoverMode) ...[
                                           FocusTraversalOrder(
                                             order: const NumericFocusOrder(1),
                                             child: TextField(
@@ -2789,10 +2844,11 @@ class ChatViewState extends ConsumerState<ChatView> {
                                                                   return;
                                                                 }
                                                                 await shareTextExternally(
-                                                                    context,
-                                                                    output,
-                                                                    forceStegoCover:
-                                                                        true);
+                                                                  context,
+                                                                  output,
+                                                                  forceStegoCover:
+                                                                      _isCoverMode,
+                                                                );
                                                               },
                                                     icon: const Icon(
                                                         Icons
