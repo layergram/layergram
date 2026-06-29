@@ -9,6 +9,7 @@ import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/crypto/fs_security_mode.dart';
+import '../../core/crypto/fs_session_manager.dart';
 import '../../core/crypto/models.dart';
 import '../../core/crypto/stego_encoder.dart';
 import '../../core/providers.dart';
@@ -241,13 +242,6 @@ class ChatViewState extends ConsumerState<ChatView> {
   }
 
   int _estimatedPayloadBytesForSecret(String secretText) {
-    if (_usesFsCoverPayloadBudget) {
-      return StegoEncoder.estimatedCoverMessagePayloadBytes(secretText);
-    }
-    return StegoEncoder.estimatedEncryptedPayloadBytes(secretText);
-  }
-
-  bool get _usesFsCoverPayloadBudget {
     final fsController = ref.read(
       fsOpportunisticControllerProvider(widget.contact.identityId),
     );
@@ -255,7 +249,28 @@ class ChatViewState extends ConsumerState<ChatView> {
           contactId: widget.contact.identityId,
           identityContext: fsController.identityContext,
         );
-    return mode != FsSecurityMode.base;
+    if (mode == FsSecurityMode.base) {
+      return StegoEncoder.estimatedEncryptedPayloadBytes(secretText);
+    }
+    final activeSessionIds = {
+      if (fsController.sessionManager.activeSessionId != null)
+        fsController.sessionManager.activeSessionId!,
+      ...fsController.allActiveSessionIds,
+    };
+    final fsActive = _isEstimatedFsActive(
+          fsController.sessionManager.state,
+        ) ||
+        activeSessionIds.isNotEmpty;
+    return StegoEncoder.estimatedCoverMessagePayloadBytes(
+      secretText,
+      fsActive: fsActive,
+      fsWrapCount: activeSessionIds.isEmpty ? 1 : activeSessionIds.length,
+    );
+  }
+
+  bool _isEstimatedFsActive(FsSessionState state) {
+    return state == FsSessionState.fsActive ||
+        state == FsSessionState.strictFsActive;
   }
 
   int _estimatedDirectPayloadLengthForSecret(String secretText) {

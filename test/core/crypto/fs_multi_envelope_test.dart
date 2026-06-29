@@ -29,6 +29,7 @@ import 'package:layergram/core/crypto/fs_double_ratchet.dart';
 import 'package:layergram/core/crypto/fs_handshake.dart';
 import 'package:layergram/core/crypto/fs_key_codec.dart';
 import 'package:layergram/core/crypto/models.dart';
+import 'package:layergram/core/crypto/stego_encoder.dart';
 
 final _x25519 = X25519();
 
@@ -223,6 +224,42 @@ void main() {
       expect(env['mc_cipher'], isA<String>());
       // No legacy fallback by default → stays full FS.
       expect(env.containsKey('mc_fallback_key'), isFalse);
+    });
+
+    test('cover estimate scales with active multi-session wraps', () async {
+      final service = EncryptionService();
+      final alice = await _identity();
+      final bob = await _identity();
+      final (aRatchetA, _) = await _buildSession('session-A');
+      final (aRatchetB, _) = await _buildSession('session-B');
+
+      const secret = 'x';
+      final result = await service.encryptMultiEnvelope(
+        senderPrivateKeyBase64: alice.privateKeyBase64,
+        recipientPublicKeyBase64: bob.publicKeyBase64,
+        payload: const PlaintextPayload(
+          senderId: 'ZDUAW7VUD2REOOXCEM42V2YLLWWEWXAHMANIQN6SSR2OUMZAA3SQ',
+          recipientId: 'TUJLJ5VUTD7S5B3S2CMVLOHNPDNBVPWJVPDFUENAI4NRYDZIIQVA',
+          text: secret,
+          timestamp: 1700000000,
+          senderDisplayName: 'Layergram sender with realistic display name',
+        ),
+        sessionRatchets: {'session-A': aRatchetA, 'session-B': aRatchetB},
+      );
+
+      final singleWrapEstimate = StegoEncoder.estimatedCoverMessagePayloadBytes(
+        secret,
+        fsActive: true,
+      );
+      final multiWrapEstimate = StegoEncoder.estimatedCoverMessagePayloadBytes(
+        secret,
+        fsActive: true,
+        fsWrapCount: 2,
+      );
+      final actualBytes = result.message.toRawBytes().length;
+
+      expect(singleWrapEstimate, lessThan(multiWrapEstimate));
+      expect(multiWrapEstimate, greaterThanOrEqualTo(actualBytes));
     });
 
     test('decrypting wrap advances only that device session ratchet', () async {

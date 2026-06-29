@@ -2687,17 +2687,23 @@ void main() {
           );
       final legacyEstimatedBytes =
           StegoEncoder.estimatedEncryptedPayloadBytes(secret);
-      final composerEstimatedBytes =
+      final negotiationEstimatedBytes =
           StegoEncoder.estimatedCoverMessagePayloadBytes(secret);
+      final activeFsEstimatedBytes =
+          StegoEncoder.estimatedCoverMessagePayloadBytes(
+        secret,
+        fsActive: true,
+      );
       final actualBytes = result.message.toRawBytes().length;
       final coverAcceptedByLegacyEstimate =
           'A' * StegoEncoder.minCoverLengthForBytes(legacyEstimatedBytes);
       final coverAcceptedByComposerEstimate =
-          'A' * StegoEncoder.minCoverLengthForBytes(composerEstimatedBytes);
+          'A' * StegoEncoder.minCoverLengthForBytes(activeFsEstimatedBytes);
 
       expect(result.isFsEncrypted, isTrue);
       expect(actualBytes, greaterThan(legacyEstimatedBytes));
-      expect(composerEstimatedBytes, greaterThanOrEqualTo(actualBytes));
+      expect(activeFsEstimatedBytes, greaterThanOrEqualTo(actualBytes));
+      expect(activeFsEstimatedBytes, lessThan(negotiationEstimatedBytes));
       expect(
         StegoEncoder.canEmbedBytes(
           coverAcceptedByLegacyEstimate,

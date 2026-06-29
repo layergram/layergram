@@ -17,6 +17,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/crypto/fs_security_mode.dart';
+import '../../core/crypto/fs_session_manager.dart';
 import '../../core/crypto/models.dart';
 import '../../core/crypto/stego_encoder.dart';
 import '../../core/providers.dart';
@@ -50,15 +51,10 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
   }
 
   int _estimatedPayloadBytesForSecret(String secretText) {
-    if (_usesFsCoverPayloadBudget) {
+    final recipient = _recipient;
+    if (recipient == null) {
       return StegoEncoder.estimatedCoverMessagePayloadBytes(secretText);
     }
-    return StegoEncoder.estimatedEncryptedPayloadBytes(secretText);
-  }
-
-  bool get _usesFsCoverPayloadBudget {
-    final recipient = _recipient;
-    if (recipient == null) return true;
     final fsController = ref.read(
       fsOpportunisticControllerProvider(recipient.identityId),
     );
@@ -66,7 +62,28 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
           contactId: recipient.identityId,
           identityContext: fsController.identityContext,
         );
-    return mode != FsSecurityMode.base;
+    if (mode == FsSecurityMode.base) {
+      return StegoEncoder.estimatedEncryptedPayloadBytes(secretText);
+    }
+    final activeSessionIds = {
+      if (fsController.sessionManager.activeSessionId != null)
+        fsController.sessionManager.activeSessionId!,
+      ...fsController.allActiveSessionIds,
+    };
+    final fsActive = _isEstimatedFsActive(
+          fsController.sessionManager.state,
+        ) ||
+        activeSessionIds.isNotEmpty;
+    return StegoEncoder.estimatedCoverMessagePayloadBytes(
+      secretText,
+      fsActive: fsActive,
+      fsWrapCount: activeSessionIds.isEmpty ? 1 : activeSessionIds.length,
+    );
+  }
+
+  bool _isEstimatedFsActive(FsSessionState state) {
+    return state == FsSessionState.fsActive ||
+        state == FsSessionState.strictFsActive;
   }
 
   int _minimumStegoCharacterCount({
@@ -318,12 +335,20 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
                               },
                               child: Expanded(
                                 child: Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 8.0),
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 8.0),
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
-                                      Text(item.displayName, style: Theme.of(context).textTheme.bodyLarge),
-                                      Text(item.fingerprint, style: Theme.of(context).textTheme.bodyMedium),
+                                      Text(item.displayName,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodyLarge),
+                                      Text(item.fingerprint,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodyMedium),
                                     ],
                                   ),
                                 ),
@@ -440,29 +465,33 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
                             );
                             return;
                           }
-                          final output = ref.read(stegoEncoderProvider).encodeBytes(
-                              _coverCtrl.text,
-                              rawBytes,
-                              maxTotalCharacters: _coverLengthLimit);
-                          
+                          final output = ref
+                              .read(stegoEncoderProvider)
+                              .encodeBytes(_coverCtrl.text, rawBytes,
+                                  maxTotalCharacters: _coverLengthLimit);
+
                           // Only save to chat if deleteAfterRead is false
                           if (!_deleteAfterRead) {
                             final ctrl = ref.read(homeControllerProvider);
                             final keyTag = await ctrl.currentKeyTag();
                             final storageKey = await ctrl.currentStorageKey();
                             final recordId = DateTime.now()
-                                        .microsecondsSinceEpoch
-                                        .toString();
+                                .microsecondsSinceEpoch
+                                .toString();
 
                             // §12.3: FS plaintext → encrypted aux record
-                            if (encResult.isFsEncrypted && _secretCtrl.text.isNotEmpty) {
-                              await ref.read(fsPlaintextPersistenceServiceProvider).savePlaintext(
-                                messageId: recordId,
-                                plaintext: _secretCtrl.text,
-                                contactId: recipient.identityId,
-                              );
+                            if (encResult.isFsEncrypted &&
+                                _secretCtrl.text.isNotEmpty) {
+                              await ref
+                                  .read(fsPlaintextPersistenceServiceProvider)
+                                  .savePlaintext(
+                                    messageId: recordId,
+                                    plaintext: _secretCtrl.text,
+                                    contactId: recipient.identityId,
+                                  );
                               final fsController = ref.read(
-                                fsOpportunisticControllerProvider(recipient.identityId),
+                                fsOpportunisticControllerProvider(
+                                    recipient.identityId),
                               );
                               fsController.cachePlaintext(
                                 '${recipient.identityId}|$recordId',
@@ -479,8 +508,11 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
                                     timestamp:
                                         DateTime.now().millisecondsSinceEpoch ~/
                                             1000,
-                                    text: encResult.isFsEncrypted ? null : _secretCtrl.text,
-                                    ciphertextBase64: encrypted.ciphertextBase64,
+                                    text: encResult.isFsEncrypted
+                                        ? null
+                                        : _secretCtrl.text,
+                                    ciphertextBase64:
+                                        encrypted.ciphertextBase64,
                                     nonceBase64: encrypted.nonceBase64,
                                     rawSource: output,
                                     expireAfter: expireAfter,
@@ -492,7 +524,7 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
                                   storageKey: storageKey,
                                 );
                           }
-                          
+
                           if (!mounted) return;
                           setState(() => _output = output);
                         },
@@ -535,7 +567,8 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
                                 if (!context.mounted) return;
                                 messenger.showSnackBar(
                                   SnackBar(
-                                    content: Text(strings(context, 'messageCopiedClipboard')),
+                                    content: Text(strings(
+                                        context, 'messageCopiedClipboard')),
                                   ),
                                 );
                               },
@@ -547,7 +580,8 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
                           Expanded(
                             child: FilledButton.icon(
                               onPressed: () async {
-                                await shareTextExternally(context, _output, forceStegoCover: true);
+                                await shareTextExternally(context, _output,
+                                    forceStegoCover: true);
                               },
                               icon: const Icon(Icons.share_outlined),
                               label: Text(strings(context, 'share')),

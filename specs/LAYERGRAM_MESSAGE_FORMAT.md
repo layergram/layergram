@@ -336,8 +336,13 @@ If a client shows live "characters missing" count or enables copy/share before
 constructing final encrypted payload, that preflight estimate MUST be
 conservative for active message mode. In particular, when Forward Secrecy may
 add envelope fields or multi-device wraps, preflight budget must include
-headroom for those fields. It MUST NOT tell user cover is sufficient and then
-reject same input only because final FS envelope is larger than UI estimate.
+headroom for those fields. Current senders do not emit the deprecated
+`mc_fallback_key`, so active single-session FS estimates should not reserve
+legacy fallback space. Non-active FS negotiation/control messages should still
+reserve handshake-extension headroom, while active multi-session FS estimates
+must scale with the number of `fs_wraps[]` entries. The estimate MUST NOT tell
+user cover is sufficient and then reject same input only because final FS
+envelope is larger than UI estimate.
 Exact constants used for preflight budget are implementation details;
 wire-format authority remains final `rawPayloadBytes.length` check above.
 
