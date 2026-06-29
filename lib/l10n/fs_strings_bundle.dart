@@ -111,6 +111,20 @@ class FsStringsBundle {
     'security.fs.maximum.cancel_button': 'Cancel',
     'security.fs.maximum.pending_notice':
         'Waiting for {contact} to confirm Maximum Forward Secrecy.',
+    'security.fs.maximum.disable_confirm_title': 'Disable Maximum FS?',
+    'security.fs.maximum.disable_confirm_body':
+        'Messages with this contact will return to Advanced FS. You can enable Maximum FS again later, '
+            'but you will need to confirm the secure channel again.',
+    'security.fs.maximum.disable_confirm_button': 'Disable',
+    'security.fs.maximum.setup_title': 'Maximum FS setup',
+    'security.fs.maximum.setup_outgoing_body':
+        'This will send only a setup message. Your message text will stay here. '
+            'Take turns exchanging setup messages until Maximum FS is active, then send your message again.',
+    'security.fs.maximum.setup_incoming_body':
+        'This was only a setup message. Take turns exchanging setup messages until Maximum FS is active. '
+            'No message text was sent yet.',
+    'security.fs.maximum.setup_send_button': 'Send setup',
+    'security.fs.maximum.setup_ack_button': 'I understand',
 
     // Info modal — mode-specific descriptions (§14.4)
     'security.fs.info.legacy_advantages':
@@ -176,7 +190,7 @@ class FsStringsBundle {
     'security.fs.warning.pending_title': 'Maximum FS requested',
     'security.fs.warning.pending_body':
         'Maximum FS is not active yet. Layergram is waiting for a confirmed secure session. '
-            'Until confirmation, this contact is not yet using Maximum Forward Secrecy.',
+            'Until confirmation, Layergram can send setup messages but not your message text.',
 
     // Historic fallback warning (§14.6.4)
     'security.fs.warning.fallback_body':

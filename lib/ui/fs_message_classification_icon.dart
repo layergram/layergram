@@ -33,14 +33,19 @@ class FsMessageClassificationIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final icon = _icon(classification);
-    final color = _color(classification, Theme.of(context));
+    final Widget icon = classification == FsMessageClassification.strictFs
+        ? _StrictFsLockIcon(size: size)
+        : Icon(
+            _icon(classification),
+            size: size,
+            color: _color(classification, Theme.of(context)),
+          );
 
     return GestureDetector(
       onTap: () => showFsClassificationDetail(context, classification),
       child: Tooltip(
         message: _shortLabel(context, classification),
-        child: Icon(icon, size: size, color: color),
+        child: icon,
       ),
     );
   }
@@ -58,7 +63,7 @@ class FsMessageClassificationIcon extends StatelessWidget {
       case FsMessageClassification.fsOnly:
         return Icons.lock;
       case FsMessageClassification.strictFs:
-        return Icons.enhanced_encryption;
+        return Icons.lock;
       case FsMessageClassification.fsFailed:
         return Icons.lock_open;
       case FsMessageClassification.unknown:
@@ -78,7 +83,7 @@ class FsMessageClassificationIcon extends StatelessWidget {
       case FsMessageClassification.fsOnly:
         return Colors.green.shade700;
       case FsMessageClassification.strictFs:
-        return const Color(0xFFD4A017); // gold
+        return Colors.green.shade700;
       case FsMessageClassification.fsFailed:
         return theme.colorScheme.error;
       case FsMessageClassification.unknown:
@@ -86,8 +91,7 @@ class FsMessageClassificationIcon extends StatelessWidget {
     }
   }
 
-  static String _shortLabel(
-      BuildContext context, FsMessageClassification cls) {
+  static String _shortLabel(BuildContext context, FsMessageClassification cls) {
     return AppStrings.t(context, _labelKey(cls));
   }
 
@@ -131,6 +135,27 @@ class FsMessageClassificationIcon extends StatelessWidget {
       case FsMessageClassification.unknown:
         return 'security.fs.cls.unknown.desc';
     }
+  }
+}
+
+class _StrictFsLockIcon extends StatelessWidget {
+  const _StrictFsLockIcon({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    const gold = Color(0xFFD4A017);
+    return SizedBox.square(
+      dimension: size,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Icon(Icons.lock, size: size, color: gold),
+          Icon(Icons.lock, size: size * 0.78, color: Colors.green.shade700),
+        ],
+      ),
+    );
   }
 }
 
@@ -179,8 +204,8 @@ void showFsClassificationDetail(
             ),
             const SizedBox(height: 12),
             Text(
-              AppStrings.t(context,
-                  FsMessageClassificationIcon._descriptionKey(cls)),
+              AppStrings.t(
+                  context, FsMessageClassificationIcon._descriptionKey(cls)),
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 16),

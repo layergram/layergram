@@ -55,6 +55,8 @@ class FsSendBlockedException implements Exception {
 class HomeController {
   HomeController(this.ref);
 
+  static const maximumFsPendingMessageKey = 'security.fs.warning.pending_body';
+
   final Ref ref;
   final LinkedHashMap<String, Future<SecretKey?>> _displayKeys =
       LinkedHashMap<String, Future<SecretKey?>>();
@@ -144,6 +146,43 @@ class HomeController {
     bool deleteAfterRead = false,
     bool selfCopy = false,
   }) async {
+    return _encryptForRecipient(
+      secretText: secretText,
+      recipient: recipient,
+      expireAfter: expireAfter,
+      deleteAfterRead: deleteAfterRead,
+      selfCopy: selfCopy,
+    );
+  }
+
+  Future<
+      ({
+        EncryptedMessage message,
+        bool isFsEncrypted,
+        FsMessageClassification classification
+      })> encryptMaximumFsSetupForRecipient({
+    required RemoteIdentity recipient,
+  }) async {
+    return _encryptForRecipient(
+      secretText: '',
+      recipient: recipient,
+      maximumFsSetupOnly: true,
+    );
+  }
+
+  Future<
+      ({
+        EncryptedMessage message,
+        bool isFsEncrypted,
+        FsMessageClassification classification
+      })> _encryptForRecipient({
+    required String secretText,
+    required RemoteIdentity recipient,
+    int? expireAfter,
+    bool deleteAfterRead = false,
+    bool selfCopy = false,
+    bool maximumFsSetupOnly = false,
+  }) async {
     final identityManager = ref.read(identityManagerProvider);
     final local = await identityManager.getLocalIdentity();
     final privateKey = await _activePrivateKey();
@@ -153,6 +192,13 @@ class HomeController {
 
     // Check Maximum/Strict FS policy before sending
     if (!selfCopy) {
+      final fsController = ref.read(
+        fsOpportunisticControllerProvider(recipient.identityId),
+      );
+      await _restorePersistedActiveFsSessionIfNeeded(
+        contactId: recipient.identityId,
+        fsController: fsController,
+      );
       final strictController = ref.read(
         fsStrictModeControllerProvider(recipient.identityId),
       );
@@ -214,13 +260,19 @@ class HomeController {
       sessionManager = fsController.sessionManager;
       var effectiveState = sessionManager.state;
       final routedActiveSessionIds = fsController.allActiveSessionIds;
-      final registryActiveSessionIds = ref
-          .read(fsContactSecurityRegistryProvider)
-          .forContact(
-            contactId: recipient.identityId,
-            identityContext: fsController.identityContext,
-          )
+      final registryEntries =
+          ref.read(fsContactSecurityRegistryProvider).forContact(
+                contactId: recipient.identityId,
+                identityContext: fsController.identityContext,
+              );
+      final registryActiveSessionIds = registryEntries
           .where((entry) => entry.isActive && entry.sessionId != null)
+          .map((entry) => entry.sessionId!)
+          .toSet();
+      final registryStrictActiveSessionIds = registryEntries
+          .where((entry) =>
+              entry.fsState == FsSessionState.strictFsActive &&
+              entry.sessionId != null)
           .map((entry) => entry.sessionId!)
           .toSet();
       final activeSessionIds = registryActiveSessionIds.isEmpty
@@ -229,15 +281,28 @@ class HomeController {
               for (final id in routedActiveSessionIds)
                 if (registryActiveSessionIds.contains(id)) id,
             ];
+      final canRestoreStrictSession = securityMode != FsSecurityMode.strict ||
+          activeSessionIds.any(registryStrictActiveSessionIds.contains);
       final shouldSendWithArchivedActiveSession =
           securityMode != FsSecurityMode.base &&
               !_isActiveFsState(effectiveState) &&
               _canSendWithArchivedActiveSession(effectiveState) &&
+              canRestoreStrictSession &&
               activeSessionIds.isNotEmpty;
       if (shouldSendWithArchivedActiveSession) {
         effectiveState = securityMode == FsSecurityMode.strict
             ? FsSessionState.strictFsActive
             : FsSessionState.fsActive;
+      }
+      final maximumFsRequiresSetup = securityMode == FsSecurityMode.strict &&
+          effectiveState != FsSessionState.strictFsActive;
+      if (maximumFsRequiresSetup && !maximumFsSetupOnly) {
+        throw const FsSendBlockedException(maximumFsPendingMessageKey);
+      }
+      if (maximumFsSetupOnly && !maximumFsRequiresSetup) {
+        throw const FsSendBlockedException(
+          'security.fs.error.sending_blocked',
+        );
       }
       final outgoingExt = await _buildFsOutgoingExtension(
         fsController: fsController,
@@ -248,6 +313,9 @@ class HomeController {
       );
       if (outgoingExt?.json != null) {
         fsExtension = outgoingExt!.json;
+      }
+      if (maximumFsSetupOnly && fsExtension == null) {
+        throw const FsSendBlockedException(maximumFsPendingMessageKey);
       }
 
       // If FS is active, get the ratchet state for encryption
@@ -747,6 +815,10 @@ class HomeController {
                   contactId: contact.identityId,
                   identityContext: fsController.identityContext,
                 );
+        await _restorePersistedActiveFsSessionIfNeeded(
+          contactId: contact.identityId,
+          fsController: fsController,
+        );
         final sessionManager = fsController.sessionManager;
         final activeSessionId = sessionManager.activeSessionId;
         if (activeSessionId != null) {
@@ -830,9 +902,9 @@ class HomeController {
 
         if (!isFs &&
             _incomingPlaintextViolatesMaximumFs(
-              contactId: contact.identityId,
               fsController: fsCtrl,
               fsResult: fsResult,
+              hasUserContent: result.payload.text.trim().isNotEmpty,
             )) {
           return const DecodeOutcome.fsLost();
         }
@@ -940,7 +1012,7 @@ class HomeController {
       await ref.read(messagesRepositoryProvider).markRead(recordId);
     }
 
-    return DecodeOutcome.success(payload);
+    return DecodeOutcome.success(payload, classification: classification);
   }
 
   bool _strictModeHasUnexpectedDevice(String contactId) {
@@ -959,9 +1031,9 @@ class HomeController {
   }
 
   bool _incomingPlaintextViolatesMaximumFs({
-    required String contactId,
     required FsOpportunisticController fsController,
     required FsIncomingResult? fsResult,
+    required bool hasUserContent,
   }) {
     if (fsResult?.rejectionReason == 'security.fs.error.unexpected_device') {
       return true;
@@ -971,17 +1043,33 @@ class HomeController {
       return false;
     }
 
-    if (fsController.sessionManager.state == FsSessionState.strictFsActive) {
-      return true;
-    }
+    final isMaximumFsControlOnly = fsResult != null &&
+        _isAcceptedMaximumFsControl(fsResult.type) &&
+        !hasUserContent;
+    if (isMaximumFsControlOnly) return false;
 
-    return ref
-        .read(fsContactSecurityRegistryProvider)
-        .forContact(
-          contactId: contactId,
-          identityContext: fsController.identityContext,
-        )
-        .any((entry) => entry.fsState == FsSessionState.strictFsActive);
+    return true;
+  }
+
+  bool _isAcceptedMaximumFsControl(FsIncomingType type) {
+    switch (type) {
+      case FsIncomingType.fsInitAccepted:
+      case FsIncomingType.fsReplyAccepted:
+      case FsIncomingType.fsConfirmAccepted:
+      case FsIncomingType.fsAckReceived:
+      case FsIncomingType.fsSuspendReceived:
+      case FsIncomingType.fsResetReceived:
+      case FsIncomingType.fsDowngradeNoticeReceived:
+      case FsIncomingType.fsSimultaneousNoticeReceived:
+        return true;
+      case FsIncomingType.noExtension:
+      case FsIncomingType.unknownType:
+      case FsIncomingType.malformed:
+      case FsIncomingType.fsInitRejected:
+      case FsIncomingType.fsReplyRejected:
+      case FsIncomingType.fsConfirmRejected:
+        return false;
+    }
   }
 
   // ── Message classification (§14.4) ─────────────────────────────────────────
@@ -1475,11 +1563,21 @@ class HomeController {
 }
 
 class DecodeOutcome {
-  const DecodeOutcome._(
-      {this.payload, this.kind = DecodeKind.error, this.errorCode});
+  const DecodeOutcome._({
+    this.payload,
+    this.kind = DecodeKind.error,
+    this.errorCode,
+    this.classification,
+  });
 
-  const DecodeOutcome.success(PlaintextPayload payload)
-      : this._(payload: payload, kind: DecodeKind.success);
+  const DecodeOutcome.success(
+    PlaintextPayload payload, {
+    FsMessageClassification? classification,
+  }) : this._(
+          payload: payload,
+          kind: DecodeKind.success,
+          classification: classification,
+        );
 
   const DecodeOutcome.noData() : this._(kind: DecodeKind.noData);
   const DecodeOutcome.notForMe() : this._(kind: DecodeKind.notForMe);
@@ -1492,6 +1590,12 @@ class DecodeOutcome {
   final PlaintextPayload? payload;
   final DecodeKind kind;
   final String? errorCode;
+  final FsMessageClassification? classification;
+
+  bool get isMaximumFsSetupOnly =>
+      kind == DecodeKind.success &&
+      classification == FsMessageClassification.fsNegotiation &&
+      (payload?.text.trim().isEmpty ?? false);
 }
 
 enum DecodeKind {

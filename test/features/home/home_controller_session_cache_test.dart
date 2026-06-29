@@ -13,6 +13,7 @@ import 'package:layergram/core/crypto/fs_double_ratchet.dart';
 import 'package:layergram/core/crypto/fs_message_classification.dart';
 import 'package:layergram/core/crypto/fs_security_mode.dart';
 import 'package:layergram/core/crypto/fs_session_manager.dart';
+import 'package:layergram/core/crypto/fs_startup_restore.dart';
 import 'package:layergram/core/crypto/identity_manager.dart';
 import 'package:layergram/core/crypto/models.dart';
 import 'package:layergram/core/crypto/seed_service.dart';
@@ -2490,6 +2491,170 @@ void main() {
       },
     );
 
+    test(
+      'Maximum FS first message decodes after both apps restart',
+      () async {
+        final x25519 = X25519();
+        final disp1Keys = await _keyMaterial(await x25519.newKeyPair());
+        final disp2Keys = await _keyMaterial(await x25519.newKeyPair());
+        const disp1Id = 'ZDUAW7VUD2REOOXCEM42V2YLLWWEWXAHMANIQN6SSR2OUMZAA3SQ';
+        const disp2Id = 'TUJLJ5VUTD7S5B3S2CMVLOHNPDNBVPWJVPDFUENAI4NRYDZIIQVA';
+
+        final disp1Fixture = await _createFixtureFor(
+          localIdentityId: disp1Id,
+          localDisplayName: 'Disp1 Identità A',
+          localKeys: disp1Keys,
+          contactKeysById: {disp2Id: disp2Keys},
+        );
+        final disp2Fixture = await _createFixtureFor(
+          localIdentityId: disp2Id,
+          localDisplayName: 'Disp2 Identità B',
+          localKeys: disp2Keys,
+          contactKeysById: {disp1Id: disp1Keys},
+        );
+        addTearDown(() {
+          disp1Fixture.identitiesRepository.dispose();
+          disp1Fixture.messagesRepository.dispose();
+          disp1Fixture.container.dispose();
+          disp2Fixture.identitiesRepository.dispose();
+          disp2Fixture.messagesRepository.dispose();
+          disp2Fixture.container.dispose();
+        });
+
+        await restorePersistedFsRuntimeState(disp1Fixture.container.read);
+        await restorePersistedFsRuntimeState(disp2Fixture.container.read);
+
+        final disp2ContactForDisp1 = disp1Fixture.contacts.single;
+        final disp1ContactForDisp2 = disp2Fixture.contacts.single;
+
+        await _completeFsHandshake(
+          initiatorFixture: disp1Fixture,
+          initiatorContact: disp2ContactForDisp1,
+          responderFixture: disp2Fixture,
+          responderContact: disp1ContactForDisp2,
+          label: 'disp1-disp2-maximum-before-restart',
+        );
+        await _promoteKnownSessionsToStrict(
+          fixture: disp1Fixture,
+          contactId: disp2Id,
+        );
+        await _promoteKnownSessionsToStrict(
+          fixture: disp2Fixture,
+          contactId: disp1Id,
+        );
+
+        expect(
+          disp1Fixture.container.read(fsStateForContactProvider(disp2Id)),
+          FsSessionState.strictFsActive,
+        );
+        expect(
+          disp2Fixture.container.read(fsStateForContactProvider(disp1Id)),
+          FsSessionState.strictFsActive,
+        );
+
+        final restartedDisp1 = await _createFixtureFor(
+          localIdentityId: disp1Id,
+          localDisplayName: 'Disp1 Identità A',
+          localKeys: disp1Keys,
+          contactKeysById: {disp2Id: disp2Keys},
+        );
+        final restartedDisp2 = await _createFixtureFor(
+          localIdentityId: disp2Id,
+          localDisplayName: 'Disp2 Identità B',
+          localKeys: disp2Keys,
+          contactKeysById: {disp1Id: disp1Keys},
+        );
+        addTearDown(() {
+          restartedDisp1.identitiesRepository.dispose();
+          restartedDisp1.messagesRepository.dispose();
+          restartedDisp1.container.dispose();
+          restartedDisp2.identitiesRepository.dispose();
+          restartedDisp2.messagesRepository.dispose();
+          restartedDisp2.container.dispose();
+        });
+
+        await restorePersistedFsRuntimeState(restartedDisp1.container.read);
+        await restorePersistedFsRuntimeState(restartedDisp2.container.read);
+
+        expect(
+          restartedDisp1.container
+              .read(fsSecurityModeServiceProvider)
+              .getModeSync(contactId: disp2Id, identityContext: 'primary'),
+          FsSecurityMode.strict,
+        );
+        expect(
+          restartedDisp2.container
+              .read(fsSecurityModeServiceProvider)
+              .getModeSync(contactId: disp1Id, identityContext: 'primary'),
+          FsSecurityMode.strict,
+        );
+        expect(
+          restartedDisp1.container.read(fsStateForContactProvider(disp2Id)),
+          FsSessionState.strictFsActive,
+        );
+        expect(
+          restartedDisp2.container.read(fsStateForContactProvider(disp1Id)),
+          FsSessionState.strictFsActive,
+        );
+
+        final restartedDisp1Controller =
+            restartedDisp1.container.read(homeControllerProvider);
+        final restartedDisp2Controller =
+            restartedDisp2.container.read(homeControllerProvider);
+
+        final firstAfterRestart =
+            await restartedDisp1Controller.encryptForRecipient(
+          secretText: 'first strict message after both apps restart',
+          recipient: restartedDisp1.contacts.single,
+        );
+        expect(
+          restartedDisp1.container
+              .read(fsOpportunisticControllerProvider(disp2Id))
+              .sessionManager
+              .state,
+          FsSessionState.strictFsActive,
+        );
+        expect(
+          restartedDisp1.container
+              .read(fsOpportunisticControllerProvider(disp2Id))
+              .securityMode,
+          FsSecurityMode.strict,
+        );
+        expect(
+            firstAfterRestart.classification, FsMessageClassification.strictFs);
+
+        final firstOutcome = await restartedDisp2Controller.decodeHiddenMessage(
+          restartedDisp1Controller.buildLinkPayload(firstAfterRestart.message),
+          hintContactId: disp1Id,
+        );
+        expect(firstOutcome.kind, DecodeKind.success);
+        expect(
+          firstOutcome.payload?.text,
+          'first strict message after both apps restart',
+        );
+        expect(firstOutcome.classification, FsMessageClassification.strictFs);
+
+        final replyAfterRestart =
+            await restartedDisp2Controller.encryptForRecipient(
+          secretText: 'reply strict message after both apps restart',
+          recipient: restartedDisp2.contacts.single,
+        );
+        expect(
+            replyAfterRestart.classification, FsMessageClassification.strictFs);
+
+        final replyOutcome = await restartedDisp1Controller.decodeHiddenMessage(
+          restartedDisp2Controller.buildLinkPayload(replyAfterRestart.message),
+          hintContactId: disp2Id,
+        );
+        expect(replyOutcome.kind, DecodeKind.success);
+        expect(
+          replyOutcome.payload?.text,
+          'reply strict message after both apps restart',
+        );
+        expect(replyOutcome.classification, FsMessageClassification.strictFs);
+      },
+    );
+
     test('Maximum FS activation clears stale contact sessions before rekey',
         () async {
       final fixture = await _createFixture();
@@ -2570,6 +2735,121 @@ void main() {
       expect(
         fixture.container.read(fsRatchetStateCacheProvider),
         isNot(contains(staleActiveSessionId)),
+      );
+    });
+
+    test('Maximum FS pending blocks user content and emits setup only',
+        () async {
+      final senderFixture = await _createFixture();
+      final contact = senderFixture.contacts.first;
+      final receiverFixture = await _createFixtureFor(
+        localIdentityId: contact.identityId,
+        localDisplayName: contact.displayName,
+        localKeys: senderFixture.contactKeysById[contact.identityId]!,
+        contactKeysById: {'me': senderFixture.localKeys},
+      );
+      addTearDown(() {
+        senderFixture.identitiesRepository.dispose();
+        senderFixture.messagesRepository.dispose();
+        senderFixture.container.dispose();
+        receiverFixture.identitiesRepository.dispose();
+        receiverFixture.messagesRepository.dispose();
+        receiverFixture.container.dispose();
+      });
+
+      await _setStrictModeForKnownSessions(
+        fixture: senderFixture,
+        contactId: contact.identityId,
+      );
+
+      final senderController =
+          senderFixture.container.read(homeControllerProvider);
+      await expectLater(
+        senderController.encryptForRecipient(
+          secretText: 'do not send before Maximum FS is active',
+          recipient: contact,
+        ),
+        throwsA(
+          isA<FsSendBlockedException>().having(
+            (e) => e.messageKey,
+            'messageKey',
+            HomeController.maximumFsPendingMessageKey,
+          ),
+        ),
+      );
+
+      final setup = await senderController.encryptMaximumFsSetupForRecipient(
+        recipient: contact,
+      );
+      expect(setup.isFsEncrypted, isFalse);
+      expect(setup.classification, FsMessageClassification.fsNegotiation);
+
+      final receiverController =
+          receiverFixture.container.read(homeControllerProvider);
+      final outcome = await receiverController.decodeHiddenMessage(
+        senderController.buildLinkPayload(setup.message),
+        hintContactId: 'me',
+      );
+      expect(outcome.kind, DecodeKind.success);
+      expect(outcome.payload?.text, isEmpty);
+    });
+
+    test('Maximum FS pending rejects plaintext user content with x.fs',
+        () async {
+      final receiverFixture = await _createFixture();
+      final senderContact = receiverFixture.contacts.first;
+      final senderFixture = await _createFixtureFor(
+        localIdentityId: senderContact.identityId,
+        localDisplayName: senderContact.displayName,
+        localKeys: receiverFixture.contactKeysById[senderContact.identityId]!,
+        contactKeysById: {'me': receiverFixture.localKeys},
+      );
+      addTearDown(() {
+        receiverFixture.identitiesRepository.dispose();
+        receiverFixture.messagesRepository.dispose();
+        receiverFixture.container.dispose();
+        senderFixture.identitiesRepository.dispose();
+        senderFixture.messagesRepository.dispose();
+        senderFixture.container.dispose();
+      });
+
+      await _setStrictModeForKnownSessions(
+        fixture: receiverFixture,
+        contactId: senderContact.identityId,
+      );
+
+      final senderController =
+          senderFixture.container.read(homeControllerProvider);
+      final withUserContent = await senderController.encryptForRecipient(
+        secretText: 'legacy plaintext must not pass Maximum pending',
+        recipient: senderFixture.contacts.single,
+      );
+      expect(withUserContent.isFsEncrypted, isFalse);
+      expect(
+        withUserContent.classification,
+        FsMessageClassification.fsNegotiation,
+      );
+
+      final receiverController =
+          receiverFixture.container.read(homeControllerProvider);
+      final outcome = await receiverController.decodeHiddenMessage(
+        senderController.buildLinkPayload(withUserContent.message),
+        hintContactId: senderContact.identityId,
+      );
+
+      expect(outcome.kind, DecodeKind.fsLost);
+      expect(outcome.payload, isNull);
+      expect(
+        receiverFixture.container
+            .read(fsSessionManagerProvider(senderContact.identityId))
+            .state,
+        FsSessionState.fsInitSeen,
+      );
+      expect(
+        await receiverFixture.messagesRepository.getThread(
+          senderContact.identityId,
+        ),
+        isEmpty,
       );
     });
 

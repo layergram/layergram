@@ -23,6 +23,7 @@ import '../../core/capabilities/chat_folders_capability.dart';
 import '../../core/crypto/models.dart';
 import '../../core/providers.dart';
 import '../../l10n/app_strings.dart';
+import '../../ui/fs_maximum_setup_dialog.dart';
 import '../../ui/passphrase_button.dart';
 import '../identities/identities_controller.dart';
 import 'chat_view.dart';
@@ -494,6 +495,12 @@ class _HomeViewState extends ConsumerState<HomeView> {
           return;
         }
         if (sender != null) {
+          if (outcome.isMaximumFsSetupOnly) {
+            await showMaximumFsSetupDialog(context, incoming: true);
+            if (!mounted) {
+              return;
+            }
+          }
           ref.read(encodeRecipientProvider.notifier).state = sender;
           if (isNarrow) {
             await _openChat(sender);

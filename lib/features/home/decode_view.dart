@@ -17,6 +17,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
 import '../../l10n/app_strings.dart';
+import '../../ui/fs_maximum_setup_dialog.dart';
 import 'chat_view.dart';
 import 'home_controller.dart';
 
@@ -80,6 +81,13 @@ class _DecodeViewState extends ConsumerState<DecodeView> {
                         .getRemoteById(outcome.payload!.senderId);
                     if (!context.mounted) return;
                     if (sender != null) {
+                      if (outcome.isMaximumFsSetupOnly) {
+                        await showMaximumFsSetupDialog(
+                          context,
+                          incoming: true,
+                        );
+                        if (!context.mounted) return;
+                      }
                       await Navigator.of(context).push(
                         MaterialPageRoute(
                             builder: (_) => ChatView(contact: sender)),

@@ -2,9 +2,9 @@
 
 This document describes the Forward Secrecy (FS) model implemented in Layergram, how it
 preserves Layergram's existing properties (no server, no account, no public-key
-redistribution, plausible deniability), and the hardening notes required by the FS
-specification v1.18 — in particular the **secure memory handling limitations** (§20.2) and
-the **release hardening review** (§20.4).
+redistribution, plausible deniability), and the hardening notes for the public implementation.
+It is the authoritative public FS reference for this repository and should not rely on
+non-public implementation drafts.
 
 It complements [../THREAT_MODEL.md](../THREAT_MODEL.md) (user-facing threat wording) and the
 message/identity specs under [./](.).
@@ -23,6 +23,10 @@ Layergram messages, so:
 - no server or key directory is involved;
 - users do **not** redistribute public contact keys;
 - clients that do not understand FS simply ignore the extension and keep using the Base model.
+
+For a newly added contact with no stored security-mode preference, Layergram defaults to
+**Advanced / opportunistic FS**. That means compatible contacts are upgraded automatically as
+messages are exchanged, while old or incompatible clients remain readable through the Base model.
 
 ## Core principle
 
@@ -51,7 +55,8 @@ states to a colored shield (grey → orange while negotiating → green when act
 gold rim for Strict; red for broken) and to per-message classifications.
 
 Simultaneous `fs_init` collisions are resolved with the canonical tie-break
-`EncodeKey(IK) ‖ EncodeKey(DK) ‖ initId` (spec §8.3.4).
+`EncodeKey(IK) ‖ EncodeKey(DK) ‖ initId`; the lexicographically smaller canonical value becomes
+the initiator.
 
 ## Double Ratchet and per-device sessions
 
@@ -63,7 +68,7 @@ second device of the same identity starts a new handshake, the existing session 
 decrypting. Inbound messages are routed to the correct ratchet by the `fs_session` value in the
 envelope.
 
-## Multi-envelope messages (§9.6)
+## Multi-envelope messages
 
 When a contact has **two or more active device sessions**, a single outgoing message is encoded
 as a multi-envelope (`lib/core/crypto/encryption_service.dart`, `encryptMultiEnvelope`): the
@@ -94,14 +99,55 @@ Each contact has a per-contact security mode (`lib/core/crypto/fs_security_mode.
   legacy plaintext/content-key fallback.
 - **Strict (Maximum FS)** — contact-level mode with device-bound send enforcement. Requires
   explicit mutual consent; while requested but not yet confirmed the UI shows a distinct
-  "Maximum FS requested" pending state, not active Strict (spec §14.6.3).
-  When enabled for a contact, every already-known active device session for that identity is
-  promoted to `strictFsActive` together, so restored same-identity devices that have already
-  reached green FS stay compatible. If a new active device/session appears after Strict is
+  "Maximum FS requested" pending state, not active Strict. User-facing Maximum FS activation
+  starts a strict re-key for the contact and becomes `strictFsActive` only after the FS handshake
+  and ratchet initialization are confirmed. If a new active device/session appears after Strict is
   active, sending is paused until the session is repaired or Maximum FS is explicitly disabled.
   Historical or transient handshake states (`fsInitSent`, `fsReplySeen`, etc.) are not by
   themselves unexpected devices and must not force a downgrade or false repair state. The
-  implementation must not silently fall back to legacy encryption in Strict.
+  implementation must not silently fall back to legacy encryption in Strict. While Maximum FS is
+  pending or under repair, clients may emit or process FS setup/control messages, but those
+  messages must not carry user-authored plaintext. User content resumes only after the contact is
+  `strictFsActive`.
+
+The default for a new `(contact, identity context)` pair is **Advanced** when no `fs_mode_v1`
+auxiliary record exists. Base is therefore an explicit compatibility choice, not the default.
+Strict/Maximum FS is also explicit because it creates a device-bound policy and may pause sending
+when the contact changes device, reinstalls, or uses an incompatible client.
+
+## Downgrade and active-suppression limits
+
+FS control messages are carried inside the authenticated, identity-encrypted Layergram envelope.
+An attacker who can only modify bytes on the transport cannot remove `x.fs` while preserving a
+valid message: the AEAD check fails and the message does not decrypt.
+
+An active transport attacker can still drop, delay, reorder, or replace entire Layergram messages
+using the external app. Before a pair has ever confirmed an FS session, Layergram cannot
+cryptographically distinguish three cases:
+
+- the peer is using an old client that does not understand FS;
+- one or more manual-transport messages carrying `fs_init`, `fs_reply`, or `fs_confirm` were lost
+  or not imported;
+- an active attacker suppressed those whole messages to keep the conversation on the legacy model.
+
+For this reason, Advanced mode is an opportunistic upgrade, not a guarantee that compatible peers
+will always reach FS in the presence of active message suppression. Downgrade tracking starts from
+the highest confirmed security level for a contact/device. After a contact has reached active FS,
+future legacy messages are treated as a downgrade signal: Advanced can allow them with warning
+policy, while Strict/Maximum FS must not silently fall back for user content.
+
+Maximum FS changes the failure mode, not the transport guarantees. It cannot force an external app
+to deliver the `fs_init`, `fs_reply`, or `fs_confirm` messages, so active suppression can still keep
+a Maximum request from becoming active. The difference is that this does not look like a successful
+secure channel: the contact remains in a pending/repair state, and user content must not be sent as
+if Maximum FS were active or silently downgraded to legacy after Maximum has been established.
+During that state, the only permitted legacy-wrapped traffic is setup/control traffic with an empty
+user payload so the handshake can still progress over Layergram's manual transport.
+
+Users who need a stronger guarantee for a specific relationship should verify the contact out of
+band, watch the per-contact FS state, and use Strict/Maximum FS once the session is established.
+Until the UI shows an active FS state, messages should be treated as legacy/pre-FS for forward
+secrecy purposes.
 
 ## Per-message classification
 
@@ -152,14 +198,14 @@ survives.
 Passphrase-derived contexts are never persisted as profile entries; their settings live only
 inside `fs_pp_v1` records and are visible only while the passphrase is active.
 
-## Local DoS resistance (§20.3)
+## Local DoS resistance
 
 Malformed, duplicated, stale, replayed, or excessive FS control messages are tolerated without
 corrupting state or exhausting storage (`lib/core/crypto/fs_dos_resistance.dart`,
 `lib/core/crypto/fs_replay_cache.dart`). Bounds enforced:
 
-- max pending handshakes per contact/device: **4** (spec recommended: 4);
-- max orphan auxiliary control records: **16** (spec recommended: 8 — see "Divergences").
+- max pending handshakes per contact/device: **4**;
+- max orphan auxiliary control records: **16** (see "Implementation review notes").
 
 Corrupted handshakes cannot block future valid handshakes after cleanup.
 
@@ -168,7 +214,7 @@ parsed, but before the FS ratchet is advanced. A replayed `(fs_session, fs_count
 without consuming skipped keys, persisting plaintext, or mutating ratchet state. Skipped message
 keys are bounded, TTL-pruned, and wiped best-effort before removal or after successful use.
 
-## Secure memory handling limitations (§20.2)
+## Secure memory handling limitations
 
 Layergram wipes ephemeral secrets, passphrase-derived keys, ratchet temporary values,
 `chainSeed_0`, `confirmKey`, DH outputs, and decrypted caches as soon as they are no longer
@@ -206,11 +252,11 @@ copies produced by the garbage collector or by intermediate APIs may persist unt
 Layergram therefore treats memory zeroization as best-effort and relies on minimizing secret
 lifetime plus OS-level protections, not on guaranteed erasure.
 
-## Release hardening review (§20.4)
+## Release hardening review
 
 Forward Secrecy is integrated into Layergram. The implementation passed the security review items
 below before being promoted from implementation work into an app feature. Any future divergence
-from the specification must be documented (see "Divergences") before release.
+from this public model must be documented before release.
 
 - [x] handshake transcript construction;
 - [x] DH computation order;
@@ -229,14 +275,12 @@ from the specification must be documented (see "Divergences") before release.
 The checklist above reflects the dedicated review performed before treating Forward Secrecy as an
 available Layergram feature.
 
-## Divergences from the specification
+## Implementation review notes
 
-Per §20.4, divergences are documented here:
-
-- **Orphan control record bound.** The spec recommends a max of 8 orphan replies/confirms per
-  contact; the implementation currently uses 16 (`FsDosResistance.maxOrphanAuxRecords`). The
-  recommended limits are explicitly "unless changed after testing"; 16 was retained to reduce
-  spurious pruning during multi-device negotiation. Revisit if storage growth is observed.
+- **Orphan control record bound.** The original review target used a max of 8 orphan
+  replies/confirms per contact; the implementation currently uses 16
+  (`FsDosResistance.maxOrphanAuxRecords`). The higher bound was retained to reduce spurious
+  pruning during multi-device negotiation. Revisit if storage growth is observed.
 - **Decrypted FS plaintext persistence.** To survive app restarts without re-running the
   handshake, decrypted FS plaintext is persisted as an encrypted, padded `fs_pt_v1` auxiliary
   record (not in `MessageRecord.text`). This is a deliberate, documented choice consistent with
@@ -245,7 +289,6 @@ Per §20.4, divergences are documented here:
 
 ## References
 
-- FS specification v1.18 (source of §-numbered requirements above)
 - [../THREAT_MODEL.md](../THREAT_MODEL.md) — user-facing threat model, "Forward Secrecy" section
 - `lib/core/crypto/fs_*.dart` — implementation
 - `test/core/crypto/`, `test/ui/` — FS test suites

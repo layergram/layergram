@@ -189,6 +189,11 @@ class FsContactSecurityCard extends ConsumerWidget {
                     icon: Icons.shield_outlined,
                     color: Theme.of(context).colorScheme.error,
                     onPressed: () async {
+                      final confirmed =
+                          await showDisableMaximumFsDialog(context);
+                      if (confirmed != true || !context.mounted) {
+                        return;
+                      }
                       final fsCtrl = ref.read(
                         fsOpportunisticControllerProvider(contactId),
                       );

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:layergram/core/crypto/fs_contact_security_state.dart';
+import 'package:layergram/core/crypto/fs_message_classification.dart';
 import 'package:layergram/core/crypto/fs_security_mode.dart';
 import 'package:layergram/core/crypto/fs_session_manager.dart';
 import 'package:layergram/core/crypto/fs_state_persistence_service.dart';
@@ -16,6 +17,8 @@ import 'package:layergram/l10n/fs_strings_bundle.dart';
 import 'package:layergram/ui/fs_contact_security_card.dart';
 import 'package:layergram/ui/fs_info_sheet.dart';
 import 'package:layergram/ui/fs_maximum_fs_dialog.dart';
+import 'package:layergram/ui/fs_maximum_setup_dialog.dart';
+import 'package:layergram/ui/fs_message_classification_icon.dart';
 import 'package:layergram/ui/fs_security_mode_sheet.dart';
 import 'package:layergram/ui/fs_status_icon.dart';
 
@@ -164,8 +167,7 @@ void main() {
     expect(find.byIcon(Icons.warning_amber_rounded), findsWidgets);
   });
 
-  testWidgets(
-      'disable Maximum FS downgrades registry-only strict session and confirms',
+  testWidgets('disable Maximum FS requires confirmation before downgrade',
       (tester) async {
     final en = FsStringsBundle.bundle['en']!;
     final registry = FsContactSecurityRegistry()
@@ -216,6 +218,46 @@ void main() {
 
     await tester.ensureVisible(disableFinder);
     await tester.tap(disableFinder);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(en['security.fs.maximum.disable_confirm_title']!),
+      findsOneWidget,
+    );
+    expect(
+      find.text(en['security.fs.maximum.disable_confirm_body']!),
+      findsOneWidget,
+    );
+    expect(
+      registry
+          .lookup(
+            contactId: 'alice',
+            identityContext: 'primary',
+            sessionId: 'registry-only-strict-session',
+          )
+          ?.fsState,
+      FsSessionState.strictFsActive,
+    );
+
+    await tester.tap(find.text(en['security.fs.maximum.cancel_button']!));
+    await tester.pumpAndSettle();
+    expect(
+      registry
+          .lookup(
+            contactId: 'alice',
+            identityContext: 'primary',
+            sessionId: 'registry-only-strict-session',
+          )
+          ?.fsState,
+      FsSessionState.strictFsActive,
+    );
+
+    await tester.ensureVisible(disableFinder);
+    await tester.tap(disableFinder);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.text(en['security.fs.maximum.disable_confirm_button']!),
+    );
     await tester.pumpAndSettle();
 
     expect(
@@ -332,5 +374,66 @@ void main() {
     await tester.tap(confirmFinder);
     await tester.pumpAndSettle();
     expect(result, FsSecurityMode.strict);
+  });
+
+  testWidgets('Strict message classification uses green lock with gold outline',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: FsMessageClassificationIcon(
+              classification: FsMessageClassification.strictFs,
+              size: 24,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final lockIcons = tester
+        .widgetList<Icon>(find.byIcon(Icons.lock))
+        .map((icon) => icon.color)
+        .toSet();
+    expect(lockIcons, contains(const Color(0xFFD4A017)));
+    expect(lockIcons, contains(Colors.green.shade700));
+    expect(find.byIcon(Icons.enhanced_encryption), findsNothing);
+  });
+
+  testWidgets('Maximum FS setup dialog requires outgoing confirmation',
+      (tester) async {
+    final en = FsStringsBundle.bundle['en']!;
+    bool? result;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () async {
+              result = await showMaximumFsSetupDialog(
+                context,
+                incoming: false,
+              );
+            },
+            child: const Text('open setup dialog'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('open setup dialog'));
+    await tester.pumpAndSettle();
+
+    expect(find.text(en['security.fs.maximum.setup_title']!), findsOneWidget);
+    expect(
+      find.text(en['security.fs.maximum.setup_outgoing_body']!),
+      findsOneWidget,
+    );
+    expect(result, isNull);
+
+    await tester.tap(find.text(en['security.fs.maximum.setup_send_button']!));
+    await tester.pumpAndSettle();
+
+    expect(result, isTrue);
   });
 }

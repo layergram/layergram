@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/crypto/fs_message_classification.dart';
 import '../../core/crypto/fs_security_mode.dart';
 import '../../core/crypto/fs_session_manager.dart';
 import '../../core/crypto/models.dart';
@@ -16,6 +17,7 @@ import '../../core/providers.dart';
 import '../../core/storage/messages_repository.dart';
 import '../../l10n/app_strings.dart';
 import '../../ui/fs_info_sheet.dart';
+import '../../ui/fs_maximum_setup_dialog.dart';
 import '../../ui/fs_message_classification_icon.dart';
 import '../../ui/fs_status_icon.dart';
 import '../../ui/passphrase_button.dart';
@@ -165,6 +167,8 @@ class ChatViewState extends ConsumerState<ChatView> {
   bool _backgroundHoldActive = false;
   bool _verifiedThisSession = false;
   bool _bannerDismissed = false;
+  bool _maximumFsOutgoingSetupConfirmed = false;
+  bool _maximumFsIncomingSetupExplained = false;
 
   bool get _isContactVerifiedNow =>
       widget.contact.verified || _verifiedThisSession;
@@ -1502,13 +1506,33 @@ class ChatViewState extends ConsumerState<ChatView> {
           : (DateTime.now().millisecondsSinceEpoch ~/ 1000) +
               (expiresMinutes * 60);
 
-      final encResult =
-          await ref.read(homeControllerProvider).encryptForRecipient(
-                secretText: _secretCtrl.text,
-                recipient: recipient,
-                expireAfter: expireAfter,
-                deleteAfterRead: _deleteAfterRead,
-              );
+      final controller = ref.read(homeControllerProvider);
+      var maximumSetupOnly = false;
+      late ({
+        EncryptedMessage message,
+        bool isFsEncrypted,
+        FsMessageClassification classification
+      }) encResult;
+      try {
+        encResult = await controller.encryptForRecipient(
+          secretText: _secretCtrl.text,
+          recipient: recipient,
+          expireAfter: expireAfter,
+          deleteAfterRead: _deleteAfterRead,
+        );
+      } on FsSendBlockedException catch (e) {
+        if (e.messageKey != HomeController.maximumFsPendingMessageKey) {
+          rethrow;
+        }
+        final confirmed = await _confirmMaximumFsOutgoingSetup();
+        if (!confirmed) {
+          return null;
+        }
+        encResult = await controller.encryptMaximumFsSetupForRecipient(
+          recipient: recipient,
+        );
+        maximumSetupOnly = true;
+      }
       final encrypted = encResult.message;
       final rawBytes = encrypted.toRawBytes();
       if (_isCoverMode &&
@@ -1539,16 +1563,18 @@ class ChatViewState extends ConsumerState<ChatView> {
           ref.read(homeControllerProvider).buildLinkPayload(encrypted),
       };
 
-      final controller = ref.read(homeControllerProvider);
       final keyTag = await controller.currentKeyTag();
       final storageKey = await controller.currentStorageKey();
       final recordId = DateTime.now().microsecondsSinceEpoch.toString();
+      final sentText = maximumSetupOnly ? '' : _secretCtrl.text;
+      final sentExpireAfter = maximumSetupOnly ? null : expireAfter;
+      final sentDeleteAfterRead = maximumSetupOnly ? false : _deleteAfterRead;
 
       // §12.3: FS plaintext stored as encrypted aux record, not in DB.
-      if (encResult.isFsEncrypted && _secretCtrl.text.isNotEmpty) {
+      if (encResult.isFsEncrypted && sentText.isNotEmpty) {
         await ref.read(fsPlaintextPersistenceServiceProvider).savePlaintext(
               messageId: recordId,
-              plaintext: _secretCtrl.text,
+              plaintext: sentText,
               contactId: recipient.identityId,
             );
         // Warm in-memory cache for immediate display
@@ -1557,7 +1583,7 @@ class ChatViewState extends ConsumerState<ChatView> {
         );
         fsController.cachePlaintext(
           '${recipient.identityId}|$recordId',
-          _secretCtrl.text,
+          sentText,
         );
       }
 
@@ -1576,12 +1602,12 @@ class ChatViewState extends ConsumerState<ChatView> {
               recipientId: recipient.identityId,
               direction: 'outgoing',
               timestamp: outgoingTs,
-              text: encResult.isFsEncrypted ? null : _secretCtrl.text,
+              text: encResult.isFsEncrypted ? null : sentText,
               ciphertextBase64: encrypted.ciphertextBase64,
               nonceBase64: encrypted.nonceBase64,
               rawSource: output,
-              expireAfter: expireAfter,
-              deleteAfterRead: _deleteAfterRead,
+              expireAfter: sentExpireAfter,
+              deleteAfterRead: sentDeleteAfterRead,
               keyTag: keyTag,
               isFsEncrypted: encResult.isFsEncrypted,
               fsClassification: encResult.classification,
@@ -1592,7 +1618,7 @@ class ChatViewState extends ConsumerState<ChatView> {
       if (!mounted) return null;
       setState(() {
         _encryptedOutput = output;
-        _dirtySinceEncode = false;
+        _dirtySinceEncode = maximumSetupOnly;
       });
       _scrollToBottom();
       return output;
@@ -1604,6 +1630,28 @@ class ChatViewState extends ConsumerState<ChatView> {
     } finally {
       if (mounted) setState(() => _sending = false);
     }
+  }
+
+  Future<bool> _confirmMaximumFsOutgoingSetup() async {
+    if (_maximumFsOutgoingSetupConfirmed) return true;
+    if (!mounted) return false;
+    final confirmed = await showMaximumFsSetupDialog(
+      context,
+      incoming: false,
+    );
+    if (confirmed && mounted) {
+      _maximumFsOutgoingSetupConfirmed = true;
+    }
+    return confirmed;
+  }
+
+  Future<void> _explainMaximumFsIncomingSetup() async {
+    if (_maximumFsIncomingSetupExplained || !mounted) return;
+    _maximumFsIncomingSetupExplained = true;
+    await showMaximumFsSetupDialog(
+      context,
+      incoming: true,
+    );
   }
 
   Widget _buildCompactComposer(
@@ -1955,13 +2003,23 @@ class ChatViewState extends ConsumerState<ChatView> {
                     return;
                   }
                   if (sender != null) {
+                    final isMaximumSetup = outcome.isMaximumFsSetupOnly;
                     if (sender.identityId == widget.contact.identityId) {
-                      // Already on the correct chat; just show success.
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(t(context, 'messageDecoded'))),
-                      );
                       refreshAfterDecodedMessage();
+                      if (isMaximumSetup) {
+                        await _explainMaximumFsIncomingSetup();
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(t(context, 'messageDecoded'))),
+                        );
+                      }
                     } else {
+                      if (isMaximumSetup) {
+                        await _explainMaximumFsIncomingSetup();
+                        if (!mounted || !context.mounted) {
+                          return;
+                        }
+                      }
                       await Navigator.of(context).pushReplacement(
                         MaterialPageRoute(
                           builder: (_) => ChatView(contact: sender),
@@ -2279,8 +2337,13 @@ class ChatViewState extends ConsumerState<ChatView> {
                                       (isEncrypted
                                           ? t(context, 'decryptError')
                                           : (m.text ?? '')));
-                          final displayText =
+                          final strippedDisplayText =
                               _stripZeroWidth(displayTextRaw.trimRight());
+                          final displayText = strippedDisplayText.isEmpty &&
+                                  m.effectiveClassification ==
+                                      FsMessageClassification.fsNegotiation
+                              ? t(context, 'security.fs.cls.negotiation')
+                              : strippedDisplayText;
 
                           final isSearchMatch =
                               _isSearching && _searchMatchIds.contains(m.id);

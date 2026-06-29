@@ -429,104 +429,116 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
                   onPressed: !_canGenerate
                       ? null
                       : () async {
-                          final recipient = _recipient!;
-                          final expiresMinutes =
-                              int.tryParse(_expiresCtrl.text.trim());
-                          final expireAfter = expiresMinutes == null
-                              ? null
-                              : (DateTime.now().millisecondsSinceEpoch ~/
-                                      1000) +
-                                  (expiresMinutes * 60);
-                          final encResult = await ref
-                              .read(homeControllerProvider)
-                              .encryptForRecipient(
-                                secretText: _secretCtrl.text,
-                                recipient: recipient,
-                                expireAfter: expireAfter,
-                                deleteAfterRead: _deleteAfterRead,
-                              );
-                          final encrypted = encResult.message;
-                          final rawBytes = encrypted.toRawBytes();
-                          if (!StegoEncoder.canEmbedBytes(
-                            _coverCtrl.text,
-                            rawBytes.length,
-                          )) {
-                            final missing =
-                                StegoEncoder.missingCoverCapacityForBytes(
+                          try {
+                            final recipient = _recipient!;
+                            final expiresMinutes =
+                                int.tryParse(_expiresCtrl.text.trim());
+                            final expireAfter = expiresMinutes == null
+                                ? null
+                                : (DateTime.now().millisecondsSinceEpoch ~/
+                                        1000) +
+                                    (expiresMinutes * 60);
+                            final encResult = await ref
+                                .read(homeControllerProvider)
+                                .encryptForRecipient(
+                                  secretText: _secretCtrl.text,
+                                  recipient: recipient,
+                                  expireAfter: expireAfter,
+                                  deleteAfterRead: _deleteAfterRead,
+                                );
+                            final encrypted = encResult.message;
+                            final rawBytes = encrypted.toRawBytes();
+                            if (!StegoEncoder.canEmbedBytes(
                               _coverCtrl.text,
                               rawBytes.length,
-                            );
-                            if (!context.mounted) return;
-                            setState(() => _exactCoverMissingCount = missing);
-                            final message = strings(context, 'coverTooShort')
-                                .replaceAll('{n}', '$missing');
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(message)),
-                            );
-                            return;
-                          }
-                          final output = ref
-                              .read(stegoEncoderProvider)
-                              .encodeBytes(_coverCtrl.text, rawBytes,
-                                  maxTotalCharacters: _coverLengthLimit);
+                            )) {
+                              final missing =
+                                  StegoEncoder.missingCoverCapacityForBytes(
+                                _coverCtrl.text,
+                                rawBytes.length,
+                              );
+                              if (!context.mounted) return;
+                              setState(() => _exactCoverMissingCount = missing);
+                              final message = strings(context, 'coverTooShort')
+                                  .replaceAll('{n}', '$missing');
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(message)),
+                              );
+                              return;
+                            }
+                            final output = ref
+                                .read(stegoEncoderProvider)
+                                .encodeBytes(_coverCtrl.text, rawBytes,
+                                    maxTotalCharacters: _coverLengthLimit);
 
-                          // Only save to chat if deleteAfterRead is false
-                          if (!_deleteAfterRead) {
-                            final ctrl = ref.read(homeControllerProvider);
-                            final keyTag = await ctrl.currentKeyTag();
-                            final storageKey = await ctrl.currentStorageKey();
-                            final recordId = DateTime.now()
-                                .microsecondsSinceEpoch
-                                .toString();
+                            // Only save to chat if deleteAfterRead is false
+                            if (!_deleteAfterRead) {
+                              final ctrl = ref.read(homeControllerProvider);
+                              final keyTag = await ctrl.currentKeyTag();
+                              final storageKey = await ctrl.currentStorageKey();
+                              final recordId = DateTime.now()
+                                  .microsecondsSinceEpoch
+                                  .toString();
 
-                            // §12.3: FS plaintext → encrypted aux record
-                            if (encResult.isFsEncrypted &&
-                                _secretCtrl.text.isNotEmpty) {
-                              await ref
-                                  .read(fsPlaintextPersistenceServiceProvider)
-                                  .savePlaintext(
-                                    messageId: recordId,
-                                    plaintext: _secretCtrl.text,
-                                    contactId: recipient.identityId,
+                              // §12.3: FS plaintext → encrypted aux record
+                              if (encResult.isFsEncrypted &&
+                                  _secretCtrl.text.isNotEmpty) {
+                                await ref
+                                    .read(fsPlaintextPersistenceServiceProvider)
+                                    .savePlaintext(
+                                      messageId: recordId,
+                                      plaintext: _secretCtrl.text,
+                                      contactId: recipient.identityId,
+                                    );
+                                final fsController = ref.read(
+                                  fsOpportunisticControllerProvider(
+                                      recipient.identityId),
+                                );
+                                fsController.cachePlaintext(
+                                  '${recipient.identityId}|$recordId',
+                                  _secretCtrl.text,
+                                );
+                              }
+
+                              await ref.read(messagesRepositoryProvider).add(
+                                    MessageRecord(
+                                      id: recordId,
+                                      senderId: 'me',
+                                      recipientId: recipient.identityId,
+                                      direction: 'outgoing',
+                                      timestamp: DateTime.now()
+                                              .millisecondsSinceEpoch ~/
+                                          1000,
+                                      text: encResult.isFsEncrypted
+                                          ? null
+                                          : _secretCtrl.text,
+                                      ciphertextBase64:
+                                          encrypted.ciphertextBase64,
+                                      nonceBase64: encrypted.nonceBase64,
+                                      rawSource: output,
+                                      expireAfter: expireAfter,
+                                      deleteAfterRead: _deleteAfterRead,
+                                      keyTag: keyTag,
+                                      isFsEncrypted: encResult.isFsEncrypted,
+                                      fsClassification:
+                                          encResult.classification,
+                                    ),
+                                    storageKey: storageKey,
                                   );
-                              final fsController = ref.read(
-                                fsOpportunisticControllerProvider(
-                                    recipient.identityId),
-                              );
-                              fsController.cachePlaintext(
-                                '${recipient.identityId}|$recordId',
-                                _secretCtrl.text,
-                              );
                             }
 
-                            await ref.read(messagesRepositoryProvider).add(
-                                  MessageRecord(
-                                    id: recordId,
-                                    senderId: 'me',
-                                    recipientId: recipient.identityId,
-                                    direction: 'outgoing',
-                                    timestamp:
-                                        DateTime.now().millisecondsSinceEpoch ~/
-                                            1000,
-                                    text: encResult.isFsEncrypted
-                                        ? null
-                                        : _secretCtrl.text,
-                                    ciphertextBase64:
-                                        encrypted.ciphertextBase64,
-                                    nonceBase64: encrypted.nonceBase64,
-                                    rawSource: output,
-                                    expireAfter: expireAfter,
-                                    deleteAfterRead: _deleteAfterRead,
-                                    keyTag: keyTag,
-                                    isFsEncrypted: encResult.isFsEncrypted,
-                                    fsClassification: encResult.classification,
-                                  ),
-                                  storageKey: storageKey,
-                                );
+                            if (!mounted) return;
+                            setState(() => _output = output);
+                          } on FsSendBlockedException catch (e) {
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  AppStrings.t(context, e.messageKey),
+                                ),
+                              ),
+                            );
                           }
-
-                          if (!mounted) return;
-                          setState(() => _output = output);
                         },
                   child: Text(strings(context, 'generateHidden')),
                 ),

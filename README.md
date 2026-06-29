@@ -146,14 +146,20 @@ dart doc
 
 ### Forward Secrecy Status
 
-Forward Secrecy is an integrated Layergram feature. Advanced FS upgrades compatible
-conversations opportunistically, while Maximum FS provides stricter device-bound sending for
-contacts that explicitly request it.
+Forward Secrecy is an integrated Layergram feature. New contacts default to Advanced FS, which
+upgrades compatible conversations opportunistically as messages are exchanged. Maximum FS provides
+stricter device-bound sending for contacts that explicitly request it.
 
 The implementation preserves Layergram's core model: no Layergram server, no accounts, no key
 directory, and no contact public-key redistribution. FS control messages are carried inside
 ordinary encrypted Layergram messages, and older clients can ignore them while continuing to use
-the base identity-key encryption model.
+the base identity-key encryption model. Advanced FS is therefore an automatic compatibility upgrade,
+not a guarantee that an active transport attacker cannot suppress whole negotiation messages before
+the first FS session is confirmed. Maximum FS does not make those control messages deliverable, but
+it makes the pending/not-active state explicit: while Maximum FS is pending or being repaired,
+Layergram can exchange setup/control messages but does not send the user's plaintext. This prevents
+silent legacy fallback for Maximum contacts; the remaining transport limitation is documented in
+the threat model.
 
 ## Contributing
 

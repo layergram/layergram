@@ -14,8 +14,6 @@
 
 import 'dart:async';
 import 'dart:collection';
-import 'dart:convert';
-import 'dart:typed_data';
 import 'dart:ui' show FrameTiming;
 
 import 'package:easy_localization/easy_localization.dart';
@@ -23,9 +21,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/capabilities/chat_folders_capability.dart';
-import 'core/crypto/aux_record_cipher.dart';
-import 'core/crypto/fs_double_ratchet.dart';
 import 'core/crypto/fs_passphrase_preferences.dart';
+import 'core/crypto/fs_startup_restore.dart';
 import 'core/providers.dart';
 import 'core/security/app_lock_idle_controller.dart';
 import 'features/identities/add_identity_view.dart';
@@ -474,40 +471,7 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
   }
 
   Future<void> _loadPersistedFsState() async {
-    try {
-      // Get the private key (identity or passphrase-derived)
-      final privateKeyB64 =
-          await ref.read(identityManagerProvider).getLocalPrivateKeyBase64();
-      if (privateKeyB64 == null) {
-        return;
-      }
-
-      // Derive aux storage key
-      final keyBytes = Uint8List.fromList(base64Decode(privateKeyB64));
-      final auxKey = await AuxRecordCipher.deriveAuxStorageKey(keyBytes);
-
-      // Set up aux repository context
-      final auxRepo = ref.read(auxRecordRepositoryProvider);
-      auxRepo.setActiveContext(
-        scopeToken: 'primary',
-        auxStorageKey: auxKey,
-      );
-
-      // Load persisted FS states
-      await ref.read(fsStatePersistenceServiceProvider).loadPersistedState();
-
-      // Load persisted ratchet states into cache
-      final ratchetStates = await ref
-          .read(fsRatchetPersistenceServiceProvider)
-          .loadAllRatchetStates();
-      final cache = <String, RatchetState>{};
-      for (final state in ratchetStates) {
-        cache[state.sessionId] = state;
-      }
-      ref.read(fsRatchetStateCacheProvider.notifier).state = cache;
-    } catch (_) {
-      // Silently fail - FS state will start fresh (legacyOnly)
-    }
+    await restorePersistedFsRuntimeState(ref.read);
   }
 
   @override
