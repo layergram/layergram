@@ -23,7 +23,9 @@ import 'core/storage/local_storage_security_service.dart';
 import 'core/storage/secure_storage.dart';
 import 'l10n/app_strings.dart';
 
-void main() async {
+Future<void> runLayergramApp({
+  List<Override> providerOverrides = const <Override>[],
+}) async {
   WidgetsFlutterBinding.ensureInitialized();
   await EasyLocalization.ensureInitialized();
   await LocalDatabase.init();
@@ -39,7 +41,14 @@ void main() async {
       supportedLocales: AppStrings.supportedLocales,
       path: 'assets/translations',
       fallbackLocale: const Locale('en'),
-      child: const ProviderScope(child: LayergramApp()),
+      child: ProviderScope(
+        overrides: providerOverrides,
+        child: const LayergramApp(),
+      ),
     ),
   );
+}
+
+void main() async {
+  await runLayergramApp();
 }
