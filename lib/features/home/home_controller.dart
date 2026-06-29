@@ -192,6 +192,13 @@ class HomeController {
 
     // Check Maximum/Strict FS policy before sending
     if (!selfCopy) {
+      final fsController = ref.read(
+        fsOpportunisticControllerProvider(recipient.identityId),
+      );
+      await _restorePersistedActiveFsSessionIfNeeded(
+        contactId: recipient.identityId,
+        fsController: fsController,
+      );
       final strictController = ref.read(
         fsStrictModeControllerProvider(recipient.identityId),
       );
@@ -808,6 +815,10 @@ class HomeController {
                   contactId: contact.identityId,
                   identityContext: fsController.identityContext,
                 );
+        await _restorePersistedActiveFsSessionIfNeeded(
+          contactId: contact.identityId,
+          fsController: fsController,
+        );
         final sessionManager = fsController.sessionManager;
         final activeSessionId = sessionManager.activeSessionId;
         if (activeSessionId != null) {
