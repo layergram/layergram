@@ -176,7 +176,7 @@ class FsStringsBundle {
     'security.fs.warning.pending_title': 'Maximum FS requested',
     'security.fs.warning.pending_body':
         'Maximum FS is not active yet. Layergram is waiting for a confirmed secure session. '
-            'Until confirmation, this contact is not yet using Maximum Forward Secrecy.',
+            'Until confirmation, Layergram can send setup messages but not your message text.',
 
     // Historic fallback warning (§14.6.4)
     'security.fs.warning.fallback_body':

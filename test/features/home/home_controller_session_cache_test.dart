@@ -2573,6 +2573,121 @@ void main() {
       );
     });
 
+    test('Maximum FS pending blocks user content and emits setup only',
+        () async {
+      final senderFixture = await _createFixture();
+      final contact = senderFixture.contacts.first;
+      final receiverFixture = await _createFixtureFor(
+        localIdentityId: contact.identityId,
+        localDisplayName: contact.displayName,
+        localKeys: senderFixture.contactKeysById[contact.identityId]!,
+        contactKeysById: {'me': senderFixture.localKeys},
+      );
+      addTearDown(() {
+        senderFixture.identitiesRepository.dispose();
+        senderFixture.messagesRepository.dispose();
+        senderFixture.container.dispose();
+        receiverFixture.identitiesRepository.dispose();
+        receiverFixture.messagesRepository.dispose();
+        receiverFixture.container.dispose();
+      });
+
+      await _setStrictModeForKnownSessions(
+        fixture: senderFixture,
+        contactId: contact.identityId,
+      );
+
+      final senderController =
+          senderFixture.container.read(homeControllerProvider);
+      await expectLater(
+        senderController.encryptForRecipient(
+          secretText: 'do not send before Maximum FS is active',
+          recipient: contact,
+        ),
+        throwsA(
+          isA<FsSendBlockedException>().having(
+            (e) => e.messageKey,
+            'messageKey',
+            HomeController.maximumFsPendingMessageKey,
+          ),
+        ),
+      );
+
+      final setup = await senderController.encryptMaximumFsSetupForRecipient(
+        recipient: contact,
+      );
+      expect(setup.isFsEncrypted, isFalse);
+      expect(setup.classification, FsMessageClassification.fsNegotiation);
+
+      final receiverController =
+          receiverFixture.container.read(homeControllerProvider);
+      final outcome = await receiverController.decodeHiddenMessage(
+        senderController.buildLinkPayload(setup.message),
+        hintContactId: 'me',
+      );
+      expect(outcome.kind, DecodeKind.success);
+      expect(outcome.payload?.text, isEmpty);
+    });
+
+    test('Maximum FS pending rejects plaintext user content with x.fs',
+        () async {
+      final receiverFixture = await _createFixture();
+      final senderContact = receiverFixture.contacts.first;
+      final senderFixture = await _createFixtureFor(
+        localIdentityId: senderContact.identityId,
+        localDisplayName: senderContact.displayName,
+        localKeys: receiverFixture.contactKeysById[senderContact.identityId]!,
+        contactKeysById: {'me': receiverFixture.localKeys},
+      );
+      addTearDown(() {
+        receiverFixture.identitiesRepository.dispose();
+        receiverFixture.messagesRepository.dispose();
+        receiverFixture.container.dispose();
+        senderFixture.identitiesRepository.dispose();
+        senderFixture.messagesRepository.dispose();
+        senderFixture.container.dispose();
+      });
+
+      await _setStrictModeForKnownSessions(
+        fixture: receiverFixture,
+        contactId: senderContact.identityId,
+      );
+
+      final senderController =
+          senderFixture.container.read(homeControllerProvider);
+      final withUserContent = await senderController.encryptForRecipient(
+        secretText: 'legacy plaintext must not pass Maximum pending',
+        recipient: senderFixture.contacts.single,
+      );
+      expect(withUserContent.isFsEncrypted, isFalse);
+      expect(
+        withUserContent.classification,
+        FsMessageClassification.fsNegotiation,
+      );
+
+      final receiverController =
+          receiverFixture.container.read(homeControllerProvider);
+      final outcome = await receiverController.decodeHiddenMessage(
+        senderController.buildLinkPayload(withUserContent.message),
+        hintContactId: senderContact.identityId,
+      );
+
+      expect(outcome.kind, DecodeKind.fsLost);
+      expect(outcome.payload, isNull);
+      expect(
+        receiverFixture.container
+            .read(fsSessionManagerProvider(senderContact.identityId))
+            .state,
+        FsSessionState.fsInitSeen,
+      );
+      expect(
+        await receiverFixture.messagesRepository.getThread(
+          senderContact.identityId,
+        ),
+        isEmpty,
+      );
+    });
+
     test('Advanced reset clears all stale contact sessions before rekey',
         () async {
       final fixture = await _createFixture();

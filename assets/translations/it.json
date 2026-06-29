@@ -334,7 +334,7 @@
   "security.fs.warning.device_bound_body": "Usalo solo se tu e questo contatto accettate di utilizzare i dispositivi previsti. Se una persona cambia dispositivo, reinstalla Layergram, reimposta le sessioni o utilizza una versione precedente, i messaggi potrebbero non essere leggibili finché non viene stabilita una nuova sessione sicura.",
   "security.fs.warning.device_bound_confirm": "Ho concordato questo con il contatto e comprendo che questa modalità è legata al dispositivo.",
   "security.fs.warning.pending_title": "FS massimo richiesto",
-  "security.fs.warning.pending_body": "Il massimo FS non è ancora attivo. Layergram è in attesa di una sessione sicura confermata. Fino alla conferma, questo contatto non utilizza ancora la massima segretezza di inoltro.",
+  "security.fs.warning.pending_body": "La Maximum FS non è ancora attiva. Layergram è in attesa di una sessione sicura confermata. Fino alla conferma, Layergram può inviare messaggi di configurazione ma non il testo del tuo messaggio.",
   "security.fs.warning.fallback_body": "Il fallback legacy FS e disabilitato. Se un messaggio vecchio contiene materiale di fallback, Layergram non lo usera senza una sessione FS corrispondente.",
   "security.fs.device.session_label": "Sessione {n}",
   "security.fs.device.unknown": "Sessione sconosciuta",

@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/crypto/fs_message_classification.dart';
 import '../../core/crypto/fs_security_mode.dart';
 import '../../core/crypto/fs_session_manager.dart';
 import '../../core/crypto/models.dart';
@@ -1502,13 +1503,32 @@ class ChatViewState extends ConsumerState<ChatView> {
           : (DateTime.now().millisecondsSinceEpoch ~/ 1000) +
               (expiresMinutes * 60);
 
-      final encResult =
-          await ref.read(homeControllerProvider).encryptForRecipient(
-                secretText: _secretCtrl.text,
-                recipient: recipient,
-                expireAfter: expireAfter,
-                deleteAfterRead: _deleteAfterRead,
-              );
+      final controller = ref.read(homeControllerProvider);
+      var maximumSetupOnly = false;
+      late ({
+        EncryptedMessage message,
+        bool isFsEncrypted,
+        FsMessageClassification classification
+      }) encResult;
+      try {
+        encResult = await controller.encryptForRecipient(
+          secretText: _secretCtrl.text,
+          recipient: recipient,
+          expireAfter: expireAfter,
+          deleteAfterRead: _deleteAfterRead,
+        );
+      } on FsSendBlockedException catch (e) {
+        if (e.messageKey != HomeController.maximumFsPendingMessageKey) {
+          rethrow;
+        }
+        encResult = await controller.encryptMaximumFsSetupForRecipient(
+          recipient: recipient,
+        );
+        maximumSetupOnly = true;
+        if (mounted) {
+          _showTouchComposerSnackbar(AppStrings.t(context, e.messageKey));
+        }
+      }
       final encrypted = encResult.message;
       final rawBytes = encrypted.toRawBytes();
       if (_isCoverMode &&
@@ -1539,16 +1559,18 @@ class ChatViewState extends ConsumerState<ChatView> {
           ref.read(homeControllerProvider).buildLinkPayload(encrypted),
       };
 
-      final controller = ref.read(homeControllerProvider);
       final keyTag = await controller.currentKeyTag();
       final storageKey = await controller.currentStorageKey();
       final recordId = DateTime.now().microsecondsSinceEpoch.toString();
+      final sentText = maximumSetupOnly ? '' : _secretCtrl.text;
+      final sentExpireAfter = maximumSetupOnly ? null : expireAfter;
+      final sentDeleteAfterRead = maximumSetupOnly ? false : _deleteAfterRead;
 
       // §12.3: FS plaintext stored as encrypted aux record, not in DB.
-      if (encResult.isFsEncrypted && _secretCtrl.text.isNotEmpty) {
+      if (encResult.isFsEncrypted && sentText.isNotEmpty) {
         await ref.read(fsPlaintextPersistenceServiceProvider).savePlaintext(
               messageId: recordId,
-              plaintext: _secretCtrl.text,
+              plaintext: sentText,
               contactId: recipient.identityId,
             );
         // Warm in-memory cache for immediate display
@@ -1557,7 +1579,7 @@ class ChatViewState extends ConsumerState<ChatView> {
         );
         fsController.cachePlaintext(
           '${recipient.identityId}|$recordId',
-          _secretCtrl.text,
+          sentText,
         );
       }
 
@@ -1576,12 +1598,12 @@ class ChatViewState extends ConsumerState<ChatView> {
               recipientId: recipient.identityId,
               direction: 'outgoing',
               timestamp: outgoingTs,
-              text: encResult.isFsEncrypted ? null : _secretCtrl.text,
+              text: encResult.isFsEncrypted ? null : sentText,
               ciphertextBase64: encrypted.ciphertextBase64,
               nonceBase64: encrypted.nonceBase64,
               rawSource: output,
-              expireAfter: expireAfter,
-              deleteAfterRead: _deleteAfterRead,
+              expireAfter: sentExpireAfter,
+              deleteAfterRead: sentDeleteAfterRead,
               keyTag: keyTag,
               isFsEncrypted: encResult.isFsEncrypted,
               fsClassification: encResult.classification,
@@ -1592,7 +1614,7 @@ class ChatViewState extends ConsumerState<ChatView> {
       if (!mounted) return null;
       setState(() {
         _encryptedOutput = output;
-        _dirtySinceEncode = false;
+        _dirtySinceEncode = maximumSetupOnly;
       });
       _scrollToBottom();
       return output;
@@ -2279,8 +2301,13 @@ class ChatViewState extends ConsumerState<ChatView> {
                                       (isEncrypted
                                           ? t(context, 'decryptError')
                                           : (m.text ?? '')));
-                          final displayText =
+                          final strippedDisplayText =
                               _stripZeroWidth(displayTextRaw.trimRight());
+                          final displayText = strippedDisplayText.isEmpty &&
+                                  m.effectiveClassification ==
+                                      FsMessageClassification.fsNegotiation
+                              ? t(context, 'security.fs.cls.negotiation')
+                              : strippedDisplayText;
 
                           final isSearchMatch =
                               _isSearching && _searchMatchIds.contains(m.id);
