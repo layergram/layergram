@@ -1001,7 +1001,7 @@ class HomeController {
       await ref.read(messagesRepositoryProvider).markRead(recordId);
     }
 
-    return DecodeOutcome.success(payload);
+    return DecodeOutcome.success(payload, classification: classification);
   }
 
   bool _strictModeHasUnexpectedDevice(String contactId) {
@@ -1552,11 +1552,21 @@ class HomeController {
 }
 
 class DecodeOutcome {
-  const DecodeOutcome._(
-      {this.payload, this.kind = DecodeKind.error, this.errorCode});
+  const DecodeOutcome._({
+    this.payload,
+    this.kind = DecodeKind.error,
+    this.errorCode,
+    this.classification,
+  });
 
-  const DecodeOutcome.success(PlaintextPayload payload)
-      : this._(payload: payload, kind: DecodeKind.success);
+  const DecodeOutcome.success(
+    PlaintextPayload payload, {
+    FsMessageClassification? classification,
+  }) : this._(
+          payload: payload,
+          kind: DecodeKind.success,
+          classification: classification,
+        );
 
   const DecodeOutcome.noData() : this._(kind: DecodeKind.noData);
   const DecodeOutcome.notForMe() : this._(kind: DecodeKind.notForMe);
@@ -1569,6 +1579,12 @@ class DecodeOutcome {
   final PlaintextPayload? payload;
   final DecodeKind kind;
   final String? errorCode;
+  final FsMessageClassification? classification;
+
+  bool get isMaximumFsSetupOnly =>
+      kind == DecodeKind.success &&
+      classification == FsMessageClassification.fsNegotiation &&
+      (payload?.text.trim().isEmpty ?? false);
 }
 
 enum DecodeKind {

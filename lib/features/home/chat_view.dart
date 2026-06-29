@@ -17,6 +17,7 @@ import '../../core/providers.dart';
 import '../../core/storage/messages_repository.dart';
 import '../../l10n/app_strings.dart';
 import '../../ui/fs_info_sheet.dart';
+import '../../ui/fs_maximum_setup_dialog.dart';
 import '../../ui/fs_message_classification_icon.dart';
 import '../../ui/fs_status_icon.dart';
 import '../../ui/passphrase_button.dart';
@@ -166,6 +167,8 @@ class ChatViewState extends ConsumerState<ChatView> {
   bool _backgroundHoldActive = false;
   bool _verifiedThisSession = false;
   bool _bannerDismissed = false;
+  bool _maximumFsOutgoingSetupConfirmed = false;
+  bool _maximumFsIncomingSetupExplained = false;
 
   bool get _isContactVerifiedNow =>
       widget.contact.verified || _verifiedThisSession;
@@ -1521,13 +1524,14 @@ class ChatViewState extends ConsumerState<ChatView> {
         if (e.messageKey != HomeController.maximumFsPendingMessageKey) {
           rethrow;
         }
+        final confirmed = await _confirmMaximumFsOutgoingSetup();
+        if (!confirmed) {
+          return null;
+        }
         encResult = await controller.encryptMaximumFsSetupForRecipient(
           recipient: recipient,
         );
         maximumSetupOnly = true;
-        if (mounted) {
-          _showTouchComposerSnackbar(AppStrings.t(context, e.messageKey));
-        }
       }
       final encrypted = encResult.message;
       final rawBytes = encrypted.toRawBytes();
@@ -1626,6 +1630,28 @@ class ChatViewState extends ConsumerState<ChatView> {
     } finally {
       if (mounted) setState(() => _sending = false);
     }
+  }
+
+  Future<bool> _confirmMaximumFsOutgoingSetup() async {
+    if (_maximumFsOutgoingSetupConfirmed) return true;
+    if (!mounted) return false;
+    final confirmed = await showMaximumFsSetupDialog(
+      context,
+      incoming: false,
+    );
+    if (confirmed && mounted) {
+      _maximumFsOutgoingSetupConfirmed = true;
+    }
+    return confirmed;
+  }
+
+  Future<void> _explainMaximumFsIncomingSetup() async {
+    if (_maximumFsIncomingSetupExplained || !mounted) return;
+    _maximumFsIncomingSetupExplained = true;
+    await showMaximumFsSetupDialog(
+      context,
+      incoming: true,
+    );
   }
 
   Widget _buildCompactComposer(
@@ -1977,13 +2003,23 @@ class ChatViewState extends ConsumerState<ChatView> {
                     return;
                   }
                   if (sender != null) {
+                    final isMaximumSetup = outcome.isMaximumFsSetupOnly;
                     if (sender.identityId == widget.contact.identityId) {
-                      // Already on the correct chat; just show success.
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(t(context, 'messageDecoded'))),
-                      );
                       refreshAfterDecodedMessage();
+                      if (isMaximumSetup) {
+                        await _explainMaximumFsIncomingSetup();
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(t(context, 'messageDecoded'))),
+                        );
+                      }
                     } else {
+                      if (isMaximumSetup) {
+                        await _explainMaximumFsIncomingSetup();
+                        if (!mounted || !context.mounted) {
+                          return;
+                        }
+                      }
                       await Navigator.of(context).pushReplacement(
                         MaterialPageRoute(
                           builder: (_) => ChatView(contact: sender),
