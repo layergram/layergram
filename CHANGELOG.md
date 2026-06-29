@@ -6,13 +6,23 @@ The format is inspired by Keep a Changelog and reflects the public GitHub Releas
 
 ## [Unreleased]
 
+## [1.4.0+20] - 2026-06-29
+
 ### Added
 - Integrated Forward Secrecy support with Advanced opportunistic FS and Maximum device-bound FS.
 - Added LMF v2.1 Forward Secrecy envelope fields, control extensions, and multi-envelope support.
+- Added text-only payload output mode alongside cover text and deep-link output modes.
 
 ### Changed
 - Active Forward Secrecy messages are ratchet-only and no longer include legacy identity-key content fallback.
 - Updated Forward Secrecy documentation and localized security copy for the integrated no-fallback behavior.
+- Improved onboarding flow guidance for create and restore paths.
+- Improved message composer ergonomics, default output behavior, and clear-button handling.
+- Hardened mnemonic input fields against autocorrect, suggestions, smart quotes, and automatic capitalization.
+
+### Fixed
+- Hardened Maximum Forward Secrecy negotiation, startup restore, disable confirmation, and setup messaging.
+- Improved Forward Secrecy startup and multi-device edge-case handling.
 
 ## [1.3.0+19] - 2026-04-23
 
