@@ -167,8 +167,7 @@ void main() {
     expect(find.byIcon(Icons.warning_amber_rounded), findsWidgets);
   });
 
-  testWidgets(
-      'disable Maximum FS downgrades registry-only strict session and confirms',
+  testWidgets('disable Maximum FS requires confirmation before downgrade',
       (tester) async {
     final en = FsStringsBundle.bundle['en']!;
     final registry = FsContactSecurityRegistry()
@@ -219,6 +218,46 @@ void main() {
 
     await tester.ensureVisible(disableFinder);
     await tester.tap(disableFinder);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(en['security.fs.maximum.disable_confirm_title']!),
+      findsOneWidget,
+    );
+    expect(
+      find.text(en['security.fs.maximum.disable_confirm_body']!),
+      findsOneWidget,
+    );
+    expect(
+      registry
+          .lookup(
+            contactId: 'alice',
+            identityContext: 'primary',
+            sessionId: 'registry-only-strict-session',
+          )
+          ?.fsState,
+      FsSessionState.strictFsActive,
+    );
+
+    await tester.tap(find.text(en['security.fs.maximum.cancel_button']!));
+    await tester.pumpAndSettle();
+    expect(
+      registry
+          .lookup(
+            contactId: 'alice',
+            identityContext: 'primary',
+            sessionId: 'registry-only-strict-session',
+          )
+          ?.fsState,
+      FsSessionState.strictFsActive,
+    );
+
+    await tester.ensureVisible(disableFinder);
+    await tester.tap(disableFinder);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.text(en['security.fs.maximum.disable_confirm_button']!),
+    );
     await tester.pumpAndSettle();
 
     expect(

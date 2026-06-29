@@ -28,6 +28,37 @@ Future<bool?> showMaximumFsConsentDialog(BuildContext context) {
   );
 }
 
+Future<bool?> showDisableMaximumFsDialog(BuildContext context) {
+  return showDialog<bool>(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) {
+      final t = AppStrings.t;
+      final cs = Theme.of(context).colorScheme;
+      return AlertDialog(
+        title: Text(t(context, 'security.fs.maximum.disable_confirm_title')),
+        content: Text(t(context, 'security.fs.maximum.disable_confirm_body')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(t(context, 'security.fs.maximum.cancel_button')),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: cs.error,
+              foregroundColor: cs.onError,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(
+              t(context, 'security.fs.maximum.disable_confirm_button'),
+            ),
+          ),
+        ],
+      );
+    },
+  );
+}
+
 class _MaximumFsDialog extends StatefulWidget {
   const _MaximumFsDialog();
 
@@ -76,7 +107,8 @@ class _MaximumFsDialogState extends State<_MaximumFsDialog> {
             _ConsentCheckbox(
               value: _deviceBoundChecked,
               label: t(context, 'security.fs.warning.device_bound_confirm'),
-              onChanged: (v) => setState(() => _deviceBoundChecked = v ?? false),
+              onChanged: (v) =>
+                  setState(() => _deviceBoundChecked = v ?? false),
             ),
             const SizedBox(height: 8),
 
@@ -84,7 +116,8 @@ class _MaximumFsDialogState extends State<_MaximumFsDialog> {
             _ConsentCheckbox(
               value: _recoverabilityChecked,
               label: t(context, 'security.fs.warning.recoverability_confirm'),
-              onChanged: (v) => setState(() => _recoverabilityChecked = v ?? false),
+              onChanged: (v) =>
+                  setState(() => _recoverabilityChecked = v ?? false),
             ),
           ],
         ),
@@ -138,7 +171,8 @@ class _WarningBlock extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
-          Text(body, style: theme.textTheme.bodySmall?.copyWith(color: textColor)),
+          Text(body,
+              style: theme.textTheme.bodySmall?.copyWith(color: textColor)),
         ],
       ),
     );
