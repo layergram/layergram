@@ -684,6 +684,99 @@ void main() {
     );
 
     test(
+      'received messages persist backupExcluded from encrypted payload',
+      () async {
+        final senderFixture = await _createFixture();
+        final recipient = senderFixture.contacts.first;
+        final recipientKeys =
+            senderFixture.contactKeysById[recipient.identityId]!;
+        final receiverFixture = await _createFixtureFor(
+          localIdentityId: recipient.identityId,
+          localDisplayName: recipient.displayName,
+          localKeys: recipientKeys,
+          contactKeysById: {'me': senderFixture.localKeys},
+        );
+        addTearDown(() {
+          senderFixture.identitiesRepository.dispose();
+          senderFixture.messagesRepository.dispose();
+          senderFixture.container.dispose();
+          receiverFixture.identitiesRepository.dispose();
+          receiverFixture.messagesRepository.dispose();
+          receiverFixture.container.dispose();
+        });
+
+        final senderController =
+            senderFixture.container.read(homeControllerProvider);
+        final encrypted = await senderController.encryptForRecipient(
+          secretText: 'Do not include this in official backups',
+          recipient: recipient,
+          backupExcluded: true,
+        );
+        final link = senderController.buildLinkPayload(encrypted.message);
+
+        final receiverController =
+            receiverFixture.container.read(homeControllerProvider);
+        final outcome = await receiverController.decodeHiddenMessage(
+          link,
+          hintContactId: 'me',
+        );
+
+        expect(outcome.kind, DecodeKind.success);
+        expect(outcome.payload?.backupExcluded, isTrue);
+        final thread = await receiverFixture.messagesRepository.getThread('me');
+        expect(thread.single.backupExcluded, isTrue);
+        expect(thread.single.direction, 'incoming');
+      },
+    );
+
+    test(
+      'outgoing messages are persisted backupExcluded when exclusion is active',
+      () async {
+        final fixture = await _createFixture();
+        addTearDown(() {
+          fixture.identitiesRepository.dispose();
+          fixture.messagesRepository.dispose();
+          fixture.container.dispose();
+        });
+
+        final contact = fixture.contacts.first;
+        final controller = fixture.container.read(homeControllerProvider);
+        final encrypted = await controller.encryptForRecipient(
+          secretText: 'Sender-side backup exclusion',
+          recipient: contact,
+          backupExcluded: true,
+        );
+        final storageKey = await controller.currentStorageKey();
+        final keyTag = await controller.currentKeyTag();
+
+        await fixture.messagesRepository.add(
+          MessageRecord(
+            id: 'outgoing-backup-excluded',
+            senderId: 'me',
+            recipientId: contact.identityId,
+            direction: 'outgoing',
+            timestamp: 1,
+            text: 'Sender-side backup exclusion',
+            ciphertextBase64: encrypted.message.ciphertextBase64,
+            nonceBase64: encrypted.message.nonceBase64,
+            rawSource: controller.buildTextPayload(encrypted.message),
+            backupExcluded: true,
+            keyTag: keyTag,
+            isFsEncrypted: encrypted.isFsEncrypted,
+            fsClassification: encrypted.classification,
+          ),
+          storageKey: storageKey,
+        );
+
+        final thread =
+            await fixture.messagesRepository.getThread(contact.identityId);
+        expect(thread.single.direction, 'outgoing');
+        expect(thread.single.backupExcluded, isTrue);
+        expect(thread.single.isBackupEligible, isFalse);
+      },
+    );
+
+    test(
       'Advanced FS out-of-order links are not readable without ratchet',
       () async {
         final senderFixture = await _createFixture();

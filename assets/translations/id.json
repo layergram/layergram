@@ -431,5 +431,10 @@
   "identityQrImageShareText": "Identitas Layergram saya QR",
   "identityQrImageShareSubject": "Layergram identitas QR",
   "identityQrImageUnavailable": "QR belum tersedia",
-  "identityQrImageShareFailed": "Tidak dapat membagikan gambar QR"
+  "identityQrImageShareFailed": "Tidak dapat membagikan gambar QR",
+  "excludeFromBackups": "Kecualikan dari cadangan",
+  "excludeFromBackupsShort": "Pesan baru dalam percakapan ini tidak akan disertakan dalam cadangan Layergram di klien resmi.",
+  "excludeFromBackupsCaveat": "Tidak mencegah tangkapan layar, rekaman layar, klien yang dimodifikasi, atau salinan eksternal.",
+  "touchComposerExcludeFromBackupsOn": "Pengecualian cadangan aktif",
+  "touchComposerExcludeFromBackupsOff": "Pengecualian cadangan nonaktif"
 }

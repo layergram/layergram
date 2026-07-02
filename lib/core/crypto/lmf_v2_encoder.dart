@@ -66,6 +66,7 @@ class LmfV2Encoder {
     String? senderDisplayName,
     int? expireAfter,
     bool deleteAfterRead = false,
+    bool backupExcluded = false,
     Map<String, dynamic>? fsExtension,
   }) {
     return {
@@ -77,6 +78,7 @@ class LmfV2Encoder {
       if (senderDisplayName != null) 'senderDisplayName': senderDisplayName,
       if (expireAfter != null) 'expireAfter': expireAfter,
       'deleteAfterRead': deleteAfterRead,
+      if (backupExcluded) 'backupExcluded': true,
       if (fsExtension != null) 'x': {'fs': fsExtension},
     };
   }

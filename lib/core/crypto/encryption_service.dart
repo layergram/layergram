@@ -132,6 +132,7 @@ class EncryptionService {
           'senderDisplayName': payload.senderDisplayName,
         if (payload.expireAfter != null) 'expireAfter': payload.expireAfter,
         'deleteAfterRead': payload.deleteAfterRead,
+        if (payload.backupExcluded) 'backupExcluded': true,
         if (fsExtension != null) 'x': <String, dynamic>{'fs': fsExtension},
       };
       final plainJson = jsonEncode(envelope);
@@ -180,6 +181,7 @@ class EncryptionService {
         'senderDisplayName': payload.senderDisplayName,
       if (payload.expireAfter != null) 'expireAfter': payload.expireAfter,
       'deleteAfterRead': payload.deleteAfterRead,
+      if (payload.backupExcluded) 'backupExcluded': true,
       if (fsExtension != null) 'x': <String, dynamic>{'fs': fsExtension},
     };
     final plainJson = jsonEncode(envelope);
@@ -270,6 +272,7 @@ class EncryptionService {
         'senderDisplayName': payload.senderDisplayName,
       if (payload.expireAfter != null) 'expireAfter': payload.expireAfter,
       'deleteAfterRead': payload.deleteAfterRead,
+      if (payload.backupExcluded) 'backupExcluded': true,
       if (fsExtension != null) 'x': <String, dynamic>{'fs': fsExtension},
     };
     final plainJson = jsonEncode(envelope);
@@ -362,6 +365,7 @@ class EncryptionService {
             senderDisplayName: map['senderDisplayName'] as String?,
             expireAfter: map['expireAfter'] as int?,
             deleteAfterRead: (map['deleteAfterRead'] as bool?) ?? false,
+            backupExcluded: (map['backupExcluded'] as bool?) ?? false,
           ),
           fsDecryptFailed: true,
           isFsEnvelope: true,
@@ -387,6 +391,7 @@ class EncryptionService {
             senderDisplayName: map['senderDisplayName'] as String?,
             expireAfter: map['expireAfter'] as int?,
             deleteAfterRead: (map['deleteAfterRead'] as bool?) ?? false,
+            backupExcluded: (map['backupExcluded'] as bool?) ?? false,
           ),
           fsReplayDetected: true,
           isFsEnvelope: true,
@@ -416,6 +421,7 @@ class EncryptionService {
           senderDisplayName: map['senderDisplayName'] as String?,
           expireAfter: map['expireAfter'] as int?,
           deleteAfterRead: (map['deleteAfterRead'] as bool?) ?? false,
+          backupExcluded: (map['backupExcluded'] as bool?) ?? false,
         ),
         newRatchetState: newState,
         isFsEnvelope: true,
@@ -433,6 +439,7 @@ class EncryptionService {
         senderDisplayName: map['senderDisplayName'] as String?,
         expireAfter: map['expireAfter'] as int?,
         deleteAfterRead: (map['deleteAfterRead'] as bool?) ?? false,
+        backupExcluded: (map['backupExcluded'] as bool?) ?? false,
       ),
     );
   }
@@ -459,6 +466,7 @@ class EncryptionService {
           senderDisplayName: map['senderDisplayName'] as String?,
           expireAfter: map['expireAfter'] as int?,
           deleteAfterRead: (map['deleteAfterRead'] as bool?) ?? false,
+          backupExcluded: (map['backupExcluded'] as bool?) ?? false,
         );
 
     final wraps = (map['fs_wraps'] as List?) ?? const [];
@@ -564,6 +572,7 @@ class EncryptionService {
         senderDisplayName: map['senderDisplayName'] as String?,
         expireAfter: map['expireAfter'] as int?,
         deleteAfterRead: (map['deleteAfterRead'] as bool?) ?? false,
+        backupExcluded: (map['backupExcluded'] as bool?) ?? false,
       );
     } catch (_) {
       return null;

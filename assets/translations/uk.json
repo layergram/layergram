@@ -431,5 +431,10 @@
   "identityQrImageShareText": "Моя Layergram особистість QR",
   "identityQrImageShareSubject": "Layergram ідентифікатор QR",
   "identityQrImageUnavailable": "QR ще не доступний",
-  "identityQrImageShareFailed": "Не вдалося поділитися зображенням QR"
+  "identityQrImageShareFailed": "Не вдалося поділитися зображенням QR",
+  "excludeFromBackups": "Виключити з резервних копій",
+  "excludeFromBackupsShort": "Нові повідомлення в цій розмові не включатимуться до резервних копій Layergram в офіційних клієнтах.",
+  "excludeFromBackupsCaveat": "Не запобігає знімкам екрана, записам екрана, зміненим клієнтам або зовнішнім копіям.",
+  "touchComposerExcludeFromBackupsOn": "Виключення з резервних копій увімкнено",
+  "touchComposerExcludeFromBackupsOff": "Виключення з резервних копій вимкнено"
 }

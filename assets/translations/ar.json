@@ -431,5 +431,10 @@
   "identityQrImageShareText": "هويتي Layergram QR",
   "identityQrImageShareSubject": "Layergram الهوية QR",
   "identityQrImageUnavailable": "QR غير متوفر بعد",
-  "identityQrImageShareFailed": "تعذرت مشاركة الصورة QR"
+  "identityQrImageShareFailed": "تعذرت مشاركة الصورة QR",
+  "excludeFromBackups": "استبعاد من النسخ الاحتياطية",
+  "excludeFromBackupsShort": "لن تُدرج الرسائل الجديدة في هذه المحادثة ضمن نسخ Layergram الاحتياطية على العملاء الرسميين.",
+  "excludeFromBackupsCaveat": "لا يمنع لقطات الشاشة أو تسجيل الشاشة أو العملاء المعدّلين أو النسخ الخارجية.",
+  "touchComposerExcludeFromBackupsOn": "تم تفعيل الاستبعاد من النسخ الاحتياطية",
+  "touchComposerExcludeFromBackupsOff": "تم إيقاف الاستبعاد من النسخ الاحتياطية"
 }

@@ -431,5 +431,10 @@
   "identityQrImageShareText": "ข้อมูลประจำตัว Layergram ของฉัน QR",
   "identityQrImageShareSubject": "Layergram ข้อมูลประจำตัว QR",
   "identityQrImageUnavailable": "QR ยังไม่พร้อมใช้งาน",
-  "identityQrImageShareFailed": "ไม่สามารถแชร์รูปภาพ QR ได้"
+  "identityQrImageShareFailed": "ไม่สามารถแชร์รูปภาพ QR ได้",
+  "excludeFromBackups": "ไม่รวมในการสำรองข้อมูล",
+  "excludeFromBackupsShort": "ข้อความใหม่ในบทสนทนานี้จะไม่ถูกรวมในข้อมูลสำรอง Layergram บนไคลเอนต์ทางการ",
+  "excludeFromBackupsCaveat": "ไม่ป้องกันภาพหน้าจอ การบันทึกหน้าจอ ไคลเอนต์ที่ดัดแปลง หรือสำเนาภายนอก",
+  "touchComposerExcludeFromBackupsOn": "เปิดการไม่รวมในการสำรองข้อมูลแล้ว",
+  "touchComposerExcludeFromBackupsOff": "ปิดการไม่รวมในการสำรองข้อมูลแล้ว"
 }

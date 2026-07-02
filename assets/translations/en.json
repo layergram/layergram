@@ -431,5 +431,10 @@
   "identityQrImageShareText": "My Layergram identity QR",
   "identityQrImageShareSubject": "Layergram identity QR",
   "identityQrImageUnavailable": "QR not available yet",
-  "identityQrImageShareFailed": "Could not share the QR image"
+  "identityQrImageShareFailed": "Could not share the QR image",
+  "excludeFromBackups": "Exclude from backups",
+  "excludeFromBackupsShort": "New messages in this conversation will not be included in Layergram backups on official clients.",
+  "excludeFromBackupsCaveat": "Does not prevent screenshots, screen recordings, modified clients, or external copies.",
+  "touchComposerExcludeFromBackupsOn": "Backup exclusion enabled",
+  "touchComposerExcludeFromBackupsOff": "Backup exclusion disabled"
 }

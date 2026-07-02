@@ -431,5 +431,10 @@
   "identityQrImageShareText": "የእኔ Layergram ማንነት QR",
   "identityQrImageShareSubject": "Layergram ማንነት QR",
   "identityQrImageUnavailable": "QR እስካሁን የለም።",
-  "identityQrImageShareFailed": "የQR ምስሉን ማጋራት አልተቻለም"
+  "identityQrImageShareFailed": "የQR ምስሉን ማጋራት አልተቻለም",
+  "excludeFromBackups": "ከምትኬዎች አስወግድ",
+  "excludeFromBackupsShort": "በዚህ ውይይት ያሉ አዲስ መልእክቶች በኦፊሴላዊ ክላይንቶች ላይ በLayergram ምትኬዎች ውስጥ አይካተቱም።",
+  "excludeFromBackupsCaveat": "ስክሪንሾት፣ ስክሪን ቀረጻ፣ የተቀየሩ ክላይንቶች ወይም ውጫዊ ቅጂዎችን አያግድም።",
+  "touchComposerExcludeFromBackupsOn": "ከምትኬ ማስወገድ ነቅቷል",
+  "touchComposerExcludeFromBackupsOff": "ከምትኬ ማስወገድ ተሰናክሏል"
 }

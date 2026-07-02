@@ -431,5 +431,10 @@
   "identityQrImageShareText": "私の Layergram アイデンティティ QR",
   "identityQrImageShareSubject": "Layergram ID QR",
   "identityQrImageUnavailable": "QR はまだ利用できません",
-  "identityQrImageShareFailed": "QR 画像を共有できませんでした"
+  "identityQrImageShareFailed": "QR 画像を共有できませんでした",
+  "excludeFromBackups": "バックアップから除外",
+  "excludeFromBackupsShort": "この会話の新しいメッセージは、公式クライアントの Layergram バックアップに含まれません。",
+  "excludeFromBackupsCaveat": "スクリーンショット、画面録画、改変クライアント、外部コピーは防止できません。",
+  "touchComposerExcludeFromBackupsOn": "バックアップ除外を有効にしました",
+  "touchComposerExcludeFromBackupsOff": "バックアップ除外を無効にしました"
 }

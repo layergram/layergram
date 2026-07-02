@@ -431,5 +431,10 @@
   "identityQrImageShareText": "Minha identidade Layergram QR",
   "identityQrImageShareSubject": "Layergram identidade QR",
   "identityQrImageUnavailable": "QR ainda não disponível",
-  "identityQrImageShareFailed": "Não foi possível compartilhar a imagem QR"
+  "identityQrImageShareFailed": "Não foi possível compartilhar a imagem QR",
+  "excludeFromBackups": "Excluir das cópias de segurança",
+  "excludeFromBackupsShort": "As novas mensagens desta conversa não serão incluídas nas cópias de segurança Layergram em clientes oficiais.",
+  "excludeFromBackupsCaveat": "Não impede capturas de ecrã, gravações de ecrã, clientes modificados ou cópias externas.",
+  "touchComposerExcludeFromBackupsOn": "Exclusão das cópias ativada",
+  "touchComposerExcludeFromBackupsOff": "Exclusão das cópias desativada"
 }

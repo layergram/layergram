@@ -431,5 +431,10 @@
   "identityQrImageShareText": "Identiti Layergram saya QR",
   "identityQrImageShareSubject": "Layergram identiti QR",
   "identityQrImageUnavailable": "QR belum tersedia lagi",
-  "identityQrImageShareFailed": "Tidak dapat berkongsi imej QR"
+  "identityQrImageShareFailed": "Tidak dapat berkongsi imej QR",
+  "excludeFromBackups": "Kecualikan daripada sandaran",
+  "excludeFromBackupsShort": "Mesej baharu dalam perbualan ini tidak akan disertakan dalam sandaran Layergram pada klien rasmi.",
+  "excludeFromBackupsCaveat": "Tidak menghalang tangkapan skrin, rakaman skrin, klien yang diubah suai atau salinan luaran.",
+  "touchComposerExcludeFromBackupsOn": "Pengecualian sandaran diaktifkan",
+  "touchComposerExcludeFromBackupsOff": "Pengecualian sandaran dinyahaktifkan"
 }

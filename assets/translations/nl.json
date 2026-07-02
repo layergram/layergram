@@ -431,5 +431,10 @@
   "identityQrImageShareText": "Mijn Layergram identiteit QR",
   "identityQrImageShareSubject": "Layergram identiteit QR",
   "identityQrImageUnavailable": "QR nog niet beschikbaar",
-  "identityQrImageShareFailed": "Kan de afbeelding QR niet delen"
+  "identityQrImageShareFailed": "Kan de afbeelding QR niet delen",
+  "excludeFromBackups": "Uitsluiten van back-ups",
+  "excludeFromBackupsShort": "Nieuwe berichten in dit gesprek worden op officiële clients niet opgenomen in Layergram-back-ups.",
+  "excludeFromBackupsCaveat": "Voorkomt geen screenshots, schermopnamen, aangepaste clients of externe kopieën.",
+  "touchComposerExcludeFromBackupsOn": "Back-upuitsluiting ingeschakeld",
+  "touchComposerExcludeFromBackupsOff": "Back-upuitsluiting uitgeschakeld"
 }

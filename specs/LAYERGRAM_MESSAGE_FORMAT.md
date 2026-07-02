@@ -57,7 +57,8 @@ The JSON serialization is encoded as UTF-8 before encryption. Any valid Unicode 
   "text": "The actual secret message",
   "senderDisplayName": "Alice",
   "expireAfter": null,
-  "deleteAfterRead": false
+  "deleteAfterRead": false,
+  "backupExcluded": false
 }
 ```
 
@@ -71,6 +72,13 @@ The JSON serialization is encoded as UTF-8 before encryption. Any valid Unicode 
 | `senderDisplayName` | string? | Optional sender display name |
 | `expireAfter` | int? | Optional TTL in seconds |
 | `deleteAfterRead` | bool | Whether the message self-destructs after reading |
+| `backupExcluded` | bool? | If true, official Layergram clients must exclude this message from official backups/exports. Missing field means false. |
+
+`backupExcluded` is part of the encrypted and authenticated message payload. It is
+not visible transport metadata and cannot be changed without decrypting and
+re-encrypting the message. The flag is a backup/export contract between official
+Layergram clients; it does not prevent screenshots, screen recordings, modified
+clients, or external copies.
 
 ### 2.1.1 Forward Secrecy Envelope Fields
 

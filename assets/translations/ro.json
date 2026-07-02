@@ -431,5 +431,10 @@
   "identityQrImageShareText": "Identitatea mea Layergram QR",
   "identityQrImageShareSubject": "Layergram identitate QR",
   "identityQrImageUnavailable": "QR nu este încă disponibil",
-  "identityQrImageShareFailed": "Nu s-a putut partaja imaginea QR"
+  "identityQrImageShareFailed": "Nu s-a putut partaja imaginea QR",
+  "excludeFromBackups": "Exclude din backupuri",
+  "excludeFromBackupsShort": "Mesajele noi din această conversație nu vor fi incluse în backupurile Layergram pe clienții oficiali.",
+  "excludeFromBackupsCaveat": "Nu împiedică capturile de ecran, înregistrările ecranului, clienții modificați sau copiile externe.",
+  "touchComposerExcludeFromBackupsOn": "Excluderea din backupuri activată",
+  "touchComposerExcludeFromBackupsOff": "Excluderea din backupuri dezactivată"
 }

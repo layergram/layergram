@@ -431,5 +431,10 @@
   "identityQrImageShareText": "Nawa Layergram QR",
   "identityQrImageShareSubject": "Layergram ainihi QR",
   "identityQrImageUnavailable": "QR ba a samuwa tukuna",
-  "identityQrImageShareFailed": "An kasa raba hoton QR"
+  "identityQrImageShareFailed": "An kasa raba hoton QR",
+  "excludeFromBackups": "Cire daga ajiyar kwafi",
+  "excludeFromBackupsShort": "Sabbin saƙonni a wannan tattaunawar ba za su shiga ajiyar kwafin Layergram a kan abokan ciniki na hukuma ba.",
+  "excludeFromBackupsCaveat": "Ba ya hana hoton allo, rikodin allo, abokan ciniki da aka gyara, ko kwafe na waje.",
+  "touchComposerExcludeFromBackupsOn": "Cirewa daga ajiyar kwafi ya kunna",
+  "touchComposerExcludeFromBackupsOff": "Cirewa daga ajiyar kwafi ya kashe"
 }

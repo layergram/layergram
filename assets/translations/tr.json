@@ -431,5 +431,10 @@
   "identityQrImageShareText": "Layergram kimliğim QR",
   "identityQrImageShareSubject": "Layergram kimlik QR",
   "identityQrImageUnavailable": "QR henüz mevcut değil",
-  "identityQrImageShareFailed": "QR resmi paylaşılamadı"
+  "identityQrImageShareFailed": "QR resmi paylaşılamadı",
+  "excludeFromBackups": "Yedeklerden hariç tut",
+  "excludeFromBackupsShort": "Bu konuşmadaki yeni mesajlar resmi istemcilerde Layergram yedeklerine dahil edilmeyecek.",
+  "excludeFromBackupsCaveat": "Ekran görüntülerini, ekran kayıtlarını, değiştirilmiş istemcileri veya harici kopyaları engellemez.",
+  "touchComposerExcludeFromBackupsOn": "Yedekten hariç tutma etkin",
+  "touchComposerExcludeFromBackupsOff": "Yedekten hariç tutma devre dışı"
 }

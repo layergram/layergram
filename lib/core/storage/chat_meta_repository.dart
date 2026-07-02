@@ -217,6 +217,7 @@ class ChatMetaRepository {
     required String outputMode,
     required int? expiryMinutes,
     required bool deleteAfterRead,
+    required bool excludeFromBackups,
   }) async {
     await _ensureLoaded();
     if (!_hasIdentityScope) return;
@@ -224,6 +225,23 @@ class ChatMetaRepository {
       'outputMode': outputMode,
       'expiryMinutes': expiryMinutes,
       'deleteAfterRead': deleteAfterRead,
+      'excludeFromBackups': excludeFromBackups,
+    };
+    await _persist();
+  }
+
+  Future<void> setExcludeFromBackups({
+    required String chatId,
+    required bool excludeFromBackups,
+  }) async {
+    await _ensureLoaded();
+    if (!_hasIdentityScope) return;
+    final current = _settingsByChatId[chatId] ?? const <String, dynamic>{};
+    _settingsByChatId[chatId] = {
+      'outputMode': (current['outputMode'] as String?) ?? 'text',
+      'expiryMinutes': current['expiryMinutes'] as int?,
+      'deleteAfterRead': (current['deleteAfterRead'] as bool?) ?? false,
+      'excludeFromBackups': excludeFromBackups,
     };
     await _persist();
   }

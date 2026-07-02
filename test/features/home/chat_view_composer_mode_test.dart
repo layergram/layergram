@@ -65,6 +65,7 @@ void main() {
           'outputMode': 'cover',
           'expiryMinutes': null,
           'deleteAfterRead': false,
+          'excludeFromBackups': false,
         },
       ),
     );
@@ -192,7 +193,10 @@ Future<void> _pumpChat(
   WidgetTester tester, {
   Size size = const Size(390, 844),
   MessageOutputMode? initialOutputMode,
+  RemoteIdentity contact = _contact,
   required _TestChatMetaRepository chatMetaRepository,
+  MessagesRepository? messagesRepository,
+  List<Override> extraOverrides = const [],
 }) async {
   addTearDown(() {
     tester.view.resetPhysicalSize();
@@ -204,12 +208,13 @@ Future<void> _pumpChat(
     ProviderScope(
       overrides: [
         chatMetaRepositoryProvider.overrideWithValue(chatMetaRepository),
-        messagesRepositoryProvider
-            .overrideWithValue(_EmptyMessagesRepository()),
+        messagesRepositoryProvider.overrideWithValue(
+            messagesRepository ?? _EmptyMessagesRepository()),
+        ...extraOverrides,
       ],
       child: MaterialApp(
         home: ChatView(
-          contact: _contact,
+          contact: contact,
           embedded: true,
           initialOutputMode: initialOutputMode,
         ),
@@ -234,6 +239,7 @@ class _TestChatMetaRepository extends ChatMetaRepository {
 
   final Map<String, dynamic>? _settings;
   String? savedOutputMode;
+  bool? savedExcludeFromBackups;
 
   @override
   Future<Map<String, dynamic>?> getChatSettings({
@@ -250,8 +256,10 @@ class _TestChatMetaRepository extends ChatMetaRepository {
     required String outputMode,
     required int? expiryMinutes,
     required bool deleteAfterRead,
+    required bool excludeFromBackups,
   }) async {
     savedOutputMode = outputMode;
+    savedExcludeFromBackups = excludeFromBackups;
   }
 }
 

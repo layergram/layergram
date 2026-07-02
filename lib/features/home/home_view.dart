@@ -1078,6 +1078,8 @@ class _HomeViewState extends ConsumerState<HomeView> {
                 initialSecret: pending?['secret'] as String?,
                 initialExpiry: pending?['expiry'] as int?,
                 initialDeleteAfterRead: pending?['deleteAfterRead'] as bool?,
+                initialExcludeFromBackups:
+                    pending?['excludeFromBackups'] as bool?,
                 initialOutputMode: MessageOutputMode.fromStorageValue(
                   pending?['outputMode'] as String?,
                 ),
@@ -1393,6 +1395,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
           initialSecret: pending?['secret'] as String?,
           initialExpiry: pending?['expiry'] as int?,
           initialDeleteAfterRead: pending?['deleteAfterRead'] as bool?,
+          initialExcludeFromBackups: pending?['excludeFromBackups'] as bool?,
           initialOutputMode: MessageOutputMode.fromStorageValue(
             pending?['outputMode'] as String?,
           ),
@@ -1419,6 +1422,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
         'secret': result['secret'] as String? ?? '',
         'expiry': result['expiry'] as int?,
         'deleteAfterRead': (result['deleteAfterRead'] as bool?) ?? false,
+        'excludeFromBackups': (result['excludeFromBackups'] as bool?) ?? false,
         'outputMode': (result['outputMode'] as String?) ??
             MessageOutputMode.defaultMode.storageValue,
         'isSearching': result['isSearching'] as bool? ?? false,

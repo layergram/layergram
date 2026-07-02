@@ -431,5 +431,10 @@
   "identityQrImageShareText": "ನನ್ನ Layergram ಗುರುತು QR",
   "identityQrImageShareSubject": "Layergram ಗುರುತು QR",
   "identityQrImageUnavailable": "QR ಇನ್ನೂ ಲಭ್ಯವಿಲ್ಲ",
-  "identityQrImageShareFailed": "QR ಚಿತ್ರವನ್ನು ಹಂಚಿಕೊಳ್ಳಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ"
+  "identityQrImageShareFailed": "QR ಚಿತ್ರವನ್ನು ಹಂಚಿಕೊಳ್ಳಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ",
+  "excludeFromBackups": "ಬ್ಯಾಕಪ್‌ಗಳಿಂದ ಹೊರತುಪಡಿಸಿ",
+  "excludeFromBackupsShort": "ಈ ಸಂಭಾಷಣೆಯ ಹೊಸ ಸಂದೇಶಗಳು ಅಧಿಕೃತ ಕ್ಲೈಂಟ್‌ಗಳ Layergram ಬ್ಯಾಕಪ್‌ಗಳಲ್ಲಿ ಸೇರಿಸಲಾಗುವುದಿಲ್ಲ.",
+  "excludeFromBackupsCaveat": "ಸ್ಕ್ರೀನ್‌ಶಾಟ್‌ಗಳು, ಪರದೆ ದಾಖಲಿಕೆಗಳು, ಬದಲಿಸಿದ ಕ್ಲೈಂಟ್‌ಗಳು ಅಥವಾ ಹೊರಗಿನ ಪ್ರತಿಗಳನ್ನು ತಡೆಯುವುದಿಲ್ಲ.",
+  "touchComposerExcludeFromBackupsOn": "ಬ್ಯಾಕಪ್ ಹೊರತುಪಡಿಕೆ ಸಕ್ರಿಯವಾಗಿದೆ",
+  "touchComposerExcludeFromBackupsOff": "ಬ್ಯಾಕಪ್ ಹೊರತುಪಡಿಕೆ ನಿಷ್ಕ್ರಿಯವಾಗಿದೆ"
 }

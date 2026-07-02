@@ -431,5 +431,10 @@
   "identityQrImageShareText": "Layergram danh tính QR của tôi",
   "identityQrImageShareSubject": "Layergram danh tính QR",
   "identityQrImageUnavailable": "QR chưa có sẵn",
-  "identityQrImageShareFailed": "Không thể chia sẻ hình ảnh QR"
+  "identityQrImageShareFailed": "Không thể chia sẻ hình ảnh QR",
+  "excludeFromBackups": "Loại trừ khỏi bản sao lưu",
+  "excludeFromBackupsShort": "Tin nhắn mới trong cuộc trò chuyện này sẽ không được đưa vào bản sao lưu Layergram trên các ứng dụng chính thức.",
+  "excludeFromBackupsCaveat": "Không ngăn ảnh chụp màn hình, ghi màn hình, ứng dụng đã sửa đổi hoặc bản sao bên ngoài.",
+  "touchComposerExcludeFromBackupsOn": "Đã bật loại trừ khỏi sao lưu",
+  "touchComposerExcludeFromBackupsOff": "Đã tắt loại trừ khỏi sao lưu"
 }
