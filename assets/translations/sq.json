@@ -431,5 +431,10 @@
   "identityQrImageShareText": "Identiteti im Layergram QR",
   "identityQrImageShareSubject": "Layergram identiteti QR",
   "identityQrImageUnavailable": "QR nuk disponohet ende",
-  "identityQrImageShareFailed": "Imazhi QR nuk mund të ndahej"
+  "identityQrImageShareFailed": "Imazhi QR nuk mund të ndahej",
+  "excludeFromBackups": "Përjashto nga kopjet rezervë",
+  "excludeFromBackupsShort": "Mesazhet e reja në këtë bisedë nuk do të përfshihen në kopjet rezervë Layergram në klientët zyrtarë.",
+  "excludeFromBackupsCaveat": "Nuk parandalon pamjet e ekranit, regjistrimet e ekranit, klientët e modifikuar ose kopjet e jashtme.",
+  "touchComposerExcludeFromBackupsOn": "Përjashtimi nga kopjet u aktivizua",
+  "touchComposerExcludeFromBackupsOff": "Përjashtimi nga kopjet u çaktivizua"
 }

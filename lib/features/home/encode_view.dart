@@ -438,6 +438,15 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
                                 : (DateTime.now().millisecondsSinceEpoch ~/
                                         1000) +
                                     (expiresMinutes * 60);
+                            final chatSettings = await ref
+                                .read(chatMetaRepositoryProvider)
+                                .getChatSettings(
+                                  chatId: recipient.identityId,
+                                );
+                            final backupExcluded =
+                                (chatSettings?['excludeFromBackups']
+                                        as bool?) ??
+                                    false;
                             final encResult = await ref
                                 .read(homeControllerProvider)
                                 .encryptForRecipient(
@@ -445,6 +454,7 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
                                   recipient: recipient,
                                   expireAfter: expireAfter,
                                   deleteAfterRead: _deleteAfterRead,
+                                  backupExcluded: backupExcluded,
                                 );
                             final encrypted = encResult.message;
                             final rawBytes = encrypted.toRawBytes();
@@ -518,6 +528,7 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
                                       rawSource: output,
                                       expireAfter: expireAfter,
                                       deleteAfterRead: _deleteAfterRead,
+                                      backupExcluded: backupExcluded,
                                       keyTag: keyTag,
                                       isFsEncrypted: encResult.isFsEncrypted,
                                       fsClassification:

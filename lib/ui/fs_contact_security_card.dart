@@ -108,6 +108,8 @@ class FsContactSecurityCard extends ConsumerWidget {
             // ── Current security mode (§14.3) ──────────────────────────────
             _SecurityModeBadge(contactId: contactId),
             const SizedBox(height: 12),
+            _BackupExclusionPreference(contactId: contactId),
+            const SizedBox(height: 16),
 
             // ── Actions ────────────────────────────────────────────────────
             Wrap(
@@ -372,6 +374,129 @@ class _SecurityModeBadge extends ConsumerWidget {
       case FsSecurityMode.strict:
         return Colors.green.shade800;
     }
+  }
+}
+
+// ── Backup exclusion preference ─────────────────────────────────────────────
+
+class _BackupExclusionPreference extends ConsumerStatefulWidget {
+  const _BackupExclusionPreference({required this.contactId});
+
+  final String contactId;
+
+  @override
+  ConsumerState<_BackupExclusionPreference> createState() =>
+      _BackupExclusionPreferenceState();
+}
+
+class _BackupExclusionPreferenceState
+    extends ConsumerState<_BackupExclusionPreference> {
+  bool _loaded = false;
+  bool _excludeFromBackups = false;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final settings = await ref
+        .read(chatMetaRepositoryProvider)
+        .getChatSettings(chatId: widget.contactId);
+    if (!mounted) return;
+    setState(() {
+      _excludeFromBackups = (settings?['excludeFromBackups'] as bool?) ?? false;
+      _loaded = true;
+    });
+  }
+
+  Future<void> _setExcludeFromBackups(bool value) async {
+    if (_saving || _excludeFromBackups == value) {
+      return;
+    }
+    setState(() {
+      _excludeFromBackups = value;
+      _saving = true;
+    });
+    await ref.read(chatMetaRepositoryProvider).setExcludeFromBackups(
+          chatId: widget.contactId,
+          excludeFromBackups: value,
+        );
+    if (!mounted) return;
+    setState(() => _saving = false);
+    final t = AppStrings.t;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          t(
+            context,
+            value
+                ? 'touchComposerExcludeFromBackupsOn'
+                : 'touchComposerExcludeFromBackupsOff',
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppStrings.t;
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(
+              _excludeFromBackups
+                  ? Icons.cloud_off_outlined
+                  : Icons.cloud_queue_outlined,
+              size: 20,
+              color: _excludeFromBackups
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  t(context, 'excludeFromBackups'),
+                  style: theme.textTheme.labelLarge,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  t(context, 'excludeFromBackupsShort'),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  t(context, 'excludeFromBackupsCaveat'),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Switch.adaptive(
+            value: _excludeFromBackups,
+            onChanged: _loaded && !_saving ? _setExcludeFromBackups : null,
+          ),
+        ],
+      ),
+    );
   }
 }
 

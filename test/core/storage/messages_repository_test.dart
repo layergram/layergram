@@ -46,7 +46,9 @@ void main() {
   });
 
   group('MessagesRepository', () {
-    test('stores messages in one sealed state record per domain without plaintext fields', () async {
+    test(
+        'stores messages in one sealed state record per domain without plaintext fields',
+        () async {
       final storageKey = await deriveStorageKey('orig');
       final repo = MessagesRepository();
       await initRepo(
@@ -102,10 +104,7 @@ void main() {
       );
       final rawMessages = (decrypted?['messages'] as List?) ?? const [];
       expect(rawMessages.length, 2);
-      final ids = rawMessages
-          .whereType<Map>()
-          .map((m) => m['id'])
-          .toSet();
+      final ids = rawMessages.whereType<Map>().map((m) => m['id']).toSet();
       expect(ids, {'msg-1', 'msg-2'});
 
       repo.dispose();
@@ -121,7 +120,140 @@ void main() {
       reopened.dispose();
     });
 
-    test('preserves records from other key domains while showing only the active one', () async {
+    test(
+        'persists sender-direction backupExcluded and exposes official backup filter contract',
+        () async {
+      final storageKey = await deriveStorageKey('orig');
+      final repo = MessagesRepository();
+      await initRepo(
+        repo,
+        scopeToken: 'opaque-scope-alpha',
+        storageKey: storageKey,
+      );
+
+      await repo.add(
+        const MessageRecord(
+          id: 'backup-ok',
+          senderId: 'me',
+          recipientId: 'contact',
+          direction: 'outgoing',
+          timestamp: 1,
+          text: 'eligible',
+          keyTag: 'orig',
+        ),
+      );
+      await repo.add(
+        const MessageRecord(
+          id: 'backup-excluded',
+          senderId: 'me',
+          recipientId: 'contact',
+          direction: 'outgoing',
+          timestamp: 2,
+          text: 'do not export',
+          keyTag: 'orig',
+          backupExcluded: true,
+        ),
+      );
+      repo.dispose();
+
+      final reopened = MessagesRepository();
+      await initRepo(
+        reopened,
+        scopeToken: 'opaque-scope-alpha',
+        storageKey: storageKey,
+      );
+
+      final messages = await reopened.getAllMessages();
+      expect(
+        messages
+            .firstWhere((message) => message.id == 'backup-excluded')
+            .backupExcluded,
+        isTrue,
+      );
+      expect(
+        messages
+            .firstWhere((message) => message.id == 'backup-ok')
+            .backupExcluded,
+        isFalse,
+      );
+      expect(
+        MessageRecord.backupEligibleRecords(messages).map((m) => m.id).toSet(),
+        {'backup-ok'},
+      );
+      expect(
+        MessageRecord.fromMap({
+          'id': 'legacy',
+          'senderId': 'contact',
+          'recipientId': 'me',
+          'direction': 'incoming',
+          'timestamp': 3,
+        }).backupExcluded,
+        isFalse,
+      );
+      reopened.dispose();
+    });
+
+    test('disabling backup exclusion only affects new messages', () async {
+      final storageKey = await deriveStorageKey('orig');
+      final repo = MessagesRepository();
+      await initRepo(
+        repo,
+        scopeToken: 'opaque-scope-alpha',
+        storageKey: storageKey,
+      );
+
+      await repo.add(
+        const MessageRecord(
+          id: 'old-excluded',
+          senderId: 'me',
+          recipientId: 'contact',
+          direction: 'outgoing',
+          timestamp: 1,
+          text: 'sent while preference was on',
+          keyTag: 'orig',
+          backupExcluded: true,
+        ),
+      );
+      await repo.add(
+        const MessageRecord(
+          id: 'new-included',
+          senderId: 'me',
+          recipientId: 'contact',
+          direction: 'outgoing',
+          timestamp: 2,
+          text: 'sent after preference was off',
+          keyTag: 'orig',
+          backupExcluded: false,
+        ),
+      );
+      repo.dispose();
+
+      final reopened = MessagesRepository();
+      await initRepo(
+        reopened,
+        scopeToken: 'opaque-scope-alpha',
+        storageKey: storageKey,
+      );
+
+      final messages = await reopened.getAllMessages();
+      expect(
+        messages
+            .firstWhere((message) => message.id == 'old-excluded')
+            .backupExcluded,
+        isTrue,
+      );
+      expect(
+        messages
+            .firstWhere((message) => message.id == 'new-included')
+            .backupExcluded,
+        isFalse,
+      );
+      reopened.dispose();
+    });
+
+    test(
+        'preserves records from other key domains while showing only the active one',
+        () async {
       final originalKey = await deriveStorageKey('orig');
       final passKey = await deriveStorageKey('pass');
 
@@ -197,7 +329,9 @@ void main() {
       passView.dispose();
     });
 
-    test('clearAll removes all message records for the active opaque scope across key domains', () async {
+    test(
+        'clearAll removes all message records for the active opaque scope across key domains',
+        () async {
       final originalKey = await deriveStorageKey('orig');
       final passKey = await deriveStorageKey('pass');
       final box = Hive.box<Map>(LocalDatabase.messagesBoxName);
@@ -286,7 +420,9 @@ void main() {
       repo.dispose();
     });
 
-    test('purgeReadDeleteAfterReadFor does not rewrite storage when nothing matches', () async {
+    test(
+        'purgeReadDeleteAfterReadFor does not rewrite storage when nothing matches',
+        () async {
       final storageKey = await deriveStorageKey('orig');
       final repo = MessagesRepository();
       await initRepo(
@@ -321,7 +457,8 @@ void main() {
       repo.dispose();
     });
 
-    test('watchThread does not rewrite storage when there is nothing to prune', () async {
+    test('watchThread does not rewrite storage when there is nothing to prune',
+        () async {
       final storageKey = await deriveStorageKey('orig');
       final repo = MessagesRepository();
       await initRepo(
@@ -356,7 +493,9 @@ void main() {
       repo.dispose();
     });
 
-    test('deduplicates identical incoming shared messages by normalized raw source', () async {
+    test(
+        'deduplicates identical incoming shared messages by normalized raw source',
+        () async {
       final storageKey = await deriveStorageKey('orig');
       final repo = MessagesRepository();
       await initRepo(
@@ -398,7 +537,9 @@ void main() {
       repo.dispose();
     });
 
-    test('keeps distinct incoming re-shares when their visible cover text differs', () async {
+    test(
+        'keeps distinct incoming re-shares when their visible cover text differs',
+        () async {
       final storageKey = await deriveStorageKey('orig');
       final repo = MessagesRepository();
       await initRepo(

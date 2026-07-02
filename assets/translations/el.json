@@ -431,5 +431,10 @@
   "identityQrImageShareText": "Η ταυτότητά μου Layergram QR",
   "identityQrImageShareSubject": "Layergram ταυτότητα QR",
   "identityQrImageUnavailable": "Το QR δεν είναι διαθέσιμο ακόμα",
-  "identityQrImageShareFailed": "Δεν ήταν δυνατή η κοινή χρήση της εικόνας QR"
+  "identityQrImageShareFailed": "Δεν ήταν δυνατή η κοινή χρήση της εικόνας QR",
+  "excludeFromBackups": "Εξαίρεση από αντίγραφα ασφαλείας",
+  "excludeFromBackupsShort": "Τα νέα μηνύματα αυτής της συνομιλίας δεν θα περιλαμβάνονται στα αντίγραφα ασφαλείας Layergram σε επίσημους πελάτες.",
+  "excludeFromBackupsCaveat": "Δεν εμποδίζει στιγμιότυπα οθόνης, εγγραφές οθόνης, τροποποιημένους πελάτες ή εξωτερικά αντίγραφα.",
+  "touchComposerExcludeFromBackupsOn": "Η εξαίρεση από αντίγραφα ενεργοποιήθηκε",
+  "touchComposerExcludeFromBackupsOff": "Η εξαίρεση από αντίγραφα απενεργοποιήθηκε"
 }

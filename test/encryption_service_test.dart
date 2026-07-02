@@ -23,6 +23,7 @@ void main() {
       senderDisplayName: 'Alice',
       expireAfter: 1234569999,
       deleteAfterRead: true,
+      backupExcluded: true,
     );
 
     final encResult = await service.encrypt(
@@ -36,6 +37,20 @@ void main() {
       senderPublicKeyBase64: base64Encode(alicePublic),
       message: encResult.message,
     );
+    final rawText = utf8.decode(
+      encResult.message.toRawBytes(),
+      allowMalformed: true,
+    );
+    expect(rawText, isNot(contains('backupExcluded')));
+    final envelopeKey = await service.deriveSymmetricKey(
+      localPrivateKeyBase64: base64Encode(bobPrivate),
+      remotePublicKeyBase64: base64Encode(alicePublic),
+    );
+    final envelope = await service.tryDecryptEnvelopeWithKey(
+      message: encResult.message,
+      key: envelopeKey,
+    );
+    expect(envelope?['backupExcluded'], isTrue);
 
     expect(decResult.payload.senderId, payload.senderId);
     expect(decResult.payload.recipientId, payload.recipientId);
@@ -44,6 +59,7 @@ void main() {
     expect(decResult.payload.senderDisplayName, payload.senderDisplayName);
     expect(decResult.payload.expireAfter, payload.expireAfter);
     expect(decResult.payload.deleteAfterRead, payload.deleteAfterRead);
+    expect(decResult.payload.backupExcluded, isTrue);
   });
 
   test('decrypt accepts base64url (no padding) nonce/ciphertext', () async {
@@ -73,7 +89,10 @@ void main() {
     final encrypted = encResult.message;
 
     String toBase64UrlNoPad(String input) {
-      return input.replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
+      return input
+          .replaceAll('+', '-')
+          .replaceAll('/', '_')
+          .replaceAll('=', '');
     }
 
     final urlMessage = EncryptedMessage(
@@ -97,5 +116,6 @@ void main() {
     expect(decResult.payload.senderDisplayName, payload.senderDisplayName);
     expect(decResult.payload.expireAfter, payload.expireAfter);
     expect(decResult.payload.deleteAfterRead, payload.deleteAfterRead);
+    expect(decResult.payload.backupExcluded, isFalse);
   });
 }

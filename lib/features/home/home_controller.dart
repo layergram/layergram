@@ -121,12 +121,14 @@ class HomeController {
     required RemoteIdentity recipient,
     int? expireAfter,
     bool deleteAfterRead = false,
+    bool backupExcluded = false,
   }) async {
     final result = await encryptForRecipient(
       secretText: secretText,
       recipient: recipient,
       expireAfter: expireAfter,
       deleteAfterRead: deleteAfterRead,
+      backupExcluded: backupExcluded,
     );
 
     return ref
@@ -144,6 +146,7 @@ class HomeController {
     required RemoteIdentity recipient,
     int? expireAfter,
     bool deleteAfterRead = false,
+    bool backupExcluded = false,
     bool selfCopy = false,
   }) async {
     return _encryptForRecipient(
@@ -151,6 +154,7 @@ class HomeController {
       recipient: recipient,
       expireAfter: expireAfter,
       deleteAfterRead: deleteAfterRead,
+      backupExcluded: backupExcluded,
       selfCopy: selfCopy,
     );
   }
@@ -162,11 +166,13 @@ class HomeController {
         FsMessageClassification classification
       })> encryptMaximumFsSetupForRecipient({
     required RemoteIdentity recipient,
+    bool backupExcluded = false,
   }) async {
     return _encryptForRecipient(
       secretText: '',
       recipient: recipient,
       maximumFsSetupOnly: true,
+      backupExcluded: backupExcluded,
     );
   }
 
@@ -180,6 +186,7 @@ class HomeController {
     required RemoteIdentity recipient,
     int? expireAfter,
     bool deleteAfterRead = false,
+    bool backupExcluded = false,
     bool selfCopy = false,
     bool maximumFsSetupOnly = false,
   }) async {
@@ -220,6 +227,7 @@ class HomeController {
       senderDisplayName: local.displayName,
       expireAfter: expireAfter,
       deleteAfterRead: deleteAfterRead,
+      backupExcluded: backupExcluded,
     );
 
     // Use passphrase-derived public key for self-copy when passphrase is active.
@@ -1001,6 +1009,7 @@ class HomeController {
             rawSource: rawSource,
             expireAfter: payload.expireAfter,
             deleteAfterRead: payload.deleteAfterRead,
+            backupExcluded: payload.backupExcluded,
             keyTag: keyTag,
             isFsEncrypted: isFsEncrypted,
             fsClassification: classification,

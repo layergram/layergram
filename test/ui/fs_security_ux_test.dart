@@ -11,6 +11,7 @@ import 'package:layergram/core/crypto/fs_session_manager.dart';
 import 'package:layergram/core/crypto/fs_state_persistence_service.dart';
 import 'package:layergram/core/providers.dart';
 import 'package:layergram/core/storage/aux_record_repository.dart';
+import 'package:layergram/core/storage/chat_meta_repository.dart';
 import 'package:layergram/core/storage/local_database.dart';
 import 'package:layergram/l10n/app_strings.dart';
 import 'package:layergram/l10n/fs_strings_bundle.dart';
@@ -62,6 +63,53 @@ class _NoopFsStatePersistenceService extends FsStatePersistenceService {
   Future<void> removeState(String contactId, String? sessionId) async {}
 }
 
+class _MemoryChatMetaRepository extends ChatMetaRepository {
+  _MemoryChatMetaRepository({Map<String, dynamic>? settings})
+      : _settings = settings == null
+            ? <String, dynamic>{}
+            : Map<String, dynamic>.from(settings),
+        super(identityId: 'test');
+
+  final Map<String, dynamic> _settings;
+
+  @override
+  Future<Map<String, dynamic>?> getChatSettings({
+    required String chatId,
+  }) async {
+    return Map<String, dynamic>.from(_settings);
+  }
+
+  @override
+  Future<void> saveChatSettings({
+    required String chatId,
+    required String outputMode,
+    required int? expiryMinutes,
+    required bool deleteAfterRead,
+    required bool excludeFromBackups,
+  }) async {
+    _settings
+      ..['outputMode'] = outputMode
+      ..['expiryMinutes'] = expiryMinutes
+      ..['deleteAfterRead'] = deleteAfterRead
+      ..['excludeFromBackups'] = excludeFromBackups;
+  }
+
+  @override
+  Future<void> setExcludeFromBackups({
+    required String chatId,
+    required bool excludeFromBackups,
+  }) async {
+    _settings
+      ..['outputMode'] = (_settings['outputMode'] as String?) ?? 'text'
+      ..['expiryMinutes'] = _settings['expiryMinutes'] as int?
+      ..['deleteAfterRead'] = (_settings['deleteAfterRead'] as bool?) ?? false
+      ..['excludeFromBackups'] = excludeFromBackups;
+  }
+
+  bool get excludeFromBackups =>
+      (_settings['excludeFromBackups'] as bool?) ?? false;
+}
+
 void main() {
   late Directory tmpDir;
 
@@ -71,6 +119,7 @@ void main() {
     tmpDir = await Directory.systemTemp.createTemp('layergram_fs_ux_test_');
     Hive.init(tmpDir.path);
     await Hive.openBox<Map>(LocalDatabase.messagesBoxName);
+    await Hive.openBox<Map>(LocalDatabase.chatMetaBoxName);
   });
 
   tearDownAll(() async {
@@ -165,6 +214,47 @@ void main() {
     expect(find.text(en['security.fs.action.retry']!), findsOneWidget);
     expect(find.text(en['security.fs.action.reset']!), findsOneWidget);
     expect(find.byIcon(Icons.warning_amber_rounded), findsWidgets);
+  });
+
+  testWidgets('contact security card saves backup exclusion preference',
+      (tester) async {
+    final repo = _MemoryChatMetaRepository(
+      settings: const {
+        'outputMode': 'cover',
+        'expiryMinutes': 60,
+        'deleteAfterRead': true,
+        'excludeFromBackups': false,
+      },
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          chatMetaRepositoryProvider.overrideWithValue(repo),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: FsContactSecurityCard(contactId: 'alice'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('excludeFromBackups'), findsOneWidget);
+    expect(find.text('excludeFromBackupsShort'), findsOneWidget);
+    expect(find.text('excludeFromBackupsCaveat'), findsOneWidget);
+    expect(repo.excludeFromBackups, isFalse);
+
+    await tester.ensureVisible(find.byType(Switch).first);
+    await tester.tap(find.byType(Switch).first);
+    await tester.pumpAndSettle();
+
+    expect(repo.excludeFromBackups, isTrue);
+    expect(find.byIcon(Icons.cloud_off_outlined), findsOneWidget);
+    expect(find.text('touchComposerExcludeFromBackupsOn'), findsOneWidget);
   });
 
   testWidgets('disable Maximum FS requires confirmation before downgrade',

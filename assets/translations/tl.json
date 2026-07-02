@@ -431,5 +431,10 @@
   "identityQrImageShareText": "Aking Layergram pagkakakilanlan QR",
   "identityQrImageShareSubject": "Layergram pagkakakilanlan QR",
   "identityQrImageUnavailable": "QR hindi pa available",
-  "identityQrImageShareFailed": "Hindi maibahagi ang QR na larawan"
+  "identityQrImageShareFailed": "Hindi maibahagi ang QR na larawan",
+  "excludeFromBackups": "Ibukod sa mga backup",
+  "excludeFromBackupsShort": "Ang mga bagong mensahe sa pag-uusap na ito ay hindi isasama sa mga Layergram backup sa mga opisyal na client.",
+  "excludeFromBackupsCaveat": "Hindi nito pinipigilan ang screenshots, screen recording, binagong client, o panlabas na kopya.",
+  "touchComposerExcludeFromBackupsOn": "Naka-enable ang pagbubukod sa backup",
+  "touchComposerExcludeFromBackupsOff": "Naka-disable ang pagbubukod sa backup"
 }

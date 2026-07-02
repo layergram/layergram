@@ -273,6 +273,7 @@ void main() {
           recipientId: 'bob',
           text: secretText,
           timestamp: 1700000000,
+          backupExcluded: true,
         ),
         ratchetState: aRatchet,
       );
@@ -288,6 +289,7 @@ void main() {
       );
 
       expect(decResult.payload.text, equals(secretText));
+      expect(decResult.payload.backupExcluded, isTrue);
       expect(decResult.newRatchetState, isNotNull);
     });
 

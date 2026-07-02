@@ -431,5 +431,10 @@
   "identityQrImageShareText": "Min Layergram identitet QR",
   "identityQrImageShareSubject": "Layergram identitet QR",
   "identityQrImageUnavailable": "QR ikke tilgjengelig ennå",
-  "identityQrImageShareFailed": "Kunne ikke dele QR-bildet"
+  "identityQrImageShareFailed": "Kunne ikke dele QR-bildet",
+  "excludeFromBackups": "Utelat fra sikkerhetskopier",
+  "excludeFromBackupsShort": "Nye meldinger i denne samtalen blir ikke inkludert i Layergram-sikkerhetskopier på offisielle klienter.",
+  "excludeFromBackupsCaveat": "Hindrer ikke skjermbilder, skjermopptak, modifiserte klienter eller eksterne kopier.",
+  "touchComposerExcludeFromBackupsOn": "Utelatelse fra sikkerhetskopi aktivert",
+  "touchComposerExcludeFromBackupsOff": "Utelatelse fra sikkerhetskopi deaktivert"
 }

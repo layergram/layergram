@@ -431,5 +431,10 @@
   "identityQrImageShareText": "నా Layergram గుర్తింపు QR",
   "identityQrImageShareSubject": "Layergram గుర్తింపు QR",
   "identityQrImageUnavailable": "QR ఇంకా అందుబాటులో లేదు",
-  "identityQrImageShareFailed": "QR చిత్రాన్ని భాగస్వామ్యం చేయడం సాధ్యపడలేదు"
+  "identityQrImageShareFailed": "QR చిత్రాన్ని భాగస్వామ్యం చేయడం సాధ్యపడలేదు",
+  "excludeFromBackups": "బ్యాకప్‌ల నుంచి మినహాయించు",
+  "excludeFromBackupsShort": "ఈ సంభాషణలోని కొత్త సందేశాలు అధికారిక క్లయింట్లలో Layergram బ్యాకప్‌లలో చేర్చబడవు.",
+  "excludeFromBackupsCaveat": "స్క్రీన్‌షాట్‌లు, స్క్రీన్ రికార్డింగ్‌లు, మార్చిన క్లయింట్లు లేదా బాహ్య కాపీలను ఆపదు.",
+  "touchComposerExcludeFromBackupsOn": "బ్యాకప్ మినహాయింపు సక్రియమైంది",
+  "touchComposerExcludeFromBackupsOff": "బ్యాకప్ మినహాయింపు నిష్క్రియమైంది"
 }

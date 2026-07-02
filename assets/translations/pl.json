@@ -431,5 +431,10 @@
   "identityQrImageShareText": "Moja Layergram tożsamość QR",
   "identityQrImageShareSubject": "Layergram tożsamość QR",
   "identityQrImageUnavailable": "QR jeszcze niedostępny",
-  "identityQrImageShareFailed": "Nie można udostępnić obrazu QR"
+  "identityQrImageShareFailed": "Nie można udostępnić obrazu QR",
+  "excludeFromBackups": "Wyklucz z kopii zapasowych",
+  "excludeFromBackupsShort": "Nowe wiadomości w tej rozmowie nie będą uwzględniane w kopiach zapasowych Layergram na oficjalnych klientach.",
+  "excludeFromBackupsCaveat": "Nie zapobiega zrzutom ekranu, nagraniom ekranu, zmodyfikowanym klientom ani kopiom zewnętrznym.",
+  "touchComposerExcludeFromBackupsOn": "Wykluczenie z kopii włączone",
+  "touchComposerExcludeFromBackupsOff": "Wykluczenie z kopii wyłączone"
 }

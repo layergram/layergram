@@ -35,6 +35,7 @@ class ChatView extends ConsumerStatefulWidget {
     this.initialSecret,
     this.initialExpiry,
     this.initialDeleteAfterRead,
+    this.initialExcludeFromBackups,
     this.initialOutputMode,
     this.embedded = false,
     this.initialIsSearching = false,
@@ -48,6 +49,7 @@ class ChatView extends ConsumerStatefulWidget {
   final String? initialSecret;
   final int? initialExpiry;
   final bool? initialDeleteAfterRead;
+  final bool? initialExcludeFromBackups;
   final MessageOutputMode? initialOutputMode;
   final bool embedded;
   final bool? initialIsSearching;
@@ -129,6 +131,7 @@ class ChatViewState extends ConsumerState<ChatView> {
         'secret': _secretCtrl.text,
         'expiry': _selectedExpiryMinutes,
         'deleteAfterRead': _deleteAfterRead,
+        'excludeFromBackups': _excludeFromBackups,
         'outputMode': _outputMode.storageValue,
         'isSearching': _isSearching,
         'searchQuery': _searchQuery,
@@ -156,6 +159,7 @@ class ChatViewState extends ConsumerState<ChatView> {
   int _lastNewestTimestamp = 0;
   double _composerHeight = 240.0;
   bool _deleteAfterRead = false;
+  bool _excludeFromBackups = false;
   MessageOutputMode _outputMode = MessageOutputMode.defaultMode;
   String _encryptedOutput = '';
   bool _dirtySinceEncode = true;
@@ -848,6 +852,9 @@ class ChatViewState extends ConsumerState<ChatView> {
     if (widget.initialDeleteAfterRead != null) {
       _deleteAfterRead = widget.initialDeleteAfterRead!;
     }
+    if (widget.initialExcludeFromBackups != null) {
+      _excludeFromBackups = widget.initialExcludeFromBackups!;
+    }
     if (widget.initialOutputMode != null) {
       _outputMode = widget.initialOutputMode!;
     }
@@ -919,6 +926,7 @@ class ChatViewState extends ConsumerState<ChatView> {
       outputMode: _outputMode.storageValue,
       expiryMinutes: _selectedExpiryMinutes,
       deleteAfterRead: _deleteAfterRead,
+      excludeFromBackups: _excludeFromBackups,
     );
   }
 
@@ -935,6 +943,8 @@ class ChatViewState extends ConsumerState<ChatView> {
           settings['expiryMinutes'] as int? ?? _selectedExpiryMinutes;
       _deleteAfterRead =
           settings['deleteAfterRead'] as bool? ?? _deleteAfterRead;
+      _excludeFromBackups =
+          settings['excludeFromBackups'] as bool? ?? _excludeFromBackups;
     });
   }
 
@@ -1519,6 +1529,7 @@ class ChatViewState extends ConsumerState<ChatView> {
           recipient: recipient,
           expireAfter: expireAfter,
           deleteAfterRead: _deleteAfterRead,
+          backupExcluded: _excludeFromBackups,
         );
       } on FsSendBlockedException catch (e) {
         if (e.messageKey != HomeController.maximumFsPendingMessageKey) {
@@ -1530,6 +1541,7 @@ class ChatViewState extends ConsumerState<ChatView> {
         }
         encResult = await controller.encryptMaximumFsSetupForRecipient(
           recipient: recipient,
+          backupExcluded: _excludeFromBackups,
         );
         maximumSetupOnly = true;
       }
@@ -1569,6 +1581,7 @@ class ChatViewState extends ConsumerState<ChatView> {
       final sentText = maximumSetupOnly ? '' : _secretCtrl.text;
       final sentExpireAfter = maximumSetupOnly ? null : expireAfter;
       final sentDeleteAfterRead = maximumSetupOnly ? false : _deleteAfterRead;
+      final sentBackupExcluded = _excludeFromBackups;
 
       // §12.3: FS plaintext stored as encrypted aux record, not in DB.
       if (encResult.isFsEncrypted && sentText.isNotEmpty) {
@@ -1608,6 +1621,7 @@ class ChatViewState extends ConsumerState<ChatView> {
               rawSource: output,
               expireAfter: sentExpireAfter,
               deleteAfterRead: sentDeleteAfterRead,
+              backupExcluded: sentBackupExcluded,
               keyTag: keyTag,
               isFsEncrypted: encResult.isFsEncrypted,
               fsClassification: encResult.classification,

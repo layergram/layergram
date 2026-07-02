@@ -431,5 +431,10 @@
   "identityQrImageShareText": "Min Layergram identitet QR",
   "identityQrImageShareSubject": "Layergram identitet QR",
   "identityQrImageUnavailable": "QR inte tillgänglig ännu",
-  "identityQrImageShareFailed": "Det gick inte att dela bilden QR"
+  "identityQrImageShareFailed": "Det gick inte att dela bilden QR",
+  "excludeFromBackups": "Undanta från säkerhetskopior",
+  "excludeFromBackupsShort": "Nya meddelanden i den här konversationen kommer inte att ingå i Layergram-säkerhetskopior på officiella klienter.",
+  "excludeFromBackupsCaveat": "Hindrar inte skärmbilder, skärminspelningar, modifierade klienter eller externa kopior.",
+  "touchComposerExcludeFromBackupsOn": "Undantag från säkerhetskopior aktiverat",
+  "touchComposerExcludeFromBackupsOff": "Undantag från säkerhetskopior inaktiverat"
 }

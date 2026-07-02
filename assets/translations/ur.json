@@ -431,5 +431,10 @@
   "identityQrImageShareText": "میری Layergram شناخت QR",
   "identityQrImageShareSubject": "Layergram شناخت QR",
   "identityQrImageUnavailable": "QR ابھی تک دستیاب نہیں ہے۔",
-  "identityQrImageShareFailed": "QR تصویر کا اشتراک نہیں کیا جا سکا"
+  "identityQrImageShareFailed": "QR تصویر کا اشتراک نہیں کیا جا سکا",
+  "excludeFromBackups": "بیک اپ سے خارج کریں",
+  "excludeFromBackupsShort": "اس گفتگو کے نئے پیغامات سرکاری کلائنٹس پر Layergram بیک اپ میں شامل نہیں ہوں گے۔",
+  "excludeFromBackupsCaveat": "یہ اسکرین شاٹس، اسکرین ریکارڈنگ، تبدیل شدہ کلائنٹس یا بیرونی نقول کو نہیں روکتا۔",
+  "touchComposerExcludeFromBackupsOn": "بیک اپ سے اخراج فعال",
+  "touchComposerExcludeFromBackupsOff": "بیک اپ سے اخراج غیر فعال"
 }

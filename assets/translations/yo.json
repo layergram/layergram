@@ -431,5 +431,10 @@
   "identityQrImageShareText": "Idanimọ Layergram mi QR",
   "identityQrImageShareSubject": "Layergram idanimo QR",
   "identityQrImageUnavailable": "QR ko si sibẹsibẹ",
-  "identityQrImageShareFailed": "Ko le pin aworan QR naa"
+  "identityQrImageShareFailed": "Ko le pin aworan QR naa",
+  "excludeFromBackups": "Yọ kuro ninu afẹyinti",
+  "excludeFromBackupsShort": "Awọn ifiranṣẹ tuntun ninu ibaraẹnisọrọ yii kii yoo wa ninu awọn afẹyinti Layergram lori awọn alabara osise.",
+  "excludeFromBackupsCaveat": "Ko dena sikirinisoti, gbigbasilẹ iboju, awọn alabara ti a ti yipada, tabi awọn ẹda ita.",
+  "touchComposerExcludeFromBackupsOn": "Yiyọ kuro ninu afẹyinti ti ṣiṣẹ",
+  "touchComposerExcludeFromBackupsOff": "Yiyọ kuro ninu afẹyinti ti wa ni pipa"
 }

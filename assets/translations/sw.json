@@ -431,5 +431,10 @@
   "identityQrImageShareText": "Utambulisho wangu Layergram QR",
   "identityQrImageShareSubject": "Layergram utambulisho QR",
   "identityQrImageUnavailable": "QR bado haipatikani",
-  "identityQrImageShareFailed": "Haikuweza kushiriki picha QR"
+  "identityQrImageShareFailed": "Haikuweza kushiriki picha QR",
+  "excludeFromBackups": "Ondoa kwenye nakala rudufu",
+  "excludeFromBackupsShort": "Ujumbe mpya katika mazungumzo haya hautajumuishwa katika nakala rudufu za Layergram kwenye wateja rasmi.",
+  "excludeFromBackupsCaveat": "Haizuii picha za skrini, kurekodi skrini, wateja waliobadilishwa au nakala za nje.",
+  "touchComposerExcludeFromBackupsOn": "Kuondoa kwenye nakala rudufu kumewashwa",
+  "touchComposerExcludeFromBackupsOff": "Kuondoa kwenye nakala rudufu kumezimwa"
 }

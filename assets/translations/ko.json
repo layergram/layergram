@@ -431,5 +431,10 @@
   "identityQrImageShareText": "내 Layergram 정체성 QR",
   "identityQrImageShareSubject": "Layergram 신원 QR",
   "identityQrImageUnavailable": "QR은 아직 사용할 수 없습니다.",
-  "identityQrImageShareFailed": "QR 이미지를 공유할 수 없습니다."
+  "identityQrImageShareFailed": "QR 이미지를 공유할 수 없습니다.",
+  "excludeFromBackups": "백업에서 제외",
+  "excludeFromBackupsShort": "이 대화의 새 메시지는 공식 클라이언트의 Layergram 백업에 포함되지 않습니다.",
+  "excludeFromBackupsCaveat": "스크린샷, 화면 녹화, 수정된 클라이언트 또는 외부 복사를 막지는 못합니다.",
+  "touchComposerExcludeFromBackupsOn": "백업 제외가 활성화됨",
+  "touchComposerExcludeFromBackupsOff": "백업 제외가 비활성화됨"
 }

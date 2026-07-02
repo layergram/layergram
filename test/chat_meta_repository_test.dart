@@ -105,11 +105,23 @@ void main() {
       outputMode: 'text',
       expiryMinutes: 60,
       deleteAfterRead: true,
+      excludeFromBackups: true,
     );
     final settings = await repo.getChatSettings(chatId: 'X');
     expect(settings?['outputMode'], 'text');
     expect(settings?['expiryMinutes'], 60);
     expect(settings?['deleteAfterRead'], isTrue);
+    expect(settings?['excludeFromBackups'], isTrue);
+
+    await repo.setExcludeFromBackups(
+      chatId: 'X',
+      excludeFromBackups: false,
+    );
+    final updatedSettings = await repo.getChatSettings(chatId: 'X');
+    expect(updatedSettings?['outputMode'], 'text');
+    expect(updatedSettings?['expiryMinutes'], 60);
+    expect(updatedSettings?['deleteAfterRead'], isTrue);
+    expect(updatedSettings?['excludeFromBackups'], isFalse);
 
     await repo.togglePinned(folderId: kAllChatsFolderId, chatId: 'X');
     expect(

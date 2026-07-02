@@ -431,5 +431,10 @@
   "identityQrImageShareText": "هویت Layergram من QR",
   "identityQrImageShareSubject": "Layergram هویت QR",
   "identityQrImageUnavailable": "QR هنوز در دسترس نیست",
-  "identityQrImageShareFailed": "تصویر QR به اشتراک گذاشته نشد"
+  "identityQrImageShareFailed": "تصویر QR به اشتراک گذاشته نشد",
+  "excludeFromBackups": "مستثنی کردن از پشتیبان‌ها",
+  "excludeFromBackupsShort": "پیام‌های جدید این گفتگو در پشتیبان‌های Layergram روی کلاینت‌های رسمی قرار نخواهند گرفت.",
+  "excludeFromBackupsCaveat": "جلوی اسکرین‌شات، ضبط صفحه، کلاینت‌های تغییریافته یا کپی‌های بیرونی را نمی‌گیرد.",
+  "touchComposerExcludeFromBackupsOn": "استثنا از پشتیبان فعال شد",
+  "touchComposerExcludeFromBackupsOff": "استثنا از پشتیبان غیرفعال شد"
 }

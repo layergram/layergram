@@ -71,8 +71,8 @@ class LocalIdentity extends IdentityBase {
       displayName: map['displayName'] as String,
       mnemonic: map['mnemonic'] as String,
       derivationVersion: derivationVersion,
-      derivationAlgorithm:
-          (map['derivationAlgorithm'] as String?) ?? derivationVersion.algorithm,
+      derivationAlgorithm: (map['derivationAlgorithm'] as String?) ??
+          derivationVersion.algorithm,
     );
   }
 }
@@ -128,6 +128,7 @@ class PlaintextPayload {
     this.senderDisplayName,
     this.expireAfter,
     this.deleteAfterRead = false,
+    this.backupExcluded = false,
   });
 
   final IdentityId senderId;
@@ -137,6 +138,7 @@ class PlaintextPayload {
   final String? senderDisplayName;
   final int? expireAfter;
   final bool deleteAfterRead;
+  final bool backupExcluded;
 }
 
 class EncryptedMessage {
@@ -166,7 +168,8 @@ class EncryptedMessage {
   /// senderId/recipientId are unknown until decryption succeeds.
   factory EncryptedMessage.fromRawBytes(Uint8List bytes) {
     if (bytes.length < 28) {
-      throw ArgumentError('Raw bytes too short: need >= 28, got ${bytes.length}');
+      throw ArgumentError(
+          'Raw bytes too short: need >= 28, got ${bytes.length}');
     }
     final nonce = bytes.sublist(0, 12);
     final cipher = bytes.sublist(12);
@@ -205,6 +208,7 @@ class MessageRecord {
     this.keyTag,
     this.isFsEncrypted = false,
     this.fsClassification,
+    this.backupExcluded = false,
   });
 
   final String id;
@@ -222,6 +226,7 @@ class MessageRecord {
   final int? deletedAt;
   final String? keyTag;
   final bool isFsEncrypted;
+  final bool backupExcluded;
 
   /// Per-message security classification (§14.4).
   ///
@@ -235,6 +240,17 @@ class MessageRecord {
       FsMessageClassificationExt.fromLegacyFlag(isFsEncrypted);
 
   bool get isDeleted => deletedAt != null;
+
+  /// Official Layergram backup/export pipelines must exclude records where
+  /// [backupExcluded] is true. The flag is immutable per message: changing a
+  /// chat preference only affects new messages.
+  bool get isBackupEligible => !backupExcluded;
+
+  static Iterable<MessageRecord> backupEligibleRecords(
+    Iterable<MessageRecord> records,
+  ) {
+    return records.where((record) => record.isBackupEligible);
+  }
 
   MessageRecord copyWith({
     String? id,
@@ -254,6 +270,7 @@ class MessageRecord {
     String? keyTag,
     bool? isFsEncrypted,
     FsMessageClassification? fsClassification,
+    bool? backupExcluded,
   }) {
     return MessageRecord(
       id: id ?? this.id,
@@ -272,6 +289,7 @@ class MessageRecord {
       keyTag: keyTag ?? this.keyTag,
       isFsEncrypted: isFsEncrypted ?? this.isFsEncrypted,
       fsClassification: fsClassification ?? this.fsClassification,
+      backupExcluded: backupExcluded ?? this.backupExcluded,
     );
   }
 
@@ -293,6 +311,7 @@ class MessageRecord {
       'keyTag': keyTag,
       if (isFsEncrypted) 'isFsEncrypted': true,
       if (fsClassification != null) 'fsCls': fsClassification!.storageIndex,
+      if (backupExcluded) 'backupExcluded': true,
     };
   }
 
@@ -316,6 +335,7 @@ class MessageRecord {
       fsClassification: map['fsCls'] != null
           ? FsMessageClassificationExt.fromStorageIndex(map['fsCls'] as int)
           : null,
+      backupExcluded: (map['backupExcluded'] as bool?) ?? false,
     );
   }
 }

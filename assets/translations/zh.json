@@ -431,5 +431,10 @@
   "identityQrImageShareText": "我的 Layergram 身份 QR",
   "identityQrImageShareSubject": "Layergram 身份 QR",
   "identityQrImageUnavailable": "QR 尚不可用",
-  "identityQrImageShareFailed": "无法共享 QR 图像"
+  "identityQrImageShareFailed": "无法共享 QR 图像",
+  "excludeFromBackups": "从备份中排除",
+  "excludeFromBackupsShort": "此对话中的新消息不会包含在官方客户端的 Layergram 备份中。",
+  "excludeFromBackupsCaveat": "不能阻止截图、屏幕录制、修改过的客户端或外部副本。",
+  "touchComposerExcludeFromBackupsOn": "已启用备份排除",
+  "touchComposerExcludeFromBackupsOff": "已关闭备份排除"
 }
