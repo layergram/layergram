@@ -258,7 +258,10 @@ class ChatViewState extends ConsumerState<ChatView> {
           identityContext: fsController.identityContext,
         );
     if (mode == FsSecurityMode.base) {
-      return StegoEncoder.estimatedEncryptedPayloadBytes(secretText);
+      return StegoEncoder.estimatedEncryptedPayloadBytes(
+        secretText,
+        backupExcluded: _excludeFromBackups,
+      );
     }
     final activeSessionIds = {
       if (fsController.sessionManager.activeSessionId != null)
@@ -273,6 +276,7 @@ class ChatViewState extends ConsumerState<ChatView> {
       secretText,
       fsActive: fsActive,
       fsWrapCount: activeSessionIds.isEmpty ? 1 : activeSessionIds.length,
+      backupExcluded: _excludeFromBackups,
     );
   }
 

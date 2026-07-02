@@ -335,7 +335,8 @@ minCoverLength = 64 + requiredCarrierSlots
 For exact user-facing validation, `rawPayloadBytes` means the final byte array
 that will be embedded after the complete message has been constructed and
 encrypted. This includes all optional protocol fields and envelopes, including
-forward-secrecy metadata such as `fs_*` fields, `x.fs`, `fs_multi`, and `fs_wraps`.
+`backupExcluded` and forward-secrecy metadata such as `fs_*` fields, `x.fs`,
+`fs_multi`, and `fs_wraps`.
 A pre-encryption estimate based only on the
 secret text length is therefore only a UI estimate; send/copy/share actions MUST
 re-check cover capacity against the final `rawPayloadBytes.length`.
@@ -343,8 +344,9 @@ re-check cover capacity against the final `rawPayloadBytes.length`.
 If a client shows live "characters missing" count or enables copy/share before
 constructing final encrypted payload, that preflight estimate MUST be
 conservative for active message mode. In particular, when Forward Secrecy may
-add envelope fields or multi-device wraps, preflight budget must include
-headroom for those fields. Current senders do not emit the deprecated
+add envelope fields, multi-device wraps, or optional encrypted payload fields
+such as `backupExcluded`, preflight budget must include headroom for those
+fields. Current senders do not emit the deprecated
 `mc_fallback_key`, so active single-session FS estimates should not reserve
 legacy fallback space. Non-active FS negotiation/control messages should still
 reserve handshake-extension headroom, while active multi-session FS estimates

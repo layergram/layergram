@@ -290,6 +290,35 @@ void main() {
           withSecretBytes, equals(12 + 4 + 256 + expectedSecretJsonBytes + 16));
     });
 
+    test('backup exclusion adds preflight envelope headroom', () {
+      const secretText = 'Message excluded from official backups';
+      final baseEstimate =
+          StegoEncoder.estimatedEncryptedPayloadBytes(secretText);
+      final excludedEstimate = StegoEncoder.estimatedEncryptedPayloadBytes(
+        secretText,
+        backupExcluded: true,
+      );
+      final activeFsEstimate = StegoEncoder.estimatedCoverMessagePayloadBytes(
+        secretText,
+        fsActive: true,
+      );
+      final activeFsExcludedEstimate =
+          StegoEncoder.estimatedCoverMessagePayloadBytes(
+        secretText,
+        fsActive: true,
+        backupExcluded: true,
+      );
+
+      expect(
+        excludedEstimate,
+        equals(baseEstimate + StegoEncoder.backupExcludedJsonEnvelopeBytes),
+      );
+      expect(
+        activeFsExcludedEstimate,
+        equals(activeFsEstimate + StegoEncoder.backupExcludedJsonEnvelopeBytes),
+      );
+    });
+
     test(
         'hiddenRuneCount calculation is consistent with estimatedEncryptedPayloadBytes',
         () {

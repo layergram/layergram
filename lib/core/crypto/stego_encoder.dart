@@ -71,16 +71,19 @@ class StegoEncoder {
   static int estimatedEncryptedPayloadBytes(
     String secretText, {
     int jsonEnvelopeBytes = 256,
+    bool backupExcluded = false,
   }) {
     final encodedSecret = jsonEncode(secretText);
     final secretJsonBytes = max(0, utf8.encode(encodedSecret).length - 2);
+    final envelopeBytes =
+        jsonEnvelopeBytes + _backupExcludedJsonEnvelopeHeadroom(backupExcluded);
     // LMF v2 overhead:
     // - 12 bytes: AES-GCM nonce
     // - 4 bytes: LMFv2Inner header (formatVersion, flags, reserved)
     // - jsonEnvelopeBytes: estimated JSON envelope size
     // - secretJsonBytes: actual secret text JSON size
     // - 16 bytes: AES-GCM MAC
-    return 12 + 4 + jsonEnvelopeBytes + secretJsonBytes + 16;
+    return 12 + 4 + envelopeBytes + secretJsonBytes + 16;
   }
 
   // Cover composer messages may carry production-length identity ids,
@@ -96,16 +99,19 @@ class StegoEncoder {
   static const int coverComposerSingleFsJsonEnvelopeBytes = 456;
   static const int coverComposerMultiFsBaseJsonEnvelopeBytes = 352;
   static const int coverComposerFsWrapJsonEnvelopeBytes = 256;
+  static const int backupExcludedJsonEnvelopeBytes = 32;
 
   static int estimatedCoverMessagePayloadBytes(
     String secretText, {
     bool fsActive = false,
     int fsWrapCount = 1,
+    bool backupExcluded = false,
   }) {
     if (!fsActive) {
       return estimatedEncryptedPayloadBytes(
         secretText,
         jsonEnvelopeBytes: coverComposerNegotiationJsonEnvelopeBytes,
+        backupExcluded: backupExcluded,
       );
     }
 
@@ -116,12 +122,20 @@ class StegoEncoder {
         : coverComposerMultiFsBaseJsonEnvelopeBytes +
             (fsWrapCount * coverComposerFsWrapJsonEnvelopeBytes);
 
-    return 12 + envelopeBytes + encryptedTextFieldBytes + 16;
+    return 12 +
+        envelopeBytes +
+        _backupExcludedJsonEnvelopeHeadroom(backupExcluded) +
+        encryptedTextFieldBytes +
+        16;
   }
 
   static int _base64EncodedLength(int byteCount) {
     if (byteCount <= 0) return 0;
     return ((byteCount + 2) ~/ 3) * 4;
+  }
+
+  static int _backupExcludedJsonEnvelopeHeadroom(bool backupExcluded) {
+    return backupExcluded ? backupExcludedJsonEnvelopeBytes : 0;
   }
 
   static String normalizeCoverText(String coverText) {
