@@ -51,6 +51,7 @@ For transport channels that do not support invisible Unicode characters (or when
 - **Local chat history** — encrypted archive of sent and received messages
 - **Pin / search / delete** conversations
 - **Self-destructing messages** — optional expiration and delete-after-read
+- **Backup exclusion contract** — per-contact setting marks new messages so official Layergram clients exclude them from official backups and exports
 - **42 languages** included
 
 ### Architecture

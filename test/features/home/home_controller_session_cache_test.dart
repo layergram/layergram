@@ -3058,6 +3058,13 @@ void main() {
             secretText: secret,
             recipient: contact,
           );
+      final backupExcludedResult = await fixture.container
+          .read(homeControllerProvider)
+          .encryptForRecipient(
+            secretText: secret,
+            recipient: contact,
+            backupExcluded: true,
+          );
       final legacyEstimatedBytes =
           StegoEncoder.estimatedEncryptedPayloadBytes(secret);
       final negotiationEstimatedBytes =
@@ -3067,16 +3074,32 @@ void main() {
         secret,
         fsActive: true,
       );
+      final backupExcludedEstimatedBytes =
+          StegoEncoder.estimatedCoverMessagePayloadBytes(
+        secret,
+        fsActive: true,
+        backupExcluded: true,
+      );
       final actualBytes = result.message.toRawBytes().length;
+      final backupExcludedActualBytes =
+          backupExcludedResult.message.toRawBytes().length;
       final coverAcceptedByLegacyEstimate =
           'A' * StegoEncoder.minCoverLengthForBytes(legacyEstimatedBytes);
       final coverAcceptedByComposerEstimate =
           'A' * StegoEncoder.minCoverLengthForBytes(activeFsEstimatedBytes);
+      final coverAcceptedByBackupExcludedComposerEstimate = 'A' *
+          StegoEncoder.minCoverLengthForBytes(backupExcludedEstimatedBytes);
 
       expect(result.isFsEncrypted, isTrue);
+      expect(backupExcludedResult.isFsEncrypted, isTrue);
       expect(actualBytes, greaterThan(legacyEstimatedBytes));
       expect(activeFsEstimatedBytes, greaterThanOrEqualTo(actualBytes));
       expect(activeFsEstimatedBytes, lessThan(negotiationEstimatedBytes));
+      expect(backupExcludedEstimatedBytes, greaterThan(activeFsEstimatedBytes));
+      expect(
+        backupExcludedEstimatedBytes,
+        greaterThanOrEqualTo(backupExcludedActualBytes),
+      );
       expect(
         StegoEncoder.canEmbedBytes(
           coverAcceptedByLegacyEstimate,
@@ -3099,6 +3122,13 @@ void main() {
         StegoEncoder.canEmbedBytes(
           coverAcceptedByComposerEstimate,
           actualBytes,
+        ),
+        isTrue,
+      );
+      expect(
+        StegoEncoder.canEmbedBytes(
+          coverAcceptedByBackupExcludedComposerEstimate,
+          backupExcludedActualBytes,
         ),
         isTrue,
       );

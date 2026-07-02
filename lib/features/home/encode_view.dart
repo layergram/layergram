@@ -39,6 +39,8 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
   final _recipientSearchCtrl = TextEditingController();
   RemoteIdentity? _recipient;
   bool _deleteAfterRead = false;
+  bool _excludeFromBackups = false;
+  String? _backupExclusionContactId;
   String _output = '';
   int? _exactCoverMissingCount;
 
@@ -63,7 +65,10 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
           identityContext: fsController.identityContext,
         );
     if (mode == FsSecurityMode.base) {
-      return StegoEncoder.estimatedEncryptedPayloadBytes(secretText);
+      return StegoEncoder.estimatedEncryptedPayloadBytes(
+        secretText,
+        backupExcluded: _excludeFromBackups,
+      );
     }
     final activeSessionIds = {
       if (fsController.sessionManager.activeSessionId != null)
@@ -78,6 +83,7 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
       secretText,
       fsActive: fsActive,
       fsWrapCount: activeSessionIds.isEmpty ? 1 : activeSessionIds.length,
+      backupExcluded: _excludeFromBackups,
     );
   }
 
@@ -201,6 +207,33 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
     });
   }
 
+  Future<void> _loadBackupExclusionPreference(RemoteIdentity recipient) async {
+    final contactId = recipient.identityId;
+    final chatSettings =
+        await ref.read(chatMetaRepositoryProvider).getChatSettings(
+              chatId: contactId,
+            );
+    if (!mounted || _recipient?.identityId != contactId) return;
+    final backupExcluded =
+        (chatSettings?['excludeFromBackups'] as bool?) ?? false;
+    setState(() {
+      _excludeFromBackups = backupExcluded;
+      _exactCoverMissingCount = null;
+    });
+  }
+
+  void _ensureBackupExclusionPreference(RemoteIdentity? recipient) {
+    final contactId = recipient?.identityId;
+    if (_backupExclusionContactId == contactId) return;
+    _backupExclusionContactId = contactId;
+    if (recipient == null) {
+      _excludeFromBackups = false;
+      return;
+    }
+    _excludeFromBackups = false;
+    _loadBackupExclusionPreference(recipient);
+  }
+
   bool get _coverTooShort {
     if (_secretCtrl.text.trim().isEmpty) return false;
     if (_exactCoverMissingCount != null) return true;
@@ -255,7 +288,10 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
     final strings = AppStrings.t;
     final coverLengthLimit = ref.watch(coverMessageLengthLimitProvider);
     final presetRecipient = ref.watch(encodeRecipientProvider);
-    _recipient ??= presetRecipient;
+    if (_recipient == null && presetRecipient != null) {
+      _recipient = presetRecipient;
+    }
+    _ensureBackupExclusionPreference(_recipient);
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -331,7 +367,13 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
                                 ref
                                     .read(encodeRecipientProvider.notifier)
                                     .state = chosen;
-                                setState(() => _recipient = chosen);
+                                setState(() {
+                                  _recipient = chosen;
+                                  _backupExclusionContactId = null;
+                                  _excludeFromBackups = false;
+                                  _exactCoverMissingCount = null;
+                                });
+                                _ensureBackupExclusionPreference(chosen);
                               },
                               child: Expanded(
                                 child: Padding(
