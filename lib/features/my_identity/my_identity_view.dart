@@ -13,18 +13,17 @@
 // limitations under the License.
 
 import 'dart:convert';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/providers.dart';
 import '../../l10n/app_strings.dart';
 import '../../ui/passphrase_button.dart';
 import '../../utils/sharing.dart';
+import 'identity_qr_code.dart';
 import 'my_identity_controller.dart';
 
 class MyIdentityView extends ConsumerStatefulWidget {
@@ -72,38 +71,6 @@ class _MyIdentityViewState extends ConsumerState<MyIdentityView> {
     }
   }
 
-  Future<Uint8List?> _qrPngBytes(String data) async {
-    final painter = QrPainter(
-      data: data,
-      version: QrVersions.auto,
-      errorCorrectionLevel: QrErrorCorrectLevel.M,
-      gapless: false,
-      eyeStyle: const QrEyeStyle(
-        eyeShape: QrEyeShape.square,
-        color: Colors.black,
-      ),
-      dataModuleStyle: const QrDataModuleStyle(
-        dataModuleShape: QrDataModuleShape.square,
-        color: Colors.black,
-      ),
-    );
-    const size = Size.square(1024);
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-    canvas.drawRect(
-      Offset.zero & size,
-      Paint()..color = Colors.white,
-    );
-    painter.paint(canvas, size);
-    final picture = recorder.endRecording();
-    final image = await picture.toImage(
-      size.width.toInt(),
-      size.height.toInt(),
-    );
-    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-    return byteData?.buffer.asUint8List();
-  }
-
   Future<void> _shareQrImage(String data) async {
     final messenger = ScaffoldMessenger.of(context);
     if (data.trim().isEmpty) {
@@ -118,7 +85,7 @@ class _MyIdentityViewState extends ConsumerState<MyIdentityView> {
     final container = ProviderScope.containerOf(context);
     container.read(isSharingProvider.notifier).state = true;
     try {
-      final bytes = await _qrPngBytes(data);
+      final bytes = await renderIdentityQrPng(data);
       if (bytes == null || bytes.isEmpty) {
         if (!mounted) return;
         messenger.showSnackBar(
@@ -321,22 +288,12 @@ class _MyIdentityViewState extends ConsumerState<MyIdentityView> {
                                         : () => _showQrActions(data),
                                     child: Padding(
                                       padding: const EdgeInsets.all(8),
-                                      child: QrImageView(
+                                      child: IdentityQrCode(
                                         data: data,
                                         size: 220,
-                                        eyeStyle: QrEyeStyle(
-                                          eyeShape: QrEyeShape.square,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onSurface,
-                                        ),
-                                        dataModuleStyle: QrDataModuleStyle(
-                                          dataModuleShape:
-                                              QrDataModuleShape.square,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onSurface,
-                                        ),
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onSurface,
                                         backgroundColor: Colors.transparent,
                                       ),
                                     ),

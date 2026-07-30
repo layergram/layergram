@@ -50,6 +50,14 @@ class IdentitiesController {
     return identity;
   }
 
+  RemoteIdentity parseIdentityImport(String input) {
+    final normalized = input.trim();
+    if (normalized.toLowerCase().startsWith('layergram://i/')) {
+      return parseIdentityFromLink(normalized);
+    }
+    return parseIdentityFromText(normalized);
+  }
+
   Future<void> importIdentityFromText(String text) async {
     final identity = parseIdentityFromText(text);
     await saveIdentity(identity);

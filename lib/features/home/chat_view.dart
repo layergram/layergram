@@ -24,6 +24,8 @@ import '../../ui/passphrase_button.dart';
 import '../../utils/app_platform.dart';
 import '../../utils/sharing.dart';
 import '../contact_verification/contact_verification_view.dart';
+import '../identities/identities_controller.dart';
+import '../shell/app_shell_navigation.dart';
 import 'home_controller.dart';
 import 'message_output_mode.dart';
 
@@ -2001,6 +2003,24 @@ class ChatViewState extends ConsumerState<ChatView> {
             onPressed: () async {
               final source =
                   await ref.read(clipboardServiceProvider).readText();
+              if (!context.mounted) {
+                return;
+              }
+              try {
+                ref
+                    .read(identitiesControllerProvider)
+                    .parseIdentityImport(source);
+                final navigator = Navigator.of(context);
+                if (!widget.embedded && navigator.canPop()) {
+                  navigator.pop();
+                }
+                ref.read(pendingIdentityImportProvider.notifier).state =
+                    source.trim();
+                return;
+              } catch (_) {
+                // Not an identity: continue through the message decoder.
+              }
+
               final outcome = await ref
                   .read(homeControllerProvider)
                   .decodeHiddenMessage(source,

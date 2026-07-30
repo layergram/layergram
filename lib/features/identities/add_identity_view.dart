@@ -51,6 +51,11 @@ class _AddIdentityViewState extends ConsumerState<AddIdentityView> {
     final initial = widget.initialText;
     if (initial != null && initial.trim().isNotEmpty) {
       _controller.text = initial;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _parseText(context);
+        }
+      });
     }
   }
 
@@ -100,9 +105,8 @@ class _AddIdentityViewState extends ConsumerState<AddIdentityView> {
     FocusScope.of(context).unfocus();
     final input = _controller.text;
     try {
-      final parsed = input.trim().startsWith('layergram://')
-          ? ref.read(identitiesControllerProvider).parseIdentityFromLink(input)
-          : ref.read(identitiesControllerProvider).parseIdentityFromText(input);
+      final parsed =
+          ref.read(identitiesControllerProvider).parseIdentityImport(input);
       setState(() {
         _pendingIdentity = parsed;
         _error = null;
