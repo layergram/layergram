@@ -19,9 +19,11 @@ import '../../core/capabilities/chat_folders_capability.dart';
 import '../../core/providers.dart';
 import '../../l10n/app_strings.dart';
 import '../home/home_view.dart';
+import '../identities/add_identity_view.dart';
 import '../identities/identities_list_view.dart';
 import '../my_identity/my_identity_view.dart';
 import '../settings/settings_view.dart';
+import 'app_shell_navigation.dart';
 
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
@@ -111,6 +113,27 @@ class _AppShellState extends ConsumerState<AppShell> {
           const Icon(Icons.settings_outlined), const SettingsView(),
           viewKey: 'settings'),
     ];
+
+    ref.listen<String?>(pendingIdentityImportProvider, (_, initialText) {
+      if (initialText == null || initialText.trim().isEmpty) return;
+      final contactsIndex =
+          items.indexWhere((item) => item.viewKey == 'identities');
+      if (contactsIndex < 0) return;
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted ||
+            ref.read(pendingIdentityImportProvider) != initialText) {
+          return;
+        }
+        setState(() => _index = contactsIndex);
+        ref.read(pendingIdentityImportProvider.notifier).state = null;
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => AddIdentityView(initialText: initialText),
+          ),
+        );
+      });
+    });
 
     if (_index >= items.length) {
       WidgetsBinding.instance.addPostFrameCallback((_) {

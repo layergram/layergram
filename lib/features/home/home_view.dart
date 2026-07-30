@@ -26,6 +26,7 @@ import '../../l10n/app_strings.dart';
 import '../../ui/fs_maximum_setup_dialog.dart';
 import '../../ui/passphrase_button.dart';
 import '../identities/identities_controller.dart';
+import '../shell/app_shell_navigation.dart';
 import 'chat_view.dart';
 import 'home_controller.dart';
 import 'message_output_mode.dart';
@@ -442,33 +443,18 @@ class _HomeViewState extends ConsumerState<HomeView> {
     final source = await ref.read(clipboardServiceProvider).readText();
     if (!mounted || source.isEmpty) return;
 
-    final isNarrow = MediaQuery.of(context).size.width < 980;
-
-    // Check if it's an identity link first
-    if (source.trim().startsWith('layergram://i/')) {
-      try {
-        final identity = ref
-            .read(identitiesControllerProvider)
-            .parseIdentityFromLink(source);
-        await ref.read(identitiesControllerProvider).saveIdentity(identity);
-
-        if (!mounted) return;
-        messenger.showSnackBar(
-          SnackBar(
-              content: Text(AppStrings.t(context,
-                  'contactNameSaved'))), // Reusing existing translation
-        );
-
-        // Open the chat with the newly imported contact
-        ref.read(encodeRecipientProvider.notifier).state = identity;
-        if (isNarrow) {
-          await _openChat(identity);
-        } else {
-          _selectContact(identity);
-        }
-        return;
-      } catch (e) {
-        if (!mounted) return;
+    final normalized = source.trim();
+    final lower = normalized.toLowerCase();
+    final looksLikeIdentity = lower.startsWith('layergram://i/') ||
+        lower.contains('[layergram identity]');
+    try {
+      ref
+          .read(identitiesControllerProvider)
+          .parseIdentityImport(normalized);
+      ref.read(pendingIdentityImportProvider.notifier).state = normalized;
+      return;
+    } catch (_) {
+      if (looksLikeIdentity) {
         messenger.showSnackBar(
           SnackBar(
               content: Text(AppStrings.t(context, 'invalidLayergramLink'))),
@@ -477,6 +463,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
       }
     }
 
+    final isNarrow = MediaQuery.of(context).size.width < 980;
     final outcome = await ref.read(homeControllerProvider).decodeHiddenMessage(
           source,
           hintContactId: _selectedContact?.identityId,

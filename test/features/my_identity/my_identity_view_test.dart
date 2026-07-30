@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,8 +10,10 @@ import 'package:layergram/core/crypto/seed_service.dart';
 import 'package:layergram/core/providers.dart';
 import 'package:layergram/core/storage/local_identity_vault.dart';
 import 'package:layergram/core/storage/secure_storage.dart';
+import 'package:layergram/features/my_identity/identity_qr_code.dart';
 import 'package:layergram/features/my_identity/my_identity_view.dart';
 import 'package:layergram/l10n/app_strings.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 class _InMemorySecureStorageService extends SecureStorageService {
   final Map<String, String> _values = <String, String>{};
@@ -71,6 +74,22 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    final brandedQr = tester.widget<IdentityQrCode>(
+      find.byType(IdentityQrCode),
+    );
+    expect(brandedQr.data, isNotEmpty);
+
+    final qrImage = tester.widget<QrImageView>(find.byType(QrImageView));
+    expect(qrImage.errorCorrectionLevel, identityQrErrorCorrectionLevel);
+    expect(
+      (qrImage.embeddedImage! as AssetImage).assetName,
+      identityQrLogoAsset,
+    );
+    expect(
+      qrImage.embeddedImageStyle?.size,
+      const Size.square(220 * identityQrLogoScale),
+    );
+
     await tester.scrollUntilVisible(
       find.text('Share or save QR PNG'),
       200,
@@ -90,5 +109,60 @@ void main() {
     );
     expect(find.text('Share or save QR PNG'), findsWidgets);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('exported identity QR PNG contains the Layergram logo', (
+    tester,
+  ) async {
+    final result = await tester.runAsync(() async {
+      final bytes = await renderIdentityQrPng(
+        jsonEncode({
+          'type': 'layergram_identity',
+          'identityId': 'alice',
+          'publicKey': 'test-public-key',
+        }),
+        pixelSize: 320,
+      );
+      if (bytes == null || bytes.isEmpty) return null;
+
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      final image = frame.image;
+      try {
+        final rgba = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+        if (rgba == null) return null;
+
+        var brandedPixelCount = 0;
+        const centerStart = 128;
+        const centerEnd = 192;
+        for (var y = centerStart; y < centerEnd; y++) {
+          for (var x = centerStart; x < centerEnd; x++) {
+            final offset = (y * image.width + x) * 4;
+            final red = rgba.getUint8(offset);
+            final green = rgba.getUint8(offset + 1);
+            final blue = rgba.getUint8(offset + 2);
+            final isLayergramCyan =
+                blue > 120 && green > 100 && blue > red * 1.5;
+            if (isLayergramCyan) {
+              brandedPixelCount++;
+            }
+          }
+        }
+
+        return (
+          width: image.width,
+          height: image.height,
+          brandedPixelCount: brandedPixelCount,
+        );
+      } finally {
+        image.dispose();
+        codec.dispose();
+      }
+    });
+
+    expect(result, isNotNull);
+    expect(result!.width, 320);
+    expect(result.height, 320);
+    expect(result.brandedPixelCount, greaterThan(100));
   });
 }
