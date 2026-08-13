@@ -24,6 +24,8 @@ This checkpoint provides:
 - fixed, bounded fragmentation and duplicate-aware reassembly;
 - a canonical cumulative ACK payload with no ACK-of-ACK loops;
 - inactive encrypted inbox/outbox persistence with write-before-delete recovery;
+- an inactive atomic-effect journal binding one application/control record and
+  its matching ratchet snapshot to the inbox replay tombstone;
 - public golden and adversarial parser tests.
 
 It deliberately does not provide:
@@ -31,7 +33,8 @@ It deliberately does not provide:
 - handshake or Triple Ratchet key derivation;
 - sender proof of possession or contact authentication;
 - nonce derivation across a session;
-- the ratchet/application transaction required for exactly-once effects;
+- the concrete application-record or Triple Ratchet state encoding;
+- atomicity for side effects written outside the v3 effect journal;
 - resend scheduling, erasure coding, notification, or progress UI;
 - erasure coding;
 - activation in identity, contact, messaging, UI, storage, or Premium paths.
@@ -214,16 +217,28 @@ The inactive durable inbox performs these steps in order:
    auxiliary record;
 2. authenticate it and privately reassemble only a complete set;
 3. return a complete delivery at least once;
-4. require the caller to persist higher-level application/ratchet state keyed by
-   the assembly ID;
-5. persist an encrypted complete-ACK replay tombstone;
-6. delete obsolete sealed-frame records.
+4. invoke the higher-level effect builder only if no effect for the assembly ID
+   is already durable;
+5. persist one outer-encrypted journal record containing both the canonical
+   application/control record and its matching complete ratchet snapshot;
+6. persist an encrypted complete-ACK replay tombstone bound to the journal
+   effect digest;
+7. delete obsolete sealed-frame records.
 
-A crash before step 5 can redeliver the complete plaintext. A crash after step
-5 suppresses redelivery even if frame cleanup did not finish. Exactly-once
-application effects are intentionally not claimed here: activation requires the
-future application and ratchet commit to be idempotent/transactional by the
-assembly ID before calling inbox commit.
+The journal record in step 5 is the higher-level commit point. A crash before it
+can redeliver the complete plaintext. A crash after it but before step 6 restores
+the already-built effect, does not advance the ratchet again, and finishes only
+the bound tombstone. A crash after step 6 suppresses redelivery even if frame
+cleanup did not finish. On restore, a tombstone with an effect digest but no
+matching journal record, a journal effect paired with an unbound tombstone, or
+any digest mismatch is a fail-closed persistence conflict.
+
+Within this inactive boundary, the stable application record ID is derived from
+the assembly ID, so replay cannot allocate a second record. Exactly-once effects
+outside the journal are still not claimed: future message/UI repositories must
+read the journal as their source of truth or materialize its record idempotently
+under that stable ID. The concrete application and Triple Ratchet state codecs
+remain WP-6 gates.
 
 Commit-tombstone retention is local and explicit. A tombstone may be purged only
 after the durable ratchet/application replay window will independently reject
@@ -245,16 +260,45 @@ ACK.
 
 The reference defaults bound the inbox to 256 sealed frame records, 128 KiB of
 sealed frame bytes, 4,096 commit tombstones, and 8,192 relevant physical
-records. The outbox is bounded to 64 logical entries, 512 KiB of sealed frame
-bytes, and 256 physical revisions. Reassembly retains its separate limits of 8
-pending assemblies and 64 KiB of authenticated plaintext. Limit breaches fail
-closed without silently evicting valid state.
+records. The atomic-effect journal is bounded to 4,096 effects, 16 KiB per
+application record, 256 KiB per ratchet snapshot, 16 MiB total decoded state,
+and 8,192 relevant physical records. The outbox is bounded to 64 logical
+entries, 512 KiB of sealed frame bytes, and 256 physical revisions. Reassembly
+retains its separate limits of 8 pending assemblies and 64 KiB of authenticated
+plaintext. Limit breaches fail closed without silently evicting valid state.
 
 All records use Layergram's existing padded, outer-encrypted auxiliary-record
 storage under the active identity/passphrase scope. The record kind, assembly
-ID, ACK state, frame bytes, and timestamps are not global cleartext markers.
+ID, ACK state, effect digest, application state, ratchet snapshot, frame bytes,
+and timestamps are not global cleartext markers.
 
-### 7.4 ACK golden vector
+### 7.4 Atomic-effect record invariants
+
+The journal record is keyed logically by the assembly ID and binds:
+
+- a domain-separated digest of the complete ordered sealed-frame set;
+- the exact representative target frame;
+- independently versioned application/control and ratchet-state byte strings;
+- their lengths and a domain-separated effect digest;
+- the local persistence time.
+
+The builder receives a temporary copy of the complete plaintext. The copy is
+wiped after the builder returns or throws. A restored effect bypasses the
+builder entirely. ACK frames never create journal effects. Malformed or
+conflicting effect records are retained and fail closed; only byte-identical
+duplicates may be cleaned. If the effect-store API reports an error after the
+durable outcome has become ambiguous, that journal instance fails stopped: a
+new instance must restore storage before any builder may run again. Once a
+journal is attached to an inbox, transport-only tombstones are rejected; a
+pre-existing unbound tombstone also rejects journal commit before the builder
+can observe the already-consumed delivery.
+
+Effect-journal garbage collection is deliberately not defined yet. Activation
+requires a ratchet checkpoint/compaction rule that proves both application
+history and the replay window remain durable before an effect or its bound
+tombstone can be removed.
+
+### 7.5 ACK golden vector
 
 For target suite `0x01`, kind `0x01`, five fragments, message ID `81 82 ...
 90`, epoch `7`, counter `9`, final length `1,088`, and received indexes `0, 2,
@@ -347,7 +391,8 @@ message decode, contact state, backups, migration, QR, UI, or Premium capability
 contracts.
 
 Before activation, the handshake/ratchet must define routing-binding, ACK-key,
-and nonce derivation; the inbox commit must join the real application and
-ratchet transaction; resend/progress UX and real loss recovery must pass; all
-three transports must pass real cross-app tests; and the complete design and
-implementation must pass independent review.
+nonce, and concrete state derivation; the real application and Triple Ratchet
+codecs must use the atomic journal as their source of truth; checkpoint and
+garbage-collection rules must be frozen; resend/progress UX and real loss
+recovery must pass; all three transports must pass real cross-app tests; and the
+complete design and implementation must pass independent review.

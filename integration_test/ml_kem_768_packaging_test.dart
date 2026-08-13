@@ -9,6 +9,7 @@ import 'package:layergram/core/crypto/stego_encoder.dart';
 import 'package:layergram/core/crypto/seed_service.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3_acknowledgement.dart';
+import 'package:layergram/core/crypto/v3/lmf_v3_atomic_commit.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3_outbox.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3_persistence.dart';
 import 'package:layergram/core/crypto/v3/local_identity_v3.dart';
@@ -203,9 +204,46 @@ void main() {
       secretKey: key,
     );
     expect(complete.delivery!.plaintext, orderedEquals(plaintext));
-    await restoredInbox.commit(complete.delivery!);
+    final firstJournal = V3LmfAtomicCommitJournal(
+      store: inboxStore,
+      inbox: restoredInbox,
+    );
+    await firstJournal.restore();
+    final committedEffect = await firstJournal.commit(
+      delivery: complete.delivery!,
+      builder: (_) => V3LmfAtomicEffect(
+        applicationState: _rangeBytes(96, 0x91),
+        ratchetState: _rangeBytes(192, 0xc1),
+      ),
+    );
     expect(
-      (await restoredInbox.receive(frame: frames.first, secretKey: key)).status,
+      restoredInbox.committedHigherLevelBindings[complete.delivery!.assemblyId],
+      committedEffect.effectDigest,
+    );
+    await firstJournal.close();
+    await restoredInbox.close();
+
+    final afterCommitInbox = V3LmfDurableInbox(store: inboxStore);
+    final afterCommitState =
+        await afterCommitInbox.restore(keyResolver: (_) => key);
+    expect(afterCommitState.deliveries, isEmpty);
+    final restoredJournal = V3LmfAtomicCommitJournal(
+      store: inboxStore,
+      inbox: afterCommitInbox,
+    );
+    final restoredEffects = await restoredJournal.restore();
+    expect(restoredEffects.effects, hasLength(1));
+    expect(
+      restoredEffects.effects.single.applicationState,
+      orderedEquals(_rangeBytes(96, 0x91)),
+    );
+    expect(
+      restoredEffects.effects.single.ratchetState,
+      orderedEquals(_rangeBytes(192, 0xc1)),
+    );
+    expect(
+      (await afterCommitInbox.receive(frame: frames.first, secretKey: key))
+          .status,
       V3LmfInboxStatus.committedReplay,
     );
 

@@ -117,6 +117,12 @@ reviewed standard alternative or narrow its product claim explicitly.
   advance ratchet or application state. Complete delivery MAY be at least once,
   but replay suppression MUST be committed only after the higher-level effect is
   idempotent or transactionally durable under a stable message identifier.
+- The durable higher-level effect MUST bind one application/control record and
+  its matching complete ratchet snapshot to the exact authenticated frame set.
+  Its digest MUST be bound into replay suppression. Restore MUST fail closed if
+  either side is missing, unbound, malformed, or divergent.
+- No effect-journal entry may be removed until a separately durable ratchet
+  checkpoint, application record, and replay window make that removal safe.
 
 ## Asynchronous and multi-device properties
 

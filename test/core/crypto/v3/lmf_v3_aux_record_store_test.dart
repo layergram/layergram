@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 import 'package:layergram/core/crypto/aux_record_cipher.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3.dart';
+import 'package:layergram/core/crypto/v3/lmf_v3_atomic_commit.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3_outbox.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3_persistence.dart';
 import 'package:layergram/core/storage/aux_record_repository.dart';
@@ -117,6 +118,70 @@ void main() {
       ),
     );
     expect((await isolated.restore()).entries, isEmpty);
+  });
+
+  test('atomic application and ratchet effect stays opaque and scoped',
+      () async {
+    final frames = await _frames(messageKey);
+    final repository = _repository(auxiliaryKey, 'atomic-scope');
+    final store = V3LmfAuxRecordStore(repository);
+    final inbox = V3LmfDurableInbox(store: store);
+    final journal = V3LmfAtomicCommitJournal(
+      store: store,
+      inbox: inbox,
+    );
+    await inbox.restore(keyResolver: (_) => messageKey);
+    await journal.restore();
+    V3LmfDurableDelivery? delivery;
+    for (final frame in frames) {
+      delivery =
+          (await inbox.receive(frame: frame, secretKey: messageKey)).delivery ??
+              delivery;
+    }
+    await journal.commit(
+      delivery: delivery!,
+      builder: (_) => V3LmfAtomicEffect(
+        applicationState: _bytes(96, 0x91),
+        ratchetState: _bytes(160, 0xc1),
+      ),
+    );
+
+    _expectOnlyOpaqueRecords(box);
+    final external = box.values.join();
+    expect(external, isNot(contains(V3LmfAtomicCommitJournal.recordKind)));
+    expect(external, isNot(contains('applicationState')));
+    expect(external, isNot(contains('ratchetState')));
+    await inbox.close();
+    await journal.close();
+
+    final restoredRepository = _repository(auxiliaryKey, 'atomic-scope');
+    final restoredStore = V3LmfAuxRecordStore(restoredRepository);
+    final restoredInbox = V3LmfDurableInbox(store: restoredStore);
+    await restoredInbox.restore(keyResolver: (_) => messageKey);
+    final restored = V3LmfAtomicCommitJournal(
+      store: restoredStore,
+      inbox: restoredInbox,
+    );
+    final result = await restored.restore();
+    expect(result.effects, hasLength(1));
+    expect(
+      result.effects.single.applicationState,
+      orderedEquals(_bytes(96, 0x91)),
+    );
+    expect(
+      result.effects.single.ratchetState,
+      orderedEquals(_bytes(160, 0xc1)),
+    );
+
+    final isolatedRepository = _repository(auxiliaryKey, 'other-atomic-scope');
+    final isolatedStore = V3LmfAuxRecordStore(isolatedRepository);
+    final isolatedInbox = V3LmfDurableInbox(store: isolatedStore);
+    await isolatedInbox.restore(keyResolver: (_) => messageKey);
+    final isolated = V3LmfAtomicCommitJournal(
+      store: isolatedStore,
+      inbox: isolatedInbox,
+    );
+    expect((await isolated.restore()).effects, isEmpty);
   });
 }
 

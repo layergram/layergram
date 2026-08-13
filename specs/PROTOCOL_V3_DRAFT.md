@@ -143,7 +143,14 @@ no handshake key derivation. Its bounded durable inbox stores sealed frames
 before authentication, withholds partial plaintext, restores after restart, and
 writes a replay tombstone before cleanup. Its durable outbox retains the exact
 sealed bytes and applies authenticated cumulative ACKs using write-new-before-
-delete revisions. These are inactive at-least-once transport primitives, not a
-completed ratchet transaction: ACK key derivation, exactly-once application
-effects, resend/progress UX, real cross-app loss tests, and erasure coding remain
-WP-5 activation gates.
+delete revisions. An inactive atomic-effect journal now makes the application or
+control record and its matching opaque ratchet snapshot durable in one encrypted
+record before binding that effect digest into the inbox tombstone. A crash in
+between restores the effect without running its builder or advancing the ratchet
+twice. Missing or mismatched effect/tombstone pairs fail closed.
+
+This freezes the persistence boundary, not the Triple Ratchet: concrete ratchet
+state encoding, checkpoint/compaction, ACK key and nonce derivation,
+resend/progress UX, real cross-app loss tests, and erasure coding remain
+activation gates. Effects outside the journal must later be materialized
+idempotently under its stable assembly-derived message ID.

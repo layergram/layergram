@@ -215,6 +215,7 @@ class V3LmfDurableInbox {
   Future<void> _operationTail = Future<void>.value();
   bool _restored = false;
   bool _closed = false;
+  bool _atomicCommitJournalAttached = false;
   int _persistedFrameBytes = 0;
 
   int get persistedFrameCount => _recordsByStorageId.length;
@@ -223,7 +224,35 @@ class V3LmfDurableInbox {
 
   int get committedTombstoneCount => _committed.length;
 
+  /// Higher-level atomic effect binding for every committed assembly.
+  ///
+  /// A null value represents a transport-only tombstone created without the
+  /// inactive atomic application/ratchet journal. The getter is available only
+  /// after restore so the journal can fail closed on missing or mismatched
+  /// cross-record state.
+  Map<String, String?> get committedHigherLevelBindings {
+    _ensureReady();
+    return Map<String, String?>.unmodifiable(
+      _committed.map(
+        (assemblyId, record) =>
+            MapEntry(assemblyId, record.higherLevelCommitDigest),
+      ),
+    );
+  }
+
   int get readyDeliveryCount => _ready.length;
+
+  /// Makes higher-level digest binding mandatory for this inbox lifetime.
+  ///
+  /// The inactive atomic journal calls this during restore. It prevents an
+  /// older transport-only commit path from racing or running after the journal
+  /// has taken responsibility for application/ratchet durability.
+  Future<void> attachAtomicCommitJournal() {
+    return _serialized(() async {
+      _ensureReady();
+      _atomicCommitJournalAttached = true;
+    });
+  }
 
   Future<V3LmfInboxRestoreResult> restore({
     required V3LmfFrameKeyResolver keyResolver,
@@ -445,10 +474,33 @@ class V3LmfDurableInbox {
   Future<void> commit(
     V3LmfDurableDelivery delivery, {
     DateTime? committedAt,
+    String? higherLevelCommitDigest,
   }) {
     return _serialized(() async {
       _ensureReady();
-      if (_committed.containsKey(delivery.assemblyId)) return;
+      if (higherLevelCommitDigest != null &&
+          !_isCanonicalDigest(higherLevelCommitDigest)) {
+        throw ArgumentError.value(
+          higherLevelCommitDigest,
+          'higherLevelCommitDigest',
+          'must be a canonical 32-byte digest',
+        );
+      }
+      if (_atomicCommitJournalAttached && higherLevelCommitDigest == null) {
+        throw const V3LmfPersistenceConflictException(
+          'transport-only commit is forbidden after the v3 atomic journal '
+          'is attached',
+        );
+      }
+      final existingCommit = _committed[delivery.assemblyId];
+      if (existingCommit != null) {
+        if (existingCommit.higherLevelCommitDigest != higherLevelCommitDigest) {
+          throw const V3LmfPersistenceConflictException(
+            'higher-level effect does not match the v3 commit tombstone',
+          );
+        }
+        return;
+      }
       final ready = _ready[delivery.assemblyId];
       if (ready == null || ready != delivery) {
         throw StateError('Layergram v3 delivery is not ready for commit');
@@ -463,10 +515,11 @@ class V3LmfDurableInbox {
       final representative = delivery.frames.first;
       final payload = <String, dynamic>{
         'kind': committedRecordKind,
-        'v': 1,
+        'v': 2,
         'assemblyId': delivery.assemblyId,
         'ack': _encodeBinary(V3LmfAcknowledgementCodec.encode(acknowledgement)),
         'target': _encodeBinary(V3LmfFrameCodec.encodeBinary(representative)),
+        'higherLevelCommitDigest': higherLevelCommitDigest,
         'committedAt': timestamp.millisecondsSinceEpoch,
       };
 
@@ -478,6 +531,7 @@ class V3LmfDurableInbox {
         assemblyId: delivery.assemblyId,
         acknowledgement: acknowledgement,
         targetFrame: representative,
+        higherLevelCommitDigest: higherLevelCommitDigest,
         committedAt: timestamp,
       );
       _ready.remove(delivery.assemblyId);
@@ -740,17 +794,25 @@ class V3LmfDurableInbox {
 
   _CommittedRecord _decodeCommitted(V3LmfStoredRecord stored) {
     final payload = stored.payload;
-    if (payload['v'] != 1 || payload.length != 6) {
+    final version = payload['v'];
+    if ((version != 1 && version != 2) ||
+        (version == 1 && payload.length != 6) ||
+        (version == 2 && payload.length != 7)) {
       throw const FormatException('Invalid Layergram v3 commit tombstone');
     }
     final assemblyId = payload['assemblyId'];
     final ackArmored = payload['ack'];
     final targetArmored = payload['target'];
+    final higherLevelCommitDigest =
+        version == 2 ? payload['higherLevelCommitDigest'] : null;
     final committedAt = payload['committedAt'];
     if (assemblyId is! String ||
         !_isCanonicalDigest(assemblyId) ||
         ackArmored is! String ||
         targetArmored is! String ||
+        (higherLevelCommitDigest != null &&
+            (higherLevelCommitDigest is! String ||
+                !_isCanonicalDigest(higherLevelCommitDigest))) ||
         !_isValidEpochMilliseconds(committedAt)) {
       throw const FormatException('Invalid Layergram v3 commit tombstone');
     }
@@ -772,6 +834,7 @@ class V3LmfDurableInbox {
       assemblyId: assemblyId,
       acknowledgement: acknowledgement,
       targetFrame: target,
+      higherLevelCommitDigest: higherLevelCommitDigest as String?,
       committedAt: DateTime.fromMillisecondsSinceEpoch(
         committedAt as int,
         isUtc: true,
@@ -838,6 +901,7 @@ class _CommittedRecord {
     required this.assemblyId,
     required this.acknowledgement,
     required this.targetFrame,
+    required this.higherLevelCommitDigest,
     required this.committedAt,
   });
 
@@ -845,6 +909,7 @@ class _CommittedRecord {
   final String assemblyId;
   final V3LmfAcknowledgement acknowledgement;
   final V3LmfFrame targetFrame;
+  final String? higherLevelCommitDigest;
   final DateTime committedAt;
 }
 
@@ -905,7 +970,8 @@ bool _ackMatchesFrame(V3LmfAcknowledgement ack, V3LmfFrame frame) {
 }
 
 bool _sameCommittedTarget(_CommittedRecord left, _CommittedRecord right) {
-  return _bytesEqual(
+  return left.higherLevelCommitDigest == right.higherLevelCommitDigest &&
+      _bytesEqual(
         V3LmfAcknowledgementCodec.encode(left.acknowledgement),
         V3LmfAcknowledgementCodec.encode(right.acknowledgement),
       ) &&
