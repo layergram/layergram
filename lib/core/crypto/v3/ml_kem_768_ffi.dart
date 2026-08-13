@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import 'dart:ffi';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
@@ -36,10 +37,10 @@ class MlKem768NativeException implements Exception {
 
 /// Inactive protocol-v3 FFI backend for the Layergram-owned ML-KEM-768 ABI.
 ///
-/// Constructing this object does not activate protocol v3. No default dynamic
-/// library path is provided deliberately: release-platform packaging must pass
-/// its activation gate. Encapsulation entropy never crosses Dart; the native
-/// wrapper obtains it directly from the operating-system CSPRNG.
+/// Constructing this object does not activate protocol v3. Packaged-library
+/// loading is explicit and is not wired into the app runtime or protocol
+/// selection. Encapsulation entropy never crosses Dart; the native wrapper
+/// obtains it directly from the operating-system CSPRNG.
 final class MlKem768FfiBackend implements MlKem768Backend {
   factory MlKem768FfiBackend.open({
     required String libraryPath,
@@ -51,6 +52,44 @@ final class MlKem768FfiBackend implements MlKem768Backend {
 
   factory MlKem768FfiBackend.fromDynamicLibrary(DynamicLibrary library) {
     return MlKem768FfiBackend._(_MlKem768Bindings(library));
+  }
+
+  /// Opens the production library packaged for the current Flutter target.
+  ///
+  /// iOS links the ABI into the signed application process. Android packages
+  /// it as `liblayergram_mlkem.so`. macOS opens the embedded framework by its
+  /// absolute bundle path instead of depending on global symbol scope. Calling
+  /// this factory remains an explicit engineering action and does not select
+  /// protocol v3.
+  factory MlKem768FfiBackend.openPackaged() {
+    if (Platform.isIOS) {
+      return MlKem768FfiBackend.fromDynamicLibrary(DynamicLibrary.process());
+    }
+    if (Platform.isMacOS) {
+      return MlKem768FfiBackend.open(
+        libraryPath: packagedMacOSLibraryPath(),
+      );
+    }
+    if (Platform.isAndroid) {
+      return MlKem768FfiBackend.fromDynamicLibrary(
+        DynamicLibrary.open('liblayergram_mlkem.so'),
+      );
+    }
+    throw UnsupportedError(
+      'Packaged ML-KEM-768 backend is not available on '
+      '${Platform.operatingSystem}',
+    );
+  }
+
+  /// Resolves the embedded macOS framework relative to the app executable.
+  ///
+  /// [executablePath] is exposed for deterministic packaging tests; production
+  /// callers leave it unset.
+  static String packagedMacOSLibraryPath({String? executablePath}) {
+    final executable = File(executablePath ?? Platform.resolvedExecutable);
+    final contentsDirectory = executable.parent.parent;
+    return '${contentsDirectory.path}/Frameworks/LayergramMlKem.framework/'
+        'Versions/A/LayergramMlKem';
   }
 
   MlKem768FfiBackend._(this._bindings) {

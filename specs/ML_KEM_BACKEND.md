@@ -1,10 +1,11 @@
 # ML-KEM-768 native backend
 
-Status: **inactive first-platform implementation; not production approved**
+Status: **inactive mobile/Apple packaging checkpoint; not production approved**
 
 Layergram protocol v3 uses a narrow C ABI around the pinned `mlkem-native`
-v2.0.0 implementation. The current app remains on protocol v2 and does not
-load or package this library in normal application builds.
+v2.0.0 implementation. Android, iOS, and macOS builds now package the
+production ABI, but the current app remains on protocol v2 and never loads it
+from the normal startup, identity, contact, or message paths.
 
 ## Security boundary
 
@@ -29,7 +30,7 @@ FFI boundary during identity restoration. Its native copy is wiped after the
 call, but managed-memory zeroization remains best effort. The expanded private
 key never crosses back into Dart.
 
-## Current verification
+## Native-wrapper verification
 
 On macOS ARM64, `tool/pq/test_native_macos.sh` performs:
 
@@ -45,12 +46,45 @@ Sanitizer. Loading an ASan-instrumented library into the signed Flutter test
 runner is blocked by macOS platform policy, so the sanitizer evidence covers
 the native executable while the ordinary library covers the Dart FFI path.
 
+## Packaged-platform verification
+
+The inactive production ABI is included without `LG_MLKEM_TESTING` and has
+been checked as follows:
+
+- Android debug and release APKs contain `liblayergram_mlkem.so` for
+  `armeabi-v7a`, `arm64-v8a`, and `x86_64`. Each library exports only the 14
+  `lg_mlkem768_*` production functions. The packaged round trip and self-test
+  pass in an Android 14 arm64 emulator.
+- The iOS simulator debug app is universal `arm64`/`x86_64`; its effective
+  executable exports the same 14 production functions and no test hooks. The
+  packaged round trip and self-test pass in an arm64 iOS simulator.
+- The unsigned iOS device release build is arm64, retains the 14 production
+  functions after dead stripping, excludes test hooks, and links the Security
+  framework. Physical-device execution and distribution signing have not yet
+  been verified.
+- The embedded macOS `LayergramMlKem.framework` is universal
+  `arm64`/`x86_64`, exports only the 14 production functions, and is loaded by
+  an absolute path derived from the application bundle. The packaged round
+  trip and self-test pass in an unsigned Flutter app build.
+
+An ordinary signed macOS release build reaches code signing but currently
+fails with the development certificate/keychain error
+`errSecInternalComponent`. The equivalent unsigned release build succeeds;
+signed distribution and notarization therefore remain unverified.
+
+`integration_test/ml_kem_768_packaging_test.dart` is the common device and
+simulator FFI traversal. `tool/pq/mlkem_packaged_process_smoke.dart` provides a
+minimal app/process smoke test for macOS packaging.
+
 ## Remaining activation gates
 
-- Integrate static/shared packaging into every supported Flutter target.
-- Repeat wrapper KAT, ACVP, Wycheproof, negative, sanitizer, lifecycle, device,
-  simulator, architecture, release-signing, and packaging tests for each ABI.
-- Verify iOS background/extension and Android process-lifecycle behavior.
+- Package and test the backend on Windows and Linux release architectures.
+- Repeat full wrapper KAT, ACVP, Wycheproof, negative, sanitizer, lifecycle,
+  physical-device, release-signing, and packaging tests for every shipped ABI.
+- Verify iOS background/extension and Android process-lifecycle behavior on
+  physical devices.
+- Complete Apple distribution signing/notarization and Android store-signing
+  validation.
 - Verify Windows and Linux CSPRNG and toolchain branches.
 - Complete supply-chain inventory and independent implementation audit.
 - Specify and review the authenticated hybrid handshake and sparse PQ ratchet.

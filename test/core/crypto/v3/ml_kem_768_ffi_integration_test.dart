@@ -13,12 +13,24 @@ void main() {
   final libraryPath = Platform.environment['LAYERGRAM_MLKEM_TEST_LIBRARY'];
   final productionLibraryPath =
       Platform.environment['LAYERGRAM_MLKEM_PRODUCTION_LIBRARY'];
+  final packagedMacOSLibraryPath =
+      Platform.environment['LAYERGRAM_MLKEM_PACKAGED_MACOS_LIBRARY'];
   final skipReason = libraryPath == null
       ? 'Build the native test library with tool/pq/test_native_macos.sh'
       : false;
   final productionSkipReason = productionLibraryPath == null
       ? 'Build the production library with tool/pq/test_native_macos.sh'
       : false;
+
+  test('macOS packaged path is derived from the app executable', () {
+    expect(
+      MlKem768FfiBackend.packagedMacOSLibraryPath(
+        executablePath: '/Applications/Layergram.app/Contents/MacOS/Layergram',
+      ),
+      '/Applications/Layergram.app/Contents/Frameworks/'
+      'LayergramMlKem.framework/Versions/A/LayergramMlKem',
+    );
+  });
 
   test('Dart calls the shipped ABI and passes upstream known-answer vectors',
       () async {
@@ -171,6 +183,38 @@ void main() {
     encapsulation.wipeSharedSecret();
     decapsulated.fillRange(0, decapsulated.length, 0);
   }, skip: productionSkipReason);
+
+  test('packaged macOS framework traverses production ABI', () async {
+    final backend = MlKem768FfiBackend.open(
+      libraryPath: packagedMacOSLibraryPath!,
+    );
+    expect(backend.hasTestHooks, isFalse);
+    expect(await backend.selfTest(), isTrue);
+
+    final seed = Uint8List.fromList(
+      List<int>.generate(MlKem768.keyGenerationSeedBytes, (index) => index),
+    );
+    MlKem768KeyPair? keyPair;
+    MlKem768Encapsulation? encapsulation;
+    Uint8List? decapsulated;
+    try {
+      keyPair = await backend.keyPairFromSeed(seed);
+      encapsulation = await backend.encapsulate(keyPair.publicKey);
+      decapsulated = await backend.decapsulate(
+        keyPair.privateKeyHandle,
+        encapsulation.ciphertext,
+      );
+      expect(decapsulated, orderedEquals(encapsulation.sharedSecret));
+    } finally {
+      seed.fillRange(0, seed.length, 0);
+      encapsulation?.wipeSharedSecret();
+      decapsulated?.fillRange(0, decapsulated.length, 0);
+      await keyPair?.privateKeyHandle.close();
+    }
+  },
+      skip: packagedMacOSLibraryPath == null
+          ? 'Build and provide the packaged macOS framework'
+          : false);
 }
 
 Uint8List _hex(String value) {

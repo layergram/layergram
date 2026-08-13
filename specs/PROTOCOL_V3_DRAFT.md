@@ -85,9 +85,13 @@ preferred derivation or appear as quantum-resistant until all of these pass:
 - independent protocol and implementation audit with no unresolved high or
   critical findings.
 
-The first macOS ARM64 native wrapper and Dart FFI traversal are implemented but
-remain inactive. This satisfies only a first-platform engineering checkpoint,
-not the production-native-backend gate; see `ML_KEM_BACKEND.md`.
+The native wrapper and inactive packaging now traverse the production ABI on
+an Android arm64 emulator, an iOS arm64 simulator, and a macOS arm64 app; the
+packaged Android libraries and Apple binaries also cover their release
+architectures. This is an engineering checkpoint, not the
+production-native-backend gate: physical devices, distribution signing,
+Windows/Linux, complete per-ABI vectors, and independent review remain. See
+`ML_KEM_BACKEND.md`.
 
 ## Initial transport limitation
 

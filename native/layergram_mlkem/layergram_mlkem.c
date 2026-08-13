@@ -10,6 +10,10 @@
 
 #if defined(__APPLE__)
 #include <Security/SecRandom.h>
+#elif defined(__ANDROID__)
+// arc4random_buf is provided by Android's Bionic libc on every supported
+// Layergram API level. It handles kernel getrandom and /dev/urandom fallback
+// internally and has no caller-visible failure mode.
 #elif defined(_WIN32)
 #include <windows.h>
 #include <bcrypt.h>
@@ -109,6 +113,9 @@ static int32_t lg_secure_random(uint8_t *output, size_t length) {
   return SecRandomCopyBytes(kSecRandomDefault, length, output) == errSecSuccess
              ? LG_MLKEM_OK
              : LG_MLKEM_ERR_ENTROPY;
+#elif defined(__ANDROID__)
+  arc4random_buf(output, length);
+  return LG_MLKEM_OK;
 #elif defined(_WIN32)
   return BCryptGenRandom(NULL, output, (ULONG)length,
                          BCRYPT_USE_SYSTEM_PREFERRED_RNG) == 0
