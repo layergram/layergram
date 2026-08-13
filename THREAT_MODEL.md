@@ -1,5 +1,11 @@
 # Layergram Threat Model
 
+> Protocol-v3 work is an inactive research implementation. Its stronger target
+> properties and activation gates are defined in
+> [Protocol v3 Security Goals](specs/PROTOCOL_V3_SECURITY_GOALS.md). Nothing in
+> the current application should yet be interpreted as a post-quantum security
+> claim; the active protocol remains v2.
+
 This document describes, in plain language, what Layergram is designed to protect against and — just as importantly — what it does **not** protect against. It is written for users, integrators and security researchers evaluating whether Layergram fits their threat model.
 
 Layergram is an end-to-end encrypted messaging tool that is transport-agnostic: encrypted payloads travel as opaque text (steganographic cover messages, direct text payloads, or direct deep links) over an untrusted transport of the user's choice (WhatsApp, Telegram, email, handwritten notes, etc.). This framing drives every decision below.

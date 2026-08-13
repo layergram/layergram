@@ -146,6 +146,12 @@ tool/pq/verify_packaged_linux.sh
 The expected artifact marker is `LAYERGRAM_MLKEM_PACKAGED_LINUX_OK`; the
 process marker remains `LAYERGRAM_MLKEM_PACKAGED_SMOKE_OK`.
 
+The common `ml_kem_768_packaging_test.dart` traversal also checks the complete
+24-word v3 identity vector and the imported ML-KEM public-key validation
+boundary. Run the same file on every shipped target; matching only the native
+primitive KAT is not sufficient to establish cross-platform identity
+derivation.
+
 This is cross-platform packaging evidence, not production approval. The
 backend still requires any Linux ARM64 or native Windows ARM64 build that is
 actually distributed, physical-device and signed-distribution validation,

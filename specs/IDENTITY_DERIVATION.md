@@ -47,6 +47,23 @@ The labels are purpose- and algorithm-specific:
 - `layergram/v3/passphrase-identity/x25519-seed`
 - `layergram/v3/passphrase-identity/ml-kem-768-keygen-seed`
 
+The inactive `V3LocalIdentityFactory` is the only complete v3 assembly path. It
+requires a successful native ML-KEM self-test, derives both key components,
+validates the resulting ML-KEM public key, and returns a non-serializable local
+handle. Temporary BIP39 and algorithm seed buffers are overwritten as a best
+effort after construction. The expanded 2,400-byte ML-KEM private key remains
+inside the native opaque handle and is destroyed when the local handle closes.
+
+For passphrase-scoped identities, the passphrase first participates in the
+standard BIP39 seed derivation and the result then uses Layergram's separate v3
+passphrase labels. Neither the passphrase nor the resulting local handle is
+persisted by this checkpoint.
+
+Public identities received from text, links, or QR must cross the separate
+`V3PublicIdentityValidator` boundary before use. A checksum-valid identity is
+not sufficient: the native backend self-test and ML-KEM public-key validity
+check must also pass. This validation still does not authenticate the owner.
+
 The 64-byte ML-KEM seed is never truncated for QR or link compactness. A native
 backend expands it into the complete FIPS 203 keypair. Until that backend and
 the complete protocol pass their release gates, `v2` remains the preferred

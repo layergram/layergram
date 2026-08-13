@@ -33,6 +33,7 @@
     "Linux x64 native AddressSanitizer and UndefinedBehaviorSanitizer run",
     "Linux x64 release shared object exact versioned production export surface, glibc dependency, RELRO, and immediate binding",
     "Linux x64 packaged Flutter integration and release-process traversal on Ubuntu 22.04",
+    "identical complete 24-word v3 public-identity vector and native public-key validation on macOS arm64, Android 14 arm64, iOS arm64 simulator, Linux x64, and Windows x64",
     "vendored mlkem tree and fixtures match pinned upstream Git objects"
   ],
   "remainingGates": [

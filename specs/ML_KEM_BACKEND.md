@@ -94,6 +94,14 @@ simulator, and desktop FFI traversal. `tool/pq/mlkem_packaged_process_smoke.dart
 provides a minimal app/process smoke test for macOS, Windows, and Linux
 packaging.
 
+The common packaged traversal also restores one public test identity from a
+24-word BIP39 vector, checks the X25519 public key, ML-KEM public-key digest,
+complete identity ID and fingerprint, then reimports the canonical bundle
+through the native ML-KEM public-key validator. The vector is byte-identical on
+macOS arm64, Android 14 arm64, iOS arm64 simulator, Linux x64, and Windows x64.
+This establishes deterministic identity assembly across the tested ABIs; it is
+not evidence for the future handshake or ratchet.
+
 ## Remaining activation gates
 
 - Package and test the backend on Linux ARM64 and native Windows ARM64 if

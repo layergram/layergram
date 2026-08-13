@@ -127,8 +127,11 @@ class SeedService {
     return bip39.validateMnemonic(mnemonic.trim());
   }
 
-  Uint8List mnemonicToSeed(String mnemonic) {
-    final seedHex = bip39.mnemonicToSeedHex(mnemonic.trim());
+  Uint8List mnemonicToSeed(String mnemonic, {String passphrase = ''}) {
+    final seedHex = bip39.mnemonicToSeedHex(
+      mnemonic.trim(),
+      passphrase: passphrase,
+    );
     return Uint8List.fromList(_hexToBytes(seedHex));
   }
 

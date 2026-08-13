@@ -30,6 +30,14 @@ void main() {
       first.mlKem768KeyGenerationSeed,
       orderedEquals(second.mlKem768KeyGenerationSeed),
     );
+    expect(
+      _toHex(first.x25519Seed),
+      'bd40bd09b73e20f72c124ebd6f782a8be94ee11a9d2cdecb60c9697a2e7b6e11',
+    );
+    expect(
+      _toHex(first.mlKem768KeyGenerationSeed),
+      'adb82691ed7a3f930f8754a9f546bce2ce745f31582fb9464d6ca530431181d7c8177c5d583637ad480d0dbf5b7f92b0878cbd7a0e901fe698beaff48b34f0ff',
+    );
   });
 
   test('v3 namespaces base and passphrase-derived identities separately',
@@ -89,3 +97,6 @@ void main() {
     expect(material.mlKem768KeyGenerationSeed, everyElement(0));
   });
 }
+
+String _toHex(List<int> bytes) =>
+    bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();

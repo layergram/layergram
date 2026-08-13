@@ -6,6 +6,11 @@ This document defines the first falsifiable invariants for the intentionally
 incompatible Layergram protocol v3. It does not declare the protocol complete
 or independently reviewed.
 
+The normative threat boundary and activation properties are defined in
+`PROTOCOL_V3_SECURITY_GOALS.md`. If this draft conflicts with those goals, the
+security-goals document wins and this draft must be corrected before code is
+enabled.
+
 ## Recovery, public identity, and session proof are different operations
 
 1. A user restores their own local identity only from the 24-word BIP39 phrase
@@ -93,6 +98,27 @@ release architectures. This is an engineering checkpoint, not the
 production-native-backend gate: physical devices, distribution signing, any
 distributed Linux ARM64 or native Windows ARM64 build, complete per-ABI
 vectors, and independent review remain. See `ML_KEM_BACKEND.md`.
+
+## Inactive complete local-identity checkpoint
+
+`V3LocalIdentityFactory` now restores a complete hybrid public identity from a
+valid mnemonic using the explicit v3 X25519 and ML-KEM derivation labels. It
+requires the native backend self-test, validates the generated ML-KEM public
+key, keeps the expanded ML-KEM private key behind an opaque native handle, and
+wipes temporary seed buffers on both success and failure. Passphrase-scoped
+restoration uses both the BIP39 passphrase and the separate v3 passphrase
+derivation namespace.
+
+The factory is intentionally absent from `IdentityManager`, providers, storage,
+backup, UI, contact import, and messaging. It is not a migration or activation:
+v2 remains preferred, and the handle exposes no handshake operations until the
+transcript specification passes its separate review gate.
+
+Imported identities have a distinct `V3PublicIdentityValidator` boundary. It
+first applies the strict canonical codec, then requires the native backend
+self-test and the FIPS 203 public-key validity check. Its validated wrapper means
+only “structurally usable”; it never substitutes owner authentication or the
+future fingerprint/SAS ceremony.
 
 ## Initial transport limitation
 

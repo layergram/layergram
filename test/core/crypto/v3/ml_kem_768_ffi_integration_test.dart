@@ -6,6 +6,8 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:layergram/core/crypto/seed_service.dart';
+import 'package:layergram/core/crypto/v3/local_identity_v3.dart';
 import 'package:layergram/core/crypto/v3/ml_kem_768.dart';
 import 'package:layergram/core/crypto/v3/ml_kem_768_ffi.dart';
 
@@ -191,6 +193,56 @@ void main() {
     seed.fillRange(0, seed.length, 0);
     encapsulation.wipeSharedSecret();
     decapsulated.fillRange(0, decapsulated.length, 0);
+  }, skip: productionSkipReason);
+
+  test('production backend restores the complete 24-word v3 identity vector',
+      () async {
+    const mnemonic =
+        'abandon abandon abandon abandon abandon abandon abandon abandon '
+        'abandon abandon abandon abandon abandon abandon abandon abandon '
+        'abandon abandon abandon abandon abandon abandon abandon art';
+    final backend = MlKem768FfiBackend.open(
+      libraryPath: productionLibraryPath!,
+    );
+    final factory = V3LocalIdentityFactory(
+      seedService: SeedService(),
+      mlKem768Backend: backend,
+    );
+    final first = await factory.restorePrimary(
+      mnemonic: mnemonic,
+      displayName: 'Vector identity',
+    );
+    final restored = await factory.restorePrimary(
+      mnemonic: mnemonic,
+      displayName: 'Renamed',
+    );
+    try {
+      expect(
+        _toHex(first.publicIdentity.x25519PublicKey),
+        '63714c686580e067c811207fee91fe01101b62f4c4ce409c88d6b0f83c883a2a',
+      );
+      expect(
+        sha256.convert(first.publicIdentity.mlKem768PublicKey).toString(),
+        '23c3e86da0aca0b264a8fce803fc300a3f3be12336f6fb3df06067f2a0b29ef4',
+      );
+      expect(
+        first.publicIdentity.identityId,
+        'YJACJCAEX3JH7QSS6ESDJCSBNGOBRTVIZDHK3GQIWDXFL4YJSUPW43QEVE5PEJSYTHMVYHYC4LBOE',
+      );
+      expect(
+        first.publicIdentity.fingerprint,
+        'C240-2488-04BE-D27F-C252-F124-348A-4169',
+      );
+      expect(
+          restored.publicIdentity.identityId, first.publicIdentity.identityId);
+      expect(
+        restored.publicIdentity.mlKem768PublicKey,
+        orderedEquals(first.publicIdentity.mlKem768PublicKey),
+      );
+    } finally {
+      await first.close();
+      await restored.close();
+    }
   }, skip: productionSkipReason);
 
   test('packaged macOS framework traverses production ABI', () async {
