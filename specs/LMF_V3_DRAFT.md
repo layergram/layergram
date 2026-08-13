@@ -3,8 +3,9 @@
 Status: **normative research draft; inactive; not externally reviewed**
 
 This document freezes the first testable candidate for Layergram protocol-v3
-binary framing, text/link armor, steganographic carriage, and bounded fragment
-reassembly. It does not enable protocol v3, define the handshake or ratchet key
+binary framing, text/link armor, steganographic carriage, bounded fragment
+reassembly, cumulative acknowledgements, and crash-consistent sealed-frame
+storage. It does not enable protocol v3, define the handshake or ratchet key
 schedule, or establish a quantum-resistant product claim.
 
 `PROTOCOL_V3_SECURITY_GOALS.md` remains authoritative. This draft must change if
@@ -21,6 +22,8 @@ This checkpoint provides:
 - a deep link that prefixes the exact same text token;
 - steganographic transport of the exact same binary frame;
 - fixed, bounded fragmentation and duplicate-aware reassembly;
+- a canonical cumulative ACK payload with no ACK-of-ACK loops;
+- inactive encrypted inbox/outbox persistence with write-before-delete recovery;
 - public golden and adversarial parser tests.
 
 It deliberately does not provide:
@@ -28,7 +31,8 @@ It deliberately does not provide:
 - handshake or Triple Ratchet key derivation;
 - sender proof of possession or contact authentication;
 - nonce derivation across a session;
-- durable fragment persistence, acknowledgements, resend UI, or crash recovery;
+- the ratchet/application transaction required for exactly-once effects;
+- resend scheduling, erasure coding, notification, or progress UI;
 - erasure coding;
 - activation in identity, contact, messaging, UI, storage, or Premium paths.
 
@@ -166,17 +170,103 @@ present, and best-effort wipes discarded managed buffers.
 
 Retention cleanup is explicit rather than time-assumed: legitimate manual
 transport can take days or weeks, and Layergram has no trusted shared clock.
-The future persistence layer must store sealed frames transactionally before
-ratchet state changes. The current in-memory reassembler does not yet satisfy
-the crash/restart part of WP-5.
+The durable inbox stores the exact sealed frame through the encrypted auxiliary
+record repository before authenticating or passing it to this in-memory
+reassembler. A caller that uses the reassembler directly has no persistence
+guarantee.
 
 This candidate uses retransmission, not erasure coding. Loss therefore leaves
-an assembly incomplete until the missing authenticated frame is supplied. Ack,
-progress, resend, and durable recovery remain later WP-5 work.
+an assembly incomplete until the missing authenticated frame is supplied.
 
-## 7. Three transports, one binary meaning
+## 7. Cumulative ACK and durable delivery candidate
 
-### 7.1 Direct text
+### 7.1 Canonical ACK plaintext
+
+An acknowledgement is exactly 48 plaintext bytes carried inside a separately
+authenticated, single-fragment LMF frame of kind `0x04`:
+
+| Offset | Bytes | Field | Rule |
+|---:|---:|---|---|
+| 0 | 3 | magic | ASCII `AK3` |
+| 3 | 1 | ACK format version | `0x01` |
+| 4 | 1 | target suite | registered value |
+| 5 | 1 | target kind | handshake, application, or PQ-ratchet; never ACK |
+| 6 | 1 | flags | zero |
+| 7 | 1 | target fragment count | 1–64 |
+| 8 | 16 | target message ID | non-zero |
+| 24 | 4 | target epoch | exact authenticated target value |
+| 28 | 8 | target message counter | 0–2^63−1 |
+| 36 | 4 | target final plaintext length | 1–16,384 |
+| 40 | 8 | received bitmap | bit `n` acknowledges fragment `n` |
+
+The bitmap is cumulative, non-empty, and has no set bits beyond the target
+fragment count. The ACK envelope MUST use the target suite and session ID and
+MUST reverse the target sender/recipient routing bindings. Its key comes from
+the future session/ratchet schedule. ACK frames are never acknowledged; loss of
+an ACK can therefore cause a safe duplicate resend but cannot create an
+ACK-of-ACK loop.
+
+### 7.2 Inbox commit order
+
+The inactive durable inbox performs these steps in order:
+
+1. persist the exact still-sealed canonical frame in an outer-encrypted local
+   auxiliary record;
+2. authenticate it and privately reassemble only a complete set;
+3. return a complete delivery at least once;
+4. require the caller to persist higher-level application/ratchet state keyed by
+   the assembly ID;
+5. persist an encrypted complete-ACK replay tombstone;
+6. delete obsolete sealed-frame records.
+
+A crash before step 5 can redeliver the complete plaintext. A crash after step
+5 suppresses redelivery even if frame cleanup did not finish. Exactly-once
+application effects are intentionally not claimed here: activation requires the
+future application and ratchet commit to be idempotent/transactional by the
+assembly ID before calling inbox commit.
+
+Commit-tombstone retention is local and explicit. A tombstone may be purged only
+after the durable ratchet/application replay window will independently reject
+the corresponding old message; a peer-supplied timestamp never authorizes it.
+
+No partial fragment plaintext is returned or persisted. Competing
+unauthenticated bytes are removed alone. Two different authenticated fragments
+for the same assembly index wipe and reject the pending assembly.
+
+### 7.3 Outbox and resend order
+
+The inactive durable outbox persists a complete canonical set of exact sealed
+frames before first export. Export attempts and cumulative ACK progress create
+a new encrypted revision before the prior revision is deleted. After a crash,
+the highest valid revision wins and older copies are cleaned. A resend returns
+the same sealed bytes; it never re-encrypts a fragment or derives policy from a
+remote clock. Removing an entry is allowed only after a complete authenticated
+ACK.
+
+The reference defaults bound the inbox to 256 sealed frame records, 128 KiB of
+sealed frame bytes, 4,096 commit tombstones, and 8,192 relevant physical
+records. The outbox is bounded to 64 logical entries, 512 KiB of sealed frame
+bytes, and 256 physical revisions. Reassembly retains its separate limits of 8
+pending assemblies and 64 KiB of authenticated plaintext. Limit breaches fail
+closed without silently evicting valid state.
+
+All records use Layergram's existing padded, outer-encrypted auxiliary-record
+storage under the active identity/passphrase scope. The record kind, assembly
+ID, ACK state, frame bytes, and timestamps are not global cleartext markers.
+
+### 7.4 ACK golden vector
+
+For target suite `0x01`, kind `0x01`, five fragments, message ID `81 82 ...
+90`, epoch `7`, counter `9`, final length `1,088`, and received indexes `0, 2,
+4`, the canonical 48-byte ACK plaintext is:
+
+```text
+414b3301010100058182838485868788898a8b8c8d8e8f90000000070000000000000009000004401500000000000000
+```
+
+## 8. Three transports, one binary meaning
+
+### 8.1 Direct text
 
 ```text
 m3.<unpadded Base64URL(canonical binary frame)>
@@ -185,7 +275,7 @@ m3.<unpadded Base64URL(canonical binary frame)>
 Only ASCII letters, digits, `-`, and `_` are valid after `m3.`. Padding `=`,
 whitespace, alternate alphabets, and non-round-tripping forms are rejected.
 
-### 7.2 Deep link
+### 8.2 Deep link
 
 ```text
 layergram://m/m3.<same text token>
@@ -195,7 +285,7 @@ User info, ports, queries, fragments, extra path segments, and alternate
 serialization are rejected. The link adds a prefix; it is not a different
 protocol.
 
-### 7.3 Steganography
+### 8.3 Steganography
 
 The existing hardened Layergram payload alphabet maps the exact binary frame to
 four zero-width payload runes per byte and may interleave only the documented
@@ -222,7 +312,7 @@ candidate target in text, link, and minimum-cover steganographic form. This is a
 codec result, not proof that WhatsApp, Telegram, Signal, or iMessage preserves
 the payload; real transport tests remain an activation gate.
 
-## 8. Golden vector
+## 9. Frame golden vector
 
 Inputs:
 
@@ -249,14 +339,15 @@ Canonical direct token:
 m3.TE0zAwEBAI4AGQECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gQUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVpbXF1eX2CBgoOEhYaHiImKi4yNjo-QoaKjpKWmp6ipqqusra6vsAAAAAcAAAAAAAAACXc1lAAAAAABAAAAGaChoqOkpaanqKmqq6p5BUg3rHDeD0Xx4Ccdr7IUyTcw9MUjAfmHzPMIEqdaUa6kYnTT8axy
 ```
 
-## 9. Activation boundary
+## 10. Activation boundary
 
 The implementation lives only under `lib/core/crypto/v3/`. Protocol v2 remains
 active. Nothing in this draft or codec changes identity import, message send,
 message decode, contact state, backups, migration, QR, UI, or Premium capability
 contracts.
 
-Before activation, the handshake/ratchet must define routing-binding and nonce
-derivation; fragment persistence and resend behavior must survive crashes; all
+Before activation, the handshake/ratchet must define routing-binding, ACK-key,
+and nonce derivation; the inbox commit must join the real application and
+ratchet transaction; resend/progress UX and real loss recovery must pass; all
 three transports must pass real cross-app tests; and the complete design and
 implementation must pass independent review.

@@ -300,6 +300,26 @@ abstract final class V3LmfFrameCodec {
     );
   }
 
+  /// Stable, non-secret identifier for one logical framed message.
+  ///
+  /// It is a domain-separated SHA-256 digest over the canonical context used
+  /// by reassembly. It is suitable as an encrypted local persistence key, not
+  /// as contact authentication or a public identity identifier.
+  static String assemblyId(V3LmfFrame frame) {
+    final metadata = frame.metadata;
+    final binding = <int>[
+      ...utf8.encode('layergram/v3/lmf/assembly-id\u0000'),
+      metadata.suite.wireId,
+      metadata.kind.wireId,
+      ...metadata._senderBinding,
+      ...metadata._recipientBinding,
+      ...metadata._messageId,
+      ...metadata._sessionId,
+    ];
+    return base64UrlEncode(crypto.sha256.convert(binding).bytes)
+        .replaceAll('=', '');
+  }
+
   static V3LmfFrame decodeBinary(Uint8List encoded) {
     if (encoded.length < minBinaryFrameBytes ||
         encoded.length > maxBinaryFrameBytes) {
@@ -697,6 +717,18 @@ abstract final class V3LmfAead {
     return _open(frame: frame, secretKey: secretKey);
   }
 
+  /// Authenticates any canonical frame and discards its fragment plaintext.
+  ///
+  /// Persistence uses this for conflicting candidates without creating a
+  /// second reassembly path that could expose partial content.
+  static Future<void> authenticate({
+    required V3LmfFrame frame,
+    required SecretKey secretKey,
+  }) async {
+    final plaintext = await _open(frame: frame, secretKey: secretKey);
+    plaintext.fillRange(0, plaintext.length, 0);
+  }
+
   static Future<V3LmfFrame> _seal({
     required V3LmfMessageMetadata metadata,
     required Uint8List plaintext,
@@ -780,6 +812,11 @@ class V3LmfReassemblyOutcome {
 
   Uint8List? get plaintext =>
       _plaintext == null ? null : Uint8List.fromList(_plaintext);
+
+  /// Best-effort wipes complete plaintext retained by this managed result.
+  void wipePlaintext() {
+    _plaintext?.fillRange(0, _plaintext.length, 0);
+  }
 }
 
 class V3LmfReassemblyLimitException implements Exception {
@@ -802,9 +839,9 @@ class V3LmfReassemblyConflictException implements Exception {
 
 /// Bounded, duplicate-aware reassembler for authenticated LMF v3 fragments.
 ///
-/// Persistence and crash recovery are intentionally not implemented here. A
-/// future storage layer must persist sealed frames transactionally before it
-/// can satisfy the complete WP-5 crash/loss gate.
+/// Persistence remains outside this cryptographic primitive. The inactive
+/// durable inbox wraps it by storing each sealed frame before calling [accept];
+/// callers that use this class directly receive no crash-recovery guarantee.
 class V3LmfReassembler {
   V3LmfReassembler({
     this.maxPendingAssemblies = 8,
@@ -859,7 +896,7 @@ class V3LmfReassembler {
       return outcome;
     }
 
-    final assemblyKey = _assemblyKey(frame);
+    final assemblyKey = V3LmfFrameCodec.assemblyId(frame);
     final now = (receivedAt ?? DateTime.now()).toUtc();
     var state = _pending[assemblyKey];
     if (state == null) {
@@ -968,6 +1005,16 @@ class V3LmfReassembler {
       _removeAndWipe(key);
     }
     return keys.length;
+  }
+
+  /// Wipes one pending assembly after a durable-storage conflict or explicit
+  /// cancellation. A completed or unknown assembly is a no-op.
+  bool discardAssembly(V3LmfFrame frame) {
+    if (_isClosed) return false;
+    final key = V3LmfFrameCodec.assemblyId(frame);
+    if (!_pending.containsKey(key)) return false;
+    _removeAndWipe(key);
+    return true;
   }
 
   void close() {
@@ -1168,18 +1215,6 @@ bool _isCanonicalBase64Url(String value) {
     }
   }
   return true;
-}
-
-String _assemblyKey(V3LmfFrame frame) {
-  final metadata = frame.metadata;
-  return base64UrlEncode(<int>[
-    metadata.suite.wireId,
-    metadata.kind.wireId,
-    ...metadata._senderBinding,
-    ...metadata._recipientBinding,
-    ...metadata._messageId,
-    ...metadata._sessionId,
-  ]);
 }
 
 bool _constantTimeEquals(Uint8List left, Uint8List right) {

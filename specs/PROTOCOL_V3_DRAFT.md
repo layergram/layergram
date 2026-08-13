@@ -139,7 +139,11 @@ share target after steganographic encoding. The final 64-byte fragment is 222
 binary bytes. These are frozen codec vectors, not cross-app reliability proof.
 
 The framing implementation is still isolated from active messaging and exposes
-no handshake key derivation. Its in-memory reassembler is bounded,
-duplicate-aware, and withholds partial plaintext, but durable persistence,
-acknowledgements, resend UX, crash recovery, and erasure coding remain later
-WP-5 gates.
+no handshake key derivation. Its bounded durable inbox stores sealed frames
+before authentication, withholds partial plaintext, restores after restart, and
+writes a replay tombstone before cleanup. Its durable outbox retains the exact
+sealed bytes and applies authenticated cumulative ACKs using write-new-before-
+delete revisions. These are inactive at-least-once transport primitives, not a
+completed ratchet transaction: ACK key derivation, exactly-once application
+effects, resend/progress UX, real cross-app loss tests, and erasure coding remain
+WP-5 activation gates.

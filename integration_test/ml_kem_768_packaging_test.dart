@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
@@ -7,6 +8,9 @@ import 'package:integration_test/integration_test.dart';
 import 'package:layergram/core/crypto/stego_encoder.dart';
 import 'package:layergram/core/crypto/seed_service.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3.dart';
+import 'package:layergram/core/crypto/v3/lmf_v3_acknowledgement.dart';
+import 'package:layergram/core/crypto/v3/lmf_v3_outbox.dart';
+import 'package:layergram/core/crypto/v3/lmf_v3_persistence.dart';
 import 'package:layergram/core/crypto/v3/local_identity_v3.dart';
 import 'package:layergram/core/crypto/v3/ml_kem_768.dart';
 import 'package:layergram/core/crypto/v3/ml_kem_768_ffi.dart';
@@ -161,6 +165,95 @@ void main() {
     expect(reassembler.pendingAssemblyCount, 0);
     reassembler.close();
   });
+
+  testWidgets('inactive durable LMF v3 state survives a packaged restart',
+      (tester) async {
+    final key = SecretKeyData(_rangeBytes(32, 0x11));
+    final metadata = V3LmfMessageMetadata(
+      kind: V3LmfFrameKind.application,
+      senderBinding: _rangeBytes(V3LmfFrameCodec.routingBindingBytes, 1),
+      recipientBinding: _rangeBytes(V3LmfFrameCodec.routingBindingBytes, 0x41),
+      messageId: _rangeBytes(V3LmfFrameCodec.messageIdBytes, 0x81),
+      sessionId: _rangeBytes(V3LmfFrameCodec.sessionIdBytes, 0xa1),
+      epoch: 7,
+      messageCounter: 9,
+    );
+    final plaintext = _rangeBytes(600, 0x31);
+    final frames = await V3LmfAead.sealFragmented(
+      metadata: metadata,
+      plaintext: plaintext,
+      secretKey: key,
+      nonceForFragment: (index) =>
+          _rangeBytes(V3LmfFrameCodec.nonceBytes, 0x51 + index),
+    );
+
+    final inboxStore = _PackagingRecordStore();
+    final firstInbox = V3LmfDurableInbox(store: inboxStore);
+    await firstInbox.restore(keyResolver: (_) => key);
+    await firstInbox.receive(frame: frames.last, secretKey: key);
+    await firstInbox.receive(frame: frames.first, secretKey: key);
+    await firstInbox.close();
+
+    final restoredInbox = V3LmfDurableInbox(store: inboxStore);
+    final restoredState =
+        await restoredInbox.restore(keyResolver: (_) async => key);
+    expect(restoredState.deliveries, isEmpty);
+    final complete = await restoredInbox.receive(
+      frame: frames[1],
+      secretKey: key,
+    );
+    expect(complete.delivery!.plaintext, orderedEquals(plaintext));
+    await restoredInbox.commit(complete.delivery!);
+    expect(
+      (await restoredInbox.receive(frame: frames.first, secretKey: key)).status,
+      V3LmfInboxStatus.committedReplay,
+    );
+
+    final outboxStore = _PackagingRecordStore();
+    final firstOutbox = V3LmfDurableOutbox(store: outboxStore);
+    await firstOutbox.restore();
+    final queued = await firstOutbox.enqueue(frames);
+    await firstOutbox.markExported(
+      assemblyId: queued.assemblyId,
+      fragmentIndexes: {0, 2},
+    );
+    await firstOutbox.close();
+
+    final restoredOutbox = V3LmfDurableOutbox(store: outboxStore);
+    final outboxState = await restoredOutbox.restore();
+    expect(outboxState.entries.single.exportAttempts, [1, 0, 1]);
+    for (var index = 0; index < frames.length; index++) {
+      expect(
+        V3LmfFrameCodec.encodeBinary(
+          outboxState.entries.single.frames[index],
+        ),
+        orderedEquals(V3LmfFrameCodec.encodeBinary(frames[index])),
+      );
+    }
+
+    final acknowledgement = V3LmfAcknowledgementCodec.forReceivedFrames(frames);
+    final ackFrame = await V3LmfAead.sealSingle(
+      metadata: V3LmfMessageMetadata(
+        kind: V3LmfFrameKind.acknowledgement,
+        senderBinding: metadata.recipientBinding,
+        recipientBinding: metadata.senderBinding,
+        messageId: _rangeBytes(V3LmfFrameCodec.messageIdBytes, 0xc1),
+        sessionId: metadata.sessionId,
+        epoch: metadata.epoch,
+        messageCounter: metadata.messageCounter + 1,
+      ),
+      plaintext: V3LmfAcknowledgementCodec.encode(acknowledgement),
+      secretKey: key,
+      nonce: _rangeBytes(V3LmfFrameCodec.nonceBytes, 0xd1),
+    );
+    expect(
+      await restoredOutbox.applyAcknowledgement(
+        acknowledgementFrame: ackFrame,
+        secretKey: key,
+      ),
+      V3LmfOutboxAckStatus.complete,
+    );
+  });
 }
 
 String _toHex(Uint8List value) =>
@@ -171,3 +264,34 @@ Uint8List _rangeBytes(int length, int start) {
     List<int>.generate(length, (index) => (start + index) & 0xff),
   );
 }
+
+class _PackagingRecordStore implements V3LmfRecordStore {
+  final Map<String, Map<String, dynamic>> _records =
+      <String, Map<String, dynamic>>{};
+  var _nextId = 0;
+
+  @override
+  Future<String> write(Map<String, dynamic> payload) async {
+    final storageId = 'record-${_nextId++}';
+    _records[storageId] = _copyMap(payload);
+    return storageId;
+  }
+
+  @override
+  Future<List<V3LmfStoredRecord>> readAll() async => _records.entries
+      .map(
+        (entry) => V3LmfStoredRecord(
+          storageId: entry.key,
+          payload: _copyMap(entry.value),
+        ),
+      )
+      .toList(growable: false);
+
+  @override
+  Future<void> delete(String storageId) async {
+    _records.remove(storageId);
+  }
+}
+
+Map<String, dynamic> _copyMap(Map<String, dynamic> value) =>
+    (jsonDecode(jsonEncode(value)) as Map).cast<String, dynamic>();

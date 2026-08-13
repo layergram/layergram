@@ -110,6 +110,13 @@ reviewed standard alternative or narrow its product claim explicitly.
   deletion rules.
 - A crash MUST leave either the old committed state or the new committed state,
   never visible plaintext paired with an uncommitted ratchet transition.
+- An outgoing manual-transport message MUST durably retain the exact sealed
+  bytes before first export. Retransmission MUST NOT re-encrypt an old logical
+  frame under reused key/nonce state.
+- An incoming frame MUST be durably stored while still sealed before it can
+  advance ratchet or application state. Complete delivery MAY be at least once,
+  but replay suppression MUST be committed only after the higher-level effect is
+  idempotent or transactionally durable under a stable message identifier.
 
 ## Asynchronous and multi-device properties
 
@@ -136,6 +143,11 @@ reviewed standard alternative or narrow its product claim explicitly.
 - Text, links, and steganography MUST tolerate documented loss/reorder scenarios
   without a server. Transport normalization may produce a clear local error but
   never a weakened cryptographic fallback.
+- Fragment acknowledgements MUST be authenticated in the same session context,
+  bind the exact target message metadata, accumulate monotonically, and reverse
+  the routing roles. Acknowledgements MUST NOT acknowledge acknowledgements.
+- Resend and retention policy MUST NOT trust a peer-supplied clock. A lost ACK
+  may cause an exact-byte duplicate resend, never state rollback or nonce reuse.
 - The single static identity QR MUST carry the entire public identity. Reliability
   on representative screens, printers, cameras, reductions, and photocopies is
   a physical test gate, not implied by theoretical QR capacity.
