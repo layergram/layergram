@@ -85,6 +85,10 @@ preferred derivation or appear as quantum-resistant until all of these pass:
 - independent protocol and implementation audit with no unresolved high or
   critical findings.
 
+The first macOS ARM64 native wrapper and Dart FFI traversal are implemented but
+remain inactive. This satisfies only a first-platform engineering checkpoint,
+not the production-native-backend gate; see `ML_KEM_BACKEND.md`.
+
 ## Initial transport limitation
 
 An ML-KEM-768 ciphertext is 1,088 bytes and does not fit the current 800-byte

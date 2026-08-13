@@ -37,6 +37,7 @@ dependencies:
   dotted_border: ^3.1.0
   flutter_linkify: ^6.0.0
   archive: ^4.0.0
+  ffi: ^2.2.0
   android_intent_plus: ^5.0.0
 
 dev_dependencies:

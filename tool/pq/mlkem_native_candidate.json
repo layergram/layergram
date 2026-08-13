@@ -14,17 +14,22 @@
     "upstream KAT verification",
     "upstream ACVP vectors v1.1.0.43",
     "upstream Wycheproof vectors",
-    "upstream unit, allocation, RNG-failure, and ABI checks"
+    "upstream unit, allocation, RNG-failure, and ABI checks",
+    "Layergram C ABI warning-as-error build on macOS arm64",
+    "Layergram native KAT, negative, implicit-rejection, lifecycle, OS-CSPRNG, and zeroization tests",
+    "Layergram Dart FFI KAT and production-library traversal",
+    "Layergram native AddressSanitizer and UndefinedBehaviorSanitizer run",
+    "production export surface excludes upstream and deterministic test symbols",
+    "vendored mlkem tree and fixtures match pinned upstream Git objects"
   ],
   "remainingGates": [
-    "Layergram-owned minimal C ABI wrapper",
     "Android ABI builds and device tests",
     "iOS device and simulator builds",
     "macOS universal build",
     "Windows x64 and arm64 builds where distributed",
     "Linux x64 and arm64 builds where distributed",
-    "shipped-wrapper KAT and negative tests",
-    "supply-chain and license inventory",
+    "full ACVP and Wycheproof traversal through each shipped wrapper ABI",
+    "complete supply-chain and packaged-license inventory",
     "independent implementation audit",
     "incremental API decision for sparse PQ ratchet"
   ]

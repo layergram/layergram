@@ -1,0 +1,24 @@
+{
+  "repository": "https://github.com/pq-code-package/mlkem-native.git",
+  "release": "v2.0.0",
+  "commit": "d1b2fe782888bdb761a50336012923180be7f502",
+  "commitDate": "2026-08-07T20:21:56+08:00",
+  "vendoredPaths": {
+    "mlkem": {
+      "upstreamPath": "mlkem",
+      "gitTree": "d9d581290ea1e6fa37462bfbc61b9b4266a2e9e5",
+      "modified": false
+    },
+    "test/expected_test_vectors.h": {
+      "upstreamPath": "test/test_vectors/expected_test_vectors.h",
+      "gitBlob": "2774e6416fb6c29ea8a8ca7cc6c4faa038b4d3d6",
+      "modified": false
+    },
+    "LICENSE": {
+      "upstreamPath": "LICENSE",
+      "gitBlob": "79c71b1fdcc53cc17b1df99a0f4d4d48121ac174",
+      "modified": false
+    }
+  },
+  "libraryLicenseChoice": "Apache-2.0"
+}
