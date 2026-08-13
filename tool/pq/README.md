@@ -2,9 +2,9 @@
 
 This directory records reproducible candidate decisions and platform
 verification commands. The pinned source is vendored under
-`third_party/mlkem-native`. Android, iOS, and macOS builds package the backend,
-but normal application code never loads or activates it and protocol v2 remains
-unchanged.
+`third_party/mlkem-native`. Android, iOS, macOS, Windows x64, and Linux x64
+builds package the backend, but normal application code never loads or
+activates it and protocol v2 remains unchanged.
 
 ## Current candidate
 
@@ -27,6 +27,10 @@ Run the host-native wrapper, vector, production-ABI, and sanitizer checks:
 tool/pq/test_native_macos.sh
 make -C native/layergram_mlkem TESTING=1 SANITIZE=1 \
   BUILD_DIR="$PWD/.dart_tool/layergram_pq/macos-sanitized" test
+tool/pq/test_native_linux.sh
+LAYERGRAM_MLKEM_SANITIZE=1 \
+  LAYERGRAM_MLKEM_LINUX_BUILD_DIR="$PWD/.dart_tool/layergram_pq/linux-sanitized" \
+  tool/pq/test_native_linux.sh
 ```
 
 Build the packaged Android, Apple, and Windows artifacts on their respective
@@ -39,6 +43,7 @@ flutter build ios --simulator --debug
 flutter build ios --release --no-codesign
 flutter build macos --release
 flutter build windows --release
+flutter build linux --release
 ```
 
 On macOS, verify all three Android ABIs, both iOS simulator architectures, the
@@ -121,8 +126,28 @@ marker is `LAYERGRAM_MLKEM_PACKAGED_SMOKE_OK`, and the artifact verifier emits
 `LAYERGRAM_MLKEM_PACKAGED_WINDOWS_OK`. If `layergram.msix` exists, the verifier
 also requires that it contain the production DLL.
 
+On Linux x64, build and inspect the release bundle, traverse the production ABI
+inside a Flutter desktop integration-test process, and run the release-process
+smoke entry point under a display server (or `xvfb-run` on a headless host):
+
+```sh
+tool/pq/test_native_linux.sh
+flutter build linux --release -t lib/main.dart
+tool/pq/verify_packaged_linux.sh
+xvfb-run -a flutter test \
+  integration_test/ml_kem_768_packaging_test.dart -d linux -r expanded
+flutter build linux --release \
+  -t tool/pq/mlkem_packaged_process_smoke.dart
+xvfb-run -a build/linux/x64/release/bundle/layergram
+flutter build linux --release -t lib/main.dart
+tool/pq/verify_packaged_linux.sh
+```
+
+The expected artifact marker is `LAYERGRAM_MLKEM_PACKAGED_LINUX_OK`; the
+process marker remains `LAYERGRAM_MLKEM_PACKAGED_SMOKE_OK`.
+
 This is cross-platform packaging evidence, not production approval. The
-backend still requires Linux packaging, any native Windows ARM64 build that is
+backend still requires any Linux ARM64 or native Windows ARM64 build that is
 actually distributed, physical-device and signed-distribution validation,
 equivalent validation on every shipped ABI, full ACVP/Wycheproof traversal
 through the wrapper, supply-chain review, and an independent audit. See

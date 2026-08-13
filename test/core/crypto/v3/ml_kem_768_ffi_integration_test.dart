@@ -32,6 +32,15 @@ void main() {
     );
   });
 
+  test('Linux packaged path is derived from the app executable', () {
+    expect(
+      MlKem768FfiBackend.packagedLinuxLibraryPath(
+        executablePath: '/opt/layergram/layergram',
+      ),
+      '/opt/layergram/lib/liblayergram_mlkem.so',
+    );
+  });
+
   test('Dart calls the shipped ABI and passes upstream known-answer vectors',
       () async {
     const d =

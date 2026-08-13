@@ -87,12 +87,12 @@ preferred derivation or appear as quantum-resistant until all of these pass:
 
 The native wrapper and inactive packaging now traverse the production ABI on
 an Android arm64 emulator, an iOS arm64 simulator, a macOS arm64 app, and a
-Windows x64 app running on Windows 11 ARM64; the packaged Android libraries and
-Apple binaries also cover their release architectures. This is an engineering
-checkpoint, not the production-native-backend gate: physical devices,
-distribution signing, Linux and any distributed native Windows ARM64 build,
-complete per-ABI vectors, and independent review remain. See
-`ML_KEM_BACKEND.md`.
+Windows x64 app running on Windows 11 ARM64, plus a Linux x64 app on Ubuntu
+22.04; the packaged Android libraries and Apple binaries also cover their
+release architectures. This is an engineering checkpoint, not the
+production-native-backend gate: physical devices, distribution signing, any
+distributed Linux ARM64 or native Windows ARM64 build, complete per-ABI
+vectors, and independent review remain. See `ML_KEM_BACKEND.md`.
 
 ## Initial transport limitation
 

@@ -57,10 +57,10 @@ final class MlKem768FfiBackend implements MlKem768Backend {
   /// Opens the production library packaged for the current Flutter target.
   ///
   /// iOS links the ABI into the signed application process. Android and Windows
-  /// package a shared library beside the app. macOS opens the embedded
-  /// framework by its absolute bundle path instead of depending on global
-  /// symbol scope. Calling this factory remains an explicit engineering action
-  /// and does not select protocol v3.
+  /// package a shared library for the platform loader. macOS and Linux resolve
+  /// the embedded library from an absolute app-bundle path. Calling this
+  /// factory remains an explicit engineering action and does not select
+  /// protocol v3.
   factory MlKem768FfiBackend.openPackaged() {
     if (Platform.isIOS) {
       return MlKem768FfiBackend.fromDynamicLibrary(DynamicLibrary.process());
@@ -80,6 +80,11 @@ final class MlKem768FfiBackend implements MlKem768Backend {
         DynamicLibrary.open('layergram_mlkem.dll'),
       );
     }
+    if (Platform.isLinux) {
+      return MlKem768FfiBackend.open(
+        libraryPath: packagedLinuxLibraryPath(),
+      );
+    }
     throw UnsupportedError(
       'Packaged ML-KEM-768 backend is not available on '
       '${Platform.operatingSystem}',
@@ -95,6 +100,15 @@ final class MlKem768FfiBackend implements MlKem768Backend {
     final contentsDirectory = executable.parent.parent;
     return '${contentsDirectory.path}/Frameworks/LayergramMlKem.framework/'
         'Versions/A/LayergramMlKem';
+  }
+
+  /// Resolves the Linux shared library relative to the app executable.
+  ///
+  /// [executablePath] is exposed for deterministic packaging tests; production
+  /// callers leave it unset.
+  static String packagedLinuxLibraryPath({String? executablePath}) {
+    final executable = File(executablePath ?? Platform.resolvedExecutable);
+    return '${executable.parent.path}/lib/liblayergram_mlkem.so';
   }
 
   MlKem768FfiBackend._(this._bindings) {

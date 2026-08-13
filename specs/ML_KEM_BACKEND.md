@@ -1,11 +1,11 @@
 # ML-KEM-768 native backend
 
-Status: **inactive Android/Apple/Windows packaging checkpoint; not production approved**
+Status: **inactive Android/Apple/Windows/Linux packaging checkpoint; not production approved**
 
 Layergram protocol v3 uses a narrow C ABI around the pinned `mlkem-native`
-v2.0.0 implementation. Android, iOS, macOS, and Windows x64 builds now package
-the production ABI, but the current app remains on protocol v2 and never loads
-it from the normal startup, identity, contact, or message paths.
+v2.0.0 implementation. Android, iOS, macOS, Windows x64, and Linux x64 builds
+now package the production ABI, but the current app remains on protocol v2 and
+never loads it from the normal startup, identity, contact, or message paths.
 
 ## Security boundary
 
@@ -46,6 +46,11 @@ Sanitizer. Loading an ASan-instrumented library into the signed Flutter test
 runner is blocked by macOS platform policy, so the sanitizer evidence covers
 the native executable while the ordinary library covers the Dart FFI path.
 
+On Ubuntu 22.04 x86_64, `tool/pq/test_native_linux.sh` performs the equivalent
+warning-as-error native and Dart FFI traversal. Its optional
+`LAYERGRAM_MLKEM_SANITIZE=1` mode passes AddressSanitizer and UndefinedBehavior
+Sanitizer, and production encapsulation traverses the Linux `getrandom` branch.
+
 ## Packaged-platform verification
 
 The inactive production ABI is included without `LG_MLKEM_TESTING` and has
@@ -72,6 +77,12 @@ been checked as follows:
   integration traversal, a release-process smoke test, and the native ABI,
   negative, implicit-rejection, CSPRNG, lifecycle, and zeroization tests. The
   generated Store-mode MSIX also contains the production DLL.
+- The Linux release bundle contains an x86-64 `liblayergram_mlkem.so` linked to
+  glibc and exporting exactly the 14 versioned production functions. On Ubuntu
+  22.04, the packaged Flutter integration traversal and a release-process smoke
+  test pass under a virtual X display. The library is loaded from the bundle's
+  `lib` directory using an absolute path derived from the app executable and is
+  linked with full RELRO and immediate binding.
 
 An ordinary signed macOS release build reaches code signing but currently
 fails with the development certificate/keychain error
@@ -80,19 +91,19 @@ signed distribution and notarization therefore remain unverified.
 
 `integration_test/ml_kem_768_packaging_test.dart` is the common device,
 simulator, and desktop FFI traversal. `tool/pq/mlkem_packaged_process_smoke.dart`
-provides a minimal app/process smoke test for macOS and Windows packaging.
+provides a minimal app/process smoke test for macOS, Windows, and Linux
+packaging.
 
 ## Remaining activation gates
 
-- Package and test the backend on Linux release architectures and native
-  Windows ARM64 if Layergram distributes that target.
+- Package and test the backend on Linux ARM64 and native Windows ARM64 if
+  Layergram distributes those targets.
 - Repeat full wrapper KAT, ACVP, Wycheproof, negative, sanitizer, lifecycle,
   physical-device, release-signing, and packaging tests for every shipped ABI.
 - Verify iOS background/extension and Android process-lifecycle behavior on
   physical devices.
 - Complete Apple distribution signing/notarization and Android store-signing
   validation.
-- Verify the Linux CSPRNG and toolchain branch.
 - Complete supply-chain inventory and independent implementation audit.
 - Specify and review the authenticated hybrid handshake and sparse PQ ratchet.
 

@@ -7,7 +7,7 @@
   "parameterSet": "ML-KEM-768",
   "licenseChoiceForLibrarySources": "Apache-2.0",
   "observedOn": "2026-08-13",
-  "observedPlatform": "macOS arm64 host; Android 14 arm64 emulator; iOS arm64 simulator; Windows 11 ARM64 host running Flutter windows-x64",
+  "observedPlatform": "macOS arm64 host; Android 14 arm64 emulator; iOS arm64 simulator; Windows 11 ARM64 host running Flutter windows-x64; Ubuntu 22.04 x86_64 container on a Linux x86_64 host",
   "observedChecks": [
     "upstream make build",
     "upstream functional tests",
@@ -29,6 +29,10 @@
     "Windows x64 packaged Flutter integration and release-process traversal on Windows 11 ARM64",
     "Windows x64 native negative, implicit-rejection, CSPRNG, lifecycle, and zeroization tests",
     "Windows Store-mode MSIX contains the production ML-KEM DLL",
+    "Linux x64 native warning-as-error negative, implicit-rejection, getrandom CSPRNG, lifecycle, and zeroization tests",
+    "Linux x64 native AddressSanitizer and UndefinedBehaviorSanitizer run",
+    "Linux x64 release shared object exact versioned production export surface, glibc dependency, RELRO, and immediate binding",
+    "Linux x64 packaged Flutter integration and release-process traversal on Ubuntu 22.04",
     "vendored mlkem tree and fixtures match pinned upstream Git objects"
   ],
   "remainingGates": [
@@ -36,7 +40,7 @@
     "iOS physical-device and distribution-signing tests",
     "macOS distribution signing and notarization",
     "native Windows arm64 build if distributed",
-    "Linux x64 and arm64 builds where distributed",
+    "Linux arm64 build if distributed",
     "full ACVP and Wycheproof traversal through each shipped wrapper ABI",
     "complete supply-chain and packaged-license inventory",
     "independent implementation audit",
