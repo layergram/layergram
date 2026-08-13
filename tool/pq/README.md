@@ -29,7 +29,8 @@ make -C native/layergram_mlkem TESTING=1 SANITIZE=1 \
   BUILD_DIR="$PWD/.dart_tool/layergram_pq/macos-sanitized" test
 ```
 
-Build the packaged Android and Apple artifacts:
+Build the packaged Android, Apple, and Windows artifacts on their respective
+hosts:
 
 ```sh
 flutter build apk --debug
@@ -37,6 +38,7 @@ flutter build apk --release
 flutter build ios --simulator --debug
 flutter build ios --release --no-codesign
 flutter build macos --release
+flutter build windows --release
 ```
 
 On macOS, verify all three Android ABIs, both iOS simulator architectures, the
@@ -95,8 +97,33 @@ Its success marker is `LAYERGRAM_MLKEM_PACKAGED_SMOKE_OK`. Run the release
 `--config-only -t lib/main.dart` command again before a subsequent normal Xcode
 build so the generated ephemeral configuration targets the application.
 
+On Windows, run the native warning-as-error ABI suite, verify the x64 PE export
+table, and traverse the packaged DLL inside a real Flutter integration-test
+process:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tool\pq\test_native_windows.ps1
+flutter build windows --release
+powershell -ExecutionPolicy Bypass -File tool\pq\verify_packaged_windows.ps1
+flutter test integration_test\ml_kem_768_packaging_test.dart `
+  -d windows -r expanded
+flutter build windows --release `
+  -t tool\pq\mlkem_packaged_process_smoke.dart
+build\windows\x64\runner\Release\layergram.exe
+flutter build windows --release -t lib\main.dart
+dart run msix:create
+powershell -ExecutionPolicy Bypass -File tool\pq\verify_packaged_windows.ps1
+```
+
+The PowerShell invocations use a process-scoped execution-policy override;
+they do not change the machine or user execution policy. The expected smoke
+marker is `LAYERGRAM_MLKEM_PACKAGED_SMOKE_OK`, and the artifact verifier emits
+`LAYERGRAM_MLKEM_PACKAGED_WINDOWS_OK`. If `layergram.msix` exists, the verifier
+also requires that it contain the production DLL.
+
 This is cross-platform packaging evidence, not production approval. The
-backend still requires Windows/Linux packaging, physical-device and signed
-distribution validation, equivalent validation on every shipped ABI, full
-ACVP/Wycheproof traversal through the wrapper, supply-chain review, and an
-independent audit. See `specs/ML_KEM_BACKEND.md`.
+backend still requires Linux packaging, any native Windows ARM64 build that is
+actually distributed, physical-device and signed-distribution validation,
+equivalent validation on every shipped ABI, full ACVP/Wycheproof traversal
+through the wrapper, supply-chain review, and an independent audit. See
+`specs/ML_KEM_BACKEND.md`.

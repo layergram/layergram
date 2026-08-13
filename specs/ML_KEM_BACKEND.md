@@ -1,11 +1,11 @@
 # ML-KEM-768 native backend
 
-Status: **inactive mobile/Apple packaging checkpoint; not production approved**
+Status: **inactive Android/Apple/Windows packaging checkpoint; not production approved**
 
 Layergram protocol v3 uses a narrow C ABI around the pinned `mlkem-native`
-v2.0.0 implementation. Android, iOS, and macOS builds now package the
-production ABI, but the current app remains on protocol v2 and never loads it
-from the normal startup, identity, contact, or message paths.
+v2.0.0 implementation. Android, iOS, macOS, and Windows x64 builds now package
+the production ABI, but the current app remains on protocol v2 and never loads
+it from the normal startup, identity, contact, or message paths.
 
 ## Security boundary
 
@@ -66,26 +66,33 @@ been checked as follows:
   `arm64`/`x86_64`, exports only the 14 production functions, and is loaded by
   an absolute path derived from the application bundle. The packaged round
   trip and self-test pass in an unsigned Flutter app build.
+- The Windows release bundle contains an x64 `layergram_mlkem.dll` linked to
+  BCrypt and exporting exactly the 14 production functions. On Windows 11 ARM64
+  under Parallels, Windows' x64 execution layer passes the packaged Flutter
+  integration traversal, a release-process smoke test, and the native ABI,
+  negative, implicit-rejection, CSPRNG, lifecycle, and zeroization tests. The
+  generated Store-mode MSIX also contains the production DLL.
 
 An ordinary signed macOS release build reaches code signing but currently
 fails with the development certificate/keychain error
 `errSecInternalComponent`. The equivalent unsigned release build succeeds;
 signed distribution and notarization therefore remain unverified.
 
-`integration_test/ml_kem_768_packaging_test.dart` is the common device and
-simulator FFI traversal. `tool/pq/mlkem_packaged_process_smoke.dart` provides a
-minimal app/process smoke test for macOS packaging.
+`integration_test/ml_kem_768_packaging_test.dart` is the common device,
+simulator, and desktop FFI traversal. `tool/pq/mlkem_packaged_process_smoke.dart`
+provides a minimal app/process smoke test for macOS and Windows packaging.
 
 ## Remaining activation gates
 
-- Package and test the backend on Windows and Linux release architectures.
+- Package and test the backend on Linux release architectures and native
+  Windows ARM64 if Layergram distributes that target.
 - Repeat full wrapper KAT, ACVP, Wycheproof, negative, sanitizer, lifecycle,
   physical-device, release-signing, and packaging tests for every shipped ABI.
 - Verify iOS background/extension and Android process-lifecycle behavior on
   physical devices.
 - Complete Apple distribution signing/notarization and Android store-signing
   validation.
-- Verify Windows and Linux CSPRNG and toolchain branches.
+- Verify the Linux CSPRNG and toolchain branch.
 - Complete supply-chain inventory and independent implementation audit.
 - Specify and review the authenticated hybrid handshake and sparse PQ ratchet.
 

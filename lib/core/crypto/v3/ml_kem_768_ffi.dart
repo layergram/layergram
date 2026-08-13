@@ -56,11 +56,11 @@ final class MlKem768FfiBackend implements MlKem768Backend {
 
   /// Opens the production library packaged for the current Flutter target.
   ///
-  /// iOS links the ABI into the signed application process. Android packages
-  /// it as `liblayergram_mlkem.so`. macOS opens the embedded framework by its
-  /// absolute bundle path instead of depending on global symbol scope. Calling
-  /// this factory remains an explicit engineering action and does not select
-  /// protocol v3.
+  /// iOS links the ABI into the signed application process. Android and Windows
+  /// package a shared library beside the app. macOS opens the embedded
+  /// framework by its absolute bundle path instead of depending on global
+  /// symbol scope. Calling this factory remains an explicit engineering action
+  /// and does not select protocol v3.
   factory MlKem768FfiBackend.openPackaged() {
     if (Platform.isIOS) {
       return MlKem768FfiBackend.fromDynamicLibrary(DynamicLibrary.process());
@@ -73,6 +73,11 @@ final class MlKem768FfiBackend implements MlKem768Backend {
     if (Platform.isAndroid) {
       return MlKem768FfiBackend.fromDynamicLibrary(
         DynamicLibrary.open('liblayergram_mlkem.so'),
+      );
+    }
+    if (Platform.isWindows) {
+      return MlKem768FfiBackend.fromDynamicLibrary(
+        DynamicLibrary.open('layergram_mlkem.dll'),
       );
     }
     throw UnsupportedError(
