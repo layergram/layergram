@@ -123,6 +123,22 @@ void main() {
       expect(await secureStorage.read(LocalIdentityVault.storageKey), isNull);
     });
 
+    test('does not persist a partial identity when v3 runtime is gated',
+        () async {
+      const mnemonic =
+          'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+
+      await expectLater(
+        manager.restoreIdentityFromMnemonic(
+          mnemonic,
+          derivationVersion: IdentityDerivationVersion.v3,
+        ),
+        throwsUnsupportedError,
+      );
+      expect(await manager.getLocalIdentity(), isNull);
+      expect(await secureStorage.read(LocalIdentityVault.storageKey), isNull);
+    });
+
     test(
         'restores the same mnemonic deterministically for the selected derivation version',
         () async {

@@ -30,6 +30,28 @@ For `v2`, Layergram uses explicit domain separation:
 
 This keeps identity derivation isolated from future key uses and from the passphrase-derived identity namespace.
 
+### v3 (research implementation, not active)
+
+- Input: BIP39 seed bytes
+- KDF: HKDF-SHA256
+- Salt/context: `layergram/protocol-v3/identity-derivation`
+- X25519 seed output: 32 bytes
+- ML-KEM-768 key-generation seed output: 64 bytes (`d || z`)
+- Status: implemented for deterministic vectors and protocol-v3 development;
+  not the preferred production derivation
+
+The labels are purpose- and algorithm-specific:
+
+- `layergram/v3/identity/x25519-seed`
+- `layergram/v3/identity/ml-kem-768-keygen-seed`
+- `layergram/v3/passphrase-identity/x25519-seed`
+- `layergram/v3/passphrase-identity/ml-kem-768-keygen-seed`
+
+The 64-byte ML-KEM seed is never truncated for QR or link compactness. A native
+backend expands it into the complete FIPS 203 keypair. Until that backend and
+the complete protocol pass their release gates, `v2` remains the preferred
+application derivation.
+
 ## Storage Metadata
 
 Stored local identity material persists derivation metadata:
@@ -71,3 +93,8 @@ Changing derivation version changes:
 - trust relationships bound to the old public key
 
 Any future migration from `v1` to `v2` must be explicit, user-driven, and designed as a separate product flow.
+
+The same rule applies to v3. Reusing the same 24 words produces deterministic
+but different v3 key material, identity ID, fingerprint, contact bindings, and
+sessions. A v3 migration therefore requires a new public-identity exchange and
+contact verification; it is never silent.
