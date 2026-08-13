@@ -127,9 +127,19 @@ forward-secrecy control budget. It must be fragmented for steganographic
 bootstrap. The steady-state sparse PQ ratchet will use bounded smaller chunks.
 Neither issue may be hidden through a classical-only fallback labelled as v3.
 
-With the current steganographic alphabet, the raw ciphertext alone would need
-272 carrier slots and at least 336 visible cover characters. A research-only
-256-byte raw-fragment cap yields five fragments (256, 256, 256, 256, 64) and at
-least 128 visible cover characters for each full fragment. These numbers exclude
-the authenticated fragment header, routing fields, and AEAD overhead; 256 bytes
-is a measurement point, not yet a protocol constant.
+`LMF_V3_DRAFT.md` now defines an inactive framing candidate with a fixed
+142-byte authenticated header, a full 16-byte AES-GCM tag, canonical 256-byte
+multi-frame plaintext fragments, at most 64 fragments, and a 16,384-byte final
+length. The 1,088-byte ML-KEM ciphertext becomes five frames with encrypted
+fragment sizes 256, 256, 256, 256, and 64 bytes.
+
+A full fragment is 414 binary bytes, uses a minimum 168 visible carrier-safe
+ASCII characters, and can remain below the current 4,000-character portable
+share target after steganographic encoding. The final 64-byte fragment is 222
+binary bytes. These are frozen codec vectors, not cross-app reliability proof.
+
+The framing implementation is still isolated from active messaging and exposes
+no handshake key derivation. Its in-memory reassembler is bounded,
+duplicate-aware, and withholds partial plaintext, but durable persistence,
+acknowledgements, resend UX, crash recovery, and erasure coding remain later
+WP-5 gates.

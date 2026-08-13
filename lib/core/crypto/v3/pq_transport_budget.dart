@@ -13,13 +13,13 @@
 // limitations under the License.
 
 import '../stego_encoder.dart';
+import 'lmf_v3.dart';
 
-/// Research-only sizing helpers for carrying post-quantum material through
-/// the existing LMF v2 steganographic carrier.
+/// Sizing helpers for carrying post-quantum material through Layergram's
+/// existing steganographic carrier.
 ///
-/// These calculations cover raw fragment payload bytes only. A production v3
-/// fragment must also budget its authenticated header, routing fields and AEAD
-/// overhead. This class deliberately does not select a protocol chunk size.
+/// Raw helpers remain useful for comparing candidate fragment sizes. The
+/// canonical-frame helpers include the inactive LMF v3 header and full AEAD tag.
 abstract final class V3PqStegoBudget {
   static int fragmentCount({
     required int totalPayloadBytes,
@@ -59,6 +59,37 @@ abstract final class V3PqStegoBudget {
       throw ArgumentError.value(byteCount, 'byteCount', 'must not be negative');
     }
     return StegoEncoder.requiredCarrierSlotsForBytes(byteCount);
+  }
+
+  static int canonicalFragmentFrameBytes(int fragmentPlaintextBytes) {
+    if (fragmentPlaintextBytes <= 0 ||
+        fragmentPlaintextBytes > V3LmfFrameCodec.fragmentPlaintextBytes) {
+      throw ArgumentError.value(
+        fragmentPlaintextBytes,
+        'fragmentPlaintextBytes',
+        'must be between 1 and '
+            '${V3LmfFrameCodec.fragmentPlaintextBytes}',
+      );
+    }
+    return V3LmfFrameCodec.headerBytes +
+        fragmentPlaintextBytes +
+        V3LmfFrameCodec.authenticationTagBytes;
+  }
+
+  static int minimumVisibleCoverCharactersForCanonicalFragment(
+    int fragmentPlaintextBytes,
+  ) {
+    return StegoEncoder.minCoverLengthForBytes(
+      canonicalFragmentFrameBytes(fragmentPlaintextBytes),
+    );
+  }
+
+  static int minimumEncodedCharactersForCanonicalFragment(
+    int fragmentPlaintextBytes,
+  ) {
+    final frameBytes = canonicalFragmentFrameBytes(fragmentPlaintextBytes);
+    return StegoEncoder.minCoverLengthForBytes(frameBytes) +
+        StegoEncoder.minimumHiddenLengthForBytes(frameBytes);
   }
 
   static void _validateInputs(

@@ -18,7 +18,7 @@ void main() {
     );
   });
 
-  test('candidate 256-byte payload cap produces bounded raw fragments', () {
+  test('canonical 256-byte cap produces five bounded fragments', () {
     final sizes = V3PqStegoBudget.fragmentPayloadSizes(
       totalPayloadBytes: MlKem768.ciphertextBytes,
       maxFragmentPayloadBytes: 256,
@@ -29,6 +29,24 @@ void main() {
     expect(
       V3PqStegoBudget.minimumVisibleCoverCharactersForRawFragment(256),
       128,
+    );
+    expect(V3PqStegoBudget.canonicalFragmentFrameBytes(256), 414);
+    expect(
+      V3PqStegoBudget.minimumVisibleCoverCharactersForCanonicalFragment(256),
+      168,
+    );
+    expect(
+      V3PqStegoBudget.minimumEncodedCharactersForCanonicalFragment(256),
+      2032,
+    );
+    expect(V3PqStegoBudget.canonicalFragmentFrameBytes(64), 222);
+    expect(
+      V3PqStegoBudget.minimumVisibleCoverCharactersForCanonicalFragment(64),
+      120,
+    );
+    expect(
+      V3PqStegoBudget.minimumEncodedCharactersForCanonicalFragment(64),
+      1120,
     );
   });
 
@@ -45,6 +63,14 @@ void main() {
         totalPayloadBytes: 1,
         maxFragmentPayloadBytes: 0,
       ),
+      throwsArgumentError,
+    );
+    expect(
+      () => V3PqStegoBudget.canonicalFragmentFrameBytes(0),
+      throwsArgumentError,
+    );
+    expect(
+      () => V3PqStegoBudget.canonicalFragmentFrameBytes(257),
       throwsArgumentError,
     );
   });

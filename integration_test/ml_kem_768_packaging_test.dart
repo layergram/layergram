@@ -1,9 +1,12 @@
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
+import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:layergram/core/crypto/stego_encoder.dart';
 import 'package:layergram/core/crypto/seed_service.dart';
+import 'package:layergram/core/crypto/v3/lmf_v3.dart';
 import 'package:layergram/core/crypto/v3/local_identity_v3.dart';
 import 'package:layergram/core/crypto/v3/ml_kem_768.dart';
 import 'package:layergram/core/crypto/v3/ml_kem_768_ffi.dart';
@@ -84,7 +87,87 @@ void main() {
       await identity.close();
     }
   });
+
+  testWidgets('inactive LMF v3 framing traverses the packaged platform',
+      (tester) async {
+    final key = SecretKeyData(_rangeBytes(32, 0));
+    final metadata = V3LmfMessageMetadata(
+      kind: V3LmfFrameKind.handshake,
+      senderBinding: _rangeBytes(V3LmfFrameCodec.routingBindingBytes, 1),
+      recipientBinding: _rangeBytes(V3LmfFrameCodec.routingBindingBytes, 0x41),
+      messageId: _rangeBytes(V3LmfFrameCodec.messageIdBytes, 0x81),
+      sessionId: _rangeBytes(V3LmfFrameCodec.sessionIdBytes, 0xa1),
+      epoch: 7,
+      messageCounter: 9,
+      expiresAtUnixSeconds: 2000000000,
+    );
+    final golden = await V3LmfAead.sealSingle(
+      metadata: metadata,
+      plaintext: Uint8List.fromList('Layergram v3 golden frame'.codeUnits),
+      secretKey: key,
+      nonce: _rangeBytes(V3LmfFrameCodec.nonceBytes, 0xa0),
+    );
+    final goldenBytes = V3LmfFrameCodec.encodeBinary(golden);
+
+    expect(
+      _toHex(goldenBytes),
+      '4c4d33030101008e00190102030405060708090a0b0c0d0e0f10111213141516'
+      '1718191a1b1c1d1e1f204142434445464748494a4b4c4d4e4f50515253545556'
+      '5758595a5b5c5d5e5f608182838485868788898a8b8c8d8e8f90a1a2a3a4a5'
+      'a6a7a8a9aaabacadaeafb0000000070000000000000009773594000000000100'
+      '000019a0a1a2a3a4a5a6a7a8a9aaabaa79054837ac70de0f45f1e0271dafb21'
+      '4c93730f4c52301f987ccf30812a75a51aea46274d3f1ac72',
+    );
+    final token = V3LmfFrameCodec.encodeToken(golden);
+    final link = V3LmfFrameCodec.encodeLink(golden);
+    final cover = 'A' * StegoEncoder.minCoverLengthForBytes(goldenBytes.length);
+    final stego = V3LmfFrameCodec.encodeStego(
+      frame: golden,
+      coverText: cover,
+      maxTotalCharacters: V3LmfFrameCodec.portableShareCharacterLimit,
+    );
+    expect(
+      V3LmfFrameCodec.encodeBinary(V3LmfFrameCodec.decodeToken(token)),
+      orderedEquals(goldenBytes),
+    );
+    expect(
+      V3LmfFrameCodec.encodeBinary(V3LmfFrameCodec.decodeLink(link)),
+      orderedEquals(goldenBytes),
+    );
+    expect(
+      V3LmfFrameCodec.encodeBinary(V3LmfFrameCodec.decodeStego(stego)),
+      orderedEquals(goldenBytes),
+    );
+
+    final plaintext = _rangeBytes(MlKem768.ciphertextBytes, 0x31);
+    final frames = await V3LmfAead.sealFragmented(
+      metadata: metadata,
+      plaintext: plaintext,
+      secretKey: key,
+      nonceForFragment: (index) =>
+          _rangeBytes(V3LmfFrameCodec.nonceBytes, 0x30 + index),
+    );
+    expect(frames, hasLength(5));
+    final reassembler = V3LmfReassembler();
+    V3LmfReassemblyOutcome? completed;
+    for (final index in <int>[4, 1, 3, 0, 2]) {
+      final outcome = await reassembler.accept(
+        frame: frames[index],
+        secretKey: key,
+      );
+      if (outcome.isComplete) completed = outcome;
+    }
+    expect(completed?.plaintext, orderedEquals(plaintext));
+    expect(reassembler.pendingAssemblyCount, 0);
+    reassembler.close();
+  });
 }
 
 String _toHex(Uint8List value) =>
     value.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
+
+Uint8List _rangeBytes(int length, int start) {
+  return Uint8List.fromList(
+    List<int>.generate(length, (index) => (start + index) & 0xff),
+  );
+}
