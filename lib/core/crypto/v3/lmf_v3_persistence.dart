@@ -74,9 +74,13 @@ class V3LmfAuxRecordStore implements V3LmfRecordStore {
 }
 
 typedef V3LmfFrameKeyResolver = FutureOr<SecretKey?> Function(V3LmfFrame frame);
+typedef V3LmfFrameAuthenticationFailureHandler = FutureOr<void> Function(
+  V3LmfFrame frame,
+);
 
 enum V3LmfInboxStatus {
   accepted,
+  deferred,
   duplicate,
   complete,
   committedReplay,
@@ -118,6 +122,19 @@ class V3LmfInboxOutcome {
   final V3LmfDurableDelivery? delivery;
 
   bool get isComplete => status == V3LmfInboxStatus.complete;
+}
+
+/// Result of durably retaining a frame before its key is available.
+class V3LmfDeferredInboxOutcome {
+  const V3LmfDeferredInboxOutcome({
+    required this.status,
+    this.acknowledgement,
+    this.delivery,
+  });
+
+  final V3LmfInboxStatus status;
+  final V3LmfAcknowledgement? acknowledgement;
+  final V3LmfDurableDelivery? delivery;
 }
 
 class V3LmfInboxRestoreResult {
@@ -256,6 +273,7 @@ class V3LmfDurableInbox {
 
   Future<V3LmfInboxRestoreResult> restore({
     required V3LmfFrameKeyResolver keyResolver,
+    V3LmfFrameAuthenticationFailureHandler? onAuthenticationFailure,
   }) {
     return _serialized(() async {
       _ensureOpen();
@@ -351,6 +369,7 @@ class V3LmfDurableInbox {
           }
         } on SecretBoxAuthenticationError {
           await _removePersisted(persisted);
+          await onAuthenticationFailure?.call(persisted.frame);
         }
       }
       return V3LmfInboxRestoreResult(
@@ -366,6 +385,7 @@ class V3LmfDurableInbox {
     required V3LmfFrame frame,
     required SecretKey secretKey,
     DateTime? receivedAt,
+    V3LmfFrameAuthenticationFailureHandler? onAuthenticationFailure,
   }) {
     return _serialized(() async {
       _ensureReady();
@@ -385,7 +405,13 @@ class V3LmfDurableInbox {
         final accepted = _acceptedByAssemblyIndex[
             _assemblyIndexKey(assemblyId, frame.fragmentIndex)];
         if (accepted == null) {
-          return _acceptPersisted(existing, secretKey);
+          try {
+            return await _acceptPersisted(existing, secretKey);
+          } on SecretBoxAuthenticationError {
+            await _removePersisted(existing);
+            await onAuthenticationFailure?.call(existing.frame);
+            rethrow;
+          }
         }
         return V3LmfInboxOutcome._(
           status: _ready.containsKey(assemblyId)
@@ -419,14 +445,77 @@ class V3LmfDurableInbox {
         return await _acceptPersisted(persisted, secretKey);
       } on SecretBoxAuthenticationError {
         await _removePersisted(persisted);
+        await onAuthenticationFailure?.call(persisted.frame);
         rethrow;
       }
+    });
+  }
+
+  /// Persists one still-sealed frame while its exact session key is unavailable.
+  ///
+  /// This permits a continuation fragment to arrive before fragment zero. It
+  /// is authenticated only after [resumeDeferred] resolves the matching key.
+  Future<V3LmfDeferredInboxOutcome> persistDeferred({
+    required V3LmfFrame frame,
+    DateTime? receivedAt,
+  }) {
+    return _serialized(() async {
+      _ensureReady();
+      final assemblyId = V3LmfFrameCodec.assemblyId(frame);
+      final committed = _committed[assemblyId];
+      if (committed != null) {
+        return V3LmfDeferredInboxOutcome(
+          status: V3LmfInboxStatus.committedReplay,
+          acknowledgement: committed.acknowledgement,
+        );
+      }
+
+      final binary = V3LmfFrameCodec.encodeBinary(frame);
+      final digest = _digest(binary);
+      final existing = _recordsByDigest[digest];
+      if (existing != null && _bytesEqual(existing.binary, binary)) {
+        final hasAuthenticatedFrames =
+            _acceptedFramesByAssembly[assemblyId]?.isNotEmpty ?? false;
+        return V3LmfDeferredInboxOutcome(
+          status: _ready.containsKey(assemblyId)
+              ? V3LmfInboxStatus.complete
+              : V3LmfInboxStatus.duplicate,
+          acknowledgement: hasAuthenticatedFrames
+              ? _currentAcknowledgement(assemblyId)
+              : null,
+          delivery: _ready[assemblyId],
+        );
+      }
+
+      _checkCapacityFor(binary.length);
+      final timestamp = (receivedAt ?? DateTime.now()).toUtc();
+      final payload = <String, dynamic>{
+        'kind': inboxRecordKind,
+        'v': 1,
+        'frame': _encodeBinary(binary),
+        'receivedAt': timestamp.millisecondsSinceEpoch,
+      };
+      final storageId = await _store.write(payload);
+      _ensureOpen();
+      final persisted = _PersistedFrame(
+        storageId: storageId,
+        frame: frame,
+        binary: binary,
+        digest: digest,
+        assemblyId: assemblyId,
+        receivedAt: timestamp,
+      );
+      _indexPersisted(persisted);
+      return const V3LmfDeferredInboxOutcome(
+        status: V3LmfInboxStatus.deferred,
+      );
     });
   }
 
   /// Retries frames retained while their passphrase/session key was unavailable.
   Future<V3LmfInboxRestoreResult> resumeDeferred({
     required V3LmfFrameKeyResolver keyResolver,
+    V3LmfFrameAuthenticationFailureHandler? onAuthenticationFailure,
   }) {
     return _serialized(() async {
       _ensureReady();
@@ -458,6 +547,7 @@ class V3LmfDurableInbox {
           }
         } on SecretBoxAuthenticationError {
           await _removePersisted(persisted);
+          await onAuthenticationFailure?.call(persisted.frame);
         }
       }
       return V3LmfInboxRestoreResult(

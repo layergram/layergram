@@ -148,11 +148,11 @@ void main() {
         role: V3SessionRole.initiator,
         sessionId: sessionId,
         authenticatedState: state,
-        messageCounter: 0x100000009,
       );
       expect(state, originalState);
-      expect(sent.message.sendingEpoch, 7);
-      expect(sent.message.messageCounter, 0x100000009);
+      final sentMessage = sent.messageForCounter(0x100000009);
+      expect(sentMessage.sendingEpoch, 7);
+      expect(sentMessage.messageCounter, 0x100000009);
       expect(sent.epochSecret?.epoch, 7);
       expect(sent.nextAuthenticatedState, isNot(originalState));
 
@@ -161,7 +161,7 @@ void main() {
         role: V3SessionRole.initiator,
         sessionId: sessionId,
         authenticatedState: state,
-        message: sent.message,
+        message: sentMessage,
       );
       expect(state, originalState);
       expect(received.receivingEpoch, 7);
@@ -194,7 +194,6 @@ void main() {
           role: V3SessionRole.responder,
           sessionId: sessionId,
           authenticatedState: state,
-          messageCounter: 9,
         ),
         throwsFormatException,
       );
@@ -287,18 +286,14 @@ final class _DeterministicTestSckaBackend implements V3SckaBackend {
     required V3SessionRole role,
     required Uint8List sessionId,
     required Uint8List authenticatedState,
-    required int messageCounter,
   }) async {
     authenticatedState[18] ^= 1;
     final next = _nextState(authenticatedState, 0x53);
     if (corruptNextState) next[0] ^= 1;
     return V3SckaSendCandidate(
       nextAuthenticatedState: next,
-      message: V3SckaMessage(
-        sendingEpoch: 7,
-        messageCounter: messageCounter,
-        nativePayload: _bytes(32, 0x61),
-      ),
+      sendingEpoch: 7,
+      nativePayload: _bytes(32, 0x61),
       epochSecret: V3SckaEpochSecret(
         epoch: 7,
         secret: _digest(<int>[...authenticatedState, 0x6b]),

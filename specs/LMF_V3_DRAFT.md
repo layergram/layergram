@@ -211,10 +211,14 @@ reassembler. A caller that uses the reassembler directly has no persistence
 guarantee.
 
 A continuation fragment may arrive before fragment zero. The durable inbox
-retains its exact sealed bytes, while the future session controller returns no
-guessed key until it has the authenticated HR3 and corresponding skipped-message
-state. It then resumes deferred records. No plaintext or ratchet transition is
-committed before the complete set authenticates and the atomic effect is durable.
+retains its exact sealed bytes, while the inactive session key resolver returns
+no guessed key until it has the HR3 and corresponding EC+Sparse-PQ candidate.
+It then resumes deferred records and verifies every deterministic nonce and HR3
+binding. If AEAD rejects a deferred fragment zero, the inbox notifies the
+resolver so its uncommitted session candidate is wiped; a continuation failure
+does not discard a candidate whose authenticated fragment zero remains valid.
+No plaintext or ratchet transition is committed before the complete set
+authenticates and the atomic effect is durable.
 
 This candidate uses retransmission, not erasure coding. Loss therefore leaves
 an assembly incomplete until the missing authenticated frame is supplied.
@@ -292,9 +296,13 @@ read the journal as their source of truth or materialize its record idempotently
 under that stable ID. The inactive canonical `AR3` and `TR3` codecs now provide
 the exact journal byte strings. The inactive receive-commit controller claims
 the journal before restore, validates AR3/TR3/session/routing bindings, and
-applies revision CAS before its candidate builder runs. Reviewed native SCKA
-semantics, complete transition integration, sending, and external
-materialization remain activation gates.
+applies revision CAS before its candidate builder runs. The inactive resolver
+now binds an exact candidate snapshot into that controller after complete LMF
+authentication. A clean commit failure is retryable only while the controller
+still exposes the candidate's expected revision; a concurrently superseded
+candidate is wiped instead of being requeued. Reviewed native SCKA semantics,
+durable sending, crash-window reconciliation, and external materialization
+remain activation gates.
 
 Commit-tombstone retention is local and explicit. A tombstone may be purged only
 after the durable ratchet/application replay window will independently reject
@@ -487,11 +495,10 @@ message decode, contact state, backups, migration, QR, UI, or Premium capability
 contracts.
 
 Before activation, the native ML-KEM Braid engine must produce and consume the
-frozen message/state formats and validate every opaque export; the current
-receive-commit controller must be completed with reviewed EC/SCKA candidate
-construction, sending, and deferred continuation processing; the application
-repository must use the atomic journal as its source of truth; checkpoint and
-garbage-collection rules must be frozen;
+frozen message/state formats and validate every opaque export; a
+crash-consistent durable send controller and effect-before-tombstone recovery
+path must be completed; the application repository must use the atomic journal
+as its source of truth; checkpoint and garbage-collection rules must be frozen;
 resend/progress UX and real loss recovery must pass; all three transports must
 pass real cross-app tests; and the complete design and implementation must pass
 independent review.

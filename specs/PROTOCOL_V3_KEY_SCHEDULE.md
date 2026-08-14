@@ -7,10 +7,11 @@ hybrid message-key combination, fragment nonce derivation, acknowledgement
 schedule, committed application/control record, and Triple Ratchet snapshot
 envelope. The separate `PROTOCOL_V3_HANDSHAKE.md` defines the inactive
 candidate that supplies its authenticated inputs. The EC Double Ratchet engine,
-ML-KEM Braid/SCKA backend boundary, exact HR3-to-LMF authentication, and an
-inactive receive-commit session controller now exist. No production SCKA
-backend or active send/receive integration exists, and protocol v3 remains
-disabled.
+ML-KEM Braid/SCKA backend boundary, Sparse-PQ message chains, exact HR3-to-LMF
+authentication, candidate-only hybrid send/receive orchestration,
+deferred-fragment key resolution, and an inactive receive-commit session
+controller now exist. No production SCKA backend or active product integration
+exists, and protocol v3 remains disabled.
 
 `PROTOCOL_V3_SECURITY_GOALS.md` remains authoritative. This draft and its code
 must change if later transcript design, ML-KEM Braid integration, persistence
@@ -46,8 +47,12 @@ This checkpoint provides:
   epochs, bounded skipped keys, and an opaque native SCKA-state export;
 - a strict public `SK3` SCKA envelope, a canonical `HR3` EC+SCKA container,
   and a non-mutating backend contract for authenticated native state exports;
+- deterministic directional Sparse-PQ epoch chains, bounded expired skipped
+  keys, and candidate-only EC+PQ send/receive transitions;
 - exact first-fragment HR3 carriage, digest-bound continuation fragments, and
   portable adaptive fragmentation;
+- durable retention and later exact-key resolution when continuation fragments
+  arrive before fragment zero;
 - one inactive identity/passphrase-scoped receive-commit controller that owns
   its atomic journal, reconstructs contiguous per-session TR3 revisions,
   validates AR3/LMF/session bindings, and applies serialized revision CAS;
@@ -59,8 +64,8 @@ It deliberately does not provide:
   candidate remains externally unreviewed);
 - a production ML-KEM Braid/SCKA implementation or reviewed native state
   exporter;
-- an active send controller, deferred continuation-key resolver, handshake
-  bootstrap, or real application-repository materializer;
+- an active durable send controller, handshake bootstrap, or real
+  application-repository materializer;
 - checkpoint compaction, replay-window retirement, or journal garbage
   collection;
 - activation in contacts, messaging, UI, backup, migration, or Premium paths.
@@ -305,7 +310,68 @@ authorize a ratchet transition by itself.
 SCKA send and receive results are candidates: each owns a new authenticated
 native export and an optional 32-byte epoch secret. The source export is never
 mutated. A non-ACK commit uses `replaceHybridState` to replace EC and PQ state
-in one `TR3` revision; no EC-only or PQ-only durable intermediate is allowed.
+in one `TR3` revision. Both candidates are bound to a domain-separated SHA-256
+digest of the exact canonical prior `TR3`, preventing same-session,
+same-revision forks from being mixed; no EC-only or PQ-only durable intermediate
+is allowed.
+
+The epoch used by the public SCKA message and the epoch attached to an optional
+new output secret are independent SCKA results. The backend MUST NOT rewrite
+the Layergram PQ message counter. Dart selects that counter only after it has
+selected the retained directional chain.
+
+### 4.2 Sparse-PQ epoch and message chains
+
+Let `PQROOT` be the current 32-byte Sparse-PQ root and `S` be either the
+handshake-derived PQ root seed for epoch zero or one new 32-byte SCKA output
+secret. Define the exact 96-byte expansion:
+
+```text
+PQ_MATERIAL = HKDF(
+  salt = (session_id for epoch zero, otherwise PQROOT),
+  IKM  = S,
+  info = "layergram/v3/sparse-pq/root\0" || session_id || U64(epoch),
+  L    = 96)
+
+next_PQROOT = PQ_MATERIAL[0..31]
+CK_i2r      = PQ_MATERIAL[32..63]
+CK_r2i      = PQ_MATERIAL[64..95]
+```
+
+The initiator sends with `CK_i2r` and receives with `CK_r2i`; the responder
+uses the reverse assignment. An SCKA output secret MUST advance the current
+epoch by exactly one. Its directional chains are installed even when the
+current SCKA message still uses the previous epoch.
+
+For chain counter `N`, derive independently:
+
+```text
+PQMK    = HMAC-SHA-256(CK,
+          "layergram/v3/sparse-pq/message-key\0" || U64(N))
+next_CK = HMAC-SHA-256(CK,
+          "layergram/v3/sparse-pq/next-chain-key\0" || U64(N))
+```
+
+Counters start at zero. Sending consumes the selected sending chain. Receiving
+derives and retains each missing key before the target, indexed by
+`(epoch, counter)`, then consumes the target key. At most 50 PQ skipped keys and
+two epochs are retained. Expiry uses caller-supplied local time. Moving an SCKA
+direction's committed high-water mark backward, skipping an epoch, exceeding a
+counter or skipped-key bound, or pruning an epoch still used by either
+direction fails closed. A delayed message may still consume a retained chain or
+skipped key from an older epoch without lowering that high-water mark. The
+committed `TR3` remains unchanged until the complete LMF plaintext and its
+candidate snapshot are atomically committed.
+
+Frozen epoch-zero vector for `session_id = 1112...1f20` and
+`S = 3132...4f50`:
+
+- `next_PQROOT` =
+  `10b41e054ec17f83eae13159a803b5f701da201b4ddec3f64a6061cd8b5c2f21`;
+- `CK_i2r` =
+  `dbda34bc9dc4e2c1d267fbe402eb2874ae611b68d6e258af16428b1bb217500c`;
+- `CK_r2i` =
+  `29d77d7b0bb350e7514fb9108cff9bb9e3be604dff1fc5ee5d21a33ea5685073`.
 
 ## 5. Hybrid application/control message schedule
 
@@ -614,9 +680,9 @@ Before this schedule can carry user messages, Layergram still requires:
   EC Double Ratchet construction;
 - a reviewed ML-KEM Braid backend implementing authenticated state
   export/import behind the frozen boundary;
-- completion of the current serialized receive-commit controller with exact
-  EC/SCKA candidate construction, a send controller, deferred continuation-key
-  resolution, and reviewed native-state validation;
+- a crash-consistent durable send controller, recovery reconciliation for an
+  effect durable before its inbox tombstone, and reviewed native-state
+  validation;
 - skipped-key expiry, checkpoint, compaction, replay-window, and garbage-
   collection rules;
 - idempotent external application materialization;

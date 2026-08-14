@@ -20,6 +20,7 @@ import 'package:cryptography/cryptography.dart';
 import 'key_schedule_v3.dart';
 import 'lmf_v3.dart';
 import 'local_identity_v3.dart';
+import 'triple_ratchet_binding_v3.dart';
 import 'triple_ratchet_state_v3.dart';
 
 /// Canonical public header produced by one EC Double Ratchet send step.
@@ -140,6 +141,7 @@ final class V3EcDoubleRatchetState {
     required int previousSendingChainLength,
     required int snapshotRevision,
     required List<V3EcSkippedMessageKey> skippedMessageKeys,
+    required Uint8List? priorSnapshotBinding,
   }) {
     _validateCounter(sendCounter, 'sendCounter');
     _validateCounter(receiveCounter, 'receiveCounter');
@@ -165,6 +167,7 @@ final class V3EcDoubleRatchetState {
     Uint8List? checkedSending;
     Uint8List? checkedReceiving;
     Uint8List? checkedPrivate;
+    Uint8List? checkedPriorSnapshotBinding;
     List<V3EcSkippedMessageKey>? checkedSkipped;
     try {
       checkedSessionId = _validatedBytes(
@@ -179,6 +182,14 @@ final class V3EcDoubleRatchetState {
           ? null
           : _validatedSecret(receivingChainKey, 'receivingChainKey');
       checkedPrivate = _validatedSecret(localDhPrivateKey, 'localDhPrivateKey');
+      checkedPriorSnapshotBinding = priorSnapshotBinding == null
+          ? null
+          : _validatedBytes(
+              priorSnapshotBinding,
+              32,
+              'priorSnapshotBinding',
+              rejectAllZero: true,
+            );
       final checkedPublic = _validatedX25519PublicKey(
         localDhPublicKey,
         'localDhPublicKey',
@@ -202,6 +213,7 @@ final class V3EcDoubleRatchetState {
         previousSendingChainLength: previousSendingChainLength,
         snapshotRevision: snapshotRevision,
         skippedMessageKeys: checkedSkipped,
+        priorSnapshotBinding: checkedPriorSnapshotBinding,
       );
     } catch (_) {
       if (checkedSessionId != null) _wipe(checkedSessionId);
@@ -209,6 +221,9 @@ final class V3EcDoubleRatchetState {
       if (checkedSending != null) _wipe(checkedSending);
       if (checkedReceiving != null) _wipe(checkedReceiving);
       if (checkedPrivate != null) _wipe(checkedPrivate);
+      if (checkedPriorSnapshotBinding != null) {
+        _wipe(checkedPriorSnapshotBinding);
+      }
       if (checkedSkipped != null) {
         for (final value in checkedSkipped) {
           value.wipeSecret();
@@ -232,6 +247,7 @@ final class V3EcDoubleRatchetState {
     required this.previousSendingChainLength,
     required this.snapshotRevision,
     required List<V3EcSkippedMessageKey> skippedMessageKeys,
+    required Uint8List? priorSnapshotBinding,
   })  : _sessionId = sessionId,
         _rootKey = rootKey,
         _sendingChainKey = sendingChainKey,
@@ -239,7 +255,8 @@ final class V3EcDoubleRatchetState {
         _localDhPrivateKey = localDhPrivateKey,
         _localDhPublicKey = localDhPublicKey,
         _remoteDhPublicKey = remoteDhPublicKey,
-        _skippedMessageKeys = skippedMessageKeys;
+        _skippedMessageKeys = skippedMessageKeys,
+        _priorSnapshotBinding = priorSnapshotBinding;
 
   final V3SessionRole role;
   final Uint8List _sessionId;
@@ -254,6 +271,7 @@ final class V3EcDoubleRatchetState {
   final int previousSendingChainLength;
   final int snapshotRevision;
   final List<V3EcSkippedMessageKey> _skippedMessageKeys;
+  final Uint8List? _priorSnapshotBinding;
   bool _isClosed = false;
 
   bool get isClosed => _isClosed;
@@ -298,6 +316,13 @@ final class V3EcDoubleRatchetState {
     return _copySkipped(_skippedMessageKeys);
   }
 
+  /// Whether this candidate was derived from the exact canonical prior TR3.
+  bool matchesPriorSnapshotBinding(Uint8List candidate) {
+    _ensureOpen();
+    final binding = _priorSnapshotBinding;
+    return binding != null && _constantTimeEqual(binding, candidate);
+  }
+
   /// Replaces only the EC component of [previous] and increments its revision.
   ///
   /// This does not persist or activate the result. The returned snapshot must
@@ -317,6 +342,19 @@ final class V3EcDoubleRatchetState {
     }
     if (snapshotRevision < 1 || previous.revision != snapshotRevision - 1) {
       throw StateError('Layergram v3 EC candidate snapshot revision conflict');
+    }
+    final priorBinding = _priorSnapshotBinding;
+    if (priorBinding != null) {
+      final candidateBinding = v3TripleRatchetPriorSnapshotBinding(previous);
+      try {
+        if (!_constantTimeEqual(priorBinding, candidateBinding)) {
+          throw StateError(
+            'Layergram v3 EC candidate prior snapshot conflict',
+          );
+        }
+      } finally {
+        _wipe(candidateBinding);
+      }
     }
     return previous.replaceEcState(
       expectedRevision: snapshotRevision - 1,
@@ -343,6 +381,7 @@ final class V3EcDoubleRatchetState {
     for (final skipped in _skippedMessageKeys) {
       skipped.wipeSecret();
     }
+    if (_priorSnapshotBinding != null) _wipe(_priorSnapshotBinding);
     _isClosed = true;
   }
 
@@ -484,6 +523,7 @@ abstract final class V3EcDoubleRatchet {
         previousSendingChainLength: 0,
         snapshotRevision: 0,
         skippedMessageKeys: const <V3EcSkippedMessageKey>[],
+        priorSnapshotBinding: null,
       );
     } finally {
       _wipe(sessionId);
@@ -515,6 +555,7 @@ abstract final class V3EcDoubleRatchet {
     final remotePublic = snapshot.ecRemoteDhPublicKey;
     final skipped = snapshot.ecSkippedMessageKeys;
     Uint8List? derivedPublic;
+    Uint8List? priorSnapshotBinding;
     try {
       if (remotePublic == null) {
         throw const FormatException(
@@ -527,6 +568,7 @@ abstract final class V3EcDoubleRatchet {
           'Layergram v3 stored EC ratchet key pair mismatch',
         );
       }
+      priorSnapshotBinding = v3TripleRatchetPriorSnapshotBinding(snapshot);
       return V3EcDoubleRatchetState._(
         role: snapshot.role,
         sessionId: sessionId,
@@ -541,6 +583,7 @@ abstract final class V3EcDoubleRatchet {
         previousSendingChainLength: snapshot.ecPreviousSendingChainLength,
         snapshotRevision: snapshot.revision,
         skippedMessageKeys: skipped,
+        priorSnapshotBinding: priorSnapshotBinding,
       );
     } finally {
       _wipe(sessionId);
@@ -549,6 +592,7 @@ abstract final class V3EcDoubleRatchet {
       if (receiving != null) _wipe(receiving);
       _wipe(localPrivate);
       if (derivedPublic != null) _wipe(derivedPublic);
+      if (priorSnapshotBinding != null) _wipe(priorSnapshotBinding);
       for (final value in skipped) {
         value.wipeSecret();
       }
@@ -588,6 +632,7 @@ abstract final class V3EcDoubleRatchet {
         previousSendingChainLength: state.previousSendingChainLength,
         snapshotRevision: state.snapshotRevision + 1,
         skippedMessageKeys: state._skippedMessageKeys,
+        priorSnapshotBinding: state._priorSnapshotBinding,
       );
       final transition = V3EcRatchetTransition._(
         header: header,
@@ -673,6 +718,7 @@ abstract final class V3EcDoubleRatchet {
             previousSendingChainLength: previousLength,
             snapshotRevision: state.snapshotRevision + 1,
             skippedMessageKeys: skipped,
+            priorSnapshotBinding: state._priorSnapshotBinding,
           );
           final transition = V3EcRatchetTransition._(
             header: header,
@@ -796,6 +842,7 @@ abstract final class V3EcDoubleRatchet {
         previousSendingChainLength: previousLength,
         snapshotRevision: state.snapshotRevision + 1,
         skippedMessageKeys: skipped,
+        priorSnapshotBinding: state._priorSnapshotBinding,
       );
       final transition = V3EcRatchetTransition._(
         header: header,

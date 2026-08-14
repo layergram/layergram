@@ -62,31 +62,39 @@ final class V3SckaEpochSecret {
 final class V3SckaSendCandidate {
   factory V3SckaSendCandidate({
     required Uint8List nextAuthenticatedState,
-    required V3SckaMessage message,
+    required int sendingEpoch,
+    required Uint8List nativePayload,
     V3SckaEpochSecret? epochSecret,
   }) {
+    _validateCounter(sendingEpoch, 'sendingEpoch');
     final nextState = _validatedStateExport(nextAuthenticatedState);
-    if (epochSecret != null && epochSecret.epoch != message.sendingEpoch) {
+    if (nativePayload.length > V3SckaMessageCodec.maxNativePayloadBytes) {
       _wipe(nextState);
-      throw ArgumentError(
-        'Layergram v3 SCKA send secret must match the sending epoch',
+      throw ArgumentError.value(
+        nativePayload.length,
+        'nativePayload.length',
+        'must not exceed ${V3SckaMessageCodec.maxNativePayloadBytes} bytes',
       );
     }
     return V3SckaSendCandidate._(
       nextAuthenticatedState: nextState,
-      message: message,
+      sendingEpoch: sendingEpoch,
+      nativePayload: Uint8List.fromList(nativePayload),
       epochSecret: epochSecret,
     );
   }
 
   V3SckaSendCandidate._({
     required Uint8List nextAuthenticatedState,
-    required this.message,
+    required this.sendingEpoch,
+    required Uint8List nativePayload,
     required this.epochSecret,
-  }) : _nextAuthenticatedState = nextAuthenticatedState;
+  })  : _nextAuthenticatedState = nextAuthenticatedState,
+        _nativePayload = nativePayload;
 
   final Uint8List _nextAuthenticatedState;
-  final V3SckaMessage message;
+  final int sendingEpoch;
+  final Uint8List _nativePayload;
   final V3SckaEpochSecret? epochSecret;
   bool _isClosed = false;
 
@@ -96,6 +104,18 @@ final class V3SckaSendCandidate {
   }
 
   bool get isClosed => _isClosed;
+
+  /// Builds the public SK3 envelope after the Dart Sparse-PQ layer selects the
+  /// exact chain counter for [sendingEpoch]. The backend owns only the native
+  /// SCKA payload and epoch; it cannot choose or rewrite Layergram counters.
+  V3SckaMessage messageForCounter(int messageCounter) {
+    _ensureOpen();
+    return V3SckaMessage(
+      sendingEpoch: sendingEpoch,
+      messageCounter: messageCounter,
+      nativePayload: _nativePayload,
+    );
+  }
 
   void close() {
     if (_isClosed) return;
@@ -120,12 +140,6 @@ final class V3SckaReceiveCandidate {
   }) {
     _validateCounter(receivingEpoch, 'receivingEpoch');
     final nextState = _validatedStateExport(nextAuthenticatedState);
-    if (epochSecret != null && epochSecret.epoch != receivingEpoch) {
-      _wipe(nextState);
-      throw ArgumentError(
-        'Layergram v3 SCKA receive secret must match the receiving epoch',
-      );
-    }
     return V3SckaReceiveCandidate._(
       nextAuthenticatedState: nextState,
       receivingEpoch: receivingEpoch,
@@ -192,7 +206,6 @@ abstract interface class V3SckaBackend {
     required V3SessionRole role,
     required Uint8List sessionId,
     required Uint8List authenticatedState,
-    required int messageCounter,
   });
 
   Future<V3SckaReceiveCandidate> receiveCandidate({
@@ -259,9 +272,7 @@ abstract final class V3SparsePqRatchet {
     required V3SessionRole role,
     required Uint8List sessionId,
     required Uint8List authenticatedState,
-    required int messageCounter,
   }) async {
-    _validateCounter(messageCounter, 'messageCounter');
     final checkedSession = _validatedSessionId(sessionId);
     final checkedState = _validatedStateExport(authenticatedState);
     Uint8List? backendSession;
@@ -280,11 +291,7 @@ abstract final class V3SparsePqRatchet {
         role: role,
         sessionId: backendSession,
         authenticatedState: backendState,
-        messageCounter: messageCounter,
       );
-      if (candidate.message.messageCounter != messageCounter) {
-        throw StateError('Layergram v3 SCKA backend changed message counter');
-      }
       final nextState = candidate.nextAuthenticatedState;
       try {
         await _validateBackendState(
