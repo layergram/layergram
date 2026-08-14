@@ -421,8 +421,8 @@ Before this candidate can be enabled:
 - pending state must use the real opaque auxiliary repository with
   write-new-before-delete updates, caps, tombstones, and crash tests;
 - Normal and Maximum device policy must be enforced by the controller;
-- real Double Ratchet and ML-KEM Braid state initialization must consume the
-  established material atomically;
+- the implemented EC Double Ratchet initializer and the future ML-KEM Braid
+  initializer must be composed into one atomic initial `TR3` checkpoint;
 - loss, reorder, duplicate, resend, text, link, steganography, QR-independent
   identity, passphrase, multi-identity Premium, backup, and cross-platform
   packaging tests must pass;

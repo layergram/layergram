@@ -23,7 +23,7 @@ void main() {
       expect(encoded, hasLength(1032));
       expect(
         crypto.sha256.convert(encoded).toString(),
-        '366a0652f7a51aac9ba80ce6c7672c027ebf42af78ffb1edcf6f3d54eb0c5589',
+        '80e1674013878a56deaee2fce71e451f956dce2415a53e254f4652ae7954bf76',
       );
 
       final decoded = V3TripleRatchetStateCodec.decode(encoded);
@@ -70,10 +70,28 @@ void main() {
     test('encodes absent remote DH key canonically as zero bytes', () {
       final state = _state(remoteDhPublicKey: Uint8List(0));
       final encoded = V3TripleRatchetStateCodec.encode(state);
-      expect(encoded[7], 0);
+      expect(encoded[7], 2);
       expect(encoded.sublist(374, 406), everyElement(0));
       final decoded = V3TripleRatchetStateCodec.decode(encoded);
       expect(decoded.ecRemoteDhPublicKey, isNull);
+      decoded.wipeSecrets();
+      state.wipeSecrets();
+    });
+
+    test('encodes an absent initial EC receiving chain canonically', () {
+      final state = _state(absentReceivingChain: true);
+      final encoded = V3TripleRatchetStateCodec.encode(state);
+      expect(encoded[7], 1);
+      expect(encoded.sublist(278, 310), everyElement(0));
+      final decoded = V3TripleRatchetStateCodec.decode(encoded);
+      expect(decoded.ecReceivingChainKey, isNull);
+      expect(decoded.ecReceiveCounter, 0);
+
+      final nonCanonical = Uint8List.fromList(encoded)..[278] = 1;
+      expect(
+        () => V3TripleRatchetStateCodec.decode(nonCanonical),
+        throwsFormatException,
+      );
       decoded.wipeSecrets();
       state.wipeSecrets();
     });
@@ -123,6 +141,23 @@ void main() {
         throwsArgumentError,
       );
       state.wipeSecrets();
+    });
+
+    test('rejects non-canonical X25519 public-key encodings', () {
+      final fieldPrime = _x25519FieldPrime();
+      expect(
+        () => _state(remoteDhPublicKey: fieldPrime),
+        throwsArgumentError,
+      );
+      expect(
+        () => V3EcSkippedMessageKey(
+          ratchetPublicKey: fieldPrime,
+          messageCounter: 0,
+          messageKey: _bytes(32, 0x41),
+          expiresAtUnixSeconds: 2000000000,
+        ),
+        throwsArgumentError,
+      );
     });
 
     test('requires current consecutive PQ epochs and available directions', () {
@@ -228,6 +263,7 @@ V3TripleRatchetState _state({
   Uint8List? initiatorToResponderAckRootKey,
   Uint8List? responderToInitiatorAckRootKey,
   Uint8List? nativeSckaState,
+  bool absentReceivingChain = false,
 }) {
   final epochs = overrideEpochs ??
       <V3PqEpochState>[
@@ -286,16 +322,16 @@ V3TripleRatchetState _state({
         responderToInitiatorAckRootKey ?? _bytes(32, 0xd1),
     ecRootKey: _bytes(32, 0x12),
     ecSendingChainKey: _bytes(32, 0x32),
-    ecReceivingChainKey: _bytes(32, 0x52),
+    ecReceivingChainKey: absentReceivingChain ? null : _bytes(32, 0x52),
     ecLocalDhPrivateKey: _bytes(32, 0x72),
-    ecLocalDhPublicKey: _bytes(32, 0x92),
+    ecLocalDhPublicKey: _bytes(32, 0x12),
     ecRemoteDhPublicKey: remoteDhPublicKey == null
-        ? _bytes(32, 0xb2)
+        ? _bytes(32, 0x32)
         : remoteDhPublicKey.isEmpty
             ? null
             : remoteDhPublicKey,
     ecSendCounter: 5,
-    ecReceiveCounter: 6,
+    ecReceiveCounter: absentReceivingChain ? 0 : 6,
     ecPreviousSendingChainLength: 4,
     pqRootKey: _bytes(32, 0xd2),
     pqCurrentEpoch: 7,
@@ -310,4 +346,8 @@ V3TripleRatchetState _state({
 
 Uint8List _bytes(int length, int start) => Uint8List.fromList(
       List<int>.generate(length, (index) => (start + index) & 0xff),
+    );
+
+Uint8List _x25519FieldPrime() => Uint8List.fromList(
+      <int>[0xed, ...List<int>.filled(30, 0xff), 0x7f],
     );

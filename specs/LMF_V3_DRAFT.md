@@ -35,7 +35,7 @@ This checkpoint provides:
 It deliberately does not provide:
 
 - the authenticated handshake transcript or sender proof;
-- the real EC Double Ratchet or ML-KEM Braid transition engines;
+- the final composite EC+SCKA wire header or ML-KEM Braid transition engine;
 - sender proof of possession or contact authentication;
 - reviewed native ML-KEM Braid state export/import;
 - atomicity for side effects written outside the v3 effect journal;
@@ -142,6 +142,12 @@ and nonce before committing the ratchet transition. The framing API still
 requires the nonce explicitly and rejects duplicates within one locally sealed
 fragment set; callers outside the v3 schedule receive no session-wide safety
 claim.
+
+The implemented EC transition engine produces a separate canonical 56-byte
+`DR3` header containing `(DH, PN, N)`. This 142-byte LMF draft does not carry or
+authenticate that header or the future opaque SCKA message, so application and
+ratchet-control frames remain ineligible for activation. A later reviewed
+composite-header revision must bind both components before hybrid sealing.
 
 ## 6. Canonical fragmentation
 

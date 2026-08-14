@@ -32,6 +32,8 @@ This checkpoint provides:
   post-quantum handshake secrets;
 - independent EC-ratchet, PQ-ratchet, directional ACK, routing, and session-ID
   outputs;
+- a non-mutating X25519 Double Ratchet transition engine initialized from the
+  authenticated handshake, including canonical `(DH, PN, N)` headers;
 - mandatory hybrid combination of one EC and one PQ message key;
 - deterministic, domain-separated message IDs, AES-256-GCM keys, and fragment
   nonces;
@@ -45,8 +47,9 @@ It deliberately does not provide:
 
 - an independently approved handshake or deniability claim (the separate
   candidate remains externally unreviewed);
-- the EC Double Ratchet transition engine for v3;
 - the ML-KEM Braid/SCKA state machine or reviewed native state exporter;
+- the final composite LMF wire header carrying both the EC header and opaque
+  SCKA message;
 - checkpoint compaction, replay-window retirement, or journal garbage
   collection;
 - activation in contacts, messaging, UI, backup, migration, or Premium paths.
@@ -140,7 +143,104 @@ second. A reply or ACK reverses them. The session ID and routing values are
 public once placed in an authenticated LMF header; the ratchet and ACK roots
 remain secret.
 
-## 4. Hybrid application/control message schedule
+## 4. EC Double Ratchet transition schedule
+
+This checkpoint follows the Signal Double Ratchet state machine with X25519.
+It produces only the EC message-key branch. It does not authorize sealing an
+LMF application/control frame until the future sparse-PQ transition produces a
+matching `PQMK` and the composite EC+SCKA header is authenticated.
+
+Let `SID` be the 16-byte session ID and `RK0` the 32-byte initial EC root from
+Section 3. The authenticated handshake also supplies fresh initial X25519
+ratchet pairs `RKA` and `RKB` for the initiator and responder. Define:
+
+```text
+KDF_RK(RK, DHOUT) = HKDF(
+  salt = RK,
+  IKM  = DHOUT,
+  info = "layergram/v3/ec-double-ratchet/root\0" || SID,
+  L    = 64)
+
+KDF_RK output = next_RK || CK
+
+MK      = HMAC-SHA-256(CK, "layergram/v3/ec-double-ratchet/message-key\0")
+next_CK = HMAC-SHA-256(CK, "layergram/v3/ec-double-ratchet/next-chain-key\0")
+```
+
+The initiator initializes as:
+
+```text
+(RK1, CKs_A) = KDF_RK(RK0, X25519(RKA_priv, RKB_pub))
+DHs_A = RKA
+DHr_A = RKB_pub
+CKr_A = absent
+Ns_A = Nr_A = PN_A = 0
+```
+
+The responder may precompute the standard first receive/send DH step because
+the completed authenticated handshake already binds `RKA_pub`. This permits a
+responder to send immediately after confirmation without creating a second
+ad-hoc bootstrap chain:
+
+```text
+(RK1, CKr_B) = KDF_RK(RK0, X25519(RKB_priv, RKA_pub))
+RKB2 = fresh X25519 ratchet pair
+(RK2, CKs_B) = KDF_RK(RK1, X25519(RKB2_priv, RKA_pub))
+DHs_B = RKB2
+DHr_B = RKA_pub
+Ns_B = Nr_B = PN_B = 0
+```
+
+Thus `CKs_A == CKr_B`. The responder's first header advertises `RKB2_pub`, so
+the initiator performs the corresponding receive/send DH step and obtains
+`CKr_A == CKs_B`. Every later changed remote DH public key performs the normal
+two-stage Signal DH ratchet: retain skipped keys through the authenticated
+`PN`, derive the new receiving chain, generate a fresh local pair, then derive
+the new sending chain.
+
+The canonical standalone EC header is exactly 56 bytes:
+
+| Offset | Bytes | Field |
+|---:|---:|---|
+| 0 | 3 | magic `DR3` |
+| 3 | 1 | format version `0x01` |
+| 4 | 1 | suite `0x01` |
+| 5 | 1 | flags, zero |
+| 6 | 2 | encoded length `56` |
+| 8 | 32 | current sender X25519 ratchet public key |
+| 40 | 8 | previous sending-chain length `PN` |
+| 48 | 8 | message number `N` |
+
+The current LMF header does not yet embed this record. The future Triple
+Ratchet envelope must bind its exact 56 bytes, the opaque SCKA message, and all
+LMF metadata into AEAD associated data. Until that format is frozen, this
+header is a tested internal protocol component, not an accepted wire message.
+
+Send and receive operations never mutate committed state. They return a
+candidate message key and complete next EC state. Authentication failure wipes
+the candidate and leaves the original state usable. A successful candidate
+must replace the EC fields in a `TR3` snapshot whose prior revision matches
+exactly; the new snapshot revision is prior revision plus one. This prevents a
+candidate derived from stale state from being attached to a newer snapshot.
+
+Out-of-order keys are indexed by `(ratchet_public_key, N)`. The total retained
+EC dictionary is capped at 50 entries; a single jump or aggregate insertion
+beyond that cap fails before advancing committed state. Expiry uses only a
+caller-supplied local time policy. Expired, duplicate, stale, backwards-`PN`,
+all-zero-DH, malformed, or exhausted-counter inputs fail closed. Restore
+derives the X25519 public key from the stored private seed and compares it to
+the stored public key before allowing a live transition.
+
+Frozen portable vectors:
+
+- `SHA-256(DR3(_bytes(32, 0x21), PN=7, N=9))` =
+  `c4da6a0f0645f7a935960c9e810a6e76cdf935dc26e1a1c87e9a7f82656d2091`;
+- for `CK = c1c2...dfe0`, the first `MK` =
+  `0e65a0e3dd2f7133beb2590eda9f3245107bc4f6c71425c2ff6afc3de34c80cd`;
+- for the same `CK`, `next_CK` =
+  `5dd4c244b5069d2fad5374abcbcc3ee2643a3cfabdb46a35beb9bfd14a733b34`.
+
+## 5. Hybrid application/control message schedule
 
 For every non-ACK logical message the two ratchets must independently produce:
 
@@ -205,7 +305,7 @@ Crashes and retries do not authorize resealing changed content under the same
 ratchet coordinates. The durable outbox must persist the complete sealed frame
 set before first export and every resend must reuse those exact bytes.
 
-## 5. ACK key and nonce schedule
+## 6. ACK key and nonce schedule
 
 ACKs are not Triple-Ratchet application messages and never consume an EC or PQ
 message key. They use a direction-specific ACK root retained in the session
@@ -251,7 +351,7 @@ Only header-visible values enter this derivation, so the receiver can derive
 the key before opening the 48-byte ACK plaintext. Session ID, direction, and
 both routing bindings must match the committed session exactly.
 
-## 6. Canonical committed application/control record
+## 7. Canonical committed application/control record
 
 The atomic journal's application byte string is the exact binary `AR3` record.
 It has a fixed 188-byte header followed by 1–16,384 content bytes:
@@ -291,7 +391,7 @@ allows 17 KiB for this field so the full 16 KiB LMF plaintext remains
 representable. The stable external record ID remains
 `v3:<base64url(assembly_digest)>`.
 
-## 7. Canonical Triple Ratchet snapshot
+## 8. Canonical Triple Ratchet snapshot
 
 The journal's ratchet byte string is the exact binary `TR3` snapshot. It is a
 complete post-effect state, never a delta. The fixed header is 496 bytes:
@@ -303,7 +403,7 @@ complete post-effect state, never a delta. The fixed header is 496 bytes:
 | 4 | 1 | suite `0x01` |
 | 5 | 1 | session role |
 | 6 | 1 | lifecycle: active `1`, suspended `2`, rekey-required `3`, broken `4` |
-| 7 | 1 | bit 0: remote EC DH public key present; all other bits zero |
+| 7 | 1 | bit 0: remote EC DH public key present; bit 1: EC receiving chain present; all other bits zero |
 | 8 | 2 | header length `496` |
 | 10 | 4 | exact total length |
 | 14 | 8 | monotonic snapshot revision |
@@ -315,7 +415,7 @@ complete post-effect state, never a delta. The fixed header is 496 bytes:
 | 182 | 32 | responder-to-initiator ACK root |
 | 214 | 32 | EC root key |
 | 246 | 32 | EC sending-chain key |
-| 278 | 32 | EC receiving-chain key |
+| 278 | 32 | EC receiving-chain key, or canonical zeros when absent |
 | 310 | 32 | EC local DH private seed |
 | 342 | 32 | EC local DH public key |
 | 374 | 32 | remote EC DH public key or canonical zeros |
@@ -370,16 +470,20 @@ Skipped-key identities must be unique. PQ skipped keys may reference only a
 retained epoch. Count limits are enforced before allocation. Time expiry is
 local policy and never trusts a peer clock.
 
+An absent EC receiving chain is valid only for the initial initiator state. Its
+presence flag is zero, its 32-byte field is all zero, and its receive counter is
+zero. The sending chain is always present in this Layergram initialization.
+
 The opaque SCKA bytes are reserved for a future reviewed native ML-KEM Braid
 backend. They must be a backend-authenticated export and must not be a raw
 expanded ML-KEM private key copied into Dart. The current placeholder codec
 cannot establish that property; native export/import and validation remain an
 activation gate.
 
-The synchronous envelope codec also cannot prove that the stored local EC
-private seed corresponds to the stored local public key. The reviewed EC
-transition/import boundary must derive and compare that public key before this
-state can be activated or restored into a live ratchet.
+The synchronous envelope codec alone cannot prove that the stored local EC
+private seed corresponds to the stored local public key. The EC transition
+import boundary therefore derives and compares that public key before it
+restores a live ratchet; independent cryptographic review remains required.
 
 The maximum snapshot is 256 KiB, while the native SCKA section is capped at
 192 KiB. Encoding, decode, corruption, conflicting order, unknown values,
@@ -388,7 +492,7 @@ and over-limit input fail closed. Secret buffers are copied on construction and
 best-effort overwritten when the state is discarded; perfect managed-runtime
 zeroization is not claimed.
 
-## 8. Persistence and crash rules
+## 9. Persistence and crash rules
 
 For every complete non-ACK delivery:
 
@@ -406,15 +510,14 @@ unbound, mismatched, malformed, or divergent effect/tombstone pair fails closed.
 No effect may be collected until a separately durable ratchet checkpoint,
 application record, and replay window prove it safe.
 
-## 9. Remaining activation gates
+## 10. Remaining activation gates
 
 Before this schedule can carry user messages, Layergram still requires:
 
-- a frozen authenticated hybrid handshake and transcript with public vectors;
-- reviewed v3 Double Ratchet transition code;
-- EC state import that verifies the local private-seed/public-key pair;
+- independent cryptographic review of the authenticated hybrid handshake and
+  EC Double Ratchet construction;
 - a reviewed ML-KEM Braid backend with authenticated state export/import;
-- exact send/receive transition vectors proving matching EC and PQ message keys;
+- the final composite EC+SCKA LMF header and exact hybrid send/receive vectors;
 - skipped-key expiry, checkpoint, compaction, replay-window, and garbage-
   collection rules;
 - idempotent external application materialization;

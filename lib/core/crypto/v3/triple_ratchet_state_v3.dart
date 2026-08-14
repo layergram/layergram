@@ -165,11 +165,9 @@ final class V3EcSkippedMessageKey {
     _validateCounter(messageCounter, 'messageCounter');
     _validateExpiry(expiresAtUnixSeconds);
     return V3EcSkippedMessageKey._(
-      ratchetPublicKey: _validatedBytes(
+      ratchetPublicKey: _validatedX25519PublicKey(
         ratchetPublicKey,
-        32,
         'ratchetPublicKey',
-        rejectAllZero: true,
       ),
       messageCounter: messageCounter,
       messageKey: _validatedSecret(messageKey, 'messageKey'),
@@ -306,7 +304,7 @@ final class V3TripleRatchetState {
     required Uint8List responderToInitiatorAckRootKey,
     required Uint8List ecRootKey,
     required Uint8List ecSendingChainKey,
-    required Uint8List ecReceivingChainKey,
+    Uint8List? ecReceivingChainKey,
     required Uint8List ecLocalDhPrivateKey,
     required Uint8List ecLocalDhPublicKey,
     Uint8List? ecRemoteDhPublicKey,
@@ -329,6 +327,18 @@ final class V3TripleRatchetState {
       ecPreviousSendingChainLength,
       'ecPreviousSendingChainLength',
     );
+    if (ecReceivingChainKey == null && ecReceiveCounter != 0) {
+      throw ArgumentError.value(
+        ecReceiveCounter,
+        'ecReceiveCounter',
+        'must be zero when the EC receiving chain is absent',
+      );
+    }
+    if (ecReceivingChainKey == null && role != V3SessionRole.initiator) {
+      throw ArgumentError(
+        'Only the initial Layergram v3 initiator may lack an EC receiving chain',
+      );
+    }
     _validateCounter(pqCurrentEpoch, 'pqCurrentEpoch');
     _validateCounter(pqSendingEpoch, 'pqSendingEpoch');
     _validateCounter(pqReceivingEpoch, 'pqReceivingEpoch');
@@ -435,23 +445,20 @@ final class V3TripleRatchetState {
       checkedEcRoot = _validatedSecret(ecRootKey, 'ecRootKey');
       checkedEcSending =
           _validatedSecret(ecSendingChainKey, 'ecSendingChainKey');
-      checkedEcReceiving =
-          _validatedSecret(ecReceivingChainKey, 'ecReceivingChainKey');
+      checkedEcReceiving = ecReceivingChainKey == null
+          ? null
+          : _validatedSecret(ecReceivingChainKey, 'ecReceivingChainKey');
       checkedEcPrivate =
           _validatedSecret(ecLocalDhPrivateKey, 'ecLocalDhPrivateKey');
-      checkedEcPublic = _validatedBytes(
+      checkedEcPublic = _validatedX25519PublicKey(
         ecLocalDhPublicKey,
-        32,
         'ecLocalDhPublicKey',
-        rejectAllZero: true,
       );
       checkedEcRemote = ecRemoteDhPublicKey == null
           ? null
-          : _validatedBytes(
+          : _validatedX25519PublicKey(
               ecRemoteDhPublicKey,
-              32,
               'ecRemoteDhPublicKey',
-              rejectAllZero: true,
             );
       checkedPqRoot = _validatedSecret(pqRootKey, 'pqRootKey');
       checkedNativeState = Uint8List.fromList(nativeSckaState);
@@ -547,7 +554,7 @@ final class V3TripleRatchetState {
     required Uint8List responderToInitiatorAckRootKey,
     required Uint8List ecRootKey,
     required Uint8List ecSendingChainKey,
-    required Uint8List ecReceivingChainKey,
+    required Uint8List? ecReceivingChainKey,
     required Uint8List ecLocalDhPrivateKey,
     required Uint8List ecLocalDhPublicKey,
     required Uint8List? ecRemoteDhPublicKey,
@@ -591,7 +598,7 @@ final class V3TripleRatchetState {
   final Uint8List _responderToInitiatorAckRootKey;
   final Uint8List _ecRootKey;
   final Uint8List _ecSendingChainKey;
-  final Uint8List _ecReceivingChainKey;
+  final Uint8List? _ecReceivingChainKey;
   final Uint8List _ecLocalDhPrivateKey;
   final Uint8List _ecLocalDhPublicKey;
   final Uint8List? _ecRemoteDhPublicKey;
@@ -627,7 +634,8 @@ final class V3TripleRatchetState {
       _secretCopy(_responderToInitiatorAckRootKey);
   Uint8List get ecRootKey => _secretCopy(_ecRootKey);
   Uint8List get ecSendingChainKey => _secretCopy(_ecSendingChainKey);
-  Uint8List get ecReceivingChainKey => _secretCopy(_ecReceivingChainKey);
+  Uint8List? get ecReceivingChainKey =>
+      _ecReceivingChainKey == null ? null : _secretCopy(_ecReceivingChainKey);
   Uint8List get ecLocalDhPrivateKey => _secretCopy(_ecLocalDhPrivateKey);
   Uint8List get pqRootKey => _secretCopy(_pqRootKey);
   Uint8List get nativeSckaState => _secretCopy(_nativeSckaState);
@@ -660,7 +668,7 @@ final class V3TripleRatchetState {
     _wipeBytes(_responderToInitiatorAckRootKey);
     _wipeBytes(_ecRootKey);
     _wipeBytes(_ecSendingChainKey);
-    _wipeBytes(_ecReceivingChainKey);
+    if (_ecReceivingChainKey != null) _wipeBytes(_ecReceivingChainKey);
     _wipeBytes(_ecLocalDhPrivateKey);
     _wipeBytes(_pqRootKey);
     _wipeBytes(_nativeSckaState);
@@ -685,6 +693,63 @@ final class V3TripleRatchetState {
     if (_isWiped) {
       throw StateError('Layergram v3 Triple Ratchet state is wiped');
     }
+  }
+
+  /// Builds the next durable snapshot after an authenticated EC transition.
+  ///
+  /// The current snapshot is never mutated. PQ, ACK, routing, transcript, and
+  /// native-backend state are copied exactly while the complete EC component
+  /// is replaced. The caller must persist this returned snapshot atomically
+  /// with the application effect before discarding the previous snapshot.
+  V3TripleRatchetState replaceEcState({
+    required int expectedRevision,
+    required Uint8List ecRootKey,
+    required Uint8List ecSendingChainKey,
+    Uint8List? ecReceivingChainKey,
+    required Uint8List ecLocalDhPrivateKey,
+    required Uint8List ecLocalDhPublicKey,
+    required Uint8List ecRemoteDhPublicKey,
+    required int ecSendCounter,
+    required int ecReceiveCounter,
+    required int ecPreviousSendingChainLength,
+    required List<V3EcSkippedMessageKey> ecSkippedMessageKeys,
+    V3RatchetLifecycle? lifecycle,
+  }) {
+    _ensureNotWiped();
+    if (revision != expectedRevision) {
+      throw StateError('Layergram v3 ratchet snapshot revision conflict');
+    }
+    if (revision >= 0x7fffffffffffffff) {
+      throw StateError('Layergram v3 ratchet snapshot revision is exhausted');
+    }
+    return V3TripleRatchetState(
+      role: role,
+      lifecycle: lifecycle ?? this.lifecycle,
+      revision: revision + 1,
+      sessionId: _sessionId,
+      transcriptDigest: _transcriptDigest,
+      initiatorRoutingBinding: _initiatorRoutingBinding,
+      responderRoutingBinding: _responderRoutingBinding,
+      initiatorToResponderAckRootKey: _initiatorToResponderAckRootKey,
+      responderToInitiatorAckRootKey: _responderToInitiatorAckRootKey,
+      ecRootKey: ecRootKey,
+      ecSendingChainKey: ecSendingChainKey,
+      ecReceivingChainKey: ecReceivingChainKey,
+      ecLocalDhPrivateKey: ecLocalDhPrivateKey,
+      ecLocalDhPublicKey: ecLocalDhPublicKey,
+      ecRemoteDhPublicKey: ecRemoteDhPublicKey,
+      ecSendCounter: ecSendCounter,
+      ecReceiveCounter: ecReceiveCounter,
+      ecPreviousSendingChainLength: ecPreviousSendingChainLength,
+      pqRootKey: _pqRootKey,
+      pqCurrentEpoch: pqCurrentEpoch,
+      pqSendingEpoch: pqSendingEpoch,
+      pqReceivingEpoch: pqReceivingEpoch,
+      pqEpochStates: _pqEpochStates,
+      ecSkippedMessageKeys: ecSkippedMessageKeys,
+      pqSkippedMessageKeys: _pqSkippedMessageKeys,
+      nativeSckaState: _nativeSckaState,
+    );
   }
 }
 
@@ -720,7 +785,10 @@ abstract final class V3TripleRatchetStateCodec {
     result[offset++] = V3LmfSuite.hybridX25519MlKem768Aes256Gcm.wireId;
     result[offset++] = state.role.wireId;
     result[offset++] = state.lifecycle.wireId;
-    result[offset++] = state._ecRemoteDhPublicKey == null ? 0 : 1;
+    var flags = 0;
+    if (state._ecRemoteDhPublicKey != null) flags |= 1;
+    if (state._ecReceivingChainKey != null) flags |= 2;
+    result[offset++] = flags;
     data.setUint16(offset, headerBytes, Endian.big);
     offset += 2;
     data.setUint32(offset, totalLength, Endian.big);
@@ -743,7 +811,11 @@ abstract final class V3TripleRatchetStateCodec {
     );
     offset = _writeBytes(result, offset, state._ecRootKey);
     offset = _writeBytes(result, offset, state._ecSendingChainKey);
-    offset = _writeBytes(result, offset, state._ecReceivingChainKey);
+    if (state._ecReceivingChainKey == null) {
+      offset += 32;
+    } else {
+      offset = _writeBytes(result, offset, state._ecReceivingChainKey);
+    }
     offset = _writeBytes(result, offset, state._ecLocalDhPrivateKey);
     offset = _writeBytes(result, offset, state._ecLocalDhPublicKey);
     if (state._ecRemoteDhPublicKey == null) {
@@ -861,7 +933,7 @@ abstract final class V3TripleRatchetStateCodec {
     final role = V3SessionRole.fromWireId(encoded[5]);
     final lifecycle = V3RatchetLifecycle.fromWireId(encoded[6]);
     final flags = encoded[7];
-    if ((flags & 0xfe) != 0) {
+    if ((flags & 0xfc) != 0) {
       throw const FormatException(
         'Unsupported Layergram v3 Triple Ratchet state flags',
       );
@@ -900,6 +972,12 @@ abstract final class V3TripleRatchetStateCodec {
       offset += 32;
       final ecReceiving = _copySensitive(encoded, offset, sensitive);
       offset += 32;
+      final receivingPresent = (flags & 2) != 0;
+      if (receivingPresent == _isAllZero(ecReceiving)) {
+        throw const FormatException(
+          'Non-canonical Layergram v3 EC receiving-chain state',
+        );
+      }
       final ecPrivate = _copySensitive(encoded, offset, sensitive);
       offset += 32;
       final ecPublic = _copyRange(encoded, offset, 32);
@@ -1068,7 +1146,7 @@ abstract final class V3TripleRatchetStateCodec {
           responderToInitiatorAckRootKey: ackR2I,
           ecRootKey: ecRoot,
           ecSendingChainKey: ecSending,
-          ecReceivingChainKey: ecReceiving,
+          ecReceivingChainKey: receivingPresent ? ecReceiving : null,
           ecLocalDhPrivateKey: ecPrivate,
           ecLocalDhPublicKey: ecPublic,
           ecRemoteDhPublicKey: remotePublic,
@@ -1232,6 +1310,62 @@ Uint8List _validatedSecret(Uint8List value, String name) => _validatedBytes(
       name,
       rejectAllZero: true,
     );
+
+Uint8List _validatedX25519PublicKey(Uint8List value, String name) {
+  if (value.length != 32) {
+    throw ArgumentError.value(
+      value.length,
+      '$name.length',
+      'must be exactly 32 bytes',
+    );
+  }
+  if (_isAllZero(value)) {
+    throw ArgumentError.value(value, name, 'must not be all zero');
+  }
+  const fieldPrimeLittleEndian = <int>[
+    0xed,
+    0xff,
+    0xff,
+    0xff,
+    0xff,
+    0xff,
+    0xff,
+    0xff,
+    0xff,
+    0xff,
+    0xff,
+    0xff,
+    0xff,
+    0xff,
+    0xff,
+    0xff,
+    0xff,
+    0xff,
+    0xff,
+    0xff,
+    0xff,
+    0xff,
+    0xff,
+    0xff,
+    0xff,
+    0xff,
+    0xff,
+    0xff,
+    0xff,
+    0xff,
+    0xff,
+    0x7f,
+  ];
+  for (var index = 31; index >= 0; index--) {
+    if (value[index] < fieldPrimeLittleEndian[index]) {
+      return Uint8List.fromList(value);
+    }
+    if (value[index] > fieldPrimeLittleEndian[index]) {
+      throw ArgumentError.value(value, name, 'must be canonical X25519');
+    }
+  }
+  throw ArgumentError.value(value, name, 'must be canonical X25519');
+}
 
 Uint8List _validatedBytes(
   Uint8List value,
