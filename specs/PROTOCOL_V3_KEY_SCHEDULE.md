@@ -12,9 +12,10 @@ authentication, candidate-only hybrid send/receive orchestration,
 deferred-fragment key resolution, and an inactive crash-consistent send/receive
 session coordinator, encrypted stable-ID AR3 materializer, and monotonic TR3
 checkpoint repository now exist. A scope-pinned owner also connects those
-components to Layergram's real encrypted Aux/Hive storage without registering
-them in the active application. No production SCKA backend or active product
-integration exists, and protocol v3 remains disabled.
+components and a bounded crash-consistent hybrid-handshake pending repository
+to Layergram's real encrypted Aux/Hive storage without registering them in the
+active application. No production SCKA backend or active product integration
+exists, and protocol v3 remains disabled.
 
 `PROTOCOL_V3_SECURITY_GOALS.md` remains authoritative. This draft and its code
 must change if later transcript design, ML-KEM Braid integration, persistence
@@ -66,8 +67,13 @@ This checkpoint provides:
 - checkpoint-backed restore, explicit journal collection, and write-before-
   delete replacement of incoming tombstones with durable replay-window proofs;
 - one inactive scope-pinned Aux/Hive owner that privately constructs the full
-  journal/outbox/checkpoint topology, restores sealed frames before session
-  keys are requested, and destroys its copied storage key on close;
+  handshake/journal/outbox/checkpoint topology, restores sealed frames and
+  pending handshakes before session keys are requested, and destroys its copied
+  storage key on close;
+- encrypted, bounded HP3 persistence with persist-before-export exact
+  offer/reply retry, single-controller authority, per-identity capacity
+  preflight, fail-stop ambiguous-write recovery, and write-before-delete
+  completion tombstones retaining the initiator's exact confirmation;
 - frozen local Normal/Maximum retention horizons plus a non-destructive,
   explainable eligibility check for future replay/completion-proof retirement;
 - an encrypted, bounded, fail-stop `v3_session_retirement_v1` journal whose
@@ -88,8 +94,9 @@ It deliberately does not provide:
   candidate remains externally unreviewed);
 - a production ML-KEM Braid/SCKA implementation or reviewed native state
   exporter;
-- an active durable send controller, handshake bootstrap, or projection from
-  the durable AR3 source into the current message/UI repository;
+- an active handshake bootstrap/handoff, active durable send controller, or
+  projection from the durable AR3 source into the current message/UI
+  repository;
 - registration in providers or activation in contacts, messaging, UI, backup,
   migration, or Premium paths.
 
@@ -822,6 +829,8 @@ Before this schedule can carry user messages, Layergram still requires:
   export/import behind the frozen boundary;
 - independent review and production wiring of the inactive crash-consistent
   send/receive coordinator, including the reviewed native-state validator;
+- atomic initial-session handoff that checks the exact transcript-derived TR3
+  checkpoint before retiring HP3 into its completion tombstone;
 - active message/UI repository projection from the idempotent durable AR3
   source;
 - full packaging, crash, migration, multi-device, passphrase, Maximum-mode,

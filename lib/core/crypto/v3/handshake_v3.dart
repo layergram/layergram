@@ -1509,6 +1509,13 @@ abstract final class V3HybridHandshake {
 abstract final class V3HandshakePendingStateCodec {
   static const int _headerBytes = 60;
   static const int _formatVersion = 1;
+  static const int initiatorEncodedBytes =
+      _headerBytes + V3HandshakeCodec.offerBytes + 64;
+  static const int responderEncodedBytes = _headerBytes +
+      V3HandshakeCodec.offerBytes +
+      V3HandshakeCodec.replyBytes +
+      96;
+  static const int maxEncodedBytes = 4096;
   static const List<int> _magic = <int>[0x48, 0x50, 0x33]; // HP3
   static final Uint8List _digestLabel = Uint8List.fromList(
     'layergram/v3/handshake/pending-state\x00'.codeUnits,
@@ -1671,7 +1678,7 @@ abstract final class V3HandshakePendingStateCodec {
     Uint8List secondRecord,
     Uint8List secrets,
   }) _decode(Uint8List encoded, V3SessionRole expectedRole) {
-    if (encoded.length < _headerBytes || encoded.length > 4096) {
+    if (encoded.length < _headerBytes || encoded.length > maxEncodedBytes) {
       throw const FormatException('Invalid Layergram v3 pending state length');
     }
     final data = ByteData.sublistView(encoded);

@@ -18,6 +18,7 @@ import 'package:cryptography/cryptography.dart';
 
 import '../../storage/aux_record_repository.dart';
 import 'committed_record_materializer_v3.dart';
+import 'handshake_persistence_v3.dart';
 import 'lmf_v3_atomic_commit.dart';
 import 'lmf_v3_outbox.dart';
 import 'lmf_v3_persistence.dart';
@@ -31,6 +32,7 @@ import 'triple_ratchet_state_v3.dart';
 final class V3SessionPersistenceRestoreResult {
   const V3SessionPersistenceRestoreResult({
     required this.inbox,
+    required this.handshakes,
     required this.sessions,
   });
 
@@ -41,6 +43,10 @@ final class V3SessionPersistenceRestoreResult {
   /// its reviewed SCKA-backed resolver and call
   /// [V3SessionPersistenceScope.resumeDeferred].
   final V3LmfInboxRestoreResult inbox;
+
+  /// Durable pending offer/reply state restored before any new handshake
+  /// cryptography or export is allowed.
+  final V3HandshakeControllerRestoreResult handshakes;
 
   /// Reconstructed send/receive session state and durable application state.
   final V3SessionCommitRestoreResult sessions;
@@ -69,6 +75,7 @@ final class V3SessionPersistenceScope {
     required AuxRecordRepository repository,
     required SecretKeyData ownedAuxStorageKey,
     required this.inbox,
+    required this.handshakes,
     required this.controller,
   })  : _repository = repository,
         _ownedAuxStorageKey = ownedAuxStorageKey;
@@ -118,6 +125,9 @@ final class V3SessionPersistenceScope {
       );
       final store = V3LmfAuxRecordStore(repository);
       final inbox = V3LmfDurableInbox(store: store);
+      final handshakes = V3HandshakePersistenceController(
+        repository: V3HandshakePendingRepository(store: store),
+      );
       final controller = V3SessionCommitController(
         journal: V3LmfAtomicCommitJournal(store: store, inbox: inbox),
         sendJournal: V3SessionSendJournal(store: store),
@@ -136,6 +146,7 @@ final class V3SessionPersistenceScope {
         repository: repository,
         ownedAuxStorageKey: ownedKey,
         inbox: inbox,
+        handshakes: handshakes,
         controller: controller,
       );
     } catch (_) {
@@ -171,6 +182,9 @@ final class V3SessionPersistenceScope {
   /// ratchet commit must go through [controller].
   final V3LmfDurableInbox inbox;
 
+  /// Sole authority for pending hybrid-handshake persistence and exact resend.
+  final V3HandshakePersistenceController handshakes;
+
   /// Sole authority for durable session transitions and outgoing exports.
   final V3SessionCommitController controller;
 
@@ -181,7 +195,10 @@ final class V3SessionPersistenceScope {
   bool _recoveryRequired = false;
 
   bool get isRestored => _restored;
-  bool get requiresRecovery => _recoveryRequired || controller.requiresRecovery;
+  bool get requiresRecovery =>
+      _recoveryRequired ||
+      handshakes.requiresRecovery ||
+      controller.requiresRecovery;
 
   /// Restores sealed transport records first, then the single-authority
   /// session controller.
@@ -201,12 +218,14 @@ final class V3SessionPersistenceScope {
       _restoreStarted = true;
       try {
         final inboxResult = await inbox.restore(keyResolver: (_) => null);
+        final handshakeResult = await handshakes.restore();
         final sessionResult = await controller.restore(
           checkpoints: checkpoints,
         );
         _restored = true;
         return V3SessionPersistenceRestoreResult(
           inbox: inboxResult,
+          handshakes: handshakeResult,
           sessions: sessionResult,
         );
       } catch (_) {
@@ -236,16 +255,20 @@ final class V3SessionPersistenceScope {
       if (_closed) return;
       _closed = true;
       try {
-        await controller.close();
+        await handshakes.close();
       } finally {
         try {
-          await inbox.close();
+          await controller.close();
         } finally {
-          _repository.setActiveContext(
-            scopeToken: null,
-            auxStorageKey: null,
-          );
-          _ownedAuxStorageKey.destroy();
+          try {
+            await inbox.close();
+          } finally {
+            _repository.setActiveContext(
+              scopeToken: null,
+              auxStorageKey: null,
+            );
+            _ownedAuxStorageKey.destroy();
+          }
         }
       }
     });

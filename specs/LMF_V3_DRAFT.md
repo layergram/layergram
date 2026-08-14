@@ -352,6 +352,11 @@ snapshot, 512 KiB of sealed frames per effect, 32 MiB total retained state, and
 logical records, 16 MiB of canonical record bytes, and 8,192 physical records.
 The checkpoint repository is bounded to 4,096 sessions, 4,096 cumulative
 receipts per session, 32 MiB retained state, and 8,192 physical records.
+The handshake repository is bounded to 64 pending HP3 states, 4 per remote
+identity, 4 MiB of retained pending bytes, 4,096 completion tombstones, and
+8,192 relevant physical records. It checks capacity before running new
+handshake cryptography and writes a checkpoint-bound completion before deleting
+HP3.
 Reassembly retains its separate limits of 8 pending assemblies and 64 KiB of
 authenticated plaintext. Limit breaches fail closed without silently evicting
 valid state.
@@ -367,17 +372,19 @@ view pinned to the canonical 16-character base64url identity namespace and to
 an owned copy of exactly one primary- or passphrase-derived Aux key. Rejecting
 non-canonical tokens is mandatory because Aux records are selected by a
 delimiter-separated prefix. The owner then privately constructs the inbox,
-receive journal, send journal, outbox, AR3 materializer, checkpoint repository,
-and their single-authority controller over the same store. It MUST NOT reuse
-the active mutable Aux-repository singleton: switching that singleton while a
-journal is open could redirect later writes into another identity context.
+pending-handshake repository/controller, receive journal, send journal, outbox,
+AR3 materializer, checkpoint repository, and their single-authority session
+controller over the same store. It MUST NOT reuse the active mutable
+Aux-repository singleton: switching that singleton while a journal is open
+could redirect later writes into another identity context.
 
-Restore first indexes every sealed inbox record with no frame key, restores the
-controller's durable TR3 truth, and only then permits deferred resolution by a
-future reviewed SCKA-backed resolver. Close drains the controller and inbox,
-removes the repository context, and destroys the owned key copy. A restore
-error is fail-stop for that owner and requires reconstruction. This boundary is
-not registered in providers and does not activate protocol v3.
+Restore first indexes every sealed inbox record with no frame key, restores
+pending handshakes, restores the controller's durable TR3 truth, and only then
+permits deferred resolution by a future reviewed SCKA-backed resolver. Close
+drains the handshake controller, session controller, and inbox before removing
+the repository context and destroying the owned key copy. A restore error is
+fail-stop for that owner and requires reconstruction. This boundary is not
+registered in providers and does not activate protocol v3.
 
 ### 7.4 Atomic-effect record invariants
 

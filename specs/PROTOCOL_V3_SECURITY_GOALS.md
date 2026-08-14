@@ -90,6 +90,19 @@ It is not approved for activation and any candidate MUST:
   required by the selected mode has committed atomically;
 - fail closed on backend self-test failure, unsupported suite, malformed
   transcript, expired state, unexpected device, or resource-limit breach.
+- persist the complete secret HP3 state and exact public offer/reply inside the
+  identity/passphrase-scoped encrypted Aux store before first export; retries
+  after restart MUST return byte-identical public records without rerunning
+  X25519 or ML-KEM;
+- enforce global and per-remote-identity pending limits before expensive
+  handshake cryptography, and require one controller authority for restore,
+  reads, writes, resend, and retirement;
+- retain HP3 until the exact initial session checkpoint is independently
+  durable. Retirement MUST write a canonical completion binding the pending
+  digest, identities/devices, exact confirmation, session ID, and checkpoint
+  digest before deleting HP3. Ambiguous writes or deletes MUST fail stopped
+  until restore, and initiator confirmation loss recovery MUST reuse exact
+  retained bytes.
 
 The proposed KEM-based proof of possession is a research candidate, not an
 approved primitive. It MUST NOT be enabled until an external cryptographic

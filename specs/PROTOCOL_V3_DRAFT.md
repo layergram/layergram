@@ -177,16 +177,19 @@ identities, installation devices, roles, mode, capabilities, record IDs, and
 every canonical handshake record are bound into the final SHA-384 transcript.
 The tags are deliberately symmetric rather than transferable signatures, so
 the candidate preserves a limited deniability design. Canonical pending-state
-records survive restart, and crossed offers use a clock-free deterministic
-tie-break.
+records now live in the real identity/passphrase-scoped encrypted Aux store:
+the exact offer/reply is persisted before first export, survives restart
+without repeating ML-KEM, and is replaced only after a checkpoint-bound
+completion tombstone is durable. Crossed offers use a clock-free deterministic
+tie-break, which the future active contact/device coordinator must enforce.
 
 The handshake is still a research candidate and is not wired to bootstrap
-transport, contacts, messages, storage providers, UI, or Premium. The v3 EC
+transport, contacts, messages, UI, backup, or Premium. The v3 EC
 transition engine and HR3 transport are now implemented as inactive components.
 The receive-commit controller still depends on a reviewed native ML-KEM Braid
 transition/state validator and trusted candidate construction. A complete send
-controller, deferred continuation-key resolution, controller-level device
-policy, durable pending-state storage, checkpoint/compaction, replay retirement,
-resend/progress UX, real cross-app loss tests, and erasure coding remain
-activation gates. Effects outside the journal must later be materialized
-idempotently under their stable assembly-derived message ID.
+and receive persistence authority, deferred continuation-key resolution,
+checkpointing, replay retirement, and pending-handshake persistence exist only
+behind the inactive v3 boundary. Atomic initial TR3 handoff, controller-level
+device policy, active projection, resend/progress UX, real cross-app loss tests,
+and erasure coding remain activation gates.

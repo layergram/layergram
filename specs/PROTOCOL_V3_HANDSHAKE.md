@@ -36,6 +36,8 @@ This checkpoint defines and implements:
 - handoff to the mandatory hybrid session key schedule;
 - fixed canonical `offer`, `reply`, and `confirmation` records;
 - canonical pending-state records for encrypted restart persistence;
+- an inactive, bounded Aux-backed pending repository and single-authority
+  controller with persist-before-export retry and completion tombstones;
 - deterministic resolution of simultaneous crossed offers;
 - fixed size bounds, public codec vectors, negative tests, and native-backend
   integration tests.
@@ -43,16 +45,16 @@ This checkpoint defines and implements:
 It deliberately does not define or enable:
 
 - the outer bootstrap encryption and LMF key-resolution mechanism;
-- contact/session controllers, pending-state auxiliary repositories, retries,
-  expiry, acknowledgement UI, or garbage collection;
+- the active contact/device coordinator, expiry, acknowledgement UI, or
+  garbage collection;
 - Maximum-mode device-pin policy or Normal-mode device caps;
-- real EC Double Ratchet or ML-KEM Braid transitions;
+- a production/reviewed ML-KEM Braid transition backend;
 - application-content activation, migration, backup, Premium wiring, or UI;
 - a third-party-verifiable signature or a non-repudiation claim.
 
-All implementation remains reachable only through
-`lib/core/crypto/v3/local_identity_v3.dart`. No active v2 provider, identity,
-contact, message, storage, UI, or Premium seam imports it.
+All implementation remains isolated under `lib/core/crypto/v3/`. The inactive
+session-persistence scope constructs the repository, but no active v2 provider,
+identity, contact, message, UI, backup, or Premium seam imports it.
 
 ## 2. Participants and keys
 
@@ -344,14 +346,16 @@ digests are exact role reversals and their mode/capabilities match. Both peers
 retain the lexicographically smaller complete canonical offer. Arrival order
 and wall-clock time do not participate.
 
-An exact duplicate is not a second handshake. Future controllers must key
-pending state by handshake ID, retain the exact already-sealed reply/confirm
-bytes for resend, and enforce the global per-contact/device pending cap.
+An exact duplicate is not a second handshake. The inactive persistence
+controller keys pending state by handshake ID, retains the exact canonical
+offer or reply bytes for resend, and enforces a global and per-remote-identity
+pending cap before expensive handshake cryptography. The active contact/device
+coordinator must still apply the crossed-offer tie-break and Normal/Maximum
+device policy before activation.
 
 Old offer/reply/confirmation tuples cannot be relabelled into a new run because
 the derived identifiers, ordered roles, complete records, KEM ciphertexts,
-device keys, and proofs are bound into `T1`, `T2`, and `TH`. Durable controller
-replay/tombstone rules remain an activation gate.
+device keys, and proofs are bound into `T1`, `T2`, and `TH`.
 
 ## 9. Pending restart state
 
@@ -375,6 +379,28 @@ AEAD authentication is mandatory.
 The codec is bounded to 4,096 bytes and rejects truncation, corruption, role
 confusion, zero secrets, non-canonical embedded records, and inconsistent
 offer/reply links. Managed-memory wiping is best effort, not guaranteed.
+
+The inactive `V3HandshakePendingRepository` now stores HP3 plus the exact
+canonical public offer/reply in the same encrypted, padded Aux namespace as the
+session scope. It is bounded to 64 pending handshakes, 4 per remote identity,
+4 MiB of retained pending bytes, 4,096 completion tombstones, and 8,192
+physical handshake records. Capacity is checked before X25519/ML-KEM work. A
+single controller authority must restore it before reads or writes; after the
+claim, direct repository access is rejected.
+
+First export occurs only after the pending record write succeeds. An ambiguous
+write fails stopped until a fresh restore, which recovers the exact offer/reply
+without rerunning cryptography. After the initial session checkpoint is
+independently durable, the controller writes a completion tombstone binding the
+handshake, pending-state digest, identities/devices, exact confirmation,
+session ID, and checkpoint digest before deleting HP3. An ambiguous write or
+delete likewise requires restore. For an initiator, the tombstone retains the
+exact confirmation for loss recovery without retaining HP3 secrets.
+
+This is durable handshake-state infrastructure, not the active bootstrap
+handoff: the future session initializer must still prove that the supplied
+checkpoint is the exact TR3 state derived from that confirmation before it may
+request completion.
 
 ## 10. Manual transport sizing
 
@@ -402,7 +428,7 @@ ML-KEM ciphertext to make the handshake shorter.
 | `INIT` | create/receive canonical offer | pending only |
 | `REPLY` | create/verify responder reply | pending only |
 | `CONFIRM` | create/verify initiator confirmation | pending only |
-| authenticated handoff | atomically initialize both ratchets | still blocked |
+| authenticated handoff | persist initial checkpoint, then tombstone HP3 | still blocked |
 | `ACTIVE` | only after ratchet/controller commit | allowed |
 
 Proof verification does not by itself make the application active. Future
@@ -418,11 +444,11 @@ Before this candidate can be enabled:
   transcript construction;
 - the bootstrap encryption and LMF key-resolution design must prevent a
   classical-only application fallback and bind exact outer records;
-- pending state must use the real opaque auxiliary repository with
-  write-new-before-delete updates, caps, tombstones, and crash tests;
 - Normal and Maximum device policy must be enforced by the controller;
 - the implemented EC Double Ratchet initializer and the future ML-KEM Braid
   initializer must be composed into one atomic initial `TR3` checkpoint;
+- the active handoff must validate that the completion tombstone's session ID
+  and checkpoint digest identify exactly that initialized `TR3` state;
 - loss, reorder, duplicate, resend, text, link, steganography, QR-independent
   identity, passphrase, multi-identity Premium, backup, and cross-platform
   packaging tests must pass;
