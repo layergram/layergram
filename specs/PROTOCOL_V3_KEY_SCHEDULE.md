@@ -68,6 +68,8 @@ This checkpoint provides:
 - one inactive scope-pinned Aux/Hive owner that privately constructs the full
   journal/outbox/checkpoint topology, restores sealed frames before session
   keys are requested, and destroys its copied storage key on close;
+- frozen local Normal/Maximum retention horizons plus a non-destructive,
+  explainable eligibility check for future replay/completion-proof retirement;
 - golden, negative, framing, reassembly, atomic-commit, exact-byte retry,
   capacity-preflight, ambiguous-write, restart, and ACK-ordering tests.
 
@@ -79,8 +81,8 @@ It deliberately does not provide:
   exporter;
 - an active durable send controller, handshake bootstrap, or projection from
   the durable AR3 source into the current message/UI repository;
-- replay-window expiry, skipped-key retirement, or rolling compaction of the
-  cumulative checkpoint receipt history;
+- destructive replay-window retirement, a crash-consistent retirement journal,
+  or rolling compaction of the cumulative checkpoint receipt history;
 - registration in providers or activation in contacts, messaging, UI, backup,
   migration, or Premium paths.
 
@@ -377,6 +379,17 @@ skipped key from an older epoch without lowering that high-water mark. The
 committed `TR3` remains unchanged until the complete LMF plaintext and its
 candidate snapshot are atomically committed.
 
+Retention uses only locally recorded UTC wall-clock values. The Normal profile
+retains newly skipped EC/PQ message keys for 180 days and requires compact
+replay/completion proofs to remain for at least 365 days. The Maximum profile
+uses 30 and 90 days respectively. Clock rollback blocks retirement; the exact
+target also remains ineligible while an unexpired PQ skipped key exists or a
+retained PQ receiving chain can still derive it. Sender-declared LMF expiry is
+never an authority for deleting local state. Pending sealed inbox frames and
+unacknowledged exact-byte outbox entries are bounded but never silently
+time-purged. The current evaluator is deliberately non-destructive: only a
+future serialized, crash-consistent journal may act on an eligible decision.
+
 Frozen epoch-zero vector for `session_id = 1112...1f20` and
 `S = 3132...4f50`:
 
@@ -618,8 +631,8 @@ U64(epoch) || U64(counter) || 32-byte message key
 ```
 
 Skipped-key identities must be unique. PQ skipped keys may reference only a
-retained epoch. Count limits are enforced before allocation. Time expiry is
-local policy and never trusts a peer clock.
+retained epoch. Count limits are enforced before allocation. Time expiry uses
+the frozen local profile in Section 4.2 and never trusts a peer clock.
 
 An absent EC receiving chain is valid only for the initial initiator state. Its
 presence flag is zero, its 32-byte field is all zero, and its receive counter is
@@ -764,8 +777,11 @@ restore; that restore uses the checkpoint and never reruns ratchet or AEAD work.
 An already durable completion proof remains valid when a later cumulative
 checkpoint retains the same immutable receipt.
 Direct tombstone/replay purging is rejected after coordinator ownership.
-Replay-window expiry and pruning cumulative receipts remain separate activation
-gates because they require the final skipped-key retirement policy.
+The retention profile and non-destructive eligibility rules are frozen, but
+actual replay/completion-proof deletion and pruning cumulative receipts remain
+separate activation gates. They require a write-before-delete retirement
+journal that durably joins the local creation timestamp, exact proof, and
+replacement checkpoint before removing either proof or receipt.
 
 ## 10. Remaining activation gates
 
@@ -777,8 +793,8 @@ Before this schedule can carry user messages, Layergram still requires:
   export/import behind the frozen boundary;
 - independent review and production wiring of the inactive crash-consistent
   send/receive coordinator, including the reviewed native-state validator;
-- skipped-key expiry, replay-window expiry, and bounded rolling compaction of
-  cumulative checkpoint receipts;
+- crash-consistent replay/completion-proof retirement and bounded rolling
+  compaction of cumulative checkpoint receipts under the frozen local policy;
 - active message/UI repository projection from the idempotent durable AR3
   source;
 - full packaging, crash, migration, multi-device, passphrase, Maximum-mode,

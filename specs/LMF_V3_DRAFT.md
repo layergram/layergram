@@ -309,6 +309,10 @@ activation gates.
 Commit-tombstone retention is local and explicit. A tombstone may be purged only
 after the durable ratchet/application replay window will independently reject
 the corresponding old message; a peer-supplied timestamp never authorizes it.
+Normal mode retains skipped keys for 180 days and compact proofs for at least
+365 days; Maximum mode uses 30 and 90 days. Locally observed clock rollback
+blocks retirement. Pending sealed inbox frames and unacknowledged outbox bytes
+are never silently time-purged.
 
 No partial fragment plaintext is returned or persisted. Competing
 unauthenticated bytes are removed alone. Two different authenticated fragments
@@ -447,9 +451,12 @@ to cover that same immutable receipt when a later checkpoint advances without
 dropping it.
 
 Replay-window entries are not time-purged by this coordinator. The existing
-explicit purge API is blocked after journal ownership. Final skipped-key expiry,
-safe replay-window expiry, and rolling pruning of the bounded cumulative receipt
-set remain activation gates.
+explicit purge API is blocked after journal ownership. The frozen evaluator is
+non-destructive and can only declare eligibility after the local minimum age
+and independent Sparse-PQ non-derivability checks pass. A future serialized
+retirement journal must write the replacement checkpoint/receipt state before
+deleting a compact proof. That crash-consistent deletion and rolling pruning of
+the bounded cumulative receipt set remain activation gates.
 
 ### 7.6 Session-controller restore and commit invariants
 
@@ -589,7 +596,8 @@ crash-consistent send/receive coordinator and its recovery paths must pass
 independent review and production wiring; the application repository must
 project from the durable stable-ID AR3 source; checkpoint-backed restore,
 compaction, and replay-window replacement must pass independent review, while
-skipped-key/replay-window expiry and rolling receipt compaction must be frozen;
+the frozen retention policy must be implemented by a crash-consistent
+replay/completion retirement journal and rolling receipt compaction;
 resend/progress UX and real loss recovery must pass; all three transports must
 pass real cross-app tests; and the complete design and implementation must pass
 independent review.

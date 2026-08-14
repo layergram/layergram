@@ -20,6 +20,7 @@ import 'package:cryptography/cryptography.dart';
 
 import 'lmf_v3.dart';
 import 'lmf_v3_persistence.dart';
+import 'retention_policy_v3.dart';
 import 'session_commit_controller_v3.dart';
 import 'sparse_pq_ratchet_v3.dart';
 import 'triple_ratchet_engine_v3.dart';
@@ -39,7 +40,8 @@ final class V3SessionRatchetKeyResolver {
   V3SessionRatchetKeyResolver({
     required V3SckaBackend backend,
     required V3SessionSnapshotProvider snapshotProvider,
-    this.skippedKeyLifetimeSeconds = 30 * 24 * 60 * 60,
+    this.skippedKeyLifetimeSeconds =
+        V3RetentionPolicy.normalSkippedKeyLifetimeSeconds,
   })  : _backend = backend,
         _snapshotProvider = snapshotProvider {
     if (skippedKeyLifetimeSeconds <= 0) {

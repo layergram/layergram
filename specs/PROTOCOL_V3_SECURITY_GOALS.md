@@ -152,7 +152,9 @@ reviewed standard alternative or narrow its product claim explicitly.
   written before an interrupted deletion MUST remain usable under a later
   checkpoint that cumulatively retains the same receipt. Replay-window expiry
   MUST remain disabled until skipped-key retirement independently rejects the
-  corresponding input.
+  corresponding input. Retention MUST use only locally recorded time, fail
+  closed on clock rollback, and MUST NOT silently time-purge incomplete inbox
+  assemblies or unacknowledged exact-byte outbox entries.
 - One identity/passphrase-scoped authority MUST own journal mutation before
   session restore. Direct journal lifecycle calls and writes MUST be rejected
   after ownership; production wiring MUST neither retain nor expose the owned
