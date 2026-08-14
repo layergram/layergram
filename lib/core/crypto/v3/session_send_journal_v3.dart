@@ -183,6 +183,14 @@ final class V3SessionSendJournal {
     return _effects[assemblyId];
   }
 
+  V3SessionSendCompletionBinding? completionBindingForAssembly(
+    String assemblyId, {
+    V3SessionSendJournalAuthority? authority,
+  }) {
+    _ensureAuthority(authority);
+    return _completions[assemblyId]?.binding;
+  }
+
   Future<V3SessionSendJournalAuthority> claimSessionCoordinatorAuthority() {
     return _serialized(() async {
       _ensureOpen();

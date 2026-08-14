@@ -237,6 +237,14 @@ class V3LmfAtomicCommitJournal {
     return _effects[assemblyId];
   }
 
+  V3LmfReplayWindowBinding? replayWindowBindingForAssembly(
+    String assemblyId, {
+    V3LmfAtomicCommitAuthority? authority,
+  }) {
+    _ensureAuthority(authority);
+    return _inbox.replayWindowBindings[assemblyId];
+  }
+
   /// Claims this journal for exactly one higher-level session coordinator.
   ///
   /// The claim must happen before restore, closing the race window in which a

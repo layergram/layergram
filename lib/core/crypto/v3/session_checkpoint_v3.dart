@@ -123,6 +123,19 @@ final class V3CheckpointReceipt {
   }
 }
 
+/// Canonical evidence that one checkpoint was replaced solely to retire one
+/// cumulative receipt. The compact replay/completion proof remains durable;
+/// this transition alone never authorizes deleting it.
+final class V3CheckpointRetirementTransition {
+  const V3CheckpointRetirementTransition._({
+    required this.sourceCheckpointDigest,
+    required this.retiredReceipt,
+  });
+
+  final String sourceCheckpointDigest;
+  final V3CheckpointReceipt retiredReceipt;
+}
+
 /// Highest durable TR3 snapshot for one session plus cumulative transition
 /// receipts. The repository owns and wipes the encoded snapshot copy.
 final class V3SessionCheckpoint {
@@ -135,6 +148,7 @@ final class V3SessionCheckpoint {
     required this.checkpointDigest,
     required Uint8List encodedSnapshot,
     required List<V3CheckpointReceipt> receipts,
+    required this.retirementTransition,
     required this.persistedAt,
   })  : _encodedSnapshot = Uint8List.fromList(encodedSnapshot),
         receipts = List<V3CheckpointReceipt>.unmodifiable(receipts);
@@ -146,11 +160,15 @@ final class V3SessionCheckpoint {
   final String snapshotDigest;
   final String checkpointDigest;
   final List<V3CheckpointReceipt> receipts;
+  final V3CheckpointRetirementTransition? retirementTransition;
   final DateTime persistedAt;
   final Uint8List _encodedSnapshot;
 
   Uint8List get encodedSnapshot => Uint8List.fromList(_encodedSnapshot);
-  int get retainedBytes => _encodedSnapshot.length + receipts.length * 160;
+  int get retainedBytes =>
+      _encodedSnapshot.length +
+      receipts.length * 160 +
+      (retirementTransition == null ? 0 : 160);
 
   V3TripleRatchetState decodeSnapshot() {
     final bytes = encodedSnapshot;
@@ -218,7 +236,7 @@ final class V3SessionCheckpointRepository {
   }
 
   static const String recordKind = 'v3_session_checkpoint_v1';
-  static const int _recordVersion = 1;
+  static const int _recordVersion = 2;
   static const int _maxTimestampMillis = 253402300799999;
 
   final V3LmfRecordStore _store;
@@ -229,6 +247,7 @@ final class V3SessionCheckpointRepository {
 
   final Map<String, V3SessionCheckpoint> _checkpoints =
       <String, V3SessionCheckpoint>{};
+  final Set<String> _pendingRetirementSourceStorageIds = <String>{};
   Future<void> _operationTail = Future<void>.value();
   bool _restored = false;
   bool _closed = false;
@@ -315,25 +334,7 @@ final class V3SessionCheckpointRepository {
         var totalBytes = 0;
         final selected = <String, V3SessionCheckpoint>{};
         for (final candidates in grouped.values) {
-          candidates.sort((left, right) {
-            final revision = right.revision.compareTo(left.revision);
-            if (revision != 0) return revision;
-            return left.storageId.compareTo(right.storageId);
-          });
-          final highest = candidates.first;
-          for (final candidate in candidates.skip(1)) {
-            if (candidate.revision == highest.revision) {
-              if (!_sameCheckpoint(candidate, highest)) {
-                throw const V3LmfPersistenceConflictException(
-                  'divergent v3 checkpoints share a session revision',
-                );
-              }
-            } else if (!_extendsCheckpoint(candidate, highest)) {
-              throw const V3LmfPersistenceConflictException(
-                'v3 checkpoint history is not monotonic',
-              );
-            }
-          }
+          final highest = _selectCheckpointHistory(candidates);
           totalBytes += highest.retainedBytes;
           if (totalBytes > maxTotalRetainedBytes) {
             throw const V3LmfPersistenceLimitException(
@@ -341,7 +342,16 @@ final class V3SessionCheckpointRepository {
             );
           }
           selected[highest.sessionKey] = highest;
-          for (final candidate in candidates.skip(1)) {
+          final retirementAncestors = _retirementAncestorDigests(
+            highest,
+            candidates,
+          );
+          for (final candidate in candidates) {
+            if (identical(candidate, highest)) continue;
+            if (retirementAncestors.contains(candidate.checkpointDigest)) {
+              _pendingRetirementSourceStorageIds.add(candidate.storageId);
+              continue;
+            }
             await _deleteIgnoringFailure(candidate.storageId);
             candidate._close();
             removed++;
@@ -398,6 +408,7 @@ final class V3SessionCheckpointRepository {
           lineageDigest: lineageDigest,
           snapshotDigest: snapshotDigest,
           receipts: canonicalReceipts,
+          retirementTransition: null,
         );
         final timestamp =
             _validatedTimestamp(persistedAt ?? DateTime.now().toUtc());
@@ -410,6 +421,7 @@ final class V3SessionCheckpointRepository {
           checkpointDigest: checkpointDigest,
           encodedSnapshot: encoded,
           receipts: canonicalReceipts,
+          retirementTransition: null,
           persistedAt: timestamp,
         );
         try {
@@ -422,6 +434,11 @@ final class V3SessionCheckpointRepository {
             }
             if (candidate.revision == existing.revision) {
               if (!_sameCheckpoint(candidate, existing)) {
+                if (existing.retirementTransition != null &&
+                    candidate.retirementTransition == null &&
+                    _sameCheckpointStateAndReceipts(candidate, existing)) {
+                  return existing;
+                }
                 throw const V3LmfPersistenceConflictException(
                   'divergent v3 checkpoint at the current revision',
                 );
@@ -460,6 +477,7 @@ final class V3SessionCheckpointRepository {
               checkpointDigest: candidate.checkpointDigest,
               encodedSnapshot: candidate._encodedSnapshot,
               receipts: candidate.receipts,
+              retirementTransition: candidate.retirementTransition,
               persistedAt: candidate.persistedAt,
             );
             _checkpoints[sessionKey] = committed;
@@ -483,6 +501,152 @@ final class V3SessionCheckpointRepository {
     });
   }
 
+  /// Writes a same-revision checkpoint that removes exactly [receipt].
+  ///
+  /// The replacement embeds the source checkpoint digest and the complete
+  /// retired receipt. It is durable before the source record is cleaned up,
+  /// allowing restore to validate and select an interrupted replacement. The
+  /// compact replay/completion proof is intentionally untouched.
+  Future<V3SessionCheckpoint> replaceReceiptForRetirement({
+    required String expectedSourceCheckpointDigest,
+    required V3CheckpointReceipt receipt,
+    DateTime? persistedAt,
+    V3SessionCheckpointAuthority? authority,
+  }) {
+    return _serialized(() async {
+      _ensureAuthority(authority);
+      _ensureReady();
+      final existing = _checkpoints[receipt.sessionKey];
+      if (existing == null) {
+        throw StateError('Layergram v3 retirement has no source checkpoint');
+      }
+      if (existing.checkpointDigest != expectedSourceCheckpointDigest) {
+        final transition = existing.retirementTransition;
+        if (transition != null &&
+            transition.sourceCheckpointDigest ==
+                expectedSourceCheckpointDigest &&
+            _sameReceipt(transition.retiredReceipt, receipt) &&
+            existing.receiptForAssembly(receipt.assemblyId) == null) {
+          return existing;
+        }
+        throw const V3LmfPersistenceConflictException(
+          'v3 retirement source checkpoint changed',
+        );
+      }
+      if (existing.retirementTransition != null) {
+        throw const V3LmfPersistenceConflictException(
+          'v3 checkpoint revision already contains a retirement transition',
+        );
+      }
+      final currentReceipt = existing.receiptForAssembly(receipt.assemblyId);
+      if (currentReceipt == null || !_sameReceipt(currentReceipt, receipt)) {
+        throw const V3LmfPersistenceConflictException(
+          'v3 retirement source receipt changed',
+        );
+      }
+      final timestamp =
+          _validatedTimestamp(persistedAt ?? DateTime.now().toUtc());
+      if (timestamp.isBefore(existing.persistedAt)) {
+        throw const V3LmfPersistenceConflictException(
+          'v3 retirement checkpoint timestamp moved backward',
+        );
+      }
+      final remaining = existing.receipts
+          .where((candidate) => candidate.assemblyId != receipt.assemblyId)
+          .toList(growable: false);
+      final transition = V3CheckpointRetirementTransition._(
+        sourceCheckpointDigest: existing.checkpointDigest,
+        retiredReceipt: receipt,
+      );
+      final digest = _checkpointDigest(
+        sessionKey: existing.sessionKey,
+        revision: existing.revision,
+        lineageDigest: existing.lineageDigest,
+        snapshotDigest: existing.snapshotDigest,
+        receipts: remaining,
+        retirementTransition: transition,
+      );
+      final candidate = V3SessionCheckpoint._(
+        storageId: '',
+        sessionKey: existing.sessionKey,
+        revision: existing.revision,
+        lineageDigest: existing.lineageDigest,
+        snapshotDigest: existing.snapshotDigest,
+        checkpointDigest: digest,
+        encodedSnapshot: existing._encodedSnapshot,
+        receipts: remaining,
+        retirementTransition: transition,
+        persistedAt: timestamp,
+      );
+      try {
+        if (!_isExactReceiptReplacement(existing, candidate)) {
+          throw const V3LmfPersistenceConflictException(
+            'v3 retirement checkpoint is not an exact receipt replacement',
+          );
+        }
+        final prospectiveBytes = _totalRetainedBytes -
+            existing.retainedBytes +
+            candidate.retainedBytes;
+        if (prospectiveBytes > maxTotalRetainedBytes) {
+          throw const V3LmfPersistenceLimitException(
+            'v3 checkpoint retained-byte capacity exceeded',
+          );
+        }
+        V3SessionCheckpoint? committed;
+        try {
+          final storageId = await _store.write(_encodePayload(candidate));
+          committed = V3SessionCheckpoint._(
+            storageId: storageId,
+            sessionKey: candidate.sessionKey,
+            revision: candidate.revision,
+            lineageDigest: candidate.lineageDigest,
+            snapshotDigest: candidate.snapshotDigest,
+            checkpointDigest: candidate.checkpointDigest,
+            encodedSnapshot: candidate._encodedSnapshot,
+            receipts: candidate.receipts,
+            retirementTransition: candidate.retirementTransition,
+            persistedAt: candidate.persistedAt,
+          );
+          _checkpoints[committed.sessionKey] = committed;
+          _totalRetainedBytes = prospectiveBytes;
+        } catch (_) {
+          committed?._close();
+          _writeRecoveryRequired = true;
+          rethrow;
+        }
+        existing._close();
+        await _deleteIgnoringFailure(existing.storageId);
+        return committed;
+      } finally {
+        candidate._close();
+      }
+    });
+  }
+
+  /// Cleans source checkpoint records retained during restore until the
+  /// session coordinator has independently validated the retirement plan.
+  /// Failures are harmless and retried by the next restore.
+  Future<int> cleanupValidatedRetirementSources({
+    V3SessionCheckpointAuthority? authority,
+  }) {
+    return _serialized(() async {
+      _ensureAuthority(authority);
+      _ensureReady();
+      var removed = 0;
+      for (final storageId
+          in _pendingRetirementSourceStorageIds.toList(growable: false)) {
+        try {
+          await _store.delete(storageId);
+          _pendingRetirementSourceStorageIds.remove(storageId);
+          removed++;
+        } catch (_) {
+          // A source duplicate is non-authoritative after plan validation.
+        }
+      }
+      return removed;
+    });
+  }
+
   Future<void> close({V3SessionCheckpointAuthority? authority}) {
     return _serialized(() async {
       _ensureAuthority(authority);
@@ -492,6 +656,7 @@ final class V3SessionCheckpointRepository {
         checkpoint._close();
       }
       _checkpoints.clear();
+      _pendingRetirementSourceStorageIds.clear();
       _totalRetainedBytes = 0;
     });
   }
@@ -508,6 +673,7 @@ final class V3SessionCheckpointRepository {
       'snapshotDigest',
       'receipts',
       'checkpointDigest',
+      'retirement',
       'persistedAt',
       'reserved',
     };
@@ -522,6 +688,7 @@ final class V3SessionCheckpointRepository {
         payload['snapshotDigest'] is! String ||
         payload['receipts'] is! List ||
         payload['checkpointDigest'] is! String ||
+        (payload['retirement'] != null && payload['retirement'] is! Map) ||
         payload['persistedAt'] is! int ||
         payload['reserved'] != 0) {
       throw const FormatException('Invalid Layergram v3 checkpoint envelope');
@@ -538,6 +705,9 @@ final class V3SessionCheckpointRepository {
       final lineageDigest = payload['lineageDigest'] as String;
       final snapshotDigest = payload['snapshotDigest'] as String;
       final checkpointDigest = payload['checkpointDigest'] as String;
+      final retirementTransition = _decodeRetirementTransition(
+        payload['retirement'],
+      );
       final rawReceipts = payload['receipts'] as List<dynamic>;
       if (rawReceipts.length > maxReceiptsPerSession) {
         throw const V3LmfPersistenceLimitException(
@@ -551,6 +721,13 @@ final class V3SessionCheckpointRepository {
         revision: revision,
         maxReceipts: maxReceiptsPerSession,
       );
+      _validateRetirementTransition(
+        retirementTransition,
+        sessionKey: sessionKey,
+        revision: revision,
+        receipts: canonicalReceipts,
+        checkpointDigest: checkpointDigest,
+      );
       if (snapshot.lifecycle != V3RatchetLifecycle.active ||
           revision != snapshot.revision ||
           sessionKey != _sessionKey(snapshot.sessionId) ||
@@ -563,6 +740,7 @@ final class V3SessionCheckpointRepository {
                 lineageDigest: lineageDigest,
                 snapshotDigest: snapshotDigest,
                 receipts: canonicalReceipts,
+                retirementTransition: retirementTransition,
               ) ||
           !_isCanonicalDigest(lineageDigest) ||
           !_isCanonicalDigest(snapshotDigest) ||
@@ -582,6 +760,7 @@ final class V3SessionCheckpointRepository {
         checkpointDigest: checkpointDigest,
         encodedSnapshot: encoded,
         receipts: canonicalReceipts,
+        retirementTransition: retirementTransition,
         persistedAt: _timestampFromMillis(payload['persistedAt'] as int),
       );
     } finally {
@@ -602,6 +781,9 @@ final class V3SessionCheckpointRepository {
         'receipts':
             checkpoint.receipts.map(_encodeReceipt).toList(growable: false),
         'checkpointDigest': checkpoint.checkpointDigest,
+        'retirement': _encodeRetirementTransition(
+          checkpoint.retirementTransition,
+        ),
         'persistedAt': checkpoint.persistedAt.millisecondsSinceEpoch,
         'reserved': 0,
       };
@@ -751,6 +933,195 @@ Map<String, dynamic> _encodeReceipt(V3CheckpointReceipt receipt) =>
       'reserved': 0,
     };
 
+V3CheckpointRetirementTransition? _decodeRetirementTransition(dynamic value) {
+  if (value == null) return null;
+  if (value is! Map) {
+    throw const FormatException(
+      'Invalid Layergram v3 checkpoint retirement transition',
+    );
+  }
+  late final Map<String, dynamic> map;
+  try {
+    map = value.cast<String, dynamic>();
+  } catch (_) {
+    throw const FormatException(
+      'Invalid Layergram v3 checkpoint retirement transition',
+    );
+  }
+  const keys = <String>{'sourceCheckpointDigest', 'retiredReceipt', 'reserved'};
+  if (map.length != keys.length ||
+      !map.keys.every(keys.contains) ||
+      map['sourceCheckpointDigest'] is! String ||
+      map['reserved'] != 0) {
+    throw const FormatException(
+      'Invalid Layergram v3 checkpoint retirement transition',
+    );
+  }
+  return V3CheckpointRetirementTransition._(
+    sourceCheckpointDigest: map['sourceCheckpointDigest'] as String,
+    retiredReceipt: _decodeReceipt(map['retiredReceipt']),
+  );
+}
+
+Map<String, dynamic>? _encodeRetirementTransition(
+  V3CheckpointRetirementTransition? value,
+) {
+  if (value == null) return null;
+  return <String, dynamic>{
+    'sourceCheckpointDigest': value.sourceCheckpointDigest,
+    'retiredReceipt': _encodeReceipt(value.retiredReceipt),
+    'reserved': 0,
+  };
+}
+
+void _validateRetirementTransition(
+  V3CheckpointRetirementTransition? value, {
+  required String sessionKey,
+  required int revision,
+  required List<V3CheckpointReceipt> receipts,
+  required String checkpointDigest,
+}) {
+  if (value == null) return;
+  final receipt = value.retiredReceipt;
+  if (!_isCanonicalDigest(value.sourceCheckpointDigest) ||
+      value.sourceCheckpointDigest == checkpointDigest ||
+      receipt.sessionKey != sessionKey ||
+      receipt.ratchetRevision <= 0 ||
+      receipt.ratchetRevision > revision ||
+      receipt.stableRecordId != 'v3:${receipt.assemblyId}' ||
+      !_isCanonicalId(receipt.assemblyId, 32) ||
+      !_isCanonicalDigest(receipt.stateDigest) ||
+      receipts.any((candidate) =>
+          candidate.assemblyId == receipt.assemblyId ||
+          candidate.ratchetRevision == receipt.ratchetRevision)) {
+    throw const FormatException(
+      'Invalid Layergram v3 checkpoint retirement binding',
+    );
+  }
+}
+
+V3SessionCheckpoint _selectCheckpointHistory(
+  List<V3SessionCheckpoint> candidates,
+) {
+  if (candidates.isEmpty) {
+    throw StateError('Layergram v3 checkpoint history is empty');
+  }
+  final byDigest = <String, V3SessionCheckpoint>{};
+  for (final candidate in candidates) {
+    final previous = byDigest[candidate.checkpointDigest];
+    if (previous == null) {
+      byDigest[candidate.checkpointDigest] = candidate;
+    } else if (!_sameCheckpoint(previous, candidate)) {
+      throw const V3LmfPersistenceConflictException(
+        'divergent v3 checkpoints share a digest',
+      );
+    }
+  }
+  for (final candidate in byDigest.values) {
+    final sourceDigest = candidate.retirementTransition?.sourceCheckpointDigest;
+    if (sourceDigest == null) continue;
+    final source = byDigest[sourceDigest];
+    if (source != null && !_isExactReceiptReplacement(source, candidate)) {
+      throw const V3LmfPersistenceConflictException(
+        'v3 checkpoint retirement chain is invalid',
+      );
+    }
+  }
+
+  final byRevision = <int, List<V3SessionCheckpoint>>{};
+  for (final candidate in byDigest.values) {
+    byRevision
+        .putIfAbsent(candidate.revision, () => <V3SessionCheckpoint>[])
+        .add(candidate);
+  }
+  final revisions = byRevision.keys.toList()..sort();
+  V3SessionCheckpoint? previous;
+  for (final revision in revisions) {
+    final selected = _selectCheckpointRevisionTip(byRevision[revision]!);
+    if (previous != null && !_extendsCheckpoint(previous, selected)) {
+      throw const V3LmfPersistenceConflictException(
+        'v3 checkpoint history is not monotonic',
+      );
+    }
+    previous = selected;
+  }
+  return previous!;
+}
+
+V3SessionCheckpoint _selectCheckpointRevisionTip(
+  List<V3SessionCheckpoint> candidates,
+) {
+  if (candidates.length == 1) return candidates.single;
+  final byDigest = <String, V3SessionCheckpoint>{
+    for (final candidate in candidates) candidate.checkpointDigest: candidate,
+  };
+  final childBySource = <String, V3SessionCheckpoint>{};
+  final roots = <V3SessionCheckpoint>[];
+  for (final candidate in candidates) {
+    final source = candidate.retirementTransition?.sourceCheckpointDigest;
+    if (source == null || !byDigest.containsKey(source)) {
+      roots.add(candidate);
+      continue;
+    }
+    final previousChild = childBySource[source];
+    if (previousChild != null &&
+        previousChild.checkpointDigest != candidate.checkpointDigest) {
+      throw const V3LmfPersistenceConflictException(
+        'v3 checkpoint retirement history forked',
+      );
+    }
+    childBySource[source] = candidate;
+  }
+  if (roots.length != 1) {
+    throw const V3LmfPersistenceConflictException(
+      'v3 checkpoint revision has divergent roots',
+    );
+  }
+  var current = roots.single;
+  var visited = 1;
+  while (true) {
+    final child = childBySource[current.checkpointDigest];
+    if (child == null) break;
+    current = child;
+    visited++;
+    if (visited > candidates.length) {
+      throw const V3LmfPersistenceConflictException(
+        'v3 checkpoint retirement history contains a cycle',
+      );
+    }
+  }
+  if (visited != candidates.length) {
+    throw const V3LmfPersistenceConflictException(
+      'v3 checkpoint retirement history is disconnected',
+    );
+  }
+  return current;
+}
+
+Set<String> _retirementAncestorDigests(
+  V3SessionCheckpoint selected,
+  List<V3SessionCheckpoint> history,
+) {
+  final byDigest = <String, V3SessionCheckpoint>{
+    for (final value in history) value.checkpointDigest: value,
+  };
+  final ancestors = <String>{};
+  var current = selected;
+  final visited = <String>{selected.checkpointDigest};
+  while (true) {
+    final transition = current.retirementTransition;
+    if (transition == null) return ancestors;
+    final sourceDigest = transition.sourceCheckpointDigest;
+    if (!visited.add(sourceDigest)) return ancestors;
+    final source = byDigest[sourceDigest];
+    if (source == null || source.revision != selected.revision) {
+      return ancestors;
+    }
+    ancestors.add(sourceDigest);
+    current = source;
+  }
+}
+
 bool _sameCheckpoint(V3SessionCheckpoint left, V3SessionCheckpoint right) =>
     left.sessionKey == right.sessionKey &&
     left.revision == right.revision &&
@@ -758,7 +1129,60 @@ bool _sameCheckpoint(V3SessionCheckpoint left, V3SessionCheckpoint right) =>
     left.snapshotDigest == right.snapshotDigest &&
     left.checkpointDigest == right.checkpointDigest &&
     _bytesEqual(left._encodedSnapshot, right._encodedSnapshot) &&
+    _sameReceiptList(left.receipts, right.receipts) &&
+    _sameRetirementTransition(
+      left.retirementTransition,
+      right.retirementTransition,
+    );
+
+bool _sameCheckpointStateAndReceipts(
+  V3SessionCheckpoint left,
+  V3SessionCheckpoint right,
+) =>
+    left.sessionKey == right.sessionKey &&
+    left.revision == right.revision &&
+    left.lineageDigest == right.lineageDigest &&
+    left.snapshotDigest == right.snapshotDigest &&
+    _bytesEqual(left._encodedSnapshot, right._encodedSnapshot) &&
     _sameReceiptList(left.receipts, right.receipts);
+
+bool _sameRetirementTransition(
+  V3CheckpointRetirementTransition? left,
+  V3CheckpointRetirementTransition? right,
+) {
+  if (left == null || right == null) return left == null && right == null;
+  return left.sourceCheckpointDigest == right.sourceCheckpointDigest &&
+      _sameReceipt(left.retiredReceipt, right.retiredReceipt);
+}
+
+bool _isExactReceiptReplacement(
+  V3SessionCheckpoint source,
+  V3SessionCheckpoint replacement,
+) {
+  final transition = replacement.retirementTransition;
+  if (transition == null ||
+      transition.sourceCheckpointDigest != source.checkpointDigest ||
+      source.sessionKey != replacement.sessionKey ||
+      source.revision != replacement.revision ||
+      source.lineageDigest != replacement.lineageDigest ||
+      source.snapshotDigest != replacement.snapshotDigest ||
+      !_bytesEqual(source._encodedSnapshot, replacement._encodedSnapshot) ||
+      replacement.persistedAt.isBefore(source.persistedAt) ||
+      source.receipts.length != replacement.receipts.length + 1) {
+    return false;
+  }
+  final retired = source.receiptForAssembly(
+    transition.retiredReceipt.assemblyId,
+  );
+  if (retired == null || !_sameReceipt(retired, transition.retiredReceipt)) {
+    return false;
+  }
+  for (final receipt in replacement.receipts) {
+    final previous = source.receiptForAssembly(receipt.assemblyId);
+    if (previous == null || !_sameReceipt(previous, receipt)) return false;
+  }
+  return true;
+}
 
 bool _extendsCheckpoint(
   V3SessionCheckpoint earlier,
@@ -896,6 +1320,7 @@ String _checkpointDigest({
   required String lineageDigest,
   required String snapshotDigest,
   required List<V3CheckpointReceipt> receipts,
+  required V3CheckpointRetirementTransition? retirementTransition,
 }) {
   final session = _decodeBinary(sessionKey, 16);
   final lineage = _decodeBinary(lineageDigest, 32);
@@ -904,19 +1329,19 @@ String _checkpointDigest({
     ..setUint64(0, revision, Endian.big)
     ..setUint32(8, receipts.length, Endian.big);
   final receiptBytes = <Uint8List>[];
+  Uint8List? retiredReceiptBytes;
+  Uint8List? sourceCheckpoint;
   try {
     for (final receipt in receipts) {
-      final assembly = _decodeBinary(receipt.assemblyId, 32);
-      final digest = _decodeBinary(receipt.stateDigest, 32);
-      final encoded = Uint8List(73);
-      final data = ByteData.sublistView(encoded);
-      encoded[0] = receipt.direction.wireId;
-      encoded.setRange(1, 33, assembly);
-      data.setUint64(33, receipt.ratchetRevision, Endian.big);
-      encoded.setRange(41, 73, digest);
-      _wipe(assembly);
-      _wipe(digest);
-      receiptBytes.add(encoded);
+      receiptBytes.add(_encodeReceiptDigestBytes(receipt));
+    }
+    if (retirementTransition != null) {
+      sourceCheckpoint = _decodeBinary(
+        retirementTransition.sourceCheckpointDigest,
+        32,
+      );
+      retiredReceiptBytes =
+          _encodeReceiptDigestBytes(retirementTransition.retiredReceipt);
     }
     final label = utf8.encode('layergram/v3/checkpoint/record\u0000');
     final bytes = Uint8List(
@@ -925,7 +1350,10 @@ String _checkpointDigest({
           header.lengthInBytes +
           lineage.length +
           snapshot.length +
-          receiptBytes.length * 73,
+          receiptBytes.length * 73 +
+          1 +
+          32 +
+          73,
     );
     var offset = 0;
     void append(List<int> value) {
@@ -942,6 +1370,9 @@ String _checkpointDigest({
       for (final receipt in receiptBytes) {
         append(receipt);
       }
+      append(<int>[retirementTransition == null ? 0 : 1]);
+      append(sourceCheckpoint ?? Uint8List(32));
+      append(retiredReceiptBytes ?? Uint8List(73));
       return _sha256Armored(bytes);
     } finally {
       _wipe(bytes);
@@ -953,6 +1384,25 @@ String _checkpointDigest({
     for (final receipt in receiptBytes) {
       _wipe(receipt);
     }
+    if (sourceCheckpoint != null) _wipe(sourceCheckpoint);
+    if (retiredReceiptBytes != null) _wipe(retiredReceiptBytes);
+  }
+}
+
+Uint8List _encodeReceiptDigestBytes(V3CheckpointReceipt receipt) {
+  final assembly = _decodeBinary(receipt.assemblyId, 32);
+  final digest = _decodeBinary(receipt.stateDigest, 32);
+  final encoded = Uint8List(73);
+  try {
+    final data = ByteData.sublistView(encoded);
+    encoded[0] = receipt.direction.wireId;
+    encoded.setRange(1, 33, assembly);
+    data.setUint64(33, receipt.ratchetRevision, Endian.big);
+    encoded.setRange(41, 73, digest);
+    return encoded;
+  } finally {
+    _wipe(assembly);
+    _wipe(digest);
   }
 }
 

@@ -454,19 +454,24 @@ Replay-window entries are not time-purged by this coordinator. The existing
 explicit purge API is blocked after journal ownership. The frozen evaluator is
 non-destructive and can only declare eligibility after the local minimum age
 and independent Sparse-PQ non-derivability checks pass. The inactive encrypted
-`v3_session_retirement_v1` journal now freezes an eligible exact proof/receipt,
-its locally measured age, and its source checkpoint in a `prepared` record. A
-write-new-before-delete `checkpointReplaced` revision binds the exact different
-replacement checkpoint digest and survives restart or an ambiguous write. It is
-deliberately non-destructive and exposes no collect/delete method. The sole
-session authority now claims it before caller validation, restores it from the
-same scope-pinned encrypted store, and rejects any plan that no longer matches
-its exact checkpoint stage, direction-bound receipt state, compact proof, and
-local proof timestamp. This restore performs no deletion. Coordinator-driven
-preparation and checkpoint replacement, reconciliation of their cross-store
-crash windows, deleting the compact proof only after replacement-checkpoint
-durability, and rolling pruning of the bounded cumulative receipt set remain
-activation gates.
+`v3_session_retirement_v1` journal freezes an eligible exact proof/receipt, its
+locally measured age, and its source checkpoint in a `prepared` record. The sole
+session authority evaluates incoming and outgoing eligibility, writes that
+intent, persists a same-revision checkpoint whose canonical retirement
+transition binds the source digest and the one removed receipt, and advances
+the plan to `checkpointReplaced`. The compact proof remains present throughout.
+Restore selects an exact write-new-before-delete replacement chain, retains its
+source until the separate plan validates, advances an interrupted prepared plan
+when the replacement write was already durable, and only then may clean the
+superseded source copy. Divergence between checkpoint, plan, direction-bound
+receipt, compact proof, or local proof timestamp fails closed. The journal
+deliberately exposes no collect/delete method. Deleting the compact proof and
+plan only after this boundary, plus rolling pruning of more than one receipt at
+the same stable revision, remain activation gates.
+Only one retirement plan may be pending for a session at this intermediate
+boundary; a different plan is rejected before another durable write.
+The inactive coordinator therefore rejects any further ratchet advance for a
+session with a retirement plan until that finalization step is implemented.
 
 ### 7.6 Session-controller restore and commit invariants
 
@@ -606,9 +611,10 @@ crash-consistent send/receive coordinator and its recovery paths must pass
 independent review and production wiring; the application repository must
 project from the durable stable-ID AR3 source; checkpoint-backed restore,
 compaction, replay-window replacement, and the integrated non-destructive
-retirement-journal restore must pass independent review, while coordinator-driven
-plan preparation, replacement-checkpoint reconciliation, crash-consistent
-replay/completion deletion, and rolling receipt compaction remain pending;
+retirement preparation, receipt-pruned replacement checkpoint, and crash
+reconciliation must pass independent review, while crash-consistent
+replay/completion-proof and plan deletion plus rolling receipt compaction remain
+pending;
 resend/progress UX and real loss recovery must pass; all three transports must
 pass real cross-app tests; and the complete design and implementation must pass
 independent review.

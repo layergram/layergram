@@ -13,6 +13,7 @@ import 'package:layergram/core/crypto/v3/lmf_v3_atomic_commit.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3_outbox.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3_persistence.dart';
 import 'package:layergram/core/crypto/v3/pq_message_ratchet_v3.dart';
+import 'package:layergram/core/crypto/v3/retention_policy_v3.dart';
 import 'package:layergram/core/crypto/v3/session_commit_controller_v3.dart';
 import 'package:layergram/core/crypto/v3/session_checkpoint_v3.dart';
 import 'package:layergram/core/crypto/v3/session_send_journal_v3.dart';
@@ -508,6 +509,80 @@ void main() {
         hasLength(1),
       );
 
+      await restored.close();
+      fixture.checkpoint.wipeSecrets();
+    });
+
+    test('replaces one eligible outgoing receipt and retains completion proof',
+        () async {
+      final fixture = await _SendFixture.create(
+        durableState: true,
+        retirementState: true,
+      );
+      final result = await fixture.controller.sendMessage(
+        sessionId: fixture.checkpoint.sessionId,
+        expectedRevision: 0,
+        plaintext: _bytes(320, 0x8b),
+        backend: fixture.backend,
+      );
+      await fixture.controller.applySendAcknowledgement(
+        acknowledgementFrame:
+            await _completeAckFrame(result.frames, fixture.checkpoint),
+      );
+      await fixture.controller.compactSession(fixture.checkpoint.sessionId);
+
+      final replaced =
+          await fixture.controller.replaceEligibleCheckpointReceipt(
+        assemblyId: result.assemblyId,
+        policy: V3RetentionPolicy.custom(
+          skippedKeyLifetimeSeconds: 1,
+          minimumProofLifetimeSeconds: 1,
+        ),
+        now: DateTime.now().toUtc().add(const Duration(seconds: 2)),
+      );
+      expect(replaced.decision.eligible, isTrue);
+      expect(replaced.checkpointWasReplaced, isTrue);
+      final checkpoint = fixture.store.records.values.singleWhere(
+        (payload) =>
+            payload['kind'] == V3SessionCheckpointRepository.recordKind,
+      );
+      expect(checkpoint['receipts'], isEmpty);
+      expect(
+        ((checkpoint['retirement'] as Map)['retiredReceipt']
+            as Map)['assemblyId'],
+        result.assemblyId,
+      );
+      expect(
+        fixture.store.records.values.where(
+          (payload) =>
+              payload['kind'] == V3SessionSendJournal.completionRecordKind,
+        ),
+        hasLength(1),
+      );
+      expect(
+        fixture.store.records.values.singleWhere(
+          (payload) => payload['kind'] == V3SessionRetirementJournal.recordKind,
+        )['stage'],
+        V3SessionRetirementStage.checkpointReplaced.wireId,
+      );
+
+      await fixture.closeControllerOnly();
+      final restored = await _SendFixture.create(
+        store: fixture.store,
+        checkpoint: fixture.checkpoint,
+        backend: fixture.backend,
+        durableState: true,
+        retirementState: true,
+      );
+      expect(restored.restoreResult.retirementPlanCount, 1);
+      expect(restored.restoreResult.sessionRevisions.values.single, 1);
+      expect(
+        fixture.store.records.values.where(
+          (payload) =>
+              payload['kind'] == V3SessionSendJournal.completionRecordKind,
+        ),
+        hasLength(1),
+      );
       await restored.close();
       fixture.checkpoint.wipeSecrets();
     });

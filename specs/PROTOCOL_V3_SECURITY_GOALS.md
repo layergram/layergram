@@ -162,14 +162,22 @@ reviewed standard alternative or narrow its product claim explicitly.
   lifetime. A later durable stage MUST bind one exact replacement checkpoint
   without weakening the prepared binding. Ambiguous writes MUST fail stopped
   until restore. Merely reaching that stage MUST NOT by itself expose a generic
-  proof-deletion API; deletion requires future single-authority cross-store
-  reconciliation and a recoverable receipt-pruning transition.
+  proof-deletion API. The coordinator MUST encode the source checkpoint digest
+  and exactly one removed receipt in the canonical replacement checkpoint,
+  write it before advancing the journal, and preserve the compact proof.
 - The single authority MUST claim and restore the retirement journal from the
-  same encrypted scope. Restore MUST reject duplicate plans for one assembly and
+  same encrypted scope. At most one retirement plan may be pending per session;
+  restore MUST reject duplicate plans for one session or assembly and
   MUST revalidate the exact current checkpoint stage, direction-bound receipt
   state, compact proof digest/bindings, and locally recorded proof time before
-  accepting any plan. This validation MUST NOT delete any plan, proof, or
-  receipt.
+  accepting any plan. If a replacement write completed before a crash, restore
+  MUST validate that exact transition and idempotently advance the prepared
+  plan. An unverified replacement MUST NOT cause its source checkpoint to be
+  deleted. Validation may clean only the superseded source checkpoint; it MUST
+  NOT delete the plan or compact proof.
+- Until compact-proof and plan deletion are crash-consistently implemented, a
+  session with any retirement plan MUST reject further ratchet advances rather
+  than silently supersede its replacement checkpoint.
 - One identity/passphrase-scoped authority MUST own journal mutation before
   session restore. Direct journal lifecycle calls and writes MUST be rejected
   after ownership; production wiring MUST neither retain nor expose the owned
