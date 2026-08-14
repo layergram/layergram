@@ -525,6 +525,40 @@ final class V3SessionCheckpointRepository {
     });
   }
 
+  /// Computes the deterministic digest of a revision-zero checkpoint without
+  /// writing it. The handshake handoff journal uses this after a crash to
+  /// prove that an existing completion tombstone names the exact initial TR3
+  /// snapshot it prepared, even if the live session has since advanced.
+  Future<String> initialCheckpointDigest({
+    required V3TripleRatchetState snapshot,
+    V3SessionCheckpointAuthority? authority,
+  }) {
+    return _serialized(() async {
+      _ensureAuthority(authority);
+      _ensureReady();
+      if (snapshot.lifecycle != V3RatchetLifecycle.active ||
+          snapshot.revision != 0) {
+        throw const FormatException(
+          'Layergram v3 initial checkpoint must be active revision zero',
+        );
+      }
+      await _validateCheckpointSnapshot(snapshot);
+      final encoded = V3TripleRatchetStateCodec.encode(snapshot);
+      try {
+        return _checkpointDigest(
+          sessionKey: _sessionKey(snapshot.sessionId),
+          revision: 0,
+          lineageDigest: _lineageDigest(snapshot),
+          snapshotDigest: _snapshotDigest(encoded),
+          receipts: const <V3CheckpointReceipt>[],
+          retirementTransition: null,
+        );
+      } finally {
+        _wipe(encoded);
+      }
+    });
+  }
+
   /// Writes a same-revision checkpoint that removes exactly [receipt].
   ///
   /// The replacement embeds the source checkpoint digest and the complete

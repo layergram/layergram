@@ -372,17 +372,19 @@ view pinned to the canonical 16-character base64url identity namespace and to
 an owned copy of exactly one primary- or passphrase-derived Aux key. Rejecting
 non-canonical tokens is mandatory because Aux records are selected by a
 delimiter-separated prefix. The owner then privately constructs the inbox,
-pending-handshake repository/controller, receive journal, send journal, outbox,
-AR3 materializer, checkpoint repository, and their single-authority session
-controller over the same store. It MUST NOT reuse the active mutable
+pending-handshake repository/controller, initial-session preparation journal,
+receive journal, send journal, outbox, AR3 materializer, checkpoint repository,
+and their single-authority controllers over the same store. It MUST NOT reuse
+the active mutable
 Aux-repository singleton: switching that singleton while a journal is open
 could redirect later writes into another identity context.
 
 Restore first indexes every sealed inbox record with no frame key, restores
-pending handshakes, restores the controller's durable TR3 truth, and only then
-permits deferred resolution by a future reviewed SCKA-backed resolver. Close
-drains the handshake controller, session controller, and inbox before removing
-the repository context and destroying the owned key copy. A restore error is
+pending handshakes, restores the controller's durable TR3 truth, reconciles
+every prepared handshake handoff, and only then permits deferred resolution by
+a future reviewed SCKA-backed resolver. Close drains the handoff, handshake,
+session, and inbox controllers in dependency order before removing the
+repository context and destroying the owned key copy. A restore error is
 fail-stop for that owner and requires reconstruction. This boundary is not
 registered in providers and does not activate protocol v3.
 

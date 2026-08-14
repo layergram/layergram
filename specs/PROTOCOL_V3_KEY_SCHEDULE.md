@@ -74,6 +74,10 @@ This checkpoint provides:
   offer/reply retry, single-controller authority, per-identity capacity
   preflight, fail-stop ambiguous-write recovery, and write-before-delete
   completion tombstones retaining the initiator's exact confirmation;
+- an encrypted, bounded initial-session preparation journal that commits the
+  exact confirmation and revision-zero TR3 before checkpoint materialization,
+  resumes every ambiguous boundary without rerunning cryptography, validates
+  the deterministic checkpoint digest, and retires HP3 before collection;
 - frozen local Normal/Maximum retention horizons plus a non-destructive,
   explainable eligibility check for future replay/completion-proof retirement;
 - an encrypted, bounded, fail-stop `v3_session_retirement_v1` journal whose
@@ -94,8 +98,8 @@ It deliberately does not provide:
   candidate remains externally unreviewed);
 - a production ML-KEM Braid/SCKA implementation or reviewed native state
   exporter;
-- an active handshake bootstrap/handoff, active durable send controller, or
-  projection from the durable AR3 source into the current message/UI
+- active contact/device bootstrap policy, an active durable send controller,
+  or projection from the durable AR3 source into the current message/UI
   repository;
 - registration in providers or activation in contacts, messaging, UI, backup,
   migration, or Premium paths.
@@ -829,8 +833,8 @@ Before this schedule can carry user messages, Layergram still requires:
   export/import behind the frozen boundary;
 - independent review and production wiring of the inactive crash-consistent
   send/receive coordinator, including the reviewed native-state validator;
-- atomic initial-session handoff that checks the exact transcript-derived TR3
-  checkpoint before retiring HP3 into its completion tombstone;
+- production wiring that keeps the implemented initial-session handoff as the
+  sole authority and supplies its reviewed native SCKA validator/backend;
 - active message/UI repository projection from the idempotent durable AR3
   source;
 - full packaging, crash, migration, multi-device, passphrase, Maximum-mode,

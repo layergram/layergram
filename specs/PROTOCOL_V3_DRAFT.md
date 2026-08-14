@@ -189,7 +189,8 @@ transition engine and HR3 transport are now implemented as inactive components.
 The receive-commit controller still depends on a reviewed native ML-KEM Braid
 transition/state validator and trusted candidate construction. A complete send
 and receive persistence authority, deferred continuation-key resolution,
-checkpointing, replay retirement, and pending-handshake persistence exist only
-behind the inactive v3 boundary. Atomic initial TR3 handoff, controller-level
-device policy, active projection, resend/progress UX, real cross-app loss tests,
-and erasure coding remain activation gates.
+checkpointing, replay retirement, pending-handshake persistence, and the exact
+prepare/checkpoint/tombstone initial-TR3 handoff exist only behind the inactive
+v3 boundary. Controller-level device policy, a reviewed production SCKA
+backend, active projection, resend/progress UX, real cross-app loss tests, and
+erasure coding remain activation gates.

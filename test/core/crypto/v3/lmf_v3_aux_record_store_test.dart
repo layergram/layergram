@@ -337,6 +337,7 @@ void main() {
     expect(firstRestore.inbox.deferredFrames, 0);
     expect(firstRestore.handshakes.pendingOutbound, isEmpty);
     expect(firstRestore.handshakes.completionCount, 0);
+    expect(firstRestore.handoffs.recoveredHandoffs, isEmpty);
     expect(firstRestore.sessions.sessionRevisions.values, <int>[1]);
     expect(firstRestore.sessions.checkpointCount, 1);
     expect(firstRestore.sessions.retirementPlanCount, 0);
@@ -371,6 +372,7 @@ void main() {
     );
     expect(isolatedRestore.inbox.deferredFrames, 0);
     expect(isolatedRestore.handshakes.pendingOutbound, isEmpty);
+    expect(isolatedRestore.handoffs.recoveredHandoffs, isEmpty);
     expect(isolatedRestore.sessions.sessionRevisions, isEmpty);
     await isolated.close();
 
@@ -388,6 +390,7 @@ void main() {
     );
     expect(wrongRestore.inbox.deferredFrames, 0);
     expect(wrongRestore.handshakes.pendingOutbound, isEmpty);
+    expect(wrongRestore.handoffs.recoveredHandoffs, isEmpty);
     expect(wrongRestore.sessions.sessionRevisions, isEmpty);
     await wrongContext.close();
 
@@ -403,6 +406,7 @@ void main() {
     expect(restoredState.inbox.deferredFrames, frames.length);
     expect(restoredState.handshakes.pendingOutbound, isEmpty);
     expect(restoredState.handshakes.completionCount, 0);
+    expect(restoredState.handoffs.recoveredHandoffs, isEmpty);
     expect(restoredState.sessions.sessionRevisions.values, <int>[1]);
     expect(restoredState.sessions.checkpointCount, 1);
     expect(restoredState.sessions.retirementPlanCount, 0);

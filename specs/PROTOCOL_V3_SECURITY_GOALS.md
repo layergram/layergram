@@ -103,6 +103,10 @@ It is not approved for activation and any candidate MUST:
   digest before deleting HP3. Ambiguous writes or deletes MUST fail stopped
   until restore, and initiator confirmation loss recovery MUST reuse exact
   retained bytes.
+- persist an encrypted preparation containing the exact confirmation and
+  revision-zero TR3 before the initial checkpoint; restore MUST finish the
+  same checkpoint/tombstone transition without rerunning handshake, SCKA, or
+  ratchet-key generation, and no confirmation may be exported first;
 
 The proposed KEM-based proof of possession is a research candidate, not an
 approved primitive. It MUST NOT be enabled until an external cryptographic

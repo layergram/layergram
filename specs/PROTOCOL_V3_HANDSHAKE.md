@@ -390,17 +390,31 @@ claim, direct repository access is rejected.
 
 First export occurs only after the pending record write succeeds. An ambiguous
 write fails stopped until a fresh restore, which recovers the exact offer/reply
-without rerunning cryptography. After the initial session checkpoint is
-independently durable, the controller writes a completion tombstone binding the
-handshake, pending-state digest, identities/devices, exact confirmation,
-session ID, and checkpoint digest before deleting HP3. An ambiguous write or
-delete likewise requires restore. For an initiator, the tombstone retains the
-exact confirmation for loss recovery without retaining HP3 secrets.
+without rerunning cryptography.
 
-This is durable handshake-state infrastructure, not the active bootstrap
-handoff: the future session initializer must still prove that the supplied
-checkpoint is the exact TR3 state derived from that confirmation before it may
-request completion.
+The inactive handoff coordinator closes the later checkpoint/tombstone crash
+gap with an encrypted `v3_handshake_handoff_v1` preparation. It persists the
+exact revision-zero `TR3` and exact confirmation before attempting the initial
+checkpoint. It then persists the checkpoint, writes a completion tombstone
+binding the handshake, pending-state digest, identities/devices, confirmation,
+session ID, and deterministic checkpoint digest, deletes HP3, and finally
+deletes the preparation. No confirmation is returned before this sequence
+completes.
+
+The preparation journal is bounded to 64 logical records, 128 physical
+records, 16 MiB retained, and the existing 256 KiB TR3 maximum. Restore
+validates canonical records, reconstructs the exact prepared snapshot, resumes
+an absent or ambiguous checkpoint idempotently, validates an already durable
+tombstone against the deterministic initial-checkpoint digest, and collects
+the preparation. It never reruns ML-KEM, X25519, SCKA initialization, or fresh
+ratchet-key generation. Ambiguous prepare, checkpoint, tombstone, HP3 delete,
+or preparation-delete outcomes fail stopped until a fresh scope restore. For
+an initiator, the tombstone retains the exact confirmation without retaining
+HP3 secrets.
+
+This remains inactive bootstrap infrastructure: the production SCKA backend,
+contact/device policy, transport wrapper, and application projection are still
+activation gates.
 
 ## 10. Manual transport sizing
 
@@ -428,7 +442,7 @@ ML-KEM ciphertext to make the handshake shorter.
 | `INIT` | create/receive canonical offer | pending only |
 | `REPLY` | create/verify responder reply | pending only |
 | `CONFIRM` | create/verify initiator confirmation | pending only |
-| authenticated handoff | persist initial checkpoint, then tombstone HP3 | still blocked |
+| authenticated handoff | prepare exact TR3, checkpoint, tombstone HP3, collect preparation | implemented but inactive |
 | `ACTIVE` | only after ratchet/controller commit | allowed |
 
 Proof verification does not by itself make the application active. Future
@@ -445,10 +459,11 @@ Before this candidate can be enabled:
 - the bootstrap encryption and LMF key-resolution design must prevent a
   classical-only application fallback and bind exact outer records;
 - Normal and Maximum device policy must be enforced by the controller;
-- the implemented EC Double Ratchet initializer and the future ML-KEM Braid
-  initializer must be composed into one atomic initial `TR3` checkpoint;
-- the active handoff must validate that the completion tombstone's session ID
-  and checkpoint digest identify exactly that initialized `TR3` state;
+- the implemented EC, epoch-zero PQ, and native-SCKA initializers must run with
+  an independently reviewed production SCKA backend; the current atomic handoff
+  already composes and persists their exact initial `TR3`;
+- active construction must remain private behind the scope coordinator so no
+  caller can bypass the preparation/checkpoint/tombstone ordering;
 - loss, reorder, duplicate, resend, text, link, steganography, QR-independent
   identity, passphrase, multi-identity Premium, backup, and cross-platform
   packaging tests must pass;

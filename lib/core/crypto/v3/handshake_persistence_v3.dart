@@ -183,6 +183,27 @@ final class V3HandshakeControllerRestoreResult {
   final int suppressedCompletedPending;
 }
 
+/// Detached public metadata for one committed handshake-to-session handoff.
+/// The retained confirmation is public wire data; HP3 secrets never leave the
+/// repository through this object.
+final class V3CommittedHandshakeHandoff {
+  V3CommittedHandshakeHandoff({
+    required this.handshakeId,
+    required this.role,
+    required this.pendingStateDigest,
+    required Uint8List confirmationRecord,
+    required this.sessionId,
+    required this.checkpointDigest,
+  }) : confirmationRecord = Uint8List.fromList(confirmationRecord);
+
+  final String handshakeId;
+  final V3SessionRole role;
+  final String pendingStateDigest;
+  final Uint8List confirmationRecord;
+  final String sessionId;
+  final String checkpointDigest;
+}
+
 /// Unforgeable authority retained by one handshake persistence controller.
 final class V3HandshakePersistenceAuthority {
   const V3HandshakePersistenceAuthority._();
@@ -951,6 +972,8 @@ final class V3HandshakePersistenceController {
   bool get requiresRecovery =>
       _recoveryRequired || _repository.requiresRecovery;
 
+  bool get isRestored => _restored && !requiresRecovery && !_closed;
+
   Future<V3HandshakeControllerRestoreResult> restore() {
     return _serialized(() async {
       _ensureOpen();
@@ -1021,6 +1044,58 @@ final class V3HandshakePersistenceController {
         outboundRecord: completion.terminalRecord,
         restored: true,
       );
+    });
+  }
+
+  /// Returns a detached binding used only by the crash-recovery handoff
+  /// coordinator to validate and collect an already committed preparation.
+  Future<V3CommittedHandshakeHandoff?> committedHandoffForId(
+    String handshakeId,
+  ) {
+    return _serialized(() async {
+      _ensureReady();
+      final completion = _repository.completionForId(
+        handshakeId,
+        authority: _authority,
+      );
+      if (completion == null) return null;
+      return V3CommittedHandshakeHandoff(
+        handshakeId: completion.handshakeId,
+        role: completion.role,
+        pendingStateDigest: completion.pendingStateDigest,
+        confirmationRecord: completion.terminalRecord,
+        sessionId: completion.sessionId,
+        checkpointDigest: completion.checkpointDigest,
+      );
+    });
+  }
+
+  /// Returns detached bindings for restore-time checkpoint reconciliation.
+  Future<List<V3CommittedHandshakeHandoff>> committedHandoffs() {
+    return _serialized(() async {
+      _ensureReady();
+      return _repository
+          .completions(authority: _authority)
+          .map(
+            (completion) => V3CommittedHandshakeHandoff(
+              handshakeId: completion.handshakeId,
+              role: completion.role,
+              pendingStateDigest: completion.pendingStateDigest,
+              confirmationRecord: completion.terminalRecord,
+              sessionId: completion.sessionId,
+              checkpointDigest: completion.checkpointDigest,
+            ),
+          )
+          .toList(growable: false);
+    });
+  }
+
+  /// Fails stopped if a higher-level initial-session handoff has crossed a
+  /// durable boundary but cannot finish in the current process instance.
+  Future<void> markInitialHandoffRecoveryRequired() {
+    return _serialized(() async {
+      _ensureOpen();
+      _recoveryRequired = true;
     });
   }
 

@@ -101,6 +101,20 @@ final class V3SessionSendResult {
   final List<V3LmfFrame> frames;
 }
 
+/// Result of durably registering the revision-zero TR3 produced by one
+/// authenticated hybrid handshake.
+final class V3InitialSessionRegistration {
+  const V3InitialSessionRegistration({
+    required this.sessionKey,
+    required this.checkpointDigest,
+    required this.wasAlreadyDurable,
+  });
+
+  final String sessionKey;
+  final String checkpointDigest;
+  final bool wasAlreadyDurable;
+}
+
 /// Explainable outcome of one fully finalized receipt retirement.
 final class V3SessionReceiptRetirementResult {
   const V3SessionReceiptRetirementResult({
@@ -221,6 +235,7 @@ final class V3SessionCommitController {
   bool _recoveryRequired = false;
 
   int get sessionCount => _sessions.length;
+  bool get isRestored => _restored && !requiresRecovery && !_closed;
   bool get requiresRecovery =>
       _recoveryRequired || (_retirementJournal?.requiresRecovery ?? false);
 
@@ -729,6 +744,240 @@ final class V3SessionCommitController {
         throw StateError('Layergram v3 session is not registered');
       }
       return _copySnapshot(current);
+    });
+  }
+
+  /// Persists and registers one exact active revision-zero TR3 before the
+  /// handshake controller may retire HP3. Repeating the byte-identical
+  /// snapshot is idempotent; a same-session fork fails closed.
+  Future<V3InitialSessionRegistration> registerInitialSession({
+    required V3TripleRatchetState snapshot,
+    DateTime? persistedAt,
+  }) {
+    return _serialized(() async {
+      _ensureReady();
+      final repository = _checkpointRepository;
+      if (repository == null) {
+        throw StateError(
+          'Layergram v3 durable checkpoint storage is not configured',
+        );
+      }
+      if (snapshot.lifecycle != V3RatchetLifecycle.active ||
+          snapshot.revision != 0) {
+        throw const FormatException(
+          'Layergram v3 initial session must be active revision zero',
+        );
+      }
+
+      final candidate = _copySnapshot(snapshot);
+      var retained = false;
+      var persistenceAttempted = false;
+      try {
+        await _validateSnapshot(candidate);
+        final sessionKey = _sessionKey(candidate.sessionId);
+        final current = _sessions[sessionKey];
+        if (current != null) {
+          if (current.revision != 0 ||
+              !_snapshotBytesEqual(current, candidate)) {
+            throw const V3LmfPersistenceConflictException(
+              'v3 initial session registration forks durable state',
+            );
+          }
+          final checkpoint = repository.checkpointForSession(
+            candidate.sessionId,
+            authority: _checkpointAuthority,
+          );
+          if (checkpoint == null ||
+              checkpoint.revision != 0 ||
+              !checkpoint.matchesLineage(candidate)) {
+            throw const V3LmfPersistenceConflictException(
+              'v3 initial session lost its exact durable checkpoint',
+            );
+          }
+          final expectedDigest = await repository.initialCheckpointDigest(
+            snapshot: candidate,
+            authority: _checkpointAuthority,
+          );
+          if (checkpoint.checkpointDigest != expectedDigest) {
+            throw const V3LmfPersistenceConflictException(
+              'v3 initial session checkpoint digest diverged',
+            );
+          }
+          return V3InitialSessionRegistration(
+            sessionKey: sessionKey,
+            checkpointDigest: checkpoint.checkpointDigest,
+            wasAlreadyDurable: true,
+          );
+        }
+        if (_sessions.length >= maxSessions) {
+          throw const V3LmfPersistenceLimitException(
+            'v3 session checkpoint limit exceeded',
+          );
+        }
+        if (repository.checkpointForSession(
+              candidate.sessionId,
+              authority: _checkpointAuthority,
+            ) !=
+            null) {
+          throw const V3LmfPersistenceConflictException(
+            'v3 unregistered initial session already has a checkpoint',
+          );
+        }
+
+        persistenceAttempted = true;
+        final checkpoint = await repository.persist(
+          snapshot: candidate,
+          receipts: const <V3CheckpointReceipt>[],
+          persistedAt: persistedAt,
+          authority: _checkpointAuthority,
+        );
+        _sessions[sessionKey] = candidate;
+        retained = true;
+        return V3InitialSessionRegistration(
+          sessionKey: sessionKey,
+          checkpointDigest: checkpoint.checkpointDigest,
+          wasAlreadyDurable: false,
+        );
+      } catch (_) {
+        if (persistenceAttempted || repository.requiresRecovery) {
+          _recoveryRequired = true;
+        }
+        rethrow;
+      } finally {
+        if (!retained) candidate.wipeSecrets();
+      }
+    });
+  }
+
+  /// Recomputes the deterministic revision-zero checkpoint digest for a
+  /// prepared handoff without changing durable state.
+  Future<String> initialCheckpointDigestFor(
+    V3TripleRatchetState snapshot,
+  ) {
+    return _serialized(() async {
+      _ensureReady();
+      final repository = _checkpointRepository;
+      if (repository == null) {
+        throw StateError(
+          'Layergram v3 durable checkpoint storage is not configured',
+        );
+      }
+      return repository.initialCheckpointDigest(
+        snapshot: snapshot,
+        authority: _checkpointAuthority,
+      );
+    });
+  }
+
+  /// Confirms the currently registered durable session belongs to the stable
+  /// lineage of an exact prepared revision-zero snapshot.
+  Future<void> verifySessionExtendsInitial(
+    V3TripleRatchetState initialSnapshot,
+  ) {
+    return _serialized(() async {
+      _ensureReady();
+      if (initialSnapshot.lifecycle != V3RatchetLifecycle.active ||
+          initialSnapshot.revision != 0) {
+        throw const FormatException(
+          'Layergram v3 prepared initial session is invalid',
+        );
+      }
+      await _validateSnapshot(initialSnapshot);
+      final sessionId = initialSnapshot.sessionId;
+      try {
+        final current = _sessions[_sessionKey(sessionId)];
+        final checkpoint = _checkpointRepository?.checkpointForSession(
+          sessionId,
+          authority: _checkpointAuthority,
+        );
+        if (current == null ||
+            checkpoint == null ||
+            current.revision < initialSnapshot.revision ||
+            !checkpoint.matchesLineage(initialSnapshot)) {
+          throw const V3LmfPersistenceConflictException(
+            'v3 durable session does not extend prepared initial state',
+          );
+        }
+        _validateStableSession(initialSnapshot, current);
+      } finally {
+        _wipe(sessionId);
+      }
+    });
+  }
+
+  /// Validates that a durable handshake completion still has a registered
+  /// checkpoint. At revision zero the digest must be the exact initial digest;
+  /// later checkpoints are accepted only as the controller-validated durable
+  /// continuation of that same registered session.
+  Future<void> verifyCommittedHandoffSession({
+    required String sessionKey,
+    required String initialCheckpointDigest,
+  }) {
+    return _serialized(() async {
+      _ensureReady();
+      Uint8List? sessionId;
+      Uint8List? digest;
+      V3TripleRatchetState? durableSnapshot;
+      try {
+        sessionId = Uint8List.fromList(
+          base64Url.decode(base64Url.normalize(sessionKey)),
+        );
+        digest = Uint8List.fromList(
+          base64Url.decode(base64Url.normalize(initialCheckpointDigest)),
+        );
+        if (sessionId.length != V3LmfFrameCodec.sessionIdBytes ||
+            digest.length != 32 ||
+            _isAllZero(sessionId) ||
+            _isAllZero(digest) ||
+            _sessionKey(sessionId) != sessionKey ||
+            base64UrlEncode(digest).replaceAll('=', '') !=
+                initialCheckpointDigest) {
+          throw const FormatException(
+            'Invalid Layergram v3 committed handoff binding',
+          );
+        }
+        final current = _sessions[sessionKey];
+        final checkpoint = _checkpointRepository?.checkpointForSession(
+          sessionId,
+          authority: _checkpointAuthority,
+        );
+        if (current == null ||
+            checkpoint == null ||
+            checkpoint.revision != current.revision ||
+            (checkpoint.revision == 0 &&
+                checkpoint.checkpointDigest != initialCheckpointDigest)) {
+          throw const V3LmfPersistenceConflictException(
+            'v3 handshake completion lost its durable session checkpoint',
+          );
+        }
+        durableSnapshot = checkpoint.decodeSnapshot();
+        if (!_snapshotBytesEqual(current, durableSnapshot)) {
+          throw const V3LmfPersistenceConflictException(
+            'v3 handshake completion checkpoint diverged from session state',
+          );
+        }
+      } on FormatException {
+        rethrow;
+      } catch (error) {
+        if (error is V3LmfPersistenceConflictException) rethrow;
+        throw FormatException(
+          'Invalid Layergram v3 committed handoff binding',
+          error,
+        );
+      } finally {
+        if (sessionId != null) _wipe(sessionId);
+        if (digest != null) _wipe(digest);
+        durableSnapshot?.wipeSecrets();
+      }
+    });
+  }
+
+  /// Prevents direct session use after a higher-level initial handoff crossed
+  /// a durable boundary but did not complete in this process instance.
+  Future<void> markInitialHandoffRecoveryRequired() {
+    return _serialized(() async {
+      _ensureOpen();
+      _recoveryRequired = true;
     });
   }
 

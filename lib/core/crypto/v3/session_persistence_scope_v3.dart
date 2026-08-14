@@ -19,6 +19,7 @@ import 'package:cryptography/cryptography.dart';
 import '../../storage/aux_record_repository.dart';
 import 'committed_record_materializer_v3.dart';
 import 'handshake_persistence_v3.dart';
+import 'handshake_session_handoff_v3.dart';
 import 'lmf_v3_atomic_commit.dart';
 import 'lmf_v3_outbox.dart';
 import 'lmf_v3_persistence.dart';
@@ -34,6 +35,7 @@ final class V3SessionPersistenceRestoreResult {
     required this.inbox,
     required this.handshakes,
     required this.sessions,
+    required this.handoffs,
   });
 
   /// Sealed transport state restored before any session key is requested.
@@ -50,6 +52,10 @@ final class V3SessionPersistenceRestoreResult {
 
   /// Reconstructed send/receive session state and durable application state.
   final V3SessionCommitRestoreResult sessions;
+
+  /// Prepared initial sessions recovered only after both durable controllers
+  /// have restored their authoritative state.
+  final V3HandshakeSessionHandoffRestoreResult handoffs;
 }
 
 /// Inactive, scope-pinned owner of the complete protocol-v3 durable runtime.
@@ -77,6 +83,7 @@ final class V3SessionPersistenceScope {
     required this.inbox,
     required this.handshakes,
     required this.controller,
+    required this.handoffs,
   })  : _repository = repository,
         _ownedAuxStorageKey = ownedAuxStorageKey;
 
@@ -142,12 +149,18 @@ final class V3SessionPersistenceScope {
         snapshotValidator: snapshotValidator,
         maxSessions: maxSessions,
       );
+      final handoffs = V3HandshakeSessionHandoffController(
+        repository: V3HandshakeHandoffRepository(store: store),
+        handshakes: handshakes,
+        sessions: controller,
+      );
       return V3SessionPersistenceScope._(
         repository: repository,
         ownedAuxStorageKey: ownedKey,
         inbox: inbox,
         handshakes: handshakes,
         controller: controller,
+        handoffs: handoffs,
       );
     } catch (_) {
       ownedKey.destroy();
@@ -188,6 +201,10 @@ final class V3SessionPersistenceScope {
   /// Sole authority for durable session transitions and outgoing exports.
   final V3SessionCommitController controller;
 
+  /// Sole serialized path from authenticated HP3 state to an initial durable
+  /// TR3 checkpoint and completion tombstone.
+  final V3HandshakeSessionHandoffController handoffs;
+
   Future<void> _operationTail = Future<void>.value();
   bool _restoreStarted = false;
   bool _restored = false;
@@ -198,10 +215,11 @@ final class V3SessionPersistenceScope {
   bool get requiresRecovery =>
       _recoveryRequired ||
       handshakes.requiresRecovery ||
-      controller.requiresRecovery;
+      controller.requiresRecovery ||
+      handoffs.requiresRecovery;
 
-  /// Restores sealed transport records first, then the single-authority
-  /// session controller.
+  /// Restores sealed transport records and pending HP3 first, then durable TR3
+  /// state, and finally every prepared initial-session handoff.
   ///
   /// Inbox keys are intentionally unavailable during the first phase. This
   /// breaks the startup cycle safely: the controller reconstructs the durable
@@ -222,11 +240,13 @@ final class V3SessionPersistenceScope {
         final sessionResult = await controller.restore(
           checkpoints: checkpoints,
         );
+        final handoffResult = await handoffs.restore();
         _restored = true;
         return V3SessionPersistenceRestoreResult(
           inbox: inboxResult,
           handshakes: handshakeResult,
           sessions: sessionResult,
+          handoffs: handoffResult,
         );
       } catch (_) {
         _recoveryRequired = true;
@@ -255,19 +275,23 @@ final class V3SessionPersistenceScope {
       if (_closed) return;
       _closed = true;
       try {
-        await handshakes.close();
+        await handoffs.close();
       } finally {
         try {
-          await controller.close();
+          await handshakes.close();
         } finally {
           try {
-            await inbox.close();
+            await controller.close();
           } finally {
-            _repository.setActiveContext(
-              scopeToken: null,
-              auxStorageKey: null,
-            );
-            _ownedAuxStorageKey.destroy();
+            try {
+              await inbox.close();
+            } finally {
+              _repository.setActiveContext(
+                scopeToken: null,
+                auxStorageKey: null,
+              );
+              _ownedAuxStorageKey.destroy();
+            }
           }
         }
       }
