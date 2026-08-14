@@ -70,6 +70,10 @@ This checkpoint provides:
   keys are requested, and destroys its copied storage key on close;
 - frozen local Normal/Maximum retention horizons plus a non-destructive,
   explainable eligibility check for future replay/completion-proof retirement;
+- an encrypted, bounded, fail-stop `v3_session_retirement_v1` journal whose
+  `prepared` record freezes the exact compact proof, cumulative receipt, local
+  proof age, and source checkpoint, and whose write-new-before-delete
+  `checkpointReplaced` revision binds the exact replacement checkpoint digest;
 - golden, negative, framing, reassembly, atomic-commit, exact-byte retry,
   capacity-preflight, ambiguous-write, restart, and ACK-ordering tests.
 
@@ -81,8 +85,9 @@ It deliberately does not provide:
   exporter;
 - an active durable send controller, handshake bootstrap, or projection from
   the durable AR3 source into the current message/UI repository;
-- destructive replay-window retirement, a crash-consistent retirement journal,
-  or rolling compaction of the cumulative checkpoint receipt history;
+- destructive replay/completion-proof retirement, integration of the prepared
+  retirement journal with the single session authority, or rolling compaction
+  of the cumulative checkpoint receipt history;
 - registration in providers or activation in contacts, messaging, UI, backup,
   migration, or Premium paths.
 
@@ -777,11 +782,19 @@ restore; that restore uses the checkpoint and never reruns ratchet or AEAD work.
 An already durable completion proof remains valid when a later cumulative
 checkpoint retains the same immutable receipt.
 Direct tombstone/replay purging is rejected after coordinator ownership.
-The retention profile and non-destructive eligibility rules are frozen, but
-actual replay/completion-proof deletion and pruning cumulative receipts remain
-separate activation gates. They require a write-before-delete retirement
-journal that durably joins the local creation timestamp, exact proof, and
-replacement checkpoint before removing either proof or receipt.
+The retention profile and non-destructive eligibility rules are frozen. The
+bounded encrypted `v3_session_retirement_v1` journal now provides only the
+non-destructive durable half of the next boundary: `prepared` binds direction,
+assembly, proof digest, stable record ID, session, ratchet revision, exact state
+receipt, source checkpoint digest, locally recorded proof/preparation times, and
+the minimum lifetime used; `checkpointReplaced` is a write-new-before-delete
+revision that additionally binds one different canonical replacement checkpoint
+digest. Ambiguous writes fail stopped until a fresh restore, equal-stage
+divergence fails closed, and a restored higher stage must exactly extend its
+prepared record. The journal intentionally exposes no collect/delete operation.
+Actual replay/completion-proof deletion, checkpoint replacement under the single
+session authority, restart reconciliation across all stores, and pruning
+cumulative receipts remain separate activation gates.
 
 ## 10. Remaining activation gates
 
@@ -793,8 +806,9 @@ Before this schedule can carry user messages, Layergram still requires:
   export/import behind the frozen boundary;
 - independent review and production wiring of the inactive crash-consistent
   send/receive coordinator, including the reviewed native-state validator;
-- crash-consistent replay/completion-proof retirement and bounded rolling
-  compaction of cumulative checkpoint receipts under the frozen local policy;
+- single-authority integration and crash-window reconciliation for the prepared
+  replay/completion retirement journal, followed by bounded rolling compaction
+  of cumulative checkpoint receipts under the frozen local policy;
 - active message/UI repository projection from the idempotent durable AR3
   source;
 - full packaging, crash, migration, multi-device, passphrase, Maximum-mode,

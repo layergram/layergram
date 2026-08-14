@@ -155,6 +155,15 @@ reviewed standard alternative or narrow its product claim explicitly.
   corresponding input. Retention MUST use only locally recorded time, fail
   closed on clock rollback, and MUST NOT silently time-purge incomplete inbox
   assemblies or unacknowledged exact-byte outbox entries.
+- A retirement intent MUST be encrypted in the same identity/passphrase scope,
+  bounded, canonical, and written before any compact proof or cumulative receipt
+  disappears. Its prepared state MUST bind the exact proof, direction-bound
+  receipt, source checkpoint, locally measured age, and configured minimum
+  lifetime. A later durable stage MUST bind one exact replacement checkpoint
+  without weakening the prepared binding. Ambiguous writes MUST fail stopped
+  until restore. Merely reaching that stage MUST NOT by itself expose a generic
+  proof-deletion API; deletion requires future single-authority cross-store
+  reconciliation and a recoverable receipt-pruning transition.
 - One identity/passphrase-scoped authority MUST own journal mutation before
   session restore. Direct journal lifecycle calls and writes MUST be rejected
   after ownership; production wiring MUST neither retain nor expose the owned

@@ -453,10 +453,16 @@ dropping it.
 Replay-window entries are not time-purged by this coordinator. The existing
 explicit purge API is blocked after journal ownership. The frozen evaluator is
 non-destructive and can only declare eligibility after the local minimum age
-and independent Sparse-PQ non-derivability checks pass. A future serialized
-retirement journal must write the replacement checkpoint/receipt state before
-deleting a compact proof. That crash-consistent deletion and rolling pruning of
-the bounded cumulative receipt set remain activation gates.
+and independent Sparse-PQ non-derivability checks pass. The inactive encrypted
+`v3_session_retirement_v1` journal now freezes an eligible exact proof/receipt,
+its locally measured age, and its source checkpoint in a `prepared` record. A
+write-new-before-delete `checkpointReplaced` revision binds the exact different
+replacement checkpoint digest and survives restart or an ambiguous write. It is
+deliberately non-destructive and exposes no collect/delete method. Wiring that
+journal into the sole session authority, reconciling every cross-store crash
+window, deleting the compact proof only after replacement-checkpoint durability,
+and rolling pruning of the bounded cumulative receipt set remain activation
+gates.
 
 ### 7.6 Session-controller restore and commit invariants
 
@@ -596,8 +602,9 @@ crash-consistent send/receive coordinator and its recovery paths must pass
 independent review and production wiring; the application repository must
 project from the durable stable-ID AR3 source; checkpoint-backed restore,
 compaction, and replay-window replacement must pass independent review, while
-the frozen retention policy must be implemented by a crash-consistent
-replay/completion retirement journal and rolling receipt compaction;
+the prepared retirement journal must be integrated with the single session
+authority for crash-consistent replay/completion deletion and rolling receipt
+compaction;
 resend/progress UX and real loss recovery must pass; all three transports must
 pass real cross-app tests; and the complete design and implementation must pass
 independent review.
