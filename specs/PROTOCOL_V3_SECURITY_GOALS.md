@@ -123,6 +123,13 @@ reviewed standard alternative or narrow its product claim explicitly.
 - An outgoing manual-transport message MUST durably retain the exact sealed
   bytes before first export. Retransmission MUST NOT re-encrypt an old logical
   frame under reused key/nonce state.
+- The outgoing commit point MUST bind the canonical application/control record,
+  complete post-send ratchet snapshot, prior revision, and exact ordered sealed
+  frame set. Restart MUST advance from that record and materialize only those
+  bytes, without invoking the ratchet or AEAD again.
+- A complete authenticated ACK MUST become durable in the send journal before
+  the outbox copy may be deleted. A journal-completed frame set MUST NOT become
+  exportable again after crash recovery.
 - An incoming frame MUST be durably stored while still sealed before it can
   advance ratchet or application state. Complete delivery MAY be at least once,
   but replay suppression MUST be committed only after the higher-level effect is

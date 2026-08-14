@@ -18,11 +18,14 @@ import 'dart:typed_data';
 
 import 'committed_record_v3.dart';
 import 'ec_double_ratchet_v3.dart';
-import 'hybrid_ratchet_header_v3.dart';
 import 'key_schedule_v3.dart';
 import 'lmf_v3.dart';
 import 'lmf_v3_atomic_commit.dart';
+import 'lmf_v3_outbox.dart';
 import 'lmf_v3_persistence.dart';
+import 'session_send_journal_v3.dart';
+import 'sparse_pq_ratchet_v3.dart';
+import 'triple_ratchet_engine_v3.dart';
 import 'triple_ratchet_state_v3.dart';
 
 /// Builds one candidate receive transition from an authenticated delivery.
@@ -51,11 +54,15 @@ final class V3SessionCommitRestoreResult {
     required this.sessionRevisions,
     required this.committedEffectCount,
     required this.pendingInboxCommitAssemblyIds,
+    this.committedSendEffectCount = 0,
+    this.pendingSendAssemblyIds = const <String>{},
   });
 
   final Map<String, int> sessionRevisions;
   final int committedEffectCount;
   final Set<String> pendingInboxCommitAssemblyIds;
+  final int committedSendEffectCount;
+  final Set<String> pendingSendAssemblyIds;
 }
 
 final class V3SessionCommitResult {
@@ -70,7 +77,21 @@ final class V3SessionCommitResult {
   final bool wasAlreadyDurable;
 }
 
-/// Inactive single-authority coordinator for protocol-v3 receive commits.
+final class V3SessionSendResult {
+  const V3SessionSendResult({
+    required this.assemblyId,
+    required this.messageRecordId,
+    required this.ratchetRevision,
+    required this.frames,
+  });
+
+  final String assemblyId;
+  final String messageRecordId;
+  final int ratchetRevision;
+  final List<V3LmfFrame> frames;
+}
+
+/// Inactive single-authority coordinator for protocol-v3 session commits.
 ///
 /// One instance owns one [V3LmfAtomicCommitJournal] for an encrypted
 /// identity/passphrase scope and serializes every registered session. Passing
@@ -87,22 +108,34 @@ final class V3SessionCommitResult {
 ///   have both completed;
 /// * fails stopped after an outcome that could have made a candidate durable.
 ///
-/// The coordinator is deliberately receive-only and accepts application or
-/// PQ-ratchet control deliveries. Hybrid handshake/session creation, sending,
+/// When [sendJournal] and [outbox] are supplied together, the same serialized
+/// authority also commits outgoing application/PQ transitions before their
+/// exact sealed bytes become exportable. Hybrid handshake/session creation,
 /// native SCKA semantics, effect materialization in the real chat repository,
 /// and journal compaction remain activation gates.
 final class V3SessionCommitController {
   V3SessionCommitController({
     required V3LmfAtomicCommitJournal journal,
+    V3SessionSendJournal? sendJournal,
+    V3LmfDurableOutbox? outbox,
     this.snapshotValidator,
     this.maxSessions = 4096,
-  }) : _journal = journal {
+  })  : _journal = journal,
+        _sendJournal = sendJournal,
+        _outbox = outbox {
     if (maxSessions <= 0) {
       throw ArgumentError.value(maxSessions, 'maxSessions');
+    }
+    if ((sendJournal == null) != (outbox == null)) {
+      throw ArgumentError(
+        'Layergram v3 send journal and outbox must be configured together',
+      );
     }
   }
 
   final V3LmfAtomicCommitJournal _journal;
+  final V3SessionSendJournal? _sendJournal;
+  final V3LmfDurableOutbox? _outbox;
   final V3SessionSnapshotValidator? snapshotValidator;
   final int maxSessions;
 
@@ -110,8 +143,12 @@ final class V3SessionCommitController {
       <String, V3TripleRatchetState>{};
   final Map<String, int> _effectRevisions = <String, int>{};
   final Set<String> _pendingInboxCommits = <String>{};
+  final Map<String, V3SessionSendEffect> _sendEffects =
+      <String, V3SessionSendEffect>{};
   Future<void> _operationTail = Future<void>.value();
   V3LmfAtomicCommitAuthority? _authority;
+  V3SessionSendJournalAuthority? _sendAuthority;
+  V3LmfOutboxAuthority? _outboxAuthority;
   bool _restored = false;
   bool _closed = false;
   bool _recoveryRequired = false;
@@ -124,17 +161,27 @@ final class V3SessionCommitController {
   }) {
     return _serialized(() async {
       _ensureOpen();
-      if (_restored || _authority != null) {
+      if (_restored ||
+          _authority != null ||
+          _sendAuthority != null ||
+          _outboxAuthority != null) {
         throw StateError('Layergram v3 session controller was restored');
       }
 
       final working = <String, V3TripleRatchetState>{};
       final decodedEffects = <_DecodedEffect>[];
+      final decodedSendEffects = <_DecodedSendEffect>[];
       try {
         // Claim before invoking any caller-supplied validator. Once this
         // operation begins, a re-entrant direct restore/close cannot bypass
         // the coordinator's exclusive journal authority.
         _authority = await _journal.claimSessionCoordinatorAuthority();
+        final sendJournal = _sendJournal;
+        final outbox = _outbox;
+        if (sendJournal != null) {
+          _sendAuthority = await sendJournal.claimSessionCoordinatorAuthority();
+          _outboxAuthority = await outbox!.claimSessionSendAuthority();
+        }
         var checkpointCount = 0;
         for (final checkpoint in checkpoints) {
           checkpointCount++;
@@ -174,39 +221,71 @@ final class V3SessionCommitController {
         for (final effect in restoredJournal.effects) {
           decodedEffects.add(_decodeEffect(effect));
         }
-        decodedEffects.sort((left, right) {
+        final restoredSendJournal = sendJournal == null
+            ? null
+            : await sendJournal.restore(authority: _sendAuthority);
+        if (restoredSendJournal != null) {
+          for (final effect in restoredSendJournal.effects) {
+            decodedSendEffects.add(_decodeSendEffect(effect));
+          }
+        }
+
+        final ordered = <_RestoredSessionEffect>[
+          ...decodedEffects.map(_RestoredSessionEffect.incoming),
+          ...decodedSendEffects.map(_RestoredSessionEffect.outgoing),
+        ];
+        ordered.sort((left, right) {
           final session = left.sessionKey.compareTo(right.sessionKey);
           if (session != 0) return session;
-          final revision = left.snapshot.revision.compareTo(
-            right.snapshot.revision,
-          );
+          final revision = left.revision.compareTo(right.revision);
           if (revision != 0) return revision;
-          return left.effect.assemblyId.compareTo(right.effect.assemblyId);
+          return left.assemblyId.compareTo(right.assemblyId);
         });
 
         final effectRevisions = <String, int>{};
-        for (final decoded in decodedEffects) {
-          final previous = working[decoded.sessionKey];
+        final sendEffects = <String, V3SessionSendEffect>{};
+        for (final restored in ordered) {
+          final previous = working[restored.sessionKey];
           if (previous == null) {
             throw const V3LmfPersistenceConflictException(
-              'v3 atomic effect has no registered session checkpoint',
+              'v3 effect has no registered session checkpoint',
             );
           }
-          await _validateTransition(
-            previous: previous,
-            candidate: decoded.snapshot,
-            effect: decoded.effect,
-            record: decoded.record,
-          );
-          if (effectRevisions.containsKey(decoded.effect.assemblyId)) {
-            throw const V3LmfPersistenceConflictException(
-              'duplicate v3 session effect assembly',
+          final incoming = restored.incoming;
+          if (incoming != null) {
+            await _validateTransition(
+              previous: previous,
+              candidate: incoming.snapshot,
+              effect: incoming.effect,
+              record: incoming.record,
             );
+            if (effectRevisions.containsKey(incoming.effect.assemblyId) ||
+                sendEffects.containsKey(incoming.effect.assemblyId)) {
+              throw const V3LmfPersistenceConflictException(
+                'duplicate v3 session effect assembly',
+              );
+            }
+            effectRevisions[incoming.effect.assemblyId] =
+                incoming.snapshot.revision;
+          } else {
+            final outgoing = restored.outgoing!;
+            await _validateOutgoingTransition(
+              previous: previous,
+              candidate: outgoing.snapshot,
+              effect: outgoing.effect,
+              record: outgoing.record,
+            );
+            if (effectRevisions.containsKey(outgoing.effect.assemblyId) ||
+                sendEffects.containsKey(outgoing.effect.assemblyId)) {
+              throw const V3LmfPersistenceConflictException(
+                'duplicate v3 session effect assembly',
+              );
+            }
+            sendEffects[outgoing.effect.assemblyId] = outgoing.effect;
           }
-          final candidate = decoded.takeSnapshot();
+          final candidate = restored.takeSnapshot();
           previous.wipeSecrets();
-          working[decoded.sessionKey] = candidate;
-          effectRevisions[decoded.effect.assemblyId] = candidate.revision;
+          working[restored.sessionKey] = candidate;
         }
 
         for (final assemblyId
@@ -218,12 +297,54 @@ final class V3SessionCommitController {
           }
         }
 
+        if (outbox != null) {
+          final restoredOutbox = await outbox.restore(
+            authority: _outboxAuthority,
+          );
+          for (final entry in restoredOutbox.entries) {
+            final effect = sendEffects[entry.assemblyId];
+            if (effect == null ||
+                !_sameFrameSet(entry.frames, effect.frames) ||
+                (entry.isFullyAcknowledged && !effect.isFullyAcknowledged)) {
+              throw const V3LmfPersistenceConflictException(
+                'v3 outbox entry has no matching durable send effect',
+              );
+            }
+          }
+          for (final effect in sendEffects.values) {
+            final entry = outbox.entry(
+              effect.assemblyId,
+              authority: _outboxAuthority,
+            );
+            if (entry != null && !_sameFrameSet(entry.frames, effect.frames)) {
+              throw const V3LmfPersistenceConflictException(
+                'v3 outbox bytes differ from the durable send effect',
+              );
+            }
+            if (effect.isFullyAcknowledged) {
+              if (entry != null) {
+                await outbox.reconcileCompleted(
+                  effect.assemblyId,
+                  authority: _outboxAuthority!,
+                );
+              }
+            } else if (entry == null) {
+              await outbox.enqueue(
+                effect.frames,
+                queuedAt: effect.persistedAt,
+                authority: _outboxAuthority,
+              );
+            }
+          }
+        }
+
         _sessions.addAll(working);
         working.clear();
         _effectRevisions.addAll(effectRevisions);
         _pendingInboxCommits.addAll(
           restoredJournal.pendingInboxCommitAssemblyIds,
         );
+        _sendEffects.addAll(sendEffects);
         _restored = true;
         return V3SessionCommitRestoreResult(
           sessionRevisions: Map<String, int>.unmodifiable(
@@ -235,6 +356,12 @@ final class V3SessionCommitController {
           pendingInboxCommitAssemblyIds: Set<String>.unmodifiable(
             _pendingInboxCommits,
           ),
+          committedSendEffectCount: sendEffects.length,
+          pendingSendAssemblyIds: Set<String>.unmodifiable(
+            sendEffects.values
+                .where((effect) => !effect.isFullyAcknowledged)
+                .map((effect) => effect.assemblyId),
+          ),
         );
       } catch (_) {
         _recoveryRequired = true;
@@ -244,6 +371,9 @@ final class V3SessionCommitController {
           snapshot.wipeSecrets();
         }
         for (final decoded in decodedEffects) {
+          decoded.close();
+        }
+        for (final decoded in decodedSendEffects) {
           decoded.close();
         }
       }
@@ -259,6 +389,324 @@ final class V3SessionCommitController {
         throw StateError('Layergram v3 session is not registered');
       }
       return _copySnapshot(current);
+    });
+  }
+
+  /// Commits one outgoing Triple-Ratchet transition before exposing frames.
+  ///
+  /// The send journal is the commit point. If its write or later outbox
+  /// materialization has an ambiguous result, this controller fails stopped;
+  /// a fresh restore advances from the durable TR3 and reuses the exact stored
+  /// frame bytes without invoking the ratchet or AEAD again.
+  Future<V3SessionSendResult> sendMessage({
+    required Uint8List sessionId,
+    required int expectedRevision,
+    required Uint8List plaintext,
+    required V3SckaBackend backend,
+    V3LmfFrameKind kind = V3LmfFrameKind.application,
+    int expiresAtUnixSeconds = 0,
+    DateTime? persistedAt,
+  }) {
+    return _serialized(() async {
+      _ensureReady();
+      final sendJournal = _sendJournal;
+      final outbox = _outbox;
+      if (sendJournal == null || outbox == null) {
+        throw StateError('Layergram v3 durable sending is not configured');
+      }
+      if (plaintext.isEmpty ||
+          plaintext.length > V3LmfFrameCodec.maxAssembledPlaintextBytes) {
+        throw ArgumentError.value(plaintext.length, 'plaintext.length');
+      }
+      if (kind != V3LmfFrameKind.application &&
+          kind != V3LmfFrameKind.pqRatchet) {
+        throw ArgumentError.value(kind, 'kind');
+      }
+
+      final key = _sessionKey(sessionId);
+      final current = _sessions[key];
+      if (current == null) {
+        throw StateError('Layergram v3 session is not registered');
+      }
+      if (current.revision != expectedRevision) {
+        throw StateError('Layergram v3 session revision conflict');
+      }
+
+      final localPlaintext = Uint8List.fromList(plaintext);
+      V3TripleRatchetTransition? transition;
+      V3TripleRatchetState? pendingSnapshot;
+      V3CommittedRecord? record;
+      Uint8List? applicationBytes;
+      Uint8List? ratchetBytes;
+      Uint8List? encodedHeader;
+      final nonces = <Uint8List>[];
+      var durableEffect = false;
+      try {
+        transition = await V3TripleRatchetEngine.send(
+          snapshot: current,
+          backend: backend,
+          kind: kind,
+          expiresAtUnixSeconds: expiresAtUnixSeconds,
+        );
+        await _validateOutgoingCandidate(
+          previous: current,
+          candidate: transition.nextSnapshot,
+          metadata: transition.metadata,
+        );
+
+        encodedHeader = V3HybridRatchetHeaderCodec.encode(transition.header);
+        final fragmentCount = V3LmfFrameCodec.canonicalFragmentCount(
+          assembledPlaintextLength: localPlaintext.length,
+          hybridRatchetHeaderLength: encodedHeader.length,
+        );
+        for (var index = 0; index < fragmentCount; index++) {
+          nonces.add(
+            await transition.nonceForFragment(
+              fragmentIndex: index,
+              fragmentCount: fragmentCount,
+              assembledPlaintextLength: localPlaintext.length,
+            ),
+          );
+        }
+        final frames = await V3LmfAead.sealFragmented(
+          metadata: transition.metadata,
+          plaintext: localPlaintext,
+          secretKey: transition.secretKey,
+          nonceForFragment: (index) => Uint8List.fromList(nonces[index]),
+          hybridRatchetHeader: transition.header,
+        );
+        await outbox.preflightEnqueue(
+          frames,
+          authority: _outboxAuthority,
+        );
+        record = V3CommittedRecord.fromDelivery(
+          targetFrame: frames.first,
+          content: localPlaintext,
+        );
+        applicationBytes = V3CommittedRecordCodec.encode(record);
+        ratchetBytes = V3TripleRatchetStateCodec.encode(
+          transition.nextSnapshot,
+        );
+        pendingSnapshot = _copySnapshot(transition.nextSnapshot);
+
+        final effect = await sendJournal.persist(
+          previousRatchetRevision: current.revision,
+          frames: frames,
+          applicationState: applicationBytes,
+          ratchetState: ratchetBytes,
+          persistedAt: persistedAt,
+          authority: _sendAuthority,
+        );
+        durableEffect = true;
+        final decoded = _decodeSendEffect(effect);
+        try {
+          if (decoded.sessionKey != key ||
+              !_snapshotBytesEqual(decoded.snapshot, pendingSnapshot)) {
+            throw const V3LmfPersistenceConflictException(
+              'durable v3 send effect differs from its prepared transition',
+            );
+          }
+        } finally {
+          decoded.close();
+        }
+
+        final queued = await outbox.enqueue(
+          effect.frames,
+          queuedAt: effect.persistedAt,
+          authority: _outboxAuthority,
+        );
+        if (!_sameFrameSet(queued.frames, effect.frames)) {
+          throw const V3LmfPersistenceConflictException(
+            'v3 outbox changed committed sealed bytes',
+          );
+        }
+
+        final next = pendingSnapshot;
+        pendingSnapshot = null;
+        current.wipeSecrets();
+        _sessions[key] = next;
+        _sendEffects[effect.assemblyId] = effect;
+        return V3SessionSendResult(
+          assemblyId: effect.assemblyId,
+          messageRecordId: effect.messageRecordId,
+          ratchetRevision: next.revision,
+          frames: List<V3LmfFrame>.unmodifiable(effect.frames),
+        );
+      } catch (_) {
+        if (durableEffect || sendJournal.requiresRecovery) {
+          _recoveryRequired = true;
+        }
+        rethrow;
+      } finally {
+        _wipe(localPlaintext);
+        for (final nonce in nonces) {
+          _wipe(nonce);
+        }
+        if (encodedHeader != null) _wipe(encodedHeader);
+        if (applicationBytes != null) _wipe(applicationBytes);
+        if (ratchetBytes != null) _wipe(ratchetBytes);
+        record?.wipeContent();
+        pendingSnapshot?.wipeSecrets();
+        transition?.close();
+      }
+    });
+  }
+
+  Future<List<V3LmfFrame>> pendingSendFrames(String assemblyId) {
+    return _serialized(() async {
+      _ensureReady();
+      final outbox = _outbox;
+      if (outbox == null) {
+        throw StateError('Layergram v3 durable sending is not configured');
+      }
+      final effect = _sendEffects[assemblyId];
+      if (effect == null || effect.isFullyAcknowledged) {
+        return const <V3LmfFrame>[];
+      }
+      return outbox.pendingFrames(
+        assemblyId,
+        authority: _outboxAuthority,
+      );
+    });
+  }
+
+  Future<V3LmfOutboxEntry> markSendExported({
+    required String assemblyId,
+    required Set<int> fragmentIndexes,
+    DateTime? exportedAt,
+  }) {
+    return _serialized(() async {
+      _ensureReady();
+      final outbox = _outbox;
+      final effect = _sendEffects[assemblyId];
+      if (outbox == null || effect == null || effect.isFullyAcknowledged) {
+        throw StateError('Unknown pending Layergram v3 send assembly');
+      }
+      var persistenceAttempted = false;
+      try {
+        return await outbox.markExported(
+          assemblyId: assemblyId,
+          fragmentIndexes: fragmentIndexes,
+          exportedAt: exportedAt,
+          beforePersist: (_) {
+            persistenceAttempted = true;
+          },
+          authority: _outboxAuthority,
+        );
+      } catch (_) {
+        if (persistenceAttempted) _recoveryRequired = true;
+        rethrow;
+      }
+    });
+  }
+
+  Future<V3LmfOutboxAckStatus> applySendAcknowledgement({
+    required V3LmfFrame acknowledgementFrame,
+    DateTime? receivedAt,
+  }) {
+    return _serialized(() async {
+      _ensureReady();
+      final sendJournal = _sendJournal;
+      final outbox = _outbox;
+      if (sendJournal == null || outbox == null) {
+        throw StateError('Layergram v3 durable sending is not configured');
+      }
+      if (acknowledgementFrame.metadata.kind !=
+          V3LmfFrameKind.acknowledgement) {
+        throw const FormatException('Layergram v3 frame is not an ACK');
+      }
+      final snapshot =
+          _sessions[_sessionKey(acknowledgementFrame.metadata.sessionId)];
+      if (snapshot == null) {
+        throw const FormatException(
+          'Layergram v3 ACK session is not registered',
+        );
+      }
+      final direction = snapshot.role == V3SessionRole.initiator
+          ? V3TrafficDirection.responderToInitiator
+          : V3TrafficDirection.initiatorToResponder;
+      final sessionId = snapshot.sessionId;
+      final initiatorBinding = snapshot.initiatorRoutingBinding;
+      final responderBinding = snapshot.responderRoutingBinding;
+      final initiatorAckRoot = snapshot.initiatorToResponderAckRootKey;
+      final responderAckRoot = snapshot.responderToInitiatorAckRootKey;
+      V3AcknowledgementKeyMaterial? acknowledgementKeys;
+      String? completedAssemblyId;
+      var outboxPersistenceAttempted = false;
+      try {
+        acknowledgementKeys =
+            await V3KeySchedule.deriveAcknowledgementFromCommittedState(
+          sessionId: sessionId,
+          initiatorRoutingBinding: initiatorBinding,
+          responderRoutingBinding: responderBinding,
+          initiatorToResponderAckRootKey: initiatorAckRoot,
+          responderToInitiatorAckRootKey: responderAckRoot,
+          direction: direction,
+          metadata: acknowledgementFrame.metadata,
+        );
+        final nonce = acknowledgementFrame.nonce;
+        try {
+          if (!acknowledgementKeys.matchesNonce(nonce)) {
+            throw const FormatException(
+              'Layergram v3 ACK nonce does not match committed session state',
+            );
+          }
+        } finally {
+          _wipe(nonce);
+        }
+        final status = await outbox.applyAcknowledgement(
+          acknowledgementFrame: acknowledgementFrame,
+          secretKey: acknowledgementKeys.secretKey,
+          receivedAt: receivedAt,
+          authority: _outboxAuthority,
+          beforePersist: (_) {
+            outboxPersistenceAttempted = true;
+          },
+          beforeComplete: (completedEntry) async {
+            final effect = _sendEffects[completedEntry.assemblyId];
+            if (effect == null ||
+                !_sameFrameSet(effect.frames, completedEntry.frames)) {
+              throw const V3LmfPersistenceConflictException(
+                'complete ACK has no matching durable v3 send effect',
+              );
+            }
+            final completed = await sendJournal.markFullyAcknowledged(
+              assemblyId: completedEntry.assemblyId,
+              acknowledgedAt: receivedAt,
+              authority: _sendAuthority,
+            );
+            _sendEffects[completed.assemblyId] = completed;
+            completedAssemblyId = completed.assemblyId;
+          },
+        );
+        if (status == V3LmfOutboxAckStatus.complete) {
+          final assemblyId = completedAssemblyId;
+          if (assemblyId == null) {
+            throw const V3LmfPersistenceConflictException(
+              'complete ACK bypassed the v3 send-journal commit',
+            );
+          }
+          await outbox.removeFullyAcknowledged(
+            assemblyId,
+            authority: _outboxAuthority,
+          );
+        }
+        return status;
+      } catch (_) {
+        if (outboxPersistenceAttempted ||
+            completedAssemblyId != null ||
+            sendJournal.requiresRecovery) {
+          _recoveryRequired = true;
+        }
+        rethrow;
+      } finally {
+        acknowledgementKeys?.close();
+        _wipe(sessionId);
+        _wipe(initiatorBinding);
+        _wipe(responderBinding);
+        _wipe(initiatorAckRoot);
+        _wipe(responderAckRoot);
+      }
     });
   }
 
@@ -441,12 +889,27 @@ final class V3SessionCommitController {
       try {
         await _journal.close(authority: _authority);
       } finally {
-        for (final snapshot in _sessions.values) {
-          snapshot.wipeSecrets();
+        try {
+          final sendJournal = _sendJournal;
+          if (sendJournal != null) {
+            await sendJournal.close(authority: _sendAuthority);
+          }
+        } finally {
+          try {
+            final outbox = _outbox;
+            if (outbox != null) {
+              await outbox.close(authority: _outboxAuthority);
+            }
+          } finally {
+            for (final snapshot in _sessions.values) {
+              snapshot.wipeSecrets();
+            }
+            _sessions.clear();
+            _effectRevisions.clear();
+            _pendingInboxCommits.clear();
+            _sendEffects.clear();
+          }
         }
-        _sessions.clear();
-        _effectRevisions.clear();
-        _pendingInboxCommits.clear();
       }
     });
   }
@@ -498,6 +961,32 @@ final class V3SessionCommitController {
     }
   }
 
+  _DecodedSendEffect _decodeSendEffect(V3SessionSendEffect effect) {
+    final applicationBytes = effect.applicationState;
+    final ratchetBytes = effect.ratchetState;
+    V3CommittedRecord? record;
+    V3TripleRatchetState? snapshot;
+    try {
+      record = V3CommittedRecordCodec.decode(applicationBytes);
+      snapshot = V3TripleRatchetStateCodec.decode(ratchetBytes);
+      _validateSendEffectRecord(effect, record, snapshot);
+      final result = _DecodedSendEffect(
+        effect: effect,
+        record: record,
+        snapshot: snapshot,
+        sessionKey: _sessionKey(snapshot.sessionId),
+      );
+      record = null;
+      snapshot = null;
+      return result;
+    } finally {
+      _wipe(applicationBytes);
+      _wipe(ratchetBytes);
+      record?.wipeContent();
+      snapshot?.wipeSecrets();
+    }
+  }
+
   void _validateEffectRecord(
     V3LmfCommittedEffect effect,
     V3CommittedRecord record,
@@ -528,6 +1017,41 @@ final class V3SessionCommitController {
     }
   }
 
+  void _validateSendEffectRecord(
+    V3SessionSendEffect effect,
+    V3CommittedRecord record,
+    V3TripleRatchetState snapshot,
+  ) {
+    if (effect.frames.isEmpty) {
+      throw const V3LmfPersistenceConflictException(
+        'v3 send effect has no sealed frames',
+      );
+    }
+    final target = effect.frames.first;
+    final metadata = target.metadata;
+    if (target.fragmentIndex != 0 ||
+        (metadata.kind != V3LmfFrameKind.application &&
+            metadata.kind != V3LmfFrameKind.pqRatchet) ||
+        target.hybridRatchetHeader == null ||
+        V3LmfFrameCodec.assemblyId(target) != effect.assemblyId ||
+        record.assemblyId != effect.assemblyId ||
+        record.stableRecordId != effect.messageRecordId ||
+        record.suite != metadata.suite ||
+        record.kind.frameKind != metadata.kind ||
+        record.epoch != metadata.epoch ||
+        record.messageCounter != metadata.messageCounter ||
+        record.contentLength != target.assembledPlaintextLength ||
+        !_bytesEqual(record.sessionId, metadata.sessionId) ||
+        !_bytesEqual(record.sessionId, snapshot.sessionId) ||
+        !_bytesEqual(record.messageId, metadata.messageId) ||
+        !_bytesEqual(record.senderBinding, metadata.senderBinding) ||
+        !_bytesEqual(record.recipientBinding, metadata.recipientBinding)) {
+      throw const V3LmfPersistenceConflictException(
+        'v3 send effect record does not match its sealed target',
+      );
+    }
+  }
+
   Future<void> _validateTransition({
     required V3TripleRatchetState previous,
     required V3TripleRatchetState candidate,
@@ -548,6 +1072,62 @@ final class V3SessionCommitController {
       throw const V3LmfPersistenceConflictException(
         'v3 session effect has an inconsistent session binding',
       );
+    }
+    await _validateSnapshot(candidate);
+  }
+
+  Future<void> _validateOutgoingTransition({
+    required V3TripleRatchetState previous,
+    required V3TripleRatchetState candidate,
+    required V3SessionSendEffect effect,
+    required V3CommittedRecord record,
+  }) async {
+    if (effect.previousRatchetRevision != previous.revision ||
+        previous.revision >= 0x7fffffffffffffff ||
+        candidate.revision != previous.revision + 1) {
+      throw const V3LmfPersistenceConflictException(
+        'v3 send effect does not advance one contiguous revision',
+      );
+    }
+    _validateStableSession(previous, candidate);
+    _validateOutboundRouting(previous, effect.frames.first);
+    if (!_bytesEqual(record.sessionId, candidate.sessionId)) {
+      throw const V3LmfPersistenceConflictException(
+        'v3 send effect has an inconsistent session binding',
+      );
+    }
+    await _validateSnapshot(candidate);
+  }
+
+  Future<void> _validateOutgoingCandidate({
+    required V3TripleRatchetState previous,
+    required V3TripleRatchetState candidate,
+    required V3LmfMessageMetadata metadata,
+  }) async {
+    if (previous.revision >= 0x7fffffffffffffff ||
+        candidate.revision != previous.revision + 1) {
+      throw const V3LmfPersistenceConflictException(
+        'v3 send candidate does not advance one revision',
+      );
+    }
+    _validateStableSession(previous, candidate);
+    final expectedSender = previous.role == V3SessionRole.initiator
+        ? previous.initiatorRoutingBinding
+        : previous.responderRoutingBinding;
+    final expectedRecipient = previous.role == V3SessionRole.initiator
+        ? previous.responderRoutingBinding
+        : previous.initiatorRoutingBinding;
+    try {
+      if (!_bytesEqual(metadata.sessionId, previous.sessionId) ||
+          !_bytesEqual(metadata.senderBinding, expectedSender) ||
+          !_bytesEqual(metadata.recipientBinding, expectedRecipient)) {
+        throw const V3LmfPersistenceConflictException(
+          'v3 send candidate changed session routing',
+        );
+      }
+    } finally {
+      _wipe(expectedSender);
+      _wipe(expectedRecipient);
     }
     await _validateSnapshot(candidate);
   }
@@ -644,6 +1224,30 @@ final class V3SessionCommitController {
     }
   }
 
+  void _validateOutboundRouting(
+    V3TripleRatchetState snapshot,
+    V3LmfFrame target,
+  ) {
+    final expectedSender = snapshot.role == V3SessionRole.initiator
+        ? snapshot.initiatorRoutingBinding
+        : snapshot.responderRoutingBinding;
+    final expectedRecipient = snapshot.role == V3SessionRole.initiator
+        ? snapshot.responderRoutingBinding
+        : snapshot.initiatorRoutingBinding;
+    try {
+      if (!_bytesEqual(target.metadata.sessionId, snapshot.sessionId) ||
+          !_bytesEqual(target.metadata.senderBinding, expectedSender) ||
+          !_bytesEqual(target.metadata.recipientBinding, expectedRecipient)) {
+        throw const FormatException(
+          'Layergram v3 send routing does not match the local session',
+        );
+      }
+    } finally {
+      _wipe(expectedSender);
+      _wipe(expectedRecipient);
+    }
+  }
+
   Future<T> _serialized<T>(Future<T> Function() operation) {
     final completer = Completer<T>();
     final previous = _operationTail;
@@ -708,6 +1312,56 @@ final class _DecodedEffect {
   }
 }
 
+final class _DecodedSendEffect {
+  _DecodedSendEffect({
+    required this.effect,
+    required this.record,
+    required V3TripleRatchetState snapshot,
+    required this.sessionKey,
+  }) : _snapshot = snapshot;
+
+  final V3SessionSendEffect effect;
+  final V3CommittedRecord record;
+  V3TripleRatchetState? _snapshot;
+  final String sessionKey;
+
+  V3TripleRatchetState get snapshot => _snapshot!;
+
+  V3TripleRatchetState takeSnapshot() {
+    final result = _snapshot!;
+    _snapshot = null;
+    return result;
+  }
+
+  void close() {
+    record.wipeContent();
+    _snapshot?.wipeSecrets();
+    _snapshot = null;
+  }
+}
+
+final class _RestoredSessionEffect {
+  const _RestoredSessionEffect._({this.incoming, this.outgoing});
+
+  factory _RestoredSessionEffect.incoming(_DecodedEffect effect) =>
+      _RestoredSessionEffect._(incoming: effect);
+
+  factory _RestoredSessionEffect.outgoing(_DecodedSendEffect effect) =>
+      _RestoredSessionEffect._(outgoing: effect);
+
+  final _DecodedEffect? incoming;
+  final _DecodedSendEffect? outgoing;
+
+  String get sessionKey => incoming?.sessionKey ?? outgoing!.sessionKey;
+  int get revision =>
+      incoming?.snapshot.revision ?? outgoing!.snapshot.revision;
+  String get assemblyId =>
+      incoming?.effect.assemblyId ?? outgoing!.effect.assemblyId;
+
+  V3TripleRatchetState takeSnapshot() =>
+      incoming?.takeSnapshot() ?? outgoing!.takeSnapshot();
+}
+
 V3TripleRatchetState _copySnapshot(V3TripleRatchetState snapshot) {
   final encoded = V3TripleRatchetStateCodec.encode(snapshot);
   try {
@@ -737,6 +1391,19 @@ bool _snapshotBytesEqual(
     _wipe(encodedLeft);
     _wipe(encodedRight);
   }
+}
+
+bool _sameFrameSet(List<V3LmfFrame> left, List<V3LmfFrame> right) {
+  if (left.length != right.length) return false;
+  for (var index = 0; index < left.length; index++) {
+    if (!_bytesEqual(
+      V3LmfFrameCodec.encodeBinary(left[index]),
+      V3LmfFrameCodec.encodeBinary(right[index]),
+    )) {
+      return false;
+    }
+  }
+  return true;
 }
 
 bool _secretGetterEqual(Uint8List left, Uint8List right) {

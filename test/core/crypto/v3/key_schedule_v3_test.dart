@@ -381,6 +381,92 @@ void main() {
       second.close();
       session.close();
     });
+
+    test('committed-state adapter matches the frozen session schedule',
+        () async {
+      final session = await _session();
+      final sessionId = session.sessionId;
+      final initiatorBinding = session.initiatorRoutingBinding;
+      final responderBinding = session.responderRoutingBinding;
+      final initiatorRoot = session.initiatorToResponderAckRootKey;
+      final responderRoot = session.responderToInitiatorAckRootKey;
+      try {
+        for (final direction in V3TrafficDirection.values) {
+          final bindings = session.bindingsFor(direction);
+          final metadata = V3LmfMessageMetadata(
+            kind: V3LmfFrameKind.acknowledgement,
+            senderBinding: bindings.senderBinding,
+            recipientBinding: bindings.recipientBinding,
+            messageId: _bytes(
+              16,
+              direction == V3TrafficDirection.initiatorToResponder
+                  ? 0xd1
+                  : 0xe1,
+            ),
+            sessionId: sessionId,
+            epoch: 0x100000007,
+            messageCounter: 0x100000009,
+          );
+          final frozen = await V3KeySchedule.deriveAcknowledgement(
+            session: session,
+            direction: direction,
+            metadata: metadata,
+          );
+          final committed =
+              await V3KeySchedule.deriveAcknowledgementFromCommittedState(
+            sessionId: sessionId,
+            initiatorRoutingBinding: initiatorBinding,
+            responderRoutingBinding: responderBinding,
+            initiatorToResponderAckRootKey: initiatorRoot,
+            responderToInitiatorAckRootKey: responderRoot,
+            direction: direction,
+            metadata: metadata,
+          );
+          try {
+            expect(committed.nonce, frozen.nonce);
+            expect(
+              await committed.secretKey.extractBytes(),
+              await frozen.secretKey.extractBytes(),
+            );
+          } finally {
+            committed.close();
+            frozen.close();
+          }
+        }
+
+        final validBindings = session.bindingsFor(
+          V3TrafficDirection.responderToInitiator,
+        );
+        final wrongSessionMetadata = V3LmfMessageMetadata(
+          kind: V3LmfFrameKind.acknowledgement,
+          senderBinding: validBindings.senderBinding,
+          recipientBinding: validBindings.recipientBinding,
+          messageId: _bytes(16, 0xf1),
+          sessionId: _bytes(16, 0x01),
+          epoch: 7,
+          messageCounter: 9,
+        );
+        await expectLater(
+          V3KeySchedule.deriveAcknowledgementFromCommittedState(
+            sessionId: sessionId,
+            initiatorRoutingBinding: initiatorBinding,
+            responderRoutingBinding: responderBinding,
+            initiatorToResponderAckRootKey: initiatorRoot,
+            responderToInitiatorAckRootKey: responderRoot,
+            direction: V3TrafficDirection.responderToInitiator,
+            metadata: wrongSessionMetadata,
+          ),
+          throwsFormatException,
+        );
+      } finally {
+        sessionId.fillRange(0, sessionId.length, 0);
+        initiatorBinding.fillRange(0, initiatorBinding.length, 0);
+        responderBinding.fillRange(0, responderBinding.length, 0);
+        initiatorRoot.fillRange(0, initiatorRoot.length, 0);
+        responderRoot.fillRange(0, responderRoot.length, 0);
+        session.close();
+      }
+    });
   });
 }
 

@@ -9,9 +9,9 @@ envelope. The separate `PROTOCOL_V3_HANDSHAKE.md` defines the inactive
 candidate that supplies its authenticated inputs. The EC Double Ratchet engine,
 ML-KEM Braid/SCKA backend boundary, Sparse-PQ message chains, exact HR3-to-LMF
 authentication, candidate-only hybrid send/receive orchestration,
-deferred-fragment key resolution, and an inactive receive-commit session
-controller now exist. No production SCKA backend or active product integration
-exists, and protocol v3 remains disabled.
+deferred-fragment key resolution, and an inactive crash-consistent send/receive
+session coordinator now exist. No production SCKA backend or active product
+integration exists, and protocol v3 remains disabled.
 
 `PROTOCOL_V3_SECURITY_GOALS.md` remains authoritative. This draft and its code
 must change if later transcript design, ML-KEM Braid integration, persistence
@@ -53,10 +53,12 @@ This checkpoint provides:
   portable adaptive fragmentation;
 - durable retention and later exact-key resolution when continuation fragments
   arrive before fragment zero;
-- one inactive identity/passphrase-scoped receive-commit controller that owns
-  its atomic journal, reconstructs contiguous per-session TR3 revisions,
-  validates AR3/LMF/session bindings, and applies serialized revision CAS;
-- golden, negative, framing, reassembly, and atomic-commit tests.
+- one inactive identity/passphrase-scoped send/receive coordinator that owns
+  its journals and outbox, reconstructs a unified contiguous per-session TR3
+  revision chain, validates AR3/LMF/session bindings, and applies serialized
+  revision CAS;
+- golden, negative, framing, reassembly, atomic-commit, exact-byte retry,
+  capacity-preflight, ambiguous-write, restart, and ACK-ordering tests.
 
 It deliberately does not provide:
 
@@ -648,20 +650,48 @@ unbound, mismatched, malformed, or divergent effect/tombstone pair fails closed.
 No effect may be collected until a separately durable ratchet checkpoint,
 application record, and replay window prove it safe.
 
-The inactive `V3SessionCommitController` claims its journal before restore, so
-direct journal lifecycle or commit calls cannot race the coordinator after the
-claim. Passing a journal to the controller transfers exclusive ownership;
-production wiring must not retain or expose it for concurrent use while restore
-begins. The controller requires a unique active checkpoint for every session in
-the encrypted identity/passphrase scope and accepts only application or
-PQ-control receive deliveries with the exact local session/routing bindings.
-Restore sorts durable effects by session and revision and requires a contiguous
-`checkpoint.revision + 1` chain. A new transition builder runs only after its
-caller-supplied expected revision matches the current committed revision. The
-controller updates its in-memory snapshot only after both the effect and bound
-replay tombstone succeed. Once a prepared effect could have become durable, any
-error makes that controller fail stopped until a fresh inbox, journal, and
-controller restore storage.
+For every outgoing application or PQ-control message, the same serialized
+session coordinator MUST:
+
+1. apply revision compare-and-swap before invoking EC or SCKA state;
+2. derive one non-mutating hybrid send candidate and every canonical fragment
+   nonce;
+3. seal the complete canonical LMF frame set and build the matching AR3 and
+   complete post-send TR3 records;
+4. persist AR3, TR3, and the exact ordered sealed frame bytes together in one
+   encrypted send-journal effect;
+5. only after that journal record is durable, materialize those exact bytes in
+   the outbox and make them available for export;
+6. on retry or restart, return the stored bytes and never rerun the ratchet,
+   derive a replacement nonce, or reseal the logical message.
+
+The send-journal record is the outgoing commit point. A crash before its write
+leaves the prior ratchet checkpoint authoritative. A crash after that write but
+before outbox materialization restores the post-send TR3 and reconstructs the
+outbox from the exact stored frame bytes. An ambiguous journal or outbox write
+forces controller reconstruction and restore before another transition.
+
+Complete ACK handling uses the reverse durability order: authenticate and merge
+the ACK, persist the send effect's completed revision, then update or remove the
+outbox materialization. A crash after the completed journal revision cannot
+re-export the acknowledged frame set even if an older outbox record is still
+present. Partial or unauthenticated ACKs never alter the send journal.
+
+The inactive `V3SessionCommitController` claims its receive journal and, when
+durable sending is configured, its send journal and outbox before restore, so
+direct lifecycle, commit, or export calls cannot race the coordinator after the
+claim. Passing these objects to the controller transfers exclusive ownership;
+production wiring must not retain or expose them for concurrent use while
+restore begins. The controller requires a unique active checkpoint for every
+session in the encrypted identity/passphrase scope and accepts only application
+or PQ-control transitions with the exact local session/routing bindings.
+Restore merges incoming and outgoing effects by session revision and requires
+one contiguous `checkpoint.revision + 1` chain. A new transition runs only after
+its caller-supplied expected revision matches the current committed revision.
+The controller updates its in-memory snapshot only after the applicable durable
+commit and replay/outbox reconciliation succeed. Once a prepared effect could
+have become durable, any error makes that controller fail stopped until fresh
+transport stores, journals, and controller restore storage.
 
 The controller validates the canonical TR3 envelope and derives the stored
 X25519 public key from its private seed before accepting a checkpoint or
@@ -680,9 +710,8 @@ Before this schedule can carry user messages, Layergram still requires:
   EC Double Ratchet construction;
 - a reviewed ML-KEM Braid backend implementing authenticated state
   export/import behind the frozen boundary;
-- a crash-consistent durable send controller, recovery reconciliation for an
-  effect durable before its inbox tombstone, and reviewed native-state
-  validation;
+- independent review and production wiring of the inactive crash-consistent
+  send/receive coordinator, including the reviewed native-state validator;
 - skipped-key expiry, checkpoint, compaction, replay-window, and garbage-
   collection rules;
 - idempotent external application materialization;

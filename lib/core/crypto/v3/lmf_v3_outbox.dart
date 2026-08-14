@@ -24,6 +24,24 @@ import 'lmf_v3_persistence.dart';
 
 enum V3LmfOutboxAckStatus { advanced, duplicate, complete }
 
+typedef V3LmfOutboxBeforeComplete = FutureOr<void> Function(
+  V3LmfOutboxEntry completedEntry,
+);
+
+typedef V3LmfOutboxBeforePersist = FutureOr<void> Function(
+  V3LmfOutboxEntry updatedEntry,
+);
+
+/// Unforgeable ownership token for the inactive v3 send coordinator.
+///
+/// Direct outbox access remains available to isolated transport tests. Once a
+/// coordinator claims an outbox, every lifecycle, read, and mutation call must
+/// present this exact token so sealed bytes cannot be exported around the
+/// crash-consistent session authority.
+final class V3LmfOutboxAuthority {
+  const V3LmfOutboxAuthority._();
+}
+
 class V3LmfOutboxEntry {
   const V3LmfOutboxEntry._({
     required this.assemblyId,
@@ -92,14 +110,37 @@ class V3LmfDurableOutbox {
   Future<void> _operationTail = Future<void>.value();
   bool _restored = false;
   bool _closed = false;
+  V3LmfOutboxAuthority? _authority;
   int _sealedFrameBytes = 0;
 
   int get entryCount => _entries.length;
 
   int get sealedFrameBytes => _sealedFrameBytes;
 
-  Future<V3LmfOutboxRestoreResult> restore() {
+  Future<V3LmfOutboxAuthority> claimSessionSendAuthority() {
     return _serialized(() async {
+      _ensureOpen();
+      if (_restored) {
+        throw StateError(
+          'Layergram v3 outbox authority must be claimed before restore',
+        );
+      }
+      if (_authority != null) {
+        throw StateError(
+          'Layergram v3 outbox already has a session send coordinator',
+        );
+      }
+      final authority = V3LmfOutboxAuthority._();
+      _authority = authority;
+      return authority;
+    });
+  }
+
+  Future<V3LmfOutboxRestoreResult> restore({
+    V3LmfOutboxAuthority? authority,
+  }) {
+    return _serialized(() async {
+      _ensureAuthority(authority);
       _ensureOpen();
       if (_restored) {
         throw StateError('Layergram v3 outbox was already restored');
@@ -169,17 +210,52 @@ class V3LmfDurableOutbox {
     });
   }
 
-  /// Persists a complete canonical frame set before it may be exported.
-  Future<V3LmfOutboxEntry> enqueue(
+  /// Checks exact capacity without persisting or exposing a frame set.
+  Future<void> preflightEnqueue(
     List<V3LmfFrame> frames, {
-    DateTime? queuedAt,
+    V3LmfOutboxAuthority? authority,
   }) {
     return _serialized(() async {
+      _ensureAuthority(authority);
       _ensureReady();
       final canonicalFrames = _validateCompleteFrameSet(frames);
       final assemblyId = V3LmfFrameCodec.assemblyId(canonicalFrames.first);
       final existing = _entries[assemblyId];
-      final timestamp = (queuedAt ?? DateTime.now()).toUtc();
+      if (existing != null) {
+        if (_sameFrameSet(existing.entry.frames, canonicalFrames)) return;
+        throw const V3LmfPersistenceConflictException(
+          'outbox assembly already exists with different sealed bytes',
+        );
+      }
+      final candidateBytes = canonicalFrames.fold<int>(
+        0,
+        (sum, frame) => sum + V3LmfFrameCodec.encodeBinary(frame).length,
+      );
+      if (_entries.length >= maxEntries ||
+          _sealedFrameBytes + candidateBytes > maxSealedFrameBytes) {
+        throw const V3LmfPersistenceLimitException(
+          'outbox capacity exceeded',
+        );
+      }
+    });
+  }
+
+  /// Persists a complete canonical frame set before it may be exported.
+  Future<V3LmfOutboxEntry> enqueue(
+    List<V3LmfFrame> frames, {
+    DateTime? queuedAt,
+    V3LmfOutboxAuthority? authority,
+  }) {
+    return _serialized(() async {
+      _ensureAuthority(authority);
+      _ensureReady();
+      final canonicalFrames = _validateCompleteFrameSet(frames);
+      final assemblyId = V3LmfFrameCodec.assemblyId(canonicalFrames.first);
+      final existing = _entries[assemblyId];
+      final timestamp = _validatedTimestamp(
+        queuedAt ?? DateTime.now(),
+        'queuedAt',
+      );
       final candidate = V3LmfOutboxEntry._(
         assemblyId: assemblyId,
         frames: canonicalFrames,
@@ -220,12 +296,20 @@ class V3LmfDurableOutbox {
     });
   }
 
-  V3LmfOutboxEntry? entry(String assemblyId) {
+  V3LmfOutboxEntry? entry(
+    String assemblyId, {
+    V3LmfOutboxAuthority? authority,
+  }) {
+    _ensureAuthority(authority);
     _ensureReady();
     return _entries[assemblyId]?.entry;
   }
 
-  List<V3LmfFrame> pendingFrames(String assemblyId) {
+  List<V3LmfFrame> pendingFrames(
+    String assemblyId, {
+    V3LmfOutboxAuthority? authority,
+  }) {
+    _ensureAuthority(authority);
     _ensureReady();
     final record = _entries[assemblyId];
     if (record == null) return const <V3LmfFrame>[];
@@ -237,8 +321,11 @@ class V3LmfDurableOutbox {
     required String assemblyId,
     required Set<int> fragmentIndexes,
     DateTime? exportedAt,
+    V3LmfOutboxBeforePersist? beforePersist,
+    V3LmfOutboxAuthority? authority,
   }) {
     return _serialized(() async {
+      _ensureAuthority(authority);
       _ensureReady();
       final current = _entries[assemblyId];
       if (current == null) {
@@ -271,8 +358,15 @@ class V3LmfDurableOutbox {
         current.entry,
         exportAttempts: List<int>.unmodifiable(attempts),
         revision: current.entry.revision + 1,
-        updatedAt: (exportedAt ?? DateTime.now()).toUtc(),
+        updatedAt: _validatedTimestamp(
+          exportedAt ?? DateTime.now(),
+          'exportedAt',
+        ),
       );
+      if (beforePersist != null) {
+        await beforePersist(updated);
+        _ensureOpen();
+      }
       await _replace(current, updated);
       return updated;
     });
@@ -283,8 +377,12 @@ class V3LmfDurableOutbox {
     required V3LmfFrame acknowledgementFrame,
     required SecretKey secretKey,
     DateTime? receivedAt,
+    V3LmfOutboxBeforeComplete? beforeComplete,
+    V3LmfOutboxBeforePersist? beforePersist,
+    V3LmfOutboxAuthority? authority,
   }) {
     return _serialized(() async {
+      _ensureAuthority(authority);
       _ensureReady();
       if (acknowledgementFrame.metadata.kind !=
           V3LmfFrameKind.acknowledgement) {
@@ -333,8 +431,19 @@ class V3LmfDurableOutbox {
         target.entry,
         acknowledgedFragmentIndexes: Set<int>.unmodifiable(merged),
         revision: target.entry.revision + 1,
-        updatedAt: (receivedAt ?? DateTime.now()).toUtc(),
+        updatedAt: _validatedTimestamp(
+          receivedAt ?? DateTime.now(),
+          'receivedAt',
+        ),
       );
+      if (updated.isFullyAcknowledged && beforeComplete != null) {
+        await beforeComplete(updated);
+        _ensureOpen();
+      }
+      if (beforePersist != null) {
+        await beforePersist(updated);
+        _ensureOpen();
+      }
       await _replace(target, updated);
       return updated.isFullyAcknowledged
           ? V3LmfOutboxAckStatus.complete
@@ -342,8 +451,12 @@ class V3LmfDurableOutbox {
     });
   }
 
-  Future<void> removeFullyAcknowledged(String assemblyId) {
+  Future<void> removeFullyAcknowledged(
+    String assemblyId, {
+    V3LmfOutboxAuthority? authority,
+  }) {
     return _serialized(() async {
+      _ensureAuthority(authority);
       _ensureReady();
       final record = _entries[assemblyId];
       if (record == null) return;
@@ -356,8 +469,26 @@ class V3LmfDurableOutbox {
     });
   }
 
-  Future<void> close() {
+  /// Removes a controller-owned materialized entry after the send journal has
+  /// already committed its authenticated complete-ACK state.
+  Future<void> reconcileCompleted(
+    String assemblyId, {
+    required V3LmfOutboxAuthority authority,
+  }) {
     return _serialized(() async {
+      _ensureAuthority(authority);
+      _ensureReady();
+      final record = _entries[assemblyId];
+      if (record == null) return;
+      await _store.delete(record.storageId);
+      _entries.remove(assemblyId);
+      _sealedFrameBytes -= _entryFrameBytes(record.entry);
+    });
+  }
+
+  Future<void> close({V3LmfOutboxAuthority? authority}) {
+    return _serialized(() async {
+      _ensureAuthority(authority);
       if (_closed) return;
       _closed = true;
       _entries.clear();
@@ -515,6 +646,15 @@ class V3LmfDurableOutbox {
     _ensureOpen();
     if (!_restored) {
       throw StateError('Layergram v3 outbox must be restored before use');
+    }
+  }
+
+  void _ensureAuthority(V3LmfOutboxAuthority? authority) {
+    final claimed = _authority;
+    if (claimed != null && !identical(claimed, authority)) {
+      throw StateError(
+        'Layergram v3 outbox is owned by a session send coordinator',
+      );
     }
   }
 }
@@ -688,3 +828,11 @@ bool _mapEquals(Map<String, dynamic> left, Map<String, dynamic> right) {
 
 bool _isValidEpochMilliseconds(Object? value) =>
     value is int && value >= 0 && value <= 8640000000000000;
+
+DateTime _validatedTimestamp(DateTime value, String name) {
+  final utc = value.toUtc();
+  if (!_isValidEpochMilliseconds(utc.millisecondsSinceEpoch)) {
+    throw ArgumentError.value(value, name, 'must not precede Unix epoch');
+  }
+  return utc;
+}

@@ -595,6 +595,112 @@ abstract final class V3KeySchedule {
       _wipe(rootKey);
     }
   }
+
+  /// Derives ACK material from one already validated durable TR3 state.
+  ///
+  /// This boundary exists for crash-restored session controllers, which no
+  /// longer retain the original handshake-only [V3SessionKeyMaterial] object.
+  /// Both directional roots are supplied so [direction] selects the root
+  /// internally rather than accepting an arbitrary caller-selected AEAD key.
+  static Future<V3AcknowledgementKeyMaterial>
+      deriveAcknowledgementFromCommittedState({
+    required Uint8List sessionId,
+    required Uint8List initiatorRoutingBinding,
+    required Uint8List responderRoutingBinding,
+    required Uint8List initiatorToResponderAckRootKey,
+    required Uint8List responderToInitiatorAckRootKey,
+    required V3TrafficDirection direction,
+    required V3LmfMessageMetadata metadata,
+  }) async {
+    Uint8List? checkedSessionId;
+    Uint8List? initiatorBinding;
+    Uint8List? responderBinding;
+    Uint8List? initiatorRoot;
+    Uint8List? responderRoot;
+    try {
+      checkedSessionId = _validatedBytes(
+        sessionId,
+        V3LmfFrameCodec.sessionIdBytes,
+        'sessionId',
+        rejectAllZero: true,
+      );
+      initiatorBinding = _validatedBytes(
+        initiatorRoutingBinding,
+        V3LmfFrameCodec.routingBindingBytes,
+        'initiatorRoutingBinding',
+        rejectAllZero: true,
+      );
+      responderBinding = _validatedBytes(
+        responderRoutingBinding,
+        V3LmfFrameCodec.routingBindingBytes,
+        'responderRoutingBinding',
+        rejectAllZero: true,
+      );
+      initiatorRoot = _validatedSecret(
+        initiatorToResponderAckRootKey,
+        'initiatorToResponderAckRootKey',
+      );
+      responderRoot = _validatedSecret(
+        responderToInitiatorAckRootKey,
+        'responderToInitiatorAckRootKey',
+      );
+      if (metadata.kind != V3LmfFrameKind.acknowledgement ||
+          !_constantTimeEqual(metadata.sessionId, checkedSessionId)) {
+        throw const FormatException(
+          'Layergram v3 ACK does not match committed session state',
+        );
+      }
+      final expectedSender =
+          direction == V3TrafficDirection.initiatorToResponder
+              ? initiatorBinding
+              : responderBinding;
+      final expectedRecipient =
+          direction == V3TrafficDirection.initiatorToResponder
+              ? responderBinding
+              : initiatorBinding;
+      if (!_constantTimeEqual(metadata.senderBinding, expectedSender) ||
+          !_constantTimeEqual(metadata.recipientBinding, expectedRecipient)) {
+        throw const FormatException(
+          'Layergram v3 ACK routing does not match committed session state',
+        );
+      }
+      final context = _ackContext(metadata: metadata, direction: direction);
+      final rootKey = direction == V3TrafficDirection.initiatorToResponder
+          ? initiatorRoot
+          : responderRoot;
+      final aeadKey = await _deriveHkdfSha256(
+        inputKeyMaterial: rootKey,
+        salt: checkedSessionId,
+        info: _concat(<List<int>>[_ackAeadKeyLabel, context]),
+        outputLength: secretBytes,
+      );
+      Uint8List? nonce;
+      try {
+        nonce = await _deriveHkdfSha256(
+          inputKeyMaterial: rootKey,
+          salt: checkedSessionId,
+          info: _concat(<List<int>>[_ackNonceLabel, context]),
+          outputLength: V3LmfFrameCodec.nonceBytes,
+        );
+        _requireDerivedNonZero(aeadKey);
+        _requireDerivedNonZero(nonce);
+        return V3AcknowledgementKeyMaterial._(
+          aeadKey: aeadKey,
+          nonce: nonce,
+        );
+      } catch (_) {
+        _wipe(aeadKey);
+        if (nonce != null) _wipe(nonce);
+        rethrow;
+      }
+    } finally {
+      if (checkedSessionId != null) _wipe(checkedSessionId);
+      if (initiatorBinding != null) _wipe(initiatorBinding);
+      if (responderBinding != null) _wipe(responderBinding);
+      if (initiatorRoot != null) _wipe(initiatorRoot);
+      if (responderRoot != null) _wipe(responderRoot);
+    }
+  }
 }
 
 final Uint8List _zeroSalt = Uint8List(V3KeySchedule.secretBytes);

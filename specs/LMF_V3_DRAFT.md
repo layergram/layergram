@@ -315,12 +315,23 @@ for the same assembly index wipe and reject the pending assembly.
 ### 7.3 Outbox and resend order
 
 The inactive durable outbox persists a complete canonical set of exact sealed
-frames before first export. Export attempts and cumulative ACK progress create
-a new encrypted revision before the prior revision is deleted. After a crash,
-the highest valid revision wins and older copies are cleaned. A resend returns
-the same sealed bytes; it never re-encrypts a fragment or derives policy from a
-remote clock. Removing an entry is allowed only after a complete authenticated
-ACK.
+frames before first export. When attached to the session coordinator it is a
+materialized view of the send journal, whose single effect binds the exact
+sealed frame set, canonical outgoing AR3 record, prior ratchet revision, and
+complete post-send TR3 snapshot. Restore selects the highest valid revision,
+rejects conflicting copies at the same revision, merges incoming and outgoing
+transitions into one contiguous per-session revision chain, and recreates a
+missing outbox entry from the journal without resealing. A resend returns the
+same sealed bytes; it never re-encrypts a fragment or derives policy from a
+remote clock.
+
+The outbox and send journal transfer exclusive ownership to the coordinator
+before restore. Direct lifecycle, mutation, or frame-read calls are rejected
+after the claim. A complete authenticated ACK is first committed as the send
+journal's next local record revision and only then may its outbox materialization
+be removed. Restart suppresses and cleans a stale outbox copy when that durable
+completed revision already exists. Unauthenticated ACK rejection happens before
+any persistence attempt and therefore does not poison a clean retry.
 
 The reference defaults bound the inbox to 256 sealed frame records, 128 KiB of
 sealed frame bytes, 4,096 commit tombstones, and 8,192 relevant physical
@@ -328,9 +339,12 @@ records. The atomic-effect journal is bounded to 4,096 effects, 17 KiB per
 encoded application record (including its 192-byte header), 256 KiB per ratchet
 snapshot, 16 MiB total decoded state,
 and 8,192 relevant physical records. The outbox is bounded to 64 logical
-entries, 512 KiB of sealed frame bytes, and 256 physical revisions. Reassembly
-retains its separate limits of 8 pending assemblies and 64 KiB of authenticated
-plaintext. Limit breaches fail closed without silently evicting valid state.
+entries, 512 KiB of sealed frame bytes, and 256 physical revisions. The send
+journal is bounded to 4,096 effects, 17 KiB per AR3 record, 256 KiB per TR3
+snapshot, 512 KiB of sealed frames per effect, 32 MiB total retained state, and
+8,192 relevant physical records. Reassembly retains its separate limits of 8
+pending assemblies and 64 KiB of authenticated plaintext. Limit breaches fail
+closed without silently evicting valid state.
 
 All records use Layergram's existing padded, outer-encrypted auxiliary-record
 storage under the active identity/passphrase scope. The record kind, assembly
@@ -495,10 +509,11 @@ message decode, contact state, backups, migration, QR, UI, or Premium capability
 contracts.
 
 Before activation, the native ML-KEM Braid engine must produce and consume the
-frozen message/state formats and validate every opaque export; a
-crash-consistent durable send controller and effect-before-tombstone recovery
-path must be completed; the application repository must use the atomic journal
-as its source of truth; checkpoint and garbage-collection rules must be frozen;
+frozen message/state formats and validate every opaque export; the inactive
+crash-consistent send/receive coordinator and its recovery paths must pass
+independent review and production wiring; the application repository must use
+the atomic journals as its source of truth; checkpoint and garbage-collection
+rules must be frozen;
 resend/progress UX and real loss recovery must pass; all three transports must
 pass real cross-app tests; and the complete design and implementation must pass
 independent review.
