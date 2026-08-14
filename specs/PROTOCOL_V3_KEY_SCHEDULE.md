@@ -5,9 +5,10 @@ Status: **normative research draft; inactive; not externally reviewed**
 This document freezes the first testable Layergram-v3 key-expansion boundary,
 hybrid message-key combination, fragment nonce derivation, acknowledgement
 schedule, committed application/control record, and Triple Ratchet snapshot
-envelope. The separate `PROTOCOL_V3_HANDSHAKE.md` now defines the inactive
-candidate that supplies its authenticated inputs. Neither document implements
-the Double Ratchet or ML-KEM Braid transition engines or enables protocol v3.
+envelope. The separate `PROTOCOL_V3_HANDSHAKE.md` defines the inactive
+candidate that supplies its authenticated inputs. The EC Double Ratchet engine
+and the ML-KEM Braid/SCKA backend boundary now exist, but no production SCKA
+backend or LMF integration exists and protocol v3 remains disabled.
 
 `PROTOCOL_V3_SECURITY_GOALS.md` remains authoritative. This draft and its code
 must change if later transcript design, ML-KEM Braid integration, persistence
@@ -38,18 +39,21 @@ This checkpoint provides:
 - deterministic, domain-separated message IDs, AES-256-GCM keys, and fragment
   nonces;
 - directional ACK keys and nonces derived from visible canonical header fields;
-- a strict 188-byte-header application/control record;
+- a strict 192-byte-header application/control record;
 - a strict bounded Triple Ratchet snapshot containing EC state, at most two PQ
   epochs, bounded skipped keys, and an opaque native SCKA-state export;
+- a strict public `SK3` SCKA envelope, a canonical `HR3` EC+SCKA container,
+  and a non-mutating backend contract for authenticated native state exports;
 - golden, negative, framing, reassembly, and atomic-commit tests.
 
 It deliberately does not provide:
 
 - an independently approved handshake or deniability claim (the separate
   candidate remains externally unreviewed);
-- the ML-KEM Braid/SCKA state machine or reviewed native state exporter;
-- the final composite LMF wire header carrying both the EC header and opaque
-  SCKA message;
+- a production ML-KEM Braid/SCKA implementation or reviewed native state
+  exporter;
+- LMF carriage and AEAD authentication of the standalone `HR3` composite
+  header;
 - checkpoint compaction, replay-window retirement, or journal garbage
   collection;
 - activation in contacts, messaging, UI, backup, migration, or Premium paths.
@@ -240,6 +244,60 @@ Frozen portable vectors:
 - for the same `CK`, `next_CK` =
   `5dd4c244b5069d2fad5374abcbcc3ee2643a3cfabdb46a35beb9bfd14a733b34`.
 
+### 4.1 Sparse-PQ backend and hybrid-header boundary
+
+The Dart boundary models the ML-KEM Braid SCKA operations `Init`, `Send`, and
+`Receive` without implementing them. A conforming native backend MUST leave its
+input export unchanged, return a distinct candidate export, bind the export to
+the session ID and stable role, validate it before and after every transition,
+and internally version and authenticate it. The export MUST NOT be an expanded
+ML-KEM private key copied into Dart. No production backend is registered in
+this checkpoint.
+
+The public SCKA message uses a canonical `SK3` envelope:
+
+| Offset | Bytes | Field |
+|---:|---:|---|
+| 0 | 3 | magic `SK3` |
+| 3 | 1 | format version `0x01` |
+| 4 | 1 | suite `0x01` |
+| 5 | 1 | flags, zero |
+| 6 | 2 | exact total length, 24–536 |
+| 8 | 8 | SCKA sending epoch |
+| 16 | 8 | PQ message counter within that epoch |
+| 24 | N | canonical backend SCKA public message, 0–512 bytes |
+
+The epoch and counter are limited to `0..2^63-1`. The backend message is public
+and may be empty for an SCKA no-op, but it is length-bounded before copying.
+The native backend remains responsible for semantic parsing and for the SCKA's
+own message authentication before its transition can be accepted.
+
+The standalone hybrid container is:
+
+| Offset | Bytes | Field |
+|---:|---:|---|
+| 0 | 3 | magic `HR3` |
+| 3 | 1 | format version `0x01` |
+| 4 | 1 | suite `0x01` |
+| 5 | 1 | flags, zero |
+| 6 | 2 | fixed header length `16` |
+| 8 | 2 | exact total length |
+| 10 | 2 | EC header length, exactly `56` |
+| 12 | 2 | SCKA envelope length, 24–536 |
+| 14 | 2 | reserved zeros |
+| 16 | 56 | exact canonical `DR3` header |
+| 72 | N | exact canonical `SK3` envelope |
+
+An `HR3` is at most 608 bytes. Decoding validates outer lengths before nested
+parsing, and both nested records must be canonical. The format exists so a
+later LMF revision can authenticate one unambiguous byte string. It is not yet
+carried by LMF and cannot authorize a ratchet transition by itself.
+
+SCKA send and receive results are candidates: each owns a new authenticated
+native export and an optional 32-byte epoch secret. The source export is never
+mutated. A non-ACK commit uses `replaceHybridState` to replace EC and PQ state
+in one `TR3` revision; no EC-only or PQ-only durable intermediate is allowed.
+
 ## 5. Hybrid application/control message schedule
 
 For every non-ACK logical message the two ratchets must independently produce:
@@ -250,7 +308,7 @@ For every non-ACK logical message the two ratchets must independently produce:
 Missing, malformed, all-zero, stale, or ambiguous input from either ratchet is
 an error. No v3 frame may be sealed from only one branch.
 
-The canonical 32-byte message context `M` is:
+The canonical 36-byte message context `M` is:
 
 | Offset | Bytes | Field |
 |---:|---:|---|
@@ -258,9 +316,9 @@ The canonical 32-byte message context `M` is:
 | 1 | 1 | suite `0x01` |
 | 2 | 1 | traffic direction |
 | 3 | 1 | non-ACK frame kind |
-| 4 | 4 | PQ epoch |
-| 8 | 8 | message counter |
-| 16 | 16 | session ID |
+| 4 | 8 | PQ epoch |
+| 12 | 8 | message counter |
+| 20 | 16 | session ID |
 
 Define:
 
@@ -312,7 +370,7 @@ message key. They use a direction-specific ACK root retained in the session
 snapshot. The ACK frame must have a fresh, non-zero 16-byte message ID whenever
 a new cumulative ACK is sealed. An ACK resend reuses the already-sealed bytes.
 
-The canonical 124-byte visible ACK context `A` is:
+The canonical 128-byte visible ACK context `A` is:
 
 | Offset | Bytes | Field |
 |---:|---:|---|
@@ -324,12 +382,12 @@ The canonical 124-byte visible ACK context `A` is:
 | 36 | 32 | recipient routing binding |
 | 68 | 16 | ACK message ID |
 | 84 | 16 | session ID |
-| 100 | 4 | ACK-envelope epoch |
-| 104 | 8 | ACK-envelope message counter |
-| 112 | 4 | sender-declared expiry |
-| 116 | 2 | fragment index `0` |
-| 118 | 2 | fragment count `1` |
-| 120 | 4 | final plaintext length `48` |
+| 100 | 8 | ACK-envelope epoch |
+| 108 | 8 | ACK-envelope message counter |
+| 116 | 4 | sender-declared expiry |
+| 120 | 2 | fragment index `0` |
+| 122 | 2 | fragment count `1` |
+| 124 | 4 | final plaintext length `52` |
 
 For the directional root `ACKROOT`:
 
@@ -348,33 +406,33 @@ ack_nonce = HKDF(
 ```
 
 Only header-visible values enter this derivation, so the receiver can derive
-the key before opening the 48-byte ACK plaintext. Session ID, direction, and
+the key before opening the 52-byte ACK plaintext. Session ID, direction, and
 both routing bindings must match the committed session exactly.
 
 ## 7. Canonical committed application/control record
 
 The atomic journal's application byte string is the exact binary `AR3` record.
-It has a fixed 188-byte header followed by 1–16,384 content bytes:
+It has a fixed 192-byte header followed by 1–16,384 content bytes:
 
 | Offset | Bytes | Field | Rule |
 |---:|---:|---|---|
 | 0 | 3 | magic | ASCII `AR3` |
-| 3 | 1 | format version | `0x01` |
+| 3 | 1 | format version | `0x02` |
 | 4 | 1 | suite | `0x01` |
 | 5 | 1 | record kind | application `1`, handshake control `2`, PQ control `3` |
 | 6 | 1 | flags | zero |
-| 7 | 1 | header length | `188` |
+| 7 | 1 | header length | `192` |
 | 8 | 4 | total record length | exact |
 | 12 | 32 | assembly digest | exact LMF assembly-ID digest bytes |
 | 44 | 16 | session ID | non-zero |
 | 60 | 16 | message ID | non-zero |
 | 76 | 32 | sender routing binding | non-zero |
 | 108 | 32 | recipient routing binding | non-zero |
-| 140 | 4 | epoch | authenticated target epoch |
-| 144 | 8 | message counter | authenticated target counter |
-| 152 | 4 | content length | 1–16,384 |
-| 156 | 32 | content digest | rule below |
-| 188 | N | content | exact complete delivered plaintext |
+| 140 | 8 | epoch | authenticated target epoch |
+| 148 | 8 | message counter | authenticated target counter |
+| 156 | 4 | content length | 1–16,384 |
+| 160 | 32 | content digest | rule below |
+| 192 | N | content | exact complete delivered plaintext |
 
 The record kind maps one-to-one to the source LMF frame kind; ACK has no mapping
 and cannot create an atomic effect. The assembly digest is recomputed using the
@@ -383,10 +441,10 @@ same domain and fields as `V3LmfFrameCodec.assemblyId`.
 ```text
 content_digest = SHA-256(
   "layergram/v3/committed-record/content\0"
-  || assembly_digest || U32(epoch) || U64(message_counter) || content)
+  || assembly_digest || U64(epoch) || U64(message_counter) || content)
 ```
 
-The maximum encoded record is 16,572 bytes. The atomic journal therefore
+The maximum encoded record is 16,576 bytes. The atomic journal therefore
 allows 17 KiB for this field so the full 16 KiB LMF plaintext remains
 representable. The stable external record ID remains
 `v3:<base64url(assembly_digest)>`.
@@ -474,11 +532,12 @@ An absent EC receiving chain is valid only for the initial initiator state. Its
 presence flag is zero, its 32-byte field is all zero, and its receive counter is
 zero. The sending chain is always present in this Layergram initialization.
 
-The opaque SCKA bytes are reserved for a future reviewed native ML-KEM Braid
-backend. They must be a backend-authenticated export and must not be a raw
-expanded ML-KEM private key copied into Dart. The current placeholder codec
-cannot establish that property; native export/import and validation remain an
-activation gate.
+The opaque SCKA bytes are consumed through the candidate-only backend boundary
+in Section 4.1. They must be a backend-authenticated export and must not be a
+raw expanded ML-KEM private key copied into Dart. The Dart envelope cannot
+establish that property by itself; a production native implementation,
+semantic export/import validation, and independent review remain activation
+gates.
 
 The synchronous envelope codec alone cannot prove that the stored local EC
 private seed corresponds to the stored local public key. The EC transition
@@ -516,8 +575,10 @@ Before this schedule can carry user messages, Layergram still requires:
 
 - independent cryptographic review of the authenticated hybrid handshake and
   EC Double Ratchet construction;
-- a reviewed ML-KEM Braid backend with authenticated state export/import;
-- the final composite EC+SCKA LMF header and exact hybrid send/receive vectors;
+- a reviewed ML-KEM Braid backend implementing authenticated state
+  export/import behind the frozen boundary;
+- LMF carriage and AEAD authentication of the standalone `HR3` header, plus
+  exact hybrid send/receive vectors;
 - skipped-key expiry, checkpoint, compaction, replay-window, and garbage-
   collection rules;
 - idempotent external application materialization;

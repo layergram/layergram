@@ -17,10 +17,10 @@ void main() {
         content: content,
       );
       final encoded = V3CommittedRecordCodec.encode(record);
-      expect(encoded, hasLength(488));
+      expect(encoded, hasLength(492));
       expect(
         crypto.sha256.convert(encoded).toString(),
-        '871faa259e758afdb0daef475f8d294d3cf55ac9d7174674e80580c0006781e0',
+        'ad2ae14b5ee380ec9d62b406795230191e0c36c8f3e4eecacfaf71f828e652b3',
       );
       expect(record.assemblyId, V3LmfFrameCodec.assemblyId(delivery.first));
       expect(record.stableRecordId, 'v3:${record.assemblyId}');
@@ -88,7 +88,7 @@ void main() {
       final encoded = V3CommittedRecordCodec.encode(record);
       for (final changed in <Uint8List>[
         Uint8List.fromList(encoded)..[0] = 0,
-        Uint8List.fromList(encoded)..[3] = 2,
+        Uint8List.fromList(encoded)..[3] = 1,
         Uint8List.fromList(encoded)..[4] = 0xff,
         Uint8List.fromList(encoded)..[5] = 0xff,
         Uint8List.fromList(encoded)..[6] = 1,
@@ -100,6 +100,7 @@ void main() {
         Uint8List.fromList(encoded)..[151] ^= 1,
         Uint8List.fromList(encoded)..[156] ^= 1,
         Uint8List.fromList(encoded)..[188] ^= 1,
+        Uint8List.fromList(encoded)..[192] ^= 1,
         Uint8List.fromList(encoded.sublist(0, encoded.length - 1)),
         Uint8List.fromList(<int>[...encoded, 0]),
       ]) {
@@ -146,14 +147,68 @@ void main() {
       expect(() => record.content, throwsStateError);
       expect(() => V3CommittedRecordCodec.encode(record), throwsStateError);
     });
+
+    test('round-trips widened epoch and counter boundaries', () async {
+      final delivery = await _delivery(
+        epoch: 0x7fffffffffffffff,
+        messageCounter: 0x7fffffffffffffff,
+      );
+      final record = V3CommittedRecord.fromDelivery(
+        targetFrame: delivery.first,
+        content: _bytes(300, 0x31),
+      );
+      final decoded = V3CommittedRecordCodec.decode(
+        V3CommittedRecordCodec.encode(record),
+      );
+      expect(decoded.epoch, 0x7fffffffffffffff);
+      expect(decoded.messageCounter, 0x7fffffffffffffff);
+      decoded.wipeContent();
+      record.wipeContent();
+    });
+
+    test('rejects high-bit epoch and counter with matching content digest',
+        () async {
+      final delivery = await _delivery();
+      final record = V3CommittedRecord.fromDelivery(
+        targetFrame: delivery.first,
+        content: _bytes(300, 0x31),
+      );
+      final encoded = V3CommittedRecordCodec.encode(record);
+      for (final counterOffset in <int>[140, 148]) {
+        final changed = Uint8List.fromList(encoded);
+        ByteData.sublistView(changed).setUint64(
+          counterOffset,
+          0x8000000000000000,
+          Endian.big,
+        );
+        final digest = crypto.sha256.convert(<int>[
+          ...'layergram/v3/committed-record/content\u0000'.codeUnits,
+          ...changed.sublist(12, 44),
+          ...changed.sublist(140, 156),
+          ...changed.sublist(V3CommittedRecordCodec.headerBytes),
+        ]).bytes;
+        changed.setRange(160, 192, digest);
+        expect(
+          () => V3CommittedRecordCodec.decode(changed),
+          throwsFormatException,
+        );
+      }
+      record.wipeContent();
+    });
   });
 }
 
 Future<List<V3LmfFrame>> _delivery({
   V3LmfFrameKind kind = V3LmfFrameKind.application,
+  int epoch = 7,
+  int messageCounter = 9,
 }) {
   return V3LmfAead.sealFragmented(
-    metadata: _metadata(kind: kind),
+    metadata: _metadata(
+      kind: kind,
+      epoch: epoch,
+      messageCounter: messageCounter,
+    ),
     plaintext: _bytes(300, 0x31),
     secretKey: SecretKey(_bytes(32, 0x11)),
     nonceForFragment: (index) => _bytes(12, 0x51 + index),
@@ -179,15 +234,19 @@ V3LmfFrame _frame({
   );
 }
 
-V3LmfMessageMetadata _metadata({required V3LmfFrameKind kind}) =>
+V3LmfMessageMetadata _metadata({
+  required V3LmfFrameKind kind,
+  int epoch = 7,
+  int messageCounter = 9,
+}) =>
     V3LmfMessageMetadata(
       kind: kind,
       senderBinding: _bytes(32, 1),
       recipientBinding: _bytes(32, 0x41),
       messageId: _bytes(16, 0x81),
       sessionId: _bytes(16, 0xa1),
-      epoch: 7,
-      messageCounter: 9,
+      epoch: epoch,
+      messageCounter: messageCounter,
     );
 
 Uint8List _bytes(int length, int start) => Uint8List.fromList(

@@ -18,6 +18,7 @@ import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
 
 import 'lmf_v3.dart';
+import 'lmf_v3_acknowledgement.dart';
 
 /// Stable participant role within one authenticated protocol-v3 session.
 enum V3SessionRole {
@@ -632,15 +633,15 @@ Uint8List _messageContext({
   required int epoch,
   required int messageCounter,
 }) {
-  final context = Uint8List(32);
+  final context = Uint8List(36);
   final data = ByteData.sublistView(context);
   context[0] = V3LmfFrameCodec.protocolVersion;
   context[1] = V3LmfSuite.hybridX25519MlKem768Aes256Gcm.wireId;
   context[2] = direction.wireId;
   context[3] = kind.wireId;
-  data.setUint32(4, epoch, Endian.big);
-  data.setUint64(8, messageCounter, Endian.big);
-  context.setRange(16, 32, sessionId);
+  data.setUint64(4, epoch, Endian.big);
+  data.setUint64(12, messageCounter, Endian.big);
+  context.setRange(20, 36, sessionId);
   return context;
 }
 
@@ -648,7 +649,7 @@ Uint8List _ackContext({
   required V3LmfMessageMetadata metadata,
   required V3TrafficDirection direction,
 }) {
-  final context = Uint8List(124);
+  final context = Uint8List(128);
   final data = ByteData.sublistView(context);
   var offset = 0;
   context[offset++] = V3LmfFrameCodec.protocolVersion;
@@ -663,8 +664,8 @@ Uint8List _ackContext({
   offset += 16;
   context.setRange(offset, offset + 16, metadata.sessionId);
   offset += 16;
-  data.setUint32(offset, metadata.epoch, Endian.big);
-  offset += 4;
+  data.setUint64(offset, metadata.epoch, Endian.big);
+  offset += 8;
   data.setUint64(offset, metadata.messageCounter, Endian.big);
   offset += 8;
   data.setUint32(offset, metadata.expiresAtUnixSeconds, Endian.big);
@@ -673,7 +674,7 @@ Uint8List _ackContext({
   offset += 2;
   data.setUint16(offset, 1, Endian.big);
   offset += 2;
-  data.setUint32(offset, 48, Endian.big);
+  data.setUint32(offset, V3LmfAcknowledgementCodec.encodedBytes, Endian.big);
   offset += 4;
   if (offset != context.length) {
     throw StateError('Layergram v3 ACK key context drift');
@@ -682,7 +683,7 @@ Uint8List _ackContext({
 }
 
 void _validateEpochAndCounter(int epoch, int messageCounter) {
-  if (epoch < 0 || epoch > 0xffffffff) {
+  if (epoch < 0 || epoch > 0x7fffffffffffffff) {
     throw ArgumentError.value(epoch, 'epoch');
   }
   if (messageCounter < 0 || messageCounter > 0x7fffffffffffffff) {

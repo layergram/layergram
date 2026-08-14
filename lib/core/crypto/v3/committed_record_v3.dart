@@ -173,8 +173,8 @@ final class V3CommittedRecord {
 /// Strict fixed-header encoding for [V3CommittedRecord].
 abstract final class V3CommittedRecordCodec {
   static const List<int> magic = <int>[0x41, 0x52, 0x33]; // "AR3"
-  static const int formatVersion = 1;
-  static const int headerBytes = 188;
+  static const int formatVersion = 2;
+  static const int headerBytes = 192;
   static const int maxEncodedBytes =
       headerBytes + V3LmfFrameCodec.maxAssembledPlaintextBytes;
 
@@ -201,8 +201,8 @@ abstract final class V3CommittedRecordCodec {
     offset = _writeBytes(result, offset, record._messageId);
     offset = _writeBytes(result, offset, record._senderBinding);
     offset = _writeBytes(result, offset, record._recipientBinding);
-    data.setUint32(offset, record.epoch, Endian.big);
-    offset += 4;
+    data.setUint64(offset, record.epoch, Endian.big);
+    offset += 8;
     data.setUint64(offset, record.messageCounter, Endian.big);
     offset += 8;
     data.setUint32(offset, record._content.length, Endian.big);
@@ -258,8 +258,8 @@ abstract final class V3CommittedRecordCodec {
     offset += 32;
     final recipientBinding = _copyRange(encoded, offset, 32);
     offset += 32;
-    final epoch = data.getUint32(offset, Endian.big);
-    offset += 4;
+    final epoch = data.getUint64(offset, Endian.big);
+    offset += 8;
     final messageCounter = data.getUint64(offset, Endian.big);
     offset += 8;
     final contentLength = data.getUint32(offset, Endian.big);
@@ -267,6 +267,10 @@ abstract final class V3CommittedRecordCodec {
     final contentDigest = _copyRange(encoded, offset, 32);
     offset += 32;
     if (offset != headerBytes ||
+        epoch < 0 ||
+        epoch > 0x7fffffffffffffff ||
+        messageCounter < 0 ||
+        messageCounter > 0x7fffffffffffffff ||
         contentLength < 1 ||
         contentLength > V3LmfFrameCodec.maxAssembledPlaintextBytes ||
         headerBytes + contentLength != encoded.length ||
@@ -357,9 +361,9 @@ Uint8List _deriveContentDigest(
   required int messageCounter,
   required Uint8List content,
 }) {
-  final counters = ByteData(12)
-    ..setUint32(0, epoch, Endian.big)
-    ..setUint64(4, messageCounter, Endian.big);
+  final counters = ByteData(16)
+    ..setUint64(0, epoch, Endian.big)
+    ..setUint64(8, messageCounter, Endian.big);
   return Uint8List.fromList(
     crypto.sha256.convert(<int>[
       ...utf8.encode('layergram/v3/committed-record/content\u0000'),

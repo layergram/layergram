@@ -19,11 +19,11 @@ void main() {
     );
 
     final encoded = V3LmfAcknowledgementCodec.encode(acknowledgement);
-    expect(encoded, hasLength(48));
+    expect(encoded, hasLength(52));
     expect(
       _hex(encoded),
-      '414b3301010100058182838485868788898a8b8c8d8e8f90'
-      '000000070000000000000009000004401500000000000000',
+      '414b3302010100058182838485868788898a8b8c8d8e8f90'
+      '00000000000000070000000000000009000004401500000000000000',
     );
 
     final decoded = V3LmfAcknowledgementCodec.decode(encoded);
@@ -79,6 +79,25 @@ void main() {
     );
   });
 
+  test('round-trips epoch bits above the legacy 32-bit range', () {
+    final encoded = V3LmfAcknowledgementCodec.encode(
+      V3LmfAcknowledgement(
+        targetSuite: V3LmfSuite.hybridX25519MlKem768Aes256Gcm,
+        targetKind: V3LmfFrameKind.application,
+        targetMessageId: _bytes(V3LmfFrameCodec.messageIdBytes, 1),
+        targetEpoch: 0x100000007,
+        targetMessageCounter: 2,
+        targetAssembledPlaintextLength: 1,
+        targetFragmentCount: 1,
+        receivedFragmentIndexes: const <int>{0},
+      ),
+    );
+    expect(
+      V3LmfAcknowledgementCodec.decode(encoded).targetEpoch,
+      0x100000007,
+    );
+  });
+
   test('strict decoder rejects malformed ACKs and unused bitmap bits', () {
     final valid = V3LmfAcknowledgementCodec.encode(
       V3LmfAcknowledgement(
@@ -95,14 +114,14 @@ void main() {
 
     for (final changed in <Uint8List>[
       Uint8List.fromList(valid)..[0] = 0,
-      Uint8List.fromList(valid)..[3] = 2,
+      Uint8List.fromList(valid)..[3] = 1,
       Uint8List.fromList(valid)..[4] = 0xff,
       Uint8List.fromList(valid)..[5] = V3LmfFrameKind.acknowledgement.wireId,
       Uint8List.fromList(valid)..[6] = 1,
       Uint8List.fromList(valid)..[7] = 0,
-      Uint8List.fromList(valid)..fillRange(40, 48, 0),
-      Uint8List.fromList(valid)..[40] |= 1 << 2,
-      Uint8List.fromList(valid.sublist(0, 47)),
+      Uint8List.fromList(valid)..fillRange(44, 52, 0),
+      Uint8List.fromList(valid)..[44] |= 1 << 2,
+      Uint8List.fromList(valid.sublist(0, 51)),
       Uint8List.fromList(<int>[...valid, 0]),
     ]) {
       expect(

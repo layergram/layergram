@@ -124,10 +124,10 @@ void main() {
     test('matches message, AEAD key, and fragment nonce vectors', () async {
       final session = await _session();
       final material = await _message(session);
-      expect(_hex(material.messageId), 'df4c0718893e931410cfec6b4209466b');
+      expect(_hex(material.messageId), '044aaf313888fab0f9caa64f00a93eb5');
       expect(
         _hex(Uint8List.fromList(await material.secretKey.extractBytes())),
-        '9c737e32b6b7ad1517983e318703109b4e564058b60e1ae4e3cbcf52f2067722',
+        '59ec62ab5d2940ec7c899703859858560e98ed720bd26045d323d7f7d3a1eb14',
       );
       expect(
         _hex(await material.nonceForFragment(
@@ -135,7 +135,7 @@ void main() {
           fragmentCount: 5,
           assembledPlaintextLength: 1088,
         )),
-        '732bfe217bea84b55ed5a8d0',
+        'e72ba41e5c0fd9d66c52e591',
       );
       expect(
         _hex(await material.nonceForFragment(
@@ -143,7 +143,7 @@ void main() {
           fragmentCount: 5,
           assembledPlaintextLength: 1088,
         )),
-        '49c718b587bac3a59f28b70e',
+        '38341c8bdf25c8490b436ef2',
       );
       material.close();
       session.close();
@@ -254,6 +254,20 @@ void main() {
       expect(() => baseline.secretKey, throwsStateError);
       session.close();
     });
+
+    test('preserves epoch bits above the legacy 32-bit range', () async {
+      final session = await _session();
+      final legacy = await _message(session, epoch: 7);
+      final widened = await _message(session, epoch: 0x100000007);
+      expect(widened.messageId, isNot(legacy.messageId));
+      expect(
+        await widened.secretKey.extractBytes(),
+        isNot(await legacy.secretKey.extractBytes()),
+      );
+      widened.close();
+      legacy.close();
+      session.close();
+    });
   });
 
   group('protocol v3 acknowledgement schedule', () {
@@ -278,9 +292,9 @@ void main() {
       );
       expect(
         _hex(Uint8List.fromList(await material.secretKey.extractBytes())),
-        'df701c0ec0b0c62f1c52d1cb36b0ab0748238c03564dc167661b55c2e555d51a',
+        '739104c8a947f09b02cc24b896063786c23c6393950e89f1e2b43018585d63f3',
       );
-      expect(_hex(material.nonce), '70279046d34f0d997e62bb81');
+      expect(_hex(material.nonce), 'c95dfd5806ba2937dbc551d9');
 
       final acknowledgement = V3LmfAcknowledgement(
         targetSuite: V3LmfSuite.hybridX25519MlKem768Aes256Gcm,

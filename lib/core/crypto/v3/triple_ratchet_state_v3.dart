@@ -715,6 +715,56 @@ final class V3TripleRatchetState {
     required List<V3EcSkippedMessageKey> ecSkippedMessageKeys,
     V3RatchetLifecycle? lifecycle,
   }) {
+    return replaceHybridState(
+      expectedRevision: expectedRevision,
+      ecRootKey: ecRootKey,
+      ecSendingChainKey: ecSendingChainKey,
+      ecReceivingChainKey: ecReceivingChainKey,
+      ecLocalDhPrivateKey: ecLocalDhPrivateKey,
+      ecLocalDhPublicKey: ecLocalDhPublicKey,
+      ecRemoteDhPublicKey: ecRemoteDhPublicKey,
+      ecSendCounter: ecSendCounter,
+      ecReceiveCounter: ecReceiveCounter,
+      ecPreviousSendingChainLength: ecPreviousSendingChainLength,
+      ecSkippedMessageKeys: ecSkippedMessageKeys,
+      pqRootKey: _pqRootKey,
+      pqCurrentEpoch: pqCurrentEpoch,
+      pqSendingEpoch: pqSendingEpoch,
+      pqReceivingEpoch: pqReceivingEpoch,
+      pqEpochStates: _pqEpochStates,
+      pqSkippedMessageKeys: _pqSkippedMessageKeys,
+      nativeSckaState: _nativeSckaState,
+      lifecycle: lifecycle,
+    );
+  }
+
+  /// Builds one post-effect snapshot containing both ratchet candidates.
+  ///
+  /// Non-ACK protocol-v3 messages consume EC and PQ material together. This
+  /// advances the snapshot revision exactly once while replacing both
+  /// components, so the journal never needs an EC-only or PQ-only intermediate
+  /// state. The current snapshot remains unchanged.
+  V3TripleRatchetState replaceHybridState({
+    required int expectedRevision,
+    required Uint8List ecRootKey,
+    required Uint8List ecSendingChainKey,
+    Uint8List? ecReceivingChainKey,
+    required Uint8List ecLocalDhPrivateKey,
+    required Uint8List ecLocalDhPublicKey,
+    required Uint8List ecRemoteDhPublicKey,
+    required int ecSendCounter,
+    required int ecReceiveCounter,
+    required int ecPreviousSendingChainLength,
+    required List<V3EcSkippedMessageKey> ecSkippedMessageKeys,
+    required Uint8List pqRootKey,
+    required int pqCurrentEpoch,
+    required int pqSendingEpoch,
+    required int pqReceivingEpoch,
+    required List<V3PqEpochState> pqEpochStates,
+    required List<V3PqSkippedMessageKey> pqSkippedMessageKeys,
+    required Uint8List nativeSckaState,
+    V3RatchetLifecycle? lifecycle,
+  }) {
     _ensureNotWiped();
     if (revision != expectedRevision) {
       throw StateError('Layergram v3 ratchet snapshot revision conflict');
@@ -741,14 +791,14 @@ final class V3TripleRatchetState {
       ecSendCounter: ecSendCounter,
       ecReceiveCounter: ecReceiveCounter,
       ecPreviousSendingChainLength: ecPreviousSendingChainLength,
-      pqRootKey: _pqRootKey,
+      pqRootKey: pqRootKey,
       pqCurrentEpoch: pqCurrentEpoch,
       pqSendingEpoch: pqSendingEpoch,
       pqReceivingEpoch: pqReceivingEpoch,
-      pqEpochStates: _pqEpochStates,
+      pqEpochStates: pqEpochStates,
       ecSkippedMessageKeys: ecSkippedMessageKeys,
-      pqSkippedMessageKeys: _pqSkippedMessageKeys,
-      nativeSckaState: _nativeSckaState,
+      pqSkippedMessageKeys: pqSkippedMessageKeys,
+      nativeSckaState: nativeSckaState,
     );
   }
 }

@@ -54,7 +54,7 @@ class V3LmfAcknowledgement {
         'must not be all zero',
       );
     }
-    if (targetEpoch < 0 || targetEpoch > 0xffffffff) {
+    if (targetEpoch < 0 || targetEpoch > 0x7fffffffffffffff) {
       throw ArgumentError.value(targetEpoch, 'targetEpoch');
     }
     if (targetMessageCounter < 0 || targetMessageCounter > 0x7fffffffffffffff) {
@@ -145,11 +145,11 @@ class V3LmfAcknowledgement {
   bool get isComplete => receivedFragmentIndexes.length == targetFragmentCount;
 }
 
-/// Canonical 48-byte acknowledgement plaintext.
+/// Canonical 52-byte acknowledgement plaintext.
 abstract final class V3LmfAcknowledgementCodec {
   static const List<int> magic = <int>[0x41, 0x4b, 0x33]; // "AK3"
-  static const int formatVersion = 1;
-  static const int encodedBytes = 48;
+  static const int formatVersion = 2;
+  static const int encodedBytes = 52;
   static const int bitmapBytes = 8;
 
   static Uint8List encode(V3LmfAcknowledgement acknowledgement) {
@@ -169,8 +169,8 @@ abstract final class V3LmfAcknowledgementCodec {
       acknowledgement._targetMessageId,
     );
     offset += V3LmfFrameCodec.messageIdBytes;
-    data.setUint32(offset, acknowledgement.targetEpoch, Endian.big);
-    offset += 4;
+    data.setUint64(offset, acknowledgement.targetEpoch, Endian.big);
+    offset += 8;
     data.setUint64(
       offset,
       acknowledgement.targetMessageCounter,
@@ -227,12 +227,12 @@ abstract final class V3LmfAcknowledgementCodec {
     }
     final data = ByteData.sublistView(encoded);
     final messageId = Uint8List.fromList(encoded.sublist(8, 24));
-    final epoch = data.getUint32(24, Endian.big);
-    final messageCounter = data.getUint64(28, Endian.big);
-    final assembledLength = data.getUint32(36, Endian.big);
+    final epoch = data.getUint64(24, Endian.big);
+    final messageCounter = data.getUint64(32, Endian.big);
+    final assembledLength = data.getUint32(40, Endian.big);
     final indexes = <int>{};
     for (var index = 0; index < V3LmfFrameCodec.maxFragments; index++) {
-      final bit = encoded[40 + (index ~/ 8)] & (1 << (index % 8));
+      final bit = encoded[44 + (index ~/ 8)] & (1 << (index % 8));
       if (bit == 0) continue;
       if (index >= fragmentCount) {
         throw const FormatException(

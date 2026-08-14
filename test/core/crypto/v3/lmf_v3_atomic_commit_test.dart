@@ -55,7 +55,7 @@ void main() {
       expect(application.content, _bytes(300, 0x31));
       expect(ratchet.sessionId, ready.frames.first.metadata.sessionId);
       expect(ratchet.pqCurrentEpoch, 0);
-      expect(journal.totalStateBytes, 488 + 720);
+      expect(journal.totalStateBytes, 492 + 720);
       application.wipeContent();
       ratchet.wipeSecrets();
     });

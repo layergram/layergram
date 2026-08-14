@@ -35,7 +35,8 @@ This checkpoint provides:
 It deliberately does not provide:
 
 - the authenticated handshake transcript or sender proof;
-- the final composite EC+SCKA wire header or ML-KEM Braid transition engine;
+- LMF carriage/authentication of the standalone EC+SCKA header or a production
+  ML-KEM Braid transition engine;
 - sender proof of possession or contact authentication;
 - reviewed native ML-KEM Braid state export/import;
 - atomicity for side effects written outside the v3 effect journal;
@@ -82,7 +83,7 @@ No flag is assigned. The flags byte must be zero.
 
 ## 4. Canonical binary frame
 
-The fixed header is exactly 142 bytes:
+The fixed header is exactly 146 bytes:
 
 | Offset | Bytes | Field | Rule |
 |---:|---:|---|---|
@@ -91,24 +92,24 @@ The fixed header is exactly 142 bytes:
 | 4 | 1 | suite | registered value |
 | 5 | 1 | frame kind | registered value |
 | 6 | 1 | flags | zero |
-| 7 | 1 | header length | `0x8e` (142) |
+| 7 | 1 | header length | `0x92` (146) |
 | 8 | 2 | ciphertext length | 1–16,384 |
 | 10 | 32 | sender binding | non-zero opaque context binding |
 | 42 | 32 | recipient binding | non-zero opaque context binding |
 | 74 | 16 | message ID | non-zero, unique in its context |
 | 90 | 16 | session ID | non-zero |
-| 106 | 4 | epoch | authenticated unsigned value |
-| 110 | 8 | message counter | 0–2^63−1 in this candidate |
-| 118 | 4 | expiry | Unix seconds; zero means no sender-declared expiry |
-| 122 | 2 | fragment index | zero based |
-| 124 | 2 | fragment count | 1–64 |
-| 126 | 4 | final plaintext length | 1–16,384 |
-| 130 | 12 | AES-GCM nonce | unique for the session key |
-| 142 | N | ciphertext fragment | length declared at offset 8 |
-| 142+N | 16 | AES-GCM tag | full, untruncated tag |
+| 106 | 8 | epoch | authenticated value, 0–2^63−1 |
+| 114 | 8 | message counter | 0–2^63−1 in this candidate |
+| 122 | 4 | expiry | Unix seconds; zero means no sender-declared expiry |
+| 126 | 2 | fragment index | zero based |
+| 128 | 2 | fragment count | 1–64 |
+| 130 | 4 | final plaintext length | 1–16,384 |
+| 134 | 12 | AES-GCM nonce | unique for the session key |
+| 146 | N | ciphertext fragment | length declared at offset 8 |
+| 146+N | 16 | AES-GCM tag | full, untruncated tag |
 
-The minimum frame is 159 bytes. The maximum syntactically valid single frame is
-16,542 bytes.
+The minimum frame is 163 bytes. The maximum syntactically valid single frame is
+16,546 bytes.
 
 The 32-byte sender and recipient values are routing/context bindings, not public
 identity IDs and not proof of an owner's identity. Their derivation must be
@@ -125,7 +126,7 @@ because of clock interpretation.
 Each fragment uses AES-256-GCM with:
 
 - a 32-byte key supplied by the future handshake/ratchet layer;
-- the exact 142-byte canonical header as associated authenticated data;
+- the exact 146-byte canonical header as associated authenticated data;
 - the 12-byte nonce from the header;
 - the encrypted fragment as ciphertext;
 - the final 16 bytes as the authentication tag.
@@ -143,11 +144,11 @@ requires the nonce explicitly and rejects duplicates within one locally sealed
 fragment set; callers outside the v3 schedule receive no session-wide safety
 claim.
 
-The implemented EC transition engine produces a separate canonical 56-byte
-`DR3` header containing `(DH, PN, N)`. This 142-byte LMF draft does not carry or
-authenticate that header or the future opaque SCKA message, so application and
-ratchet-control frames remain ineligible for activation. A later reviewed
-composite-header revision must bind both components before hybrid sealing.
+The implemented EC transition engine and SCKA boundary produce a separate
+canonical `HR3` container holding the 56-byte `DR3` header and bounded `SK3`
+message. This 146-byte LMF draft does not carry or authenticate `HR3`, so
+application and ratchet-control frames remain ineligible for activation. A
+later reviewed LMF revision must bind it before hybrid sealing.
 
 ## 6. Canonical fragmentation
 
@@ -198,22 +199,22 @@ an assembly incomplete until the missing authenticated frame is supplied.
 
 ### 7.1 Canonical ACK plaintext
 
-An acknowledgement is exactly 48 plaintext bytes carried inside a separately
+An acknowledgement is exactly 52 plaintext bytes carried inside a separately
 authenticated, single-fragment LMF frame of kind `0x04`:
 
 | Offset | Bytes | Field | Rule |
 |---:|---:|---|---|
 | 0 | 3 | magic | ASCII `AK3` |
-| 3 | 1 | ACK format version | `0x01` |
+| 3 | 1 | ACK format version | `0x02` |
 | 4 | 1 | target suite | registered value |
 | 5 | 1 | target kind | handshake, application, or PQ-ratchet; never ACK |
 | 6 | 1 | flags | zero |
 | 7 | 1 | target fragment count | 1–64 |
 | 8 | 16 | target message ID | non-zero |
-| 24 | 4 | target epoch | exact authenticated target value |
-| 28 | 8 | target message counter | 0–2^63−1 |
-| 36 | 4 | target final plaintext length | 1–16,384 |
-| 40 | 8 | received bitmap | bit `n` acknowledges fragment `n` |
+| 24 | 8 | target epoch | exact authenticated target value |
+| 32 | 8 | target message counter | 0–2^63−1 |
+| 40 | 4 | target final plaintext length | 1–16,384 |
+| 44 | 8 | received bitmap | bit `n` acknowledges fragment `n` |
 
 The bitmap is cumulative, non-empty, and has no set bits beyond the target
 fragment count. The ACK envelope MUST use the target suite and session ID and
@@ -277,7 +278,7 @@ ACK.
 The reference defaults bound the inbox to 256 sealed frame records, 128 KiB of
 sealed frame bytes, 4,096 commit tombstones, and 8,192 relevant physical
 records. The atomic-effect journal is bounded to 4,096 effects, 17 KiB per
-encoded application record (including its 188-byte header), 256 KiB per ratchet
+encoded application record (including its 192-byte header), 256 KiB per ratchet
 snapshot, 16 MiB total decoded state,
 and 8,192 relevant physical records. The outbox is bounded to 64 logical
 entries, 512 KiB of sealed frame bytes, and 256 physical revisions. Reassembly
@@ -319,10 +320,10 @@ tombstone can be removed.
 
 For target suite `0x01`, kind `0x01`, five fragments, message ID `81 82 ...
 90`, epoch `7`, counter `9`, final length `1,088`, and received indexes `0, 2,
-4`, the canonical 48-byte ACK plaintext is:
+4`, the canonical 52-byte ACK plaintext is:
 
 ```text
-414b3301010100058182838485868788898a8b8c8d8e8f90000000070000000000000009000004401500000000000000
+414b3302010100058182838485868788898a8b8c8d8e8f9000000000000000070000000000000009000004401500000000000000
 ```
 
 ## 8. Three transports, one binary meaning
@@ -360,15 +361,15 @@ final frame, not an estimate of the user's plaintext.
 
 For a 256-byte encrypted fragment:
 
-- canonical frame: 414 bytes;
-- direct token: 555 characters;
-- deep link: 569 characters;
-- minimum visible steganographic cover: 168 carrier-safe ASCII characters;
-- minimum encoded steganographic length under current noise rules: 2,032
+- canonical frame: 418 bytes;
+- direct token: 561 characters;
+- deep link: 575 characters;
+- minimum visible steganographic cover: 169 carrier-safe ASCII characters;
+- minimum encoded steganographic length under current noise rules: 2,051
   characters.
 
 For an ML-KEM-768 ciphertext of 1,088 bytes, canonical fragmentation produces
-four 414-byte frames and one 222-byte frame. All five fit the 4,000-character
+four 418-byte frames and one 226-byte frame. All five fit the 4,000-character
 candidate target in text, link, and minimum-cover steganographic form. This is a
 codec result, not proof that WhatsApp, Telegram, Signal, or iMessage preserves
 the payload; real transport tests remain an activation gate.
@@ -391,13 +392,13 @@ Inputs:
 Canonical binary hex:
 
 ```text
-4c4d33030101008e00190102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f204142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f608182838485868788898a8b8c8d8e8f90a1a2a3a4a5a6a7a8a9aaabacadaeafb0000000070000000000000009773594000000000100000019a0a1a2a3a4a5a6a7a8a9aaabaa79054837ac70de0f45f1e0271dafb214c93730f4c52301f987ccf30812a75a51aea46274d3f1ac72
+4c4d33030101009200190102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f204142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f608182838485868788898a8b8c8d8e8f90a1a2a3a4a5a6a7a8a9aaabacadaeafb000000000000000070000000000000009773594000000000100000019a0a1a2a3a4a5a6a7a8a9aaabaa79054837ac70de0f45f1e0271dafb214c93730f4c52301f95926e9badcec3712cfdd6ef4b0b4eed6
 ```
 
 Canonical direct token:
 
 ```text
-m3.TE0zAwEBAI4AGQECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gQUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVpbXF1eX2CBgoOEhYaHiImKi4yNjo-QoaKjpKWmp6ipqqusra6vsAAAAAcAAAAAAAAACXc1lAAAAAABAAAAGaChoqOkpaanqKmqq6p5BUg3rHDeD0Xx4Ccdr7IUyTcw9MUjAfmHzPMIEqdaUa6kYnTT8axy
+m3.TE0zAwEBAJIAGQECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gQUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVpbXF1eX2CBgoOEhYaHiImKi4yNjo-QoaKjpKWmp6ipqqusra6vsAAAAAAAAAAHAAAAAAAAAAl3NZQAAAAAAQAAABmgoaKjpKWmp6ipqquqeQVIN6xw3g9F8eAnHa-yFMk3MPTFIwH5WSbputzsNxLP3W70sLTu1g
 ```
 
 ## 10. Activation boundary

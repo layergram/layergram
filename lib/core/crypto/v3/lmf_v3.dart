@@ -80,7 +80,7 @@ class V3LmfMessageMetadata {
     if (flags != 0) {
       throw ArgumentError.value(flags, 'flags', 'no v3 flags are assigned yet');
     }
-    _validateUnsigned(epoch, 0xffffffff, 'epoch');
+    _validateUnsigned(epoch, 0x7fffffffffffffff, 'epoch');
     _validateUnsigned(
       messageCounter,
       0x7fffffffffffffff,
@@ -248,7 +248,7 @@ abstract final class V3LmfFrameCodec {
   static const int maxAssembledPlaintextBytes =
       fragmentPlaintextBytes * maxFragments;
 
-  static const int headerBytes = 142;
+  static const int headerBytes = 146;
   static const int minBinaryFrameBytes =
       headerBytes + 1 + authenticationTagBytes;
   static const int maxBinaryFrameBytes =
@@ -373,8 +373,8 @@ abstract final class V3LmfFrameCodec {
     offset += messageIdBytes;
     final sessionId = _copyRange(encoded, offset, sessionIdBytes);
     offset += sessionIdBytes;
-    final epoch = data.getUint32(offset, Endian.big);
-    offset += 4;
+    final epoch = data.getUint64(offset, Endian.big);
+    offset += 8;
     final messageCounter = data.getUint64(offset, Endian.big);
     offset += 8;
     final expiresAtUnixSeconds = data.getUint32(offset, Endian.big);
@@ -589,8 +589,8 @@ abstract final class V3LmfFrameCodec {
     offset += messageIdBytes;
     header.setRange(offset, offset + sessionIdBytes, metadata._sessionId);
     offset += sessionIdBytes;
-    data.setUint32(offset, metadata.epoch, Endian.big);
-    offset += 4;
+    data.setUint64(offset, metadata.epoch, Endian.big);
+    offset += 8;
     data.setUint64(offset, metadata.messageCounter, Endian.big);
     offset += 8;
     data.setUint32(offset, metadata.expiresAtUnixSeconds, Endian.big);

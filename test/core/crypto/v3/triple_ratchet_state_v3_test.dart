@@ -67,6 +67,94 @@ void main() {
       state.wipeSecrets();
     });
 
+    test('replaces EC and PQ candidates in one snapshot revision', () {
+      final state = _state();
+      final candidate = state.replaceHybridState(
+        expectedRevision: 3,
+        ecRootKey: _bytes(32, 0x13),
+        ecSendingChainKey: _bytes(32, 0x33),
+        ecReceivingChainKey: _bytes(32, 0x53),
+        ecLocalDhPrivateKey: _bytes(32, 0x72),
+        ecLocalDhPublicKey: _bytes(32, 0x12),
+        ecRemoteDhPublicKey: _bytes(32, 0x32),
+        ecSendCounter: 6,
+        ecReceiveCounter: 7,
+        ecPreviousSendingChainLength: 5,
+        ecSkippedMessageKeys: state.ecSkippedMessageKeys,
+        pqRootKey: _bytes(32, 0xd3),
+        pqCurrentEpoch: 8,
+        pqSendingEpoch: 8,
+        pqReceivingEpoch: 7,
+        pqEpochStates: <V3PqEpochState>[
+          V3PqEpochState(
+            epoch: 7,
+            receivingChainKey: _bytes(32, 0x71),
+            receiveCounter: 1,
+          ),
+          V3PqEpochState(
+            epoch: 8,
+            sendingChainKey: _bytes(32, 0x81),
+            sendCounter: 1,
+            receivingChainKey: _bytes(32, 0x91),
+          ),
+        ],
+        pqSkippedMessageKeys: <V3PqSkippedMessageKey>[
+          V3PqSkippedMessageKey(
+            epoch: 7,
+            messageCounter: 0,
+            messageKey: _bytes(32, 0xa1),
+            expiresAtUnixSeconds: 2000000300,
+          ),
+        ],
+        nativeSckaState: _bytes(160, 0x45),
+      );
+
+      expect(state.revision, 3);
+      expect(state.pqCurrentEpoch, 7);
+      expect(candidate.revision, 4);
+      expect(candidate.ecSendCounter, 6);
+      expect(candidate.pqCurrentEpoch, 8);
+      expect(candidate.pqSendingEpoch, 8);
+      expect(candidate.pqReceivingEpoch, 7);
+      expect(candidate.nativeSckaState, _bytes(160, 0x45));
+      final decoded = V3TripleRatchetStateCodec.decode(
+        V3TripleRatchetStateCodec.encode(candidate),
+      );
+      expect(decoded.revision, 4);
+      expect(
+        () => state.replaceHybridState(
+          expectedRevision: 2,
+          ecRootKey: _bytes(32, 0x13),
+          ecSendingChainKey: _bytes(32, 0x33),
+          ecReceivingChainKey: _bytes(32, 0x53),
+          ecLocalDhPrivateKey: _bytes(32, 0x72),
+          ecLocalDhPublicKey: _bytes(32, 0x12),
+          ecRemoteDhPublicKey: _bytes(32, 0x32),
+          ecSendCounter: 6,
+          ecReceiveCounter: 7,
+          ecPreviousSendingChainLength: 5,
+          ecSkippedMessageKeys: const <V3EcSkippedMessageKey>[],
+          pqRootKey: _bytes(32, 0xd3),
+          pqCurrentEpoch: 8,
+          pqSendingEpoch: 8,
+          pqReceivingEpoch: 8,
+          pqEpochStates: <V3PqEpochState>[
+            V3PqEpochState(
+              epoch: 8,
+              sendingChainKey: _bytes(32, 0x81),
+              receivingChainKey: _bytes(32, 0x91),
+            ),
+          ],
+          pqSkippedMessageKeys: const <V3PqSkippedMessageKey>[],
+          nativeSckaState: _bytes(160, 0x45),
+        ),
+        throwsStateError,
+      );
+      decoded.wipeSecrets();
+      candidate.wipeSecrets();
+      state.wipeSecrets();
+    });
+
     test('encodes absent remote DH key canonically as zero bytes', () {
       final state = _state(remoteDhPublicKey: Uint8List(0));
       final encoded = V3TripleRatchetStateCodec.encode(state);

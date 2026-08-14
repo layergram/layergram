@@ -14,12 +14,12 @@ void main() {
 
   group('LMF v3 canonical codec', () {
     test('publishes fixed, bounded wire limits', () {
-      expect(V3LmfFrameCodec.headerBytes, 142);
+      expect(V3LmfFrameCodec.headerBytes, 146);
       expect(V3LmfFrameCodec.fragmentPlaintextBytes, 256);
       expect(V3LmfFrameCodec.maxFragments, 64);
       expect(V3LmfFrameCodec.maxAssembledPlaintextBytes, 16384);
-      expect(V3LmfFrameCodec.minBinaryFrameBytes, 159);
-      expect(V3LmfFrameCodec.maxBinaryFrameBytes, 16542);
+      expect(V3LmfFrameCodec.minBinaryFrameBytes, 163);
+      expect(V3LmfFrameCodec.maxBinaryFrameBytes, 16546);
     });
 
     test('single-frame golden vector freezes binary and text armor', () async {
@@ -35,20 +35,20 @@ void main() {
 
       expect(
         _hex(binary),
-        '4c4d33030101008e00190102030405060708090a0b0c0d0e0f10111213141516'
+        '4c4d33030101009200190102030405060708090a0b0c0d0e0f10111213141516'
         '1718191a1b1c1d1e1f204142434445464748494a4b4c4d4e4f50515253545556'
         '5758595a5b5c5d5e5f608182838485868788898a8b8c8d8e8f90a1a2a3a4a5'
-        'a6a7a8a9aaabacadaeafb0000000070000000000000009773594000000000100'
-        '000019a0a1a2a3a4a5a6a7a8a9aaabaa79054837ac70de0f45f1e0271dafb21'
-        '4c93730f4c52301f987ccf30812a75a51aea46274d3f1ac72',
+        'a6a7a8a9aaabacadaeafb0000000000000000700000000000000097735940000'
+        '00000100000019a0a1a2a3a4a5a6a7a8a9aaabaa79054837ac70de0f45f1e0'
+        '271dafb214c93730f4c52301f95926e9badcec3712cfdd6ef4b0b4eed6',
       );
       expect(
         token,
-        'm3.TE0zAwEBAI4AGQECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8g'
+        'm3.TE0zAwEBAJIAGQECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8g'
         'QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVpbXF1eX2CBgoOEhYaHiImKi4yN'
-        'jo-QoaKjpKWmp6ipqqusra6vsAAAAAcAAAAAAAAACXc1lAAAAAABAAAAGaChoq'
-        'OkpaanqKmqq6p5BUg3rHDeD0Xx4Ccdr7IUyTcw9MUjAfmHzPMIEqdaUa6kYn'
-        'TT8axy',
+        'jo-QoaKjpKWmp6ipqqusra6vsAAAAAAAAAAHAAAAAAAAAAl3NZQAAAAAAQAAABm'
+        'goaKjpKWmp6ipqquqeQVIN6xw3g9F8eAnHa-yFMk3MPTFIwH5WSbputzsNxLP3'
+        'W70sLTu1g',
       );
       expect(
         V3LmfFrameCodec.encodeBinary(
@@ -101,6 +101,22 @@ void main() {
         V3LmfFrameCodec.encodeBinary(V3LmfFrameCodec.decodeStego(stego)),
         orderedEquals(binary),
       );
+    });
+
+    test('round-trips epoch bits above the legacy 32-bit range', () {
+      final frame = V3LmfFrame(
+        metadata: _metadata(epoch: 0x100000007),
+        fragmentIndex: 0,
+        fragmentCount: 1,
+        assembledPlaintextLength: 1,
+        nonce: _bytes(V3LmfFrameCodec.nonceBytes, 0xc0),
+        ciphertext: Uint8List.fromList(<int>[1]),
+        authenticationTag: _bytes(V3LmfFrameCodec.authenticationTagBytes, 0xd0),
+      );
+      final decoded = V3LmfFrameCodec.decodeBinary(
+        V3LmfFrameCodec.encodeBinary(frame),
+      );
+      expect(decoded.metadata.epoch, 0x100000007);
     });
 
     test('rejects malformed fields before accepting a frame', () async {
@@ -168,7 +184,7 @@ void main() {
       );
 
       final wrongAssembledLength = Uint8List.fromList(encoded)
-        ..[129] = encoded[129] + 1;
+        ..[133] = encoded[133] + 1;
       expect(
         () => V3LmfFrameCodec.decodeBinary(wrongAssembledLength),
         throwsFormatException,
@@ -409,7 +425,7 @@ void main() {
       );
       expect(
         frames.map((frame) => V3LmfFrameCodec.encodeBinary(frame).length),
-        <int>[414, 414, 414, 414, 222],
+        <int>[418, 418, 418, 418, 226],
       );
       for (final frame in frames) {
         expect(V3LmfFrameCodec.fitsPortableText(frame), isTrue);
