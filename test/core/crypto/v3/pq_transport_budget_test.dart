@@ -30,23 +30,61 @@ void main() {
       V3PqStegoBudget.minimumVisibleCoverCharactersForRawFragment(256),
       128,
     );
-    expect(V3PqStegoBudget.canonicalFragmentFrameBytes(256), 418);
+    expect(V3PqStegoBudget.canonicalFragmentFrameBytes(256), 452);
     expect(
       V3PqStegoBudget.minimumVisibleCoverCharactersForCanonicalFragment(256),
-      169,
+      177,
     );
     expect(
       V3PqStegoBudget.minimumEncodedCharactersForCanonicalFragment(256),
-      2051,
+      2211,
     );
-    expect(V3PqStegoBudget.canonicalFragmentFrameBytes(64), 226);
+    expect(V3PqStegoBudget.canonicalFragmentFrameBytes(64), 260);
     expect(
       V3PqStegoBudget.minimumVisibleCoverCharactersForCanonicalFragment(64),
-      121,
+      129,
     );
     expect(
       V3PqStegoBudget.minimumEncodedCharactersForCanonicalFragment(64),
-      1139,
+      1299,
+    );
+  });
+
+  test('maximum HR3 first fragment remains within 4000 stego characters', () {
+    expect(
+      V3PqStegoBudget.canonicalFragmentFrameBytes(
+        24,
+        hybridRatchetHeaderBytes: 608,
+      ),
+      828,
+    );
+    expect(
+      V3PqStegoBudget.minimumVisibleCoverCharactersForCanonicalFragment(
+        24,
+        hybridRatchetHeaderBytes: 608,
+      ),
+      271,
+    );
+    expect(
+      V3PqStegoBudget.minimumEncodedCharactersForCanonicalFragment(
+        24,
+        hybridRatchetHeaderBytes: 608,
+      ),
+      3997,
+    );
+    expect(
+      V3PqStegoBudget.canonicalFragmentFrameBytes(
+        256,
+        hybridRatchetHeaderBytes: 96,
+      ),
+      548,
+    );
+    expect(
+      () => V3PqStegoBudget.canonicalFragmentFrameBytes(
+        25,
+        hybridRatchetHeaderBytes: 608,
+      ),
+      throwsArgumentError,
     );
   });
 

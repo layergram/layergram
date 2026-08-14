@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:layergram/core/crypto/v3/committed_record_v3.dart';
+import 'package:layergram/core/crypto/v3/ec_double_ratchet_v3.dart';
+import 'package:layergram/core/crypto/v3/hybrid_ratchet_header_v3.dart';
 import 'package:layergram/core/crypto/v3/key_schedule_v3.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3_atomic_commit.dart';
@@ -497,6 +499,7 @@ Future<
     secretKey: key,
     nonceForFragment: (index) =>
         _bytes(V3LmfFrameCodec.nonceBytes, 0x51 + index),
+    hybridRatchetHeader: _hybridHeader(),
   );
   final inbox = V3LmfDurableInbox(store: store);
   await inbox.restore(keyResolver: (_) => key);
@@ -519,6 +522,19 @@ V3LmfMessageMetadata _metadata({
       sessionId: _bytes(V3LmfFrameCodec.sessionIdBytes, 0xa1),
       epoch: 7,
       messageCounter: 9,
+    );
+
+V3HybridRatchetHeader _hybridHeader() => V3HybridRatchetHeader(
+      ecHeader: V3EcRatchetHeader(
+        ratchetPublicKey: _bytes(32, 0x21),
+        previousSendingChainLength: 3,
+        messageCounter: 5,
+      ),
+      sckaMessage: V3SckaMessage(
+        sendingEpoch: 7,
+        messageCounter: 9,
+        nativePayload: Uint8List(0),
+      ),
     );
 
 V3TripleRatchetState _concreteRatchetState(V3LmfFrame frame) {

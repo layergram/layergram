@@ -104,6 +104,9 @@ reviewed standard alternative or narrow its product claim explicitly.
 - Every fragment nonce MUST be derived in a domain separate from the message
   key, bind the complete canonical message/fragment context, and be verified by
   the receiver before a ratchet transition commits.
+- Application and PQ-control fragment zero MUST authenticate the exact canonical
+  EC+SCKA header. Every continuation MUST authenticate the same header length and
+  digest; contradictory bindings MUST poison the candidate assembly.
 - ACK keys and nonces MUST use a direction-specific session root and the exact
   visible canonical ACK header context. A newly sealed cumulative ACK MUST have
   a fresh message ID; a resend MUST reuse the exact sealed bytes.
@@ -207,6 +210,8 @@ Protocol v3 may be called quantum-resistant only after all of the following:
 - real QR, text, link, and steganographic tests pass on the supported matrix;
 - the public protocol and private Premium implementation pass compatibility
   tests without a protocol fork;
+- every runtime and native dependency has a versioned license inventory that
+  permits both open-source and paid proprietary Premium distribution;
 - an independent audit has no unresolved critical or high-severity finding.
 
 Until then, all v3 code and UI must remain developer-only, inactive, and labelled

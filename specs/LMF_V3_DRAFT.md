@@ -21,7 +21,7 @@ This checkpoint provides:
 - strict unpadded Base64URL text armor;
 - a deep link that prefixes the exact same text token;
 - steganographic transport of the exact same binary frame;
-- fixed, bounded fragmentation and duplicate-aware reassembly;
+- HR3-authenticated, bounded fragmentation and duplicate-aware reassembly;
 - a canonical cumulative ACK payload with no ACK-of-ACK loops;
 - inactive encrypted inbox/outbox persistence with write-before-delete recovery;
 - an inactive atomic-effect journal binding one application/control record and
@@ -30,13 +30,14 @@ This checkpoint provides:
   message schedule, deterministic fragment nonces, and directional ACK
   schedule;
 - canonical committed application/control and Triple Ratchet snapshot codecs;
+- exact carriage of the canonical EC+SCKA `HR3` on fragment zero, with its
+  length and digest authenticated on every continuation fragment;
 - public golden and adversarial parser tests.
 
 It deliberately does not provide:
 
 - the authenticated handshake transcript or sender proof;
-- LMF carriage/authentication of the standalone EC+SCKA header or a production
-  ML-KEM Braid transition engine;
+- a production ML-KEM Braid transition engine;
 - sender proof of possession or contact authentication;
 - reviewed native ML-KEM Braid state export/import;
 - atomicity for side effects written outside the v3 effect journal;
@@ -47,7 +48,9 @@ It deliberately does not provide:
 ## 2. Integer and canonicalization rules
 
 - All multi-byte integers use unsigned network byte order (big endian).
-- No optional or variable-length header fields exist in this draft.
+- The base header has fixed length. Application/control fragment zero appends
+  exactly one canonical length-prefixed `HR3`; continuation fragments bind it
+  by the same declared length and digest without repeating it.
 - Empty ciphertexts, all-zero routing bindings/IDs, unknown values, non-zero
   flags, trailing bytes, shortened bytes, and alternative fragmentation fail
   closed.
@@ -83,7 +86,7 @@ No flag is assigned. The flags byte must be zero.
 
 ## 4. Canonical binary frame
 
-The fixed header is exactly 146 bytes:
+The fixed base header is exactly 180 bytes:
 
 | Offset | Bytes | Field | Rule |
 |---:|---:|---|---|
@@ -92,7 +95,7 @@ The fixed header is exactly 146 bytes:
 | 4 | 1 | suite | registered value |
 | 5 | 1 | frame kind | registered value |
 | 6 | 1 | flags | zero |
-| 7 | 1 | header length | `0x92` (146) |
+| 7 | 1 | header length | `0xB4` (180) |
 | 8 | 2 | ciphertext length | 1–16,384 |
 | 10 | 32 | sender binding | non-zero opaque context binding |
 | 42 | 32 | recipient binding | non-zero opaque context binding |
@@ -105,11 +108,20 @@ The fixed header is exactly 146 bytes:
 | 128 | 2 | fragment count | 1–64 |
 | 130 | 4 | final plaintext length | 1–16,384 |
 | 134 | 12 | AES-GCM nonce | unique for the session key |
-| 146 | N | ciphertext fragment | length declared at offset 8 |
-| 146+N | 16 | AES-GCM tag | full, untruncated tag |
+| 146 | 2 | total HR3 length | `0` or canonical `96–608` |
+| 148 | 32 | HR3 digest | zero iff length is zero |
+| 180 | H | canonical HR3 | exact bytes only on fragment zero |
+| 180+H | N | ciphertext fragment | length declared at offset 8 |
+| 180+H+N | 16 | AES-GCM tag | full, untruncated tag |
 
-The minimum frame is 163 bytes. The maximum syntactically valid single frame is
-16,546 bytes.
+The minimum frame is 197 bytes. A headerless single frame can be at most 16,580
+bytes. A canonical application/control frame carrying the maximum 608-byte HR3
+is capped at 828 bytes so its minimum-cover steganographic encoding stays below
+the 4,000-character portable target.
+
+Application and sparse-PQ control frames require one HR3. Its SCKA epoch and
+message counter must exactly match the LMF epoch and message counter. Handshake
+and ACK frames require zero HR3 length and an all-zero HR3 digest.
 
 The 32-byte sender and recipient values are routing/context bindings, not public
 identity IDs and not proof of an owner's identity. Their derivation must be
@@ -126,15 +138,17 @@ because of clock interpretation.
 Each fragment uses AES-256-GCM with:
 
 - a 32-byte key supplied by the future handshake/ratchet layer;
-- the exact 146-byte canonical header as associated authenticated data;
+- the exact 180-byte canonical base header as associated authenticated data;
+- on fragment zero, the exact canonical HR3 bytes appended to that data;
 - the 12-byte nonce from the header;
 - the encrypted fragment as ciphertext;
 - the final 16 bytes as the authentication tag.
 
 This binds the suite, kind, flags, routing bindings, message/session IDs, epoch,
 message counter, expiry, fragment index/count, final assembled length, nonce,
-and fragment length. Header, ciphertext, and tag tampering must fail before any
-partial application content is exposed.
+fragment length, HR3 length, and domain-separated HR3 digest. Fragment zero
+also authenticates the exact HR3 bytes. Header, HR3, ciphertext, and tag
+tampering must fail before any partial application content is exposed.
 
 `PROTOCOL_V3_KEY_SCHEDULE.md` now derives one hybrid message key from mandatory
 EC and sparse-PQ message keys, plus a distinct deterministic nonce for every
@@ -144,11 +158,11 @@ requires the nonce explicitly and rejects duplicates within one locally sealed
 fragment set; callers outside the v3 schedule receive no session-wide safety
 claim.
 
-The implemented EC transition engine and SCKA boundary produce a separate
-canonical `HR3` container holding the 56-byte `DR3` header and bounded `SK3`
-message. This 146-byte LMF draft does not carry or authenticate `HR3`, so
-application and ratchet-control frames remain ineligible for activation. A
-later reviewed LMF revision must bind it before hybrid sealing.
+The implemented EC transition engine and SCKA boundary produce the canonical
+`HR3` container holding the 56-byte `DR3` header and bounded `SK3` message.
+This draft carries and authenticates that exact container. Activation still
+requires a reviewed native SCKA engine and one serialized controller that binds
+the accepted ratchet candidate to the atomic application effect.
 
 ## 6. Canonical fragmentation
 
@@ -158,16 +172,20 @@ Single-frame messages use:
 - fragment count `1`;
 - ciphertext length equal to final plaintext length.
 
-Multi-frame messages use a fixed 256-byte plaintext fragment size:
+Headerless multi-frame messages use a 256-byte plaintext fragment size.
+Application/control messages use an adaptive first fragment:
 
 ```text
-fragmentCount = ceil(finalPlaintextLength / 256)
-fragmentOffset = fragmentIndex * 256
+firstCapacity = min(256, 828 - 180 - HR3_length - 16)
+fragment[0] = min(finalPlaintextLength, firstCapacity)
+fragment[n>0] = min(remaining, 256)
 ```
 
-Every non-final fragment is exactly 256 bytes. The final fragment is exactly the
-remaining length. Alternative splits, gaps, overlaps, empty fragments, counts
-above 64, and final lengths above 16,384 bytes are non-canonical and rejected.
+The maximum 608-byte HR3 leaves 24 plaintext bytes in fragment zero; later
+fragments remain 256 bytes. That layout permits at most 16,152 assembled bytes
+with 64 fragments. A shorter HR3 may retain the full 16,384-byte global limit.
+Alternative splits, gaps, overlaps, empty fragments, counts above 64, or lengths
+outside the derived layout are non-canonical and rejected.
 
 Every fragment is authenticated independently. The receiver authenticates a
 frame before placing its plaintext into the private reassembly buffer. It
@@ -176,7 +194,7 @@ returns the assembled plaintext.
 
 Reassembly is keyed by suite, kind, both routing bindings, message ID, and
 session ID. All other authenticated metadata must match the first accepted
-fragment. An exact duplicate is ignored. An authenticated duplicate with
+fragment, including HR3 length and digest. An exact duplicate is ignored. An authenticated duplicate with
 different content, or contradictory authenticated metadata, wipes and rejects
 the pending assembly.
 
@@ -191,6 +209,12 @@ The durable inbox stores the exact sealed frame through the encrypted auxiliary
 record repository before authenticating or passing it to this in-memory
 reassembler. A caller that uses the reassembler directly has no persistence
 guarantee.
+
+A continuation fragment may arrive before fragment zero. The durable inbox
+retains its exact sealed bytes, while the future session controller returns no
+guessed key until it has the authenticated HR3 and corresponding skipped-message
+state. It then resumes deferred records. No plaintext or ratchet transition is
+committed before the complete set authenticates and the atomic effect is durable.
 
 This candidate uses retransmission, not erasure coding. Loss therefore leaves
 an assembly incomplete until the missing authenticated frame is supplied.
@@ -224,6 +248,18 @@ come from the direction-specific ACK root and exact visible header context in
 fresh message ID. ACK frames are never acknowledged; loss of an ACK can
 therefore cause a safe exact-byte duplicate resend but cannot create an
 ACK-of-ACK loop.
+
+`AK3` deliberately omits the target HR3 length and digest to preserve this
+single compact fixed-size payload. A fragmented handshake target is headerless,
+so its fragment count is derived and checked directly from the final plaintext
+length; a canonical headerless single frame may instead carry the full bounded
+plaintext. For application and PQ-ratchet targets, the adaptive fragment count
+is accepted only from an already canonical set of authenticated LMF frames. On
+receipt, an authenticated ACK can update durable state only when suite, kind,
+message ID, epoch, message counter, final length, fragment count, session, and
+reversed routing bindings exactly match one local outbox entry. An ACK therefore
+does not independently prove the target HR3 or honest receipt by a malicious
+peer.
 
 ### 7.2 Inbox commit order
 
@@ -345,7 +381,7 @@ layergram://m/m3.<same text token>
 
 User info, ports, queries, fragments, extra path segments, and alternate
 serialization are rejected. The link adds a prefix; it is not a different
-protocol.
+protocol. Total link length is capped before URI parsing.
 
 ### 8.3 Steganography
 
@@ -359,17 +395,20 @@ The current conservative portable-share target is 4,000 total characters.
 Channel-specific adapters may impose a smaller limit and must preflight the
 final frame, not an estimate of the user's plaintext.
 
-For a 256-byte encrypted fragment:
+For a headerless 256-byte encrypted fragment:
 
-- canonical frame: 418 bytes;
-- direct token: 561 characters;
-- deep link: 575 characters;
-- minimum visible steganographic cover: 169 carrier-safe ASCII characters;
-- minimum encoded steganographic length under current noise rules: 2,051
+- canonical frame: 452 bytes;
+- minimum visible steganographic cover: 177 carrier-safe ASCII characters;
+- minimum encoded steganographic length under current noise rules: 2,211
   characters.
 
-For an ML-KEM-768 ciphertext of 1,088 bytes, canonical fragmentation produces
-four 418-byte frames and one 226-byte frame. All five fit the 4,000-character
+For a maximum 608-byte HR3, fragment zero carries 24 plaintext bytes and is 828
+binary bytes. It needs at least 271 visible carrier-safe characters and encodes
+to 3,997 characters under the current minimum-cover rules. Continuations carry
+only the authenticated HR3 length/digest and use the normal 452-byte bound.
+
+For a headerless ML-KEM-768 ciphertext of 1,088 bytes, canonical fragmentation
+produces four 452-byte frames and one 260-byte frame. All five fit the 4,000-character
 candidate target in text, link, and minimum-cover steganographic form. This is a
 codec result, not proof that WhatsApp, Telegram, Signal, or iMessage preserves
 the payload; real transport tests remain an activation gate.
@@ -392,13 +431,13 @@ Inputs:
 Canonical binary hex:
 
 ```text
-4c4d33030101009200190102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f204142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f608182838485868788898a8b8c8d8e8f90a1a2a3a4a5a6a7a8a9aaabacadaeafb000000000000000070000000000000009773594000000000100000019a0a1a2a3a4a5a6a7a8a9aaabaa79054837ac70de0f45f1e0271dafb214c93730f4c52301f95926e9badcec3712cfdd6ef4b0b4eed6
+4c4d3303010100b400190102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f204142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f608182838485868788898a8b8c8d8e8f90a1a2a3a4a5a6a7a8a9aaabacadaeafb000000000000000070000000000000009773594000000000100000019a0a1a2a3a4a5a6a7a8a9aaab00000000000000000000000000000000000000000000000000000000000000000000aa79054837ac70de0f45f1e0271dafb214c93730f4c52301f9cd648176ad87cc84dc532cbecb164569
 ```
 
 Canonical direct token:
 
 ```text
-m3.TE0zAwEBAJIAGQECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gQUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVpbXF1eX2CBgoOEhYaHiImKi4yNjo-QoaKjpKWmp6ipqqusra6vsAAAAAAAAAAHAAAAAAAAAAl3NZQAAAAAAQAAABmgoaKjpKWmp6ipqquqeQVIN6xw3g9F8eAnHa-yFMk3MPTFIwH5WSbputzsNxLP3W70sLTu1g
+m3.TE0zAwEBALQAGQECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gQUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVpbXF1eX2CBgoOEhYaHiImKi4yNjo-QoaKjpKWmp6ipqqusra6vsAAAAAAAAAAHAAAAAAAAAAl3NZQAAAAAAQAAABmgoaKjpKWmp6ipqqsAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAqnkFSDescN4PRfHgJx2vshTJNzD0xSMB-c1kgXath8yE3FMsvssWRWk
 ```
 
 ## 10. Activation boundary
@@ -408,11 +447,11 @@ active. Nothing in this draft or codec changes identity import, message send,
 message decode, contact state, backups, migration, QR, UI, or Premium capability
 contracts.
 
-Before activation, the handshake must freeze the canonical authenticated
-transcript that feeds the new routing/session schedule; the real EC Double
-Ratchet and native ML-KEM Braid engines must produce and consume the frozen
-message/state formats; the application repository must use the atomic journal
-as its source of truth; checkpoint and garbage-collection rules must be frozen;
+Before activation, the native ML-KEM Braid engine must produce and consume the
+frozen message/state formats; one serialized session controller must join the
+EC/SCKA candidates, deferred continuation processing, atomic journal, and
+snapshot revision checks; the application repository must use that journal as
+its source of truth; checkpoint and garbage-collection rules must be frozen;
 resend/progress UX and real loss recovery must pass; all three transports must
 pass real cross-app tests; and the complete design and implementation must pass
 independent review.

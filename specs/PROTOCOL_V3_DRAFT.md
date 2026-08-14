@@ -129,15 +129,19 @@ bootstrap. The steady-state sparse PQ ratchet will use bounded smaller chunks.
 Neither issue may be hidden through a classical-only fallback labelled as v3.
 
 `LMF_V3_DRAFT.md` now defines an inactive framing candidate with a fixed
-142-byte authenticated header, a full 16-byte AES-GCM tag, canonical 256-byte
-multi-frame plaintext fragments, at most 64 fragments, and a 16,384-byte final
-length. The 1,088-byte ML-KEM ciphertext becomes five frames with encrypted
-fragment sizes 256, 256, 256, 256, and 64 bytes.
+180-byte authenticated base header, a full 16-byte AES-GCM tag, canonical
+adaptive first-fragment sizing, at most 64 fragments, and a 16,384-byte global
+final-length limit. The exact canonical `HR3` EC+SCKA header is appended to
+fragment zero and authenticated directly; every continuation authenticates its
+length and domain-separated digest. Headerless 1,088-byte ML-KEM bootstrap data
+becomes five frames with encrypted fragment sizes 256, 256, 256, 256, and 64
+bytes.
 
-A full fragment is 414 binary bytes, uses a minimum 168 visible carrier-safe
-ASCII characters, and can remain below the current 4,000-character portable
-share target after steganographic encoding. The final 64-byte fragment is 222
-binary bytes. These are frozen codec vectors, not cross-app reliability proof.
+A headerless full fragment is 452 binary bytes and uses at least 177 visible
+carrier-safe ASCII characters; the final 64-byte fragment is 260 bytes. With a
+maximum 608-byte HR3, fragment zero carries 24 plaintext bytes in an 828-byte
+frame and its minimum-cover steganographic encoding is 3,997 characters. These
+are frozen codec vectors, not cross-app reliability proof.
 
 The framing implementation is still isolated from active messaging and exposes
 no authenticated handshake. Its bounded durable inbox stores sealed frames
@@ -168,9 +172,10 @@ records survive restart, and crossed offers use a clock-free deterministic
 tie-break.
 
 The handshake is still a research candidate and is not wired to bootstrap
-transport, contacts, messages, storage providers, UI, or Premium. Real v3 EC
-transitions, reviewed native ML-KEM Braid transitions and state export,
-controller-level device policy, durable pending-state storage,
+transport, contacts, messages, storage providers, UI, or Premium. The v3 EC
+transition engine and HR3 transport are now implemented as inactive components.
+Reviewed native ML-KEM Braid transitions and state export, a single serialized
+send/receive controller, controller-level device policy, durable pending-state storage,
 checkpoint/compaction, replay retirement, resend/progress UX, real cross-app
 loss tests, and erasure coding remain activation gates. Effects outside the
 journal must later be materialized idempotently under their stable

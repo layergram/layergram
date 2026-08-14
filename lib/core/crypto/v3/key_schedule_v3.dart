@@ -17,6 +17,7 @@ import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 
+import 'hybrid_ratchet_header_v3.dart';
 import 'lmf_v3.dart';
 import 'lmf_v3_acknowledgement.dart';
 
@@ -221,32 +222,47 @@ final class V3MessageKeyMaterial {
     required int fragmentIndex,
     required int fragmentCount,
     required int assembledPlaintextLength,
+    int hybridRatchetHeaderLength = 0,
+    Uint8List? hybridRatchetHeaderDigest,
   }) async {
     _ensureOpen();
+    final checkedHybridDigest = _validatedHybridNonceBinding(
+      kindWireId: _messageContext[3],
+      hybridRatchetHeaderLength: hybridRatchetHeaderLength,
+      hybridRatchetHeaderDigest: hybridRatchetHeaderDigest,
+    );
     _validateFragmentContext(
       fragmentIndex: fragmentIndex,
       fragmentCount: fragmentCount,
       assembledPlaintextLength: assembledPlaintextLength,
+      hybridRatchetHeaderLength: hybridRatchetHeaderLength,
     );
-    final shape = Uint8List(8);
+    final shape = Uint8List(42);
     final shapeData = ByteData.sublistView(shape)
       ..setUint16(0, fragmentIndex, Endian.big)
       ..setUint16(2, fragmentCount, Endian.big)
-      ..setUint32(4, assembledPlaintextLength, Endian.big);
+      ..setUint32(4, assembledPlaintextLength, Endian.big)
+      ..setUint16(8, hybridRatchetHeaderLength, Endian.big);
+    shape.setRange(10, shape.length, checkedHybridDigest);
     if (shapeData.lengthInBytes != shape.length) {
       throw StateError('Layergram v3 nonce context drift');
     }
-    return _deriveHkdfSha256(
-      inputKeyMaterial: _nonceSeed,
-      salt: _zeroSalt,
-      info: _concat(<List<int>>[
-        _messageNonceLabel,
-        _messageContext,
-        _messageId,
-        shape,
-      ]),
-      outputLength: V3LmfFrameCodec.nonceBytes,
-    );
+    try {
+      return _deriveHkdfSha256(
+        inputKeyMaterial: _nonceSeed,
+        salt: _zeroSalt,
+        info: _concat(<List<int>>[
+          _messageNonceLabel,
+          _messageContext,
+          _messageId,
+          shape,
+        ]),
+        outputLength: V3LmfFrameCodec.nonceBytes,
+      );
+    } finally {
+      _wipe(checkedHybridDigest);
+      _wipe(shape);
+    }
   }
 
   bool matchesMessageId(Uint8List candidate) {
@@ -259,11 +275,15 @@ final class V3MessageKeyMaterial {
     required int fragmentIndex,
     required int fragmentCount,
     required int assembledPlaintextLength,
+    int hybridRatchetHeaderLength = 0,
+    Uint8List? hybridRatchetHeaderDigest,
   }) async {
     final expected = await nonceForFragment(
       fragmentIndex: fragmentIndex,
       fragmentCount: fragmentCount,
       assembledPlaintextLength: assembledPlaintextLength,
+      hybridRatchetHeaderLength: hybridRatchetHeaderLength,
+      hybridRatchetHeaderDigest: hybridRatchetHeaderDigest,
     );
     try {
       return _constantTimeEqual(candidate, expected);
@@ -695,6 +715,7 @@ void _validateFragmentContext({
   required int fragmentIndex,
   required int fragmentCount,
   required int assembledPlaintextLength,
+  required int hybridRatchetHeaderLength,
 }) {
   if (fragmentCount < 1 || fragmentCount > V3LmfFrameCodec.maxFragments) {
     throw ArgumentError.value(fragmentCount, 'fragmentCount');
@@ -709,12 +730,58 @@ void _validateFragmentContext({
       'assembledPlaintextLength',
     );
   }
-  final expectedCount =
-      (assembledPlaintextLength + V3LmfFrameCodec.fragmentPlaintextBytes - 1) ~/
-          V3LmfFrameCodec.fragmentPlaintextBytes;
+  if (fragmentCount == 1 && hybridRatchetHeaderLength == 0) return;
+  final expectedCount = V3LmfFrameCodec.canonicalFragmentCount(
+    assembledPlaintextLength: assembledPlaintextLength,
+    hybridRatchetHeaderLength: hybridRatchetHeaderLength,
+  );
   if (fragmentCount != expectedCount) {
     throw ArgumentError('Non-canonical Layergram v3 fragment context');
   }
+}
+
+Uint8List _validatedHybridNonceBinding({
+  required int kindWireId,
+  required int hybridRatchetHeaderLength,
+  required Uint8List? hybridRatchetHeaderDigest,
+}) {
+  final requiresHybrid = kindWireId == V3LmfFrameKind.application.wireId ||
+      kindWireId == V3LmfFrameKind.pqRatchet.wireId;
+  if (!requiresHybrid) {
+    if (hybridRatchetHeaderDigest != null &&
+        hybridRatchetHeaderDigest.length !=
+            V3LmfFrameCodec.hybridRatchetHeaderDigestBytes) {
+      throw ArgumentError.value(
+        hybridRatchetHeaderDigest.length,
+        'hybridRatchetHeaderDigest.length',
+      );
+    }
+    if (hybridRatchetHeaderLength != 0 ||
+        (hybridRatchetHeaderDigest != null &&
+            !_isAllZero(hybridRatchetHeaderDigest))) {
+      throw ArgumentError(
+        'Layergram v3 non-ratchet nonce context cannot bind HR3',
+      );
+    }
+    return Uint8List(V3LmfFrameCodec.hybridRatchetHeaderDigestBytes);
+  }
+  if (hybridRatchetHeaderLength < V3HybridRatchetHeaderCodec.minEncodedBytes ||
+      hybridRatchetHeaderLength > V3HybridRatchetHeaderCodec.maxEncodedBytes) {
+    throw ArgumentError.value(
+      hybridRatchetHeaderLength,
+      'hybridRatchetHeaderLength',
+    );
+  }
+  if (hybridRatchetHeaderDigest == null ||
+      hybridRatchetHeaderDigest.length !=
+          V3LmfFrameCodec.hybridRatchetHeaderDigestBytes ||
+      _isAllZero(hybridRatchetHeaderDigest)) {
+    throw ArgumentError.value(
+      hybridRatchetHeaderDigest,
+      'hybridRatchetHeaderDigest',
+    );
+  }
+  return Uint8List.fromList(hybridRatchetHeaderDigest);
 }
 
 Uint8List _validatedSecret(Uint8List value, String name) => _validatedBytes(

@@ -4,6 +4,8 @@ import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:layergram/core/crypto/v3/ec_double_ratchet_v3.dart';
+import 'package:layergram/core/crypto/v3/hybrid_ratchet_header_v3.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3_acknowledgement.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3_outbox.dart';
@@ -116,6 +118,36 @@ void main() {
       await outbox.removeFullyAcknowledged(entry.assemblyId);
       expect(outbox.entryCount, 0);
       expect(store.records, isEmpty);
+    });
+
+    test('authenticated ACK completes an adaptive maximum-HR3 target',
+        () async {
+      final store = _FaultStore();
+      final frames = await _frames(
+        key,
+        plaintextBytes: 256,
+        nativePayloadBytes: 512,
+      );
+      expect(frames, hasLength(2));
+      expect(frames.map((frame) => frame.ciphertext.length), <int>[24, 232]);
+
+      final outbox = V3LmfDurableOutbox(store: store);
+      await outbox.restore();
+      final entry = await outbox.enqueue(frames);
+      final complete = await _ackFrame(
+        targetFrames: frames,
+        indexes: const <int>{0, 1},
+        key: key,
+      );
+
+      expect(
+        await outbox.applyAcknowledgement(
+          acknowledgementFrame: complete,
+          secretKey: key,
+        ),
+        V3LmfOutboxAckStatus.complete,
+      );
+      expect(outbox.entry(entry.assemblyId)!.isFullyAcknowledged, isTrue);
     });
 
     test('rejects unauthenticated or context-mismatched ACKs', () async {
@@ -306,13 +338,18 @@ void main() {
 Future<List<V3LmfFrame>> _frames(
   SecretKey key, {
   int messageIdStart = 0x81,
+  int plaintextBytes = 600,
+  int nativePayloadBytes = 0,
 }) =>
     V3LmfAead.sealFragmented(
       metadata: _metadata(messageIdStart: messageIdStart),
-      plaintext: _bytes(600, 0x30),
+      plaintext: _bytes(plaintextBytes, 0x30),
       secretKey: key,
       nonceForFragment: (index) =>
           _bytes(V3LmfFrameCodec.nonceBytes, 0x50 + index),
+      hybridRatchetHeader: _hybridHeader(
+        nativePayloadBytes: nativePayloadBytes,
+      ),
     );
 
 Future<V3LmfFrame> _ackFrame({
@@ -357,6 +394,20 @@ V3LmfMessageMetadata _metadata({int messageIdStart = 0x81}) =>
       sessionId: _bytes(V3LmfFrameCodec.sessionIdBytes, 0xa1),
       epoch: 7,
       messageCounter: 9,
+    );
+
+V3HybridRatchetHeader _hybridHeader({int nativePayloadBytes = 0}) =>
+    V3HybridRatchetHeader(
+      ecHeader: V3EcRatchetHeader(
+        ratchetPublicKey: _bytes(32, 0x21),
+        previousSendingChainLength: 3,
+        messageCounter: 5,
+      ),
+      sckaMessage: V3SckaMessage(
+        sendingEpoch: 7,
+        messageCounter: 9,
+        nativePayload: _bytes(nativePayloadBytes, 0x61),
+      ),
     );
 
 void _expectExactFrames(

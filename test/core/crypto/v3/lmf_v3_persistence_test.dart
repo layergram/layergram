@@ -4,6 +4,8 @@ import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:layergram/core/crypto/v3/ec_double_ratchet_v3.dart';
+import 'package:layergram/core/crypto/v3/hybrid_ratchet_header_v3.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3_persistence.dart';
 
@@ -341,6 +343,7 @@ Future<List<V3LmfFrame>> _frames({
       plaintext: plaintext,
       secretKey: key,
       nonce: _bytes(V3LmfFrameCodec.nonceBytes, nonceStart),
+      hybridRatchetHeader: _hybridHeader(epoch: epoch),
     ).then((frame) => <V3LmfFrame>[frame]);
   }
   return V3LmfAead.sealFragmented(
@@ -349,6 +352,7 @@ Future<List<V3LmfFrame>> _frames({
     secretKey: key,
     nonceForFragment: (index) =>
         _bytes(V3LmfFrameCodec.nonceBytes, nonceStart + index),
+    hybridRatchetHeader: _hybridHeader(epoch: epoch),
   );
 }
 
@@ -360,6 +364,19 @@ V3LmfMessageMetadata _metadata({int epoch = 7}) => V3LmfMessageMetadata(
       sessionId: _bytes(V3LmfFrameCodec.sessionIdBytes, 0xa1),
       epoch: epoch,
       messageCounter: 9,
+    );
+
+V3HybridRatchetHeader _hybridHeader({int epoch = 7}) => V3HybridRatchetHeader(
+      ecHeader: V3EcRatchetHeader(
+        ratchetPublicKey: _bytes(32, 0x21),
+        previousSendingChainLength: 3,
+        messageCounter: 5,
+      ),
+      sckaMessage: V3SckaMessage(
+        sendingEpoch: epoch,
+        messageCounter: 9,
+        nativePayload: Uint8List(0),
+      ),
     );
 
 Uint8List _bytes(int length, int start) => Uint8List.fromList(

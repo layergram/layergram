@@ -1,6 +1,8 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:layergram/core/crypto/v3/ec_double_ratchet_v3.dart';
+import 'package:layergram/core/crypto/v3/hybrid_ratchet_header_v3.dart';
 import 'package:layergram/core/crypto/v3/key_schedule_v3.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3_acknowledgement.dart';
@@ -124,6 +126,9 @@ void main() {
     test('matches message, AEAD key, and fragment nonce vectors', () async {
       final session = await _session();
       final material = await _message(session);
+      final header = _hybridHeader();
+      final headerLength = V3HybridRatchetHeaderCodec.encode(header).length;
+      final headerDigest = V3LmfFrameCodec.digestHybridRatchetHeader(header);
       expect(_hex(material.messageId), '044aaf313888fab0f9caa64f00a93eb5');
       expect(
         _hex(Uint8List.fromList(await material.secretKey.extractBytes())),
@@ -134,16 +139,20 @@ void main() {
           fragmentIndex: 0,
           fragmentCount: 5,
           assembledPlaintextLength: 1088,
+          hybridRatchetHeaderLength: headerLength,
+          hybridRatchetHeaderDigest: headerDigest,
         )),
-        'e72ba41e5c0fd9d66c52e591',
+        '264ded9339d4d0cda864d1c8',
       );
       expect(
         _hex(await material.nonceForFragment(
           fragmentIndex: 4,
           fragmentCount: 5,
           assembledPlaintextLength: 1088,
+          hybridRatchetHeaderLength: headerLength,
+          hybridRatchetHeaderDigest: headerDigest,
         )),
-        '38341c8bdf25c8490b436ef2',
+        'bc0928a2fe7deb2ee71766cf',
       );
       material.close();
       session.close();
@@ -153,6 +162,9 @@ void main() {
         () async {
       final session = await _session();
       final material = await _message(session);
+      final header = _hybridHeader();
+      final headerLength = V3HybridRatchetHeaderCodec.encode(header).length;
+      final headerDigest = V3LmfFrameCodec.digestHybridRatchetHeader(header);
       final bindings = session.bindingsFor(
         V3TrafficDirection.initiatorToResponder,
       );
@@ -175,6 +187,8 @@ void main() {
             fragmentIndex: index,
             fragmentCount: 5,
             assembledPlaintextLength: plaintext.length,
+            hybridRatchetHeaderLength: headerLength,
+            hybridRatchetHeaderDigest: headerDigest,
           ),
         );
       }
@@ -183,6 +197,7 @@ void main() {
         plaintext: plaintext,
         secretKey: material.secretKey,
         nonceForFragment: (index) => nonces[index],
+        hybridRatchetHeader: header,
       );
       expect(frames, hasLength(5));
       for (var index = 0; index < frames.length; index++) {
@@ -194,6 +209,8 @@ void main() {
             fragmentIndex: index,
             fragmentCount: frames.length,
             assembledPlaintextLength: plaintext.length,
+            hybridRatchetHeaderLength: headerLength,
+            hybridRatchetHeaderDigest: headerDigest,
           ),
           isTrue,
         );
@@ -399,3 +416,16 @@ Uint8List _bytes(int length, int start) => Uint8List.fromList(
 
 String _hex(Uint8List value) =>
     value.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
+
+V3HybridRatchetHeader _hybridHeader() => V3HybridRatchetHeader(
+      ecHeader: V3EcRatchetHeader(
+        ratchetPublicKey: _bytes(32, 0x21),
+        previousSendingChainLength: 3,
+        messageCounter: 5,
+      ),
+      sckaMessage: V3SckaMessage(
+        sendingEpoch: 7,
+        messageCounter: 9,
+        nativePayload: Uint8List(0),
+      ),
+    );

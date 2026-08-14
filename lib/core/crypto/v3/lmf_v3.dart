@@ -20,6 +20,7 @@ import 'package:cryptography/cryptography.dart';
 
 import '../stego_alphabet_v2.dart';
 import '../stego_encoder.dart';
+import 'hybrid_ratchet_header_v3.dart';
 
 /// Inactive protocol-v3 suite identifier used by the research wire format.
 enum V3LmfSuite {
@@ -173,6 +174,9 @@ class V3LmfFrame {
     required Uint8List nonce,
     required Uint8List ciphertext,
     required Uint8List authenticationTag,
+    V3HybridRatchetHeader? hybridRatchetHeader,
+    Uint8List? hybridRatchetHeaderDigest,
+    int hybridRatchetHeaderLength = 0,
   }) {
     final copiedNonce = _validatedBytes(
       nonce,
@@ -185,11 +189,19 @@ class V3LmfFrame {
       V3LmfFrameCodec.authenticationTagBytes,
       'authenticationTag',
     );
+    final hybridBinding = _validatedHybridRatchetBinding(
+      metadata: metadata,
+      fragmentIndex: fragmentIndex,
+      hybridRatchetHeader: hybridRatchetHeader,
+      hybridRatchetHeaderDigest: hybridRatchetHeaderDigest,
+      hybridRatchetHeaderLength: hybridRatchetHeaderLength,
+    );
     _validateFragmentShape(
       fragmentIndex: fragmentIndex,
       fragmentCount: fragmentCount,
       assembledPlaintextLength: assembledPlaintextLength,
       ciphertextLength: copiedCiphertext.length,
+      hybridRatchetHeaderLength: hybridBinding.totalLength,
     );
     return V3LmfFrame._(
       metadata: metadata,
@@ -199,6 +211,9 @@ class V3LmfFrame {
       nonce: copiedNonce,
       ciphertext: copiedCiphertext,
       authenticationTag: copiedTag,
+      hybridRatchetHeaderBytes: hybridBinding.encodedHeader,
+      hybridRatchetHeaderDigest: hybridBinding.digest,
+      hybridRatchetHeaderLength: hybridBinding.totalLength,
     );
   }
 
@@ -210,9 +225,15 @@ class V3LmfFrame {
     required Uint8List nonce,
     required Uint8List ciphertext,
     required Uint8List authenticationTag,
+    required Uint8List? hybridRatchetHeaderBytes,
+    required Uint8List hybridRatchetHeaderDigest,
+    required int hybridRatchetHeaderLength,
   })  : _nonce = nonce,
         _ciphertext = ciphertext,
-        _authenticationTag = authenticationTag;
+        _authenticationTag = authenticationTag,
+        _hybridRatchetHeaderBytes = hybridRatchetHeaderBytes,
+        _hybridRatchetHeaderDigest = hybridRatchetHeaderDigest,
+        _hybridRatchetHeaderLength = hybridRatchetHeaderLength;
 
   final V3LmfMessageMetadata metadata;
   final int fragmentIndex;
@@ -221,12 +242,33 @@ class V3LmfFrame {
   final Uint8List _nonce;
   final Uint8List _ciphertext;
   final Uint8List _authenticationTag;
+  final Uint8List? _hybridRatchetHeaderBytes;
+  final Uint8List _hybridRatchetHeaderDigest;
+  final int _hybridRatchetHeaderLength;
 
   Uint8List get nonce => Uint8List.fromList(_nonce);
 
   Uint8List get ciphertext => Uint8List.fromList(_ciphertext);
 
   Uint8List get authenticationTag => Uint8List.fromList(_authenticationTag);
+
+  /// Exact canonical HR3 bytes, present only on fragment zero.
+  Uint8List? get hybridRatchetHeaderBytes => _hybridRatchetHeaderBytes == null
+      ? null
+      : Uint8List.fromList(_hybridRatchetHeaderBytes);
+
+  /// Domain-separated digest that binds every fragment to the same HR3.
+  Uint8List get hybridRatchetHeaderDigest =>
+      Uint8List.fromList(_hybridRatchetHeaderDigest);
+
+  V3HybridRatchetHeader? get hybridRatchetHeader =>
+      _hybridRatchetHeaderBytes == null
+          ? null
+          : V3HybridRatchetHeaderCodec.decode(
+              Uint8List.fromList(_hybridRatchetHeaderBytes),
+            );
+
+  int get hybridRatchetHeaderLength => _hybridRatchetHeaderLength;
 
   bool get isFragmented => fragmentCount > 1;
 }
@@ -240,15 +282,17 @@ abstract final class V3LmfFrameCodec {
   static const int sessionIdBytes = 16;
   static const int nonceBytes = 12;
   static const int authenticationTagBytes = 16;
+  static const int hybridRatchetHeaderDigestBytes = 32;
 
-  /// Multi-frame messages use one fixed canonical payload size except for the
-  /// final fragment. Single-frame messages may use the larger frame bound.
+  /// Continuation fragments use this canonical payload size. A first fragment
+  /// carrying HR3 may be smaller so every encoded transport remains portable.
   static const int fragmentPlaintextBytes = 256;
   static const int maxFragments = 64;
   static const int maxAssembledPlaintextBytes =
       fragmentPlaintextBytes * maxFragments;
 
-  static const int headerBytes = 146;
+  static const int headerBytes = 180;
+  static const int maxPortableStegoFrameBytes = 828;
   static const int minBinaryFrameBytes =
       headerBytes + 1 + authenticationTagBytes;
   static const int maxBinaryFrameBytes =
@@ -259,6 +303,8 @@ abstract final class V3LmfFrameCodec {
   static const String messageHost = 'm';
   static const int maxTokenCharacters =
       3 + ((maxBinaryFrameBytes * 4 + 2) ~/ 3);
+  static const int maxLinkCharacters =
+      14 + maxTokenCharacters; // "layergram://m/"
 
   /// Conservative common-app sharing target. Actual adapters may enforce a
   /// smaller channel-specific value or require fragmentation.
@@ -290,14 +336,22 @@ abstract final class V3LmfFrameCodec {
 
   /// Exact bytes passed as AES-GCM associated authenticated data.
   static Uint8List authenticationData(V3LmfFrame frame) {
-    return _encodeHeader(
+    final base = _encodeHeader(
       metadata: frame.metadata,
       fragmentIndex: frame.fragmentIndex,
       fragmentCount: frame.fragmentCount,
       assembledPlaintextLength: frame.assembledPlaintextLength,
       nonce: frame._nonce,
       ciphertextLength: frame._ciphertext.length,
+      hybridRatchetHeaderLength: frame._hybridRatchetHeaderLength,
+      hybridRatchetHeaderDigest: frame._hybridRatchetHeaderDigest,
     );
+    final embedded = frame._hybridRatchetHeaderBytes;
+    if (embedded == null) return base;
+    final result = Uint8List(base.length + embedded.length);
+    result.setRange(0, base.length, base);
+    result.setRange(base.length, result.length, embedded);
+    return result;
   }
 
   /// Stable, non-secret identifier for one logical framed message.
@@ -350,12 +404,6 @@ abstract final class V3LmfFrameCodec {
         ciphertextLength > maxAssembledPlaintextBytes) {
       throw const FormatException('Invalid Layergram v3 ciphertext length');
     }
-    final expectedLength =
-        headerBytes + ciphertextLength + authenticationTagBytes;
-    if (encoded.length != expectedLength) {
-      throw const FormatException('Non-canonical Layergram v3 frame length');
-    }
-
     var offset = 10;
     final senderBinding = _copyRange(
       encoded,
@@ -387,10 +435,44 @@ abstract final class V3LmfFrameCodec {
     offset += 4;
     final nonce = _copyRange(encoded, offset, nonceBytes);
     offset += nonceBytes;
+    final hybridRatchetHeaderLength = data.getUint16(offset, Endian.big);
+    offset += 2;
+    if (hybridRatchetHeaderLength != 0 &&
+        (hybridRatchetHeaderLength <
+                V3HybridRatchetHeaderCodec.minEncodedBytes ||
+            hybridRatchetHeaderLength >
+                V3HybridRatchetHeaderCodec.maxEncodedBytes)) {
+      throw const FormatException(
+        'Invalid Layergram v3 hybrid ratchet header length',
+      );
+    }
+    final hybridRatchetHeaderDigest = _copyRange(
+      encoded,
+      offset,
+      hybridRatchetHeaderDigestBytes,
+    );
+    offset += hybridRatchetHeaderDigestBytes;
     if (offset != headerBytes) {
       throw StateError('Layergram v3 header implementation drift');
     }
 
+    final embeddedHybridHeaderLength =
+        fragmentIndex == 0 ? hybridRatchetHeaderLength : 0;
+    final expectedLength = headerBytes +
+        embeddedHybridHeaderLength +
+        ciphertextLength +
+        authenticationTagBytes;
+    if (encoded.length != expectedLength) {
+      throw const FormatException('Non-canonical Layergram v3 frame length');
+    }
+
+    V3HybridRatchetHeader? hybridRatchetHeader;
+    if (embeddedHybridHeaderLength != 0) {
+      hybridRatchetHeader = V3HybridRatchetHeaderCodec.decode(
+        _copyRange(encoded, offset, embeddedHybridHeaderLength),
+      );
+      offset += embeddedHybridHeaderLength;
+    }
     final ciphertext = _copyRange(encoded, offset, ciphertextLength);
     offset += ciphertextLength;
     final tag = _copyRange(encoded, offset, authenticationTagBytes);
@@ -416,6 +498,9 @@ abstract final class V3LmfFrameCodec {
         nonce: nonce,
         ciphertext: ciphertext,
         authenticationTag: tag,
+        hybridRatchetHeader: hybridRatchetHeader,
+        hybridRatchetHeaderDigest: hybridRatchetHeaderDigest,
+        hybridRatchetHeaderLength: hybridRatchetHeaderLength,
       );
     } on ArgumentError {
       throw const FormatException('Invalid Layergram v3 frame fields');
@@ -460,6 +545,9 @@ abstract final class V3LmfFrameCodec {
   }
 
   static V3LmfFrame decodeLink(String link) {
+    if (link.length > maxLinkCharacters) {
+      throw const FormatException('Invalid Layergram v3 message link');
+    }
     final uri = Uri.tryParse(link);
     if (uri == null ||
         uri.scheme != scheme ||
@@ -546,6 +634,37 @@ abstract final class V3LmfFrameCodec {
     );
   }
 
+  static int canonicalFragmentCount({
+    required int assembledPlaintextLength,
+    int hybridRatchetHeaderLength = 0,
+  }) {
+    return _fragmentLayout(
+      assembledPlaintextLength: assembledPlaintextLength,
+      hybridRatchetHeaderLength: hybridRatchetHeaderLength,
+    ).length;
+  }
+
+  static int firstFragmentPlaintextCapacity({
+    int hybridRatchetHeaderLength = 0,
+  }) {
+    return _firstFragmentPlaintextCapacity(hybridRatchetHeaderLength);
+  }
+
+  static int maxAssembledPlaintextBytesForHybridHeader({
+    int hybridRatchetHeaderLength = 0,
+  }) {
+    return _firstFragmentPlaintextCapacity(hybridRatchetHeaderLength) +
+        (maxFragments - 1) * fragmentPlaintextBytes;
+  }
+
+  static Uint8List digestHybridRatchetHeader(
+    V3HybridRatchetHeader hybridRatchetHeader,
+  ) {
+    return _hybridRatchetHeaderDigest(
+      V3HybridRatchetHeaderCodec.encode(hybridRatchetHeader),
+    );
+  }
+
   static Uint8List _encodeHeader({
     required V3LmfMessageMetadata metadata,
     required int fragmentIndex,
@@ -553,14 +672,22 @@ abstract final class V3LmfFrameCodec {
     required int assembledPlaintextLength,
     required Uint8List nonce,
     required int ciphertextLength,
+    required int hybridRatchetHeaderLength,
+    required Uint8List hybridRatchetHeaderDigest,
   }) {
     _validateFragmentShape(
       fragmentIndex: fragmentIndex,
       fragmentCount: fragmentCount,
       assembledPlaintextLength: assembledPlaintextLength,
       ciphertextLength: ciphertextLength,
+      hybridRatchetHeaderLength: hybridRatchetHeaderLength,
     );
     final checkedNonce = _validatedBytes(nonce, nonceBytes, 'nonce');
+    final checkedHybridDigest = _validatedBytes(
+      hybridRatchetHeaderDigest,
+      hybridRatchetHeaderDigestBytes,
+      'hybridRatchetHeaderDigest',
+    );
     final header = Uint8List(headerBytes);
     final data = ByteData.sublistView(header);
     var offset = 0;
@@ -603,6 +730,14 @@ abstract final class V3LmfFrameCodec {
     offset += 4;
     header.setRange(offset, offset + nonceBytes, checkedNonce);
     offset += nonceBytes;
+    data.setUint16(offset, hybridRatchetHeaderLength, Endian.big);
+    offset += 2;
+    header.setRange(
+      offset,
+      offset + hybridRatchetHeaderDigestBytes,
+      checkedHybridDigest,
+    );
+    offset += hybridRatchetHeaderDigestBytes;
     if (offset != headerBytes) {
       throw StateError('Layergram v3 header implementation drift');
     }
@@ -624,6 +759,7 @@ abstract final class V3LmfAead {
     required Uint8List plaintext,
     required SecretKey secretKey,
     required Uint8List nonce,
+    V3HybridRatchetHeader? hybridRatchetHeader,
   }) async {
     if (plaintext.isEmpty ||
         plaintext.length > V3LmfFrameCodec.maxAssembledPlaintextBytes) {
@@ -644,6 +780,9 @@ abstract final class V3LmfAead {
         assembledPlaintextLength: localPlaintext.length,
         secretKey: secretKey,
         nonce: nonce,
+        hybridRatchetHeader: hybridRatchetHeader,
+        hybridRatchetHeaderDigest: null,
+        hybridRatchetHeaderLength: 0,
       );
     } finally {
       localPlaintext.fillRange(0, localPlaintext.length, 0);
@@ -655,6 +794,7 @@ abstract final class V3LmfAead {
     required Uint8List plaintext,
     required SecretKey secretKey,
     required Uint8List Function(int fragmentIndex) nonceForFragment,
+    V3HybridRatchetHeader? hybridRatchetHeader,
   }) async {
     if (plaintext.isEmpty ||
         plaintext.length > V3LmfFrameCodec.maxAssembledPlaintextBytes) {
@@ -665,17 +805,26 @@ abstract final class V3LmfAead {
             '${V3LmfFrameCodec.maxAssembledPlaintextBytes} bytes',
       );
     }
-    final fragmentCount =
-        (plaintext.length + V3LmfFrameCodec.fragmentPlaintextBytes - 1) ~/
-            V3LmfFrameCodec.fragmentPlaintextBytes;
+    final hybridBinding = _validatedHybridRatchetBinding(
+      metadata: metadata,
+      fragmentIndex: 0,
+      hybridRatchetHeader: hybridRatchetHeader,
+      hybridRatchetHeaderDigest: null,
+      hybridRatchetHeaderLength: 0,
+    );
+    final layout = _fragmentLayout(
+      assembledPlaintextLength: plaintext.length,
+      hybridRatchetHeaderLength: hybridBinding.totalLength,
+    );
+    final fragmentCount = layout.length;
     final frames = <V3LmfFrame>[];
     final nonces = <String>{};
     for (var fragmentIndex = 0;
         fragmentIndex < fragmentCount;
         fragmentIndex++) {
-      final start = fragmentIndex * V3LmfFrameCodec.fragmentPlaintextBytes;
-      final end = (start + V3LmfFrameCodec.fragmentPlaintextBytes)
-          .clamp(0, plaintext.length);
+      final shape = layout[fragmentIndex];
+      final start = shape.offset;
+      final end = start + shape.length;
       final fragment = Uint8List.fromList(plaintext.sublist(start, end));
       final nonce = _validatedBytes(
         nonceForFragment(fragmentIndex),
@@ -697,6 +846,10 @@ abstract final class V3LmfAead {
             assembledPlaintextLength: plaintext.length,
             secretKey: secretKey,
             nonce: nonce,
+            hybridRatchetHeader:
+                fragmentIndex == 0 ? hybridRatchetHeader : null,
+            hybridRatchetHeaderDigest: hybridBinding.digest,
+            hybridRatchetHeaderLength: hybridBinding.totalLength,
           ),
         );
       } finally {
@@ -738,27 +891,46 @@ abstract final class V3LmfAead {
     required int assembledPlaintextLength,
     required SecretKey secretKey,
     required Uint8List nonce,
+    required V3HybridRatchetHeader? hybridRatchetHeader,
+    required Uint8List? hybridRatchetHeaderDigest,
+    required int hybridRatchetHeaderLength,
   }) async {
     final checkedNonce = _validatedBytes(
       nonce,
       V3LmfFrameCodec.nonceBytes,
       'nonce',
     );
-    final aad = V3LmfFrameCodec._encodeHeader(
+    final hybridBinding = _validatedHybridRatchetBinding(
+      metadata: metadata,
+      fragmentIndex: fragmentIndex,
+      hybridRatchetHeader: hybridRatchetHeader,
+      hybridRatchetHeaderDigest: hybridRatchetHeaderDigest,
+      hybridRatchetHeaderLength: hybridRatchetHeaderLength,
+    );
+    final baseAad = V3LmfFrameCodec._encodeHeader(
       metadata: metadata,
       fragmentIndex: fragmentIndex,
       fragmentCount: fragmentCount,
       assembledPlaintextLength: assembledPlaintextLength,
       nonce: checkedNonce,
       ciphertextLength: plaintext.length,
+      hybridRatchetHeaderLength: hybridBinding.totalLength,
+      hybridRatchetHeaderDigest: hybridBinding.digest,
     );
+    final embedded = hybridBinding.encodedHeader;
+    final aad = embedded == null
+        ? baseAad
+        : (Uint8List(baseAad.length + embedded.length)
+          ..setRange(0, baseAad.length, baseAad)
+          ..setRange(
+              baseAad.length, baseAad.length + embedded.length, embedded));
     final box = await _algorithm.encrypt(
       plaintext,
       secretKey: secretKey,
       nonce: checkedNonce,
       aad: aad,
     );
-    return V3LmfFrame(
+    return V3LmfFrame._(
       metadata: metadata,
       fragmentIndex: fragmentIndex,
       fragmentCount: fragmentCount,
@@ -766,6 +938,9 @@ abstract final class V3LmfAead {
       nonce: Uint8List.fromList(box.nonce),
       ciphertext: Uint8List.fromList(box.cipherText),
       authenticationTag: Uint8List.fromList(box.mac.bytes),
+      hybridRatchetHeaderBytes: embedded,
+      hybridRatchetHeaderDigest: hybridBinding.digest,
+      hybridRatchetHeaderLength: hybridBinding.totalLength,
     );
   }
 
@@ -1040,11 +1215,16 @@ class _PendingAssembly {
   _PendingAssembly({required V3LmfFrame frame, required this.lastUpdated})
       : metadata = frame.metadata,
         fragmentCount = frame.fragmentCount,
-        assembledPlaintextLength = frame.assembledPlaintextLength;
+        assembledPlaintextLength = frame.assembledPlaintextLength,
+        hybridRatchetHeaderLength = frame._hybridRatchetHeaderLength,
+        hybridRatchetHeaderDigest =
+            Uint8List.fromList(frame._hybridRatchetHeaderDigest);
 
   final V3LmfMessageMetadata metadata;
   final int fragmentCount;
   final int assembledPlaintextLength;
+  final int hybridRatchetHeaderLength;
+  final Uint8List hybridRatchetHeaderDigest;
   final Map<int, _BufferedFragment> fragments = <int, _BufferedFragment>{};
   DateTime lastUpdated;
 
@@ -1061,6 +1241,11 @@ class _PendingAssembly {
         metadata.expiresAtUnixSeconds == other.expiresAtUnixSeconds &&
         fragmentCount == frame.fragmentCount &&
         assembledPlaintextLength == frame.assembledPlaintextLength &&
+        hybridRatchetHeaderLength == frame._hybridRatchetHeaderLength &&
+        _constantTimeEquals(
+          hybridRatchetHeaderDigest,
+          frame._hybridRatchetHeaderDigest,
+        ) &&
         _constantTimeEquals(metadata._senderBinding, other._senderBinding) &&
         _constantTimeEquals(
           metadata._recipientBinding,
@@ -1075,6 +1260,11 @@ class _PendingAssembly {
       fragment.wipe();
     }
     fragments.clear();
+    hybridRatchetHeaderDigest.fillRange(
+      0,
+      hybridRatchetHeaderDigest.length,
+      0,
+    );
   }
 }
 
@@ -1090,11 +1280,208 @@ class _BufferedFragment {
   }
 }
 
+final class _HybridRatchetBinding {
+  const _HybridRatchetBinding({
+    required this.encodedHeader,
+    required this.digest,
+    required this.totalLength,
+  });
+
+  final Uint8List? encodedHeader;
+  final Uint8List digest;
+  final int totalLength;
+}
+
+_HybridRatchetBinding _validatedHybridRatchetBinding({
+  required V3LmfMessageMetadata metadata,
+  required int fragmentIndex,
+  required V3HybridRatchetHeader? hybridRatchetHeader,
+  required Uint8List? hybridRatchetHeaderDigest,
+  required int hybridRatchetHeaderLength,
+}) {
+  final providedDigest = hybridRatchetHeaderDigest == null
+      ? null
+      : _validatedBytes(
+          hybridRatchetHeaderDigest,
+          V3LmfFrameCodec.hybridRatchetHeaderDigestBytes,
+          'hybridRatchetHeaderDigest',
+        );
+  final encoded = hybridRatchetHeader == null
+      ? null
+      : V3HybridRatchetHeaderCodec.encode(hybridRatchetHeader);
+  final totalLength = encoded == null
+      ? hybridRatchetHeaderLength
+      : (hybridRatchetHeaderLength == 0
+          ? encoded.length
+          : hybridRatchetHeaderLength);
+  if (totalLength < 0 ||
+      (totalLength != 0 &&
+          (totalLength < V3HybridRatchetHeaderCodec.minEncodedBytes ||
+              totalLength > V3HybridRatchetHeaderCodec.maxEncodedBytes)) ||
+      (encoded != null && encoded.length != totalLength)) {
+    throw ArgumentError.value(
+      hybridRatchetHeaderLength,
+      'hybridRatchetHeaderLength',
+      'does not describe one canonical HR3 header',
+    );
+  }
+
+  final requiresHybrid = metadata.kind == V3LmfFrameKind.application ||
+      metadata.kind == V3LmfFrameKind.pqRatchet;
+  if (!requiresHybrid) {
+    if (encoded != null ||
+        totalLength != 0 ||
+        (providedDigest != null && !_isAllZero(providedDigest))) {
+      throw ArgumentError(
+        'Layergram v3 handshake and acknowledgement frames cannot carry HR3',
+      );
+    }
+    return _HybridRatchetBinding(
+      encodedHeader: null,
+      digest: Uint8List(V3LmfFrameCodec.hybridRatchetHeaderDigestBytes),
+      totalLength: 0,
+    );
+  }
+
+  if (totalLength == 0) {
+    throw ArgumentError('Layergram v3 application/control frame requires HR3');
+  }
+  if (fragmentIndex == 0 && encoded == null) {
+    throw ArgumentError('Layergram v3 first fragment must carry complete HR3');
+  }
+  if (fragmentIndex != 0 && encoded != null) {
+    throw ArgumentError(
+      'Layergram v3 continuation fragments reference HR3 by digest only',
+    );
+  }
+
+  Uint8List digest;
+  if (providedDigest == null) {
+    if (encoded == null) {
+      throw ArgumentError(
+        'Layergram v3 continuation fragment requires the HR3 digest',
+      );
+    }
+    digest = _hybridRatchetHeaderDigest(encoded);
+  } else {
+    digest = providedDigest;
+    if (_isAllZero(digest)) {
+      throw ArgumentError(
+        'Layergram v3 hybrid ratchet header digest must not be zero',
+      );
+    }
+    if (encoded != null) {
+      final expected = _hybridRatchetHeaderDigest(encoded);
+      final matches = _constantTimeEquals(digest, expected);
+      expected.fillRange(0, expected.length, 0);
+      if (!matches) {
+        throw ArgumentError(
+          'Layergram v3 hybrid ratchet header digest mismatch',
+        );
+      }
+    }
+  }
+
+  if (hybridRatchetHeader != null &&
+      (hybridRatchetHeader.sckaMessage.sendingEpoch != metadata.epoch ||
+          hybridRatchetHeader.sckaMessage.messageCounter !=
+              metadata.messageCounter)) {
+    digest.fillRange(0, digest.length, 0);
+    throw ArgumentError(
+      'Layergram v3 HR3 PQ coordinates do not match LMF metadata',
+    );
+  }
+  return _HybridRatchetBinding(
+    encodedHeader: encoded,
+    digest: digest,
+    totalLength: totalLength,
+  );
+}
+
+Uint8List _hybridRatchetHeaderDigest(Uint8List encoded) => Uint8List.fromList(
+      crypto.sha256.convert(<int>[
+        ...utf8.encode('layergram/v3/lmf/hybrid-ratchet-header\u0000'),
+        ...encoded,
+      ]).bytes,
+    );
+
+final class _FragmentShape {
+  const _FragmentShape({required this.offset, required this.length});
+
+  final int offset;
+  final int length;
+}
+
+List<_FragmentShape> _fragmentLayout({
+  required int assembledPlaintextLength,
+  required int hybridRatchetHeaderLength,
+}) {
+  if (assembledPlaintextLength < 1 ||
+      assembledPlaintextLength > V3LmfFrameCodec.maxAssembledPlaintextBytes) {
+    throw ArgumentError.value(
+      assembledPlaintextLength,
+      'assembledPlaintextLength',
+      'is outside the Layergram v3 limit',
+    );
+  }
+  final boundedFirstCapacity =
+      _firstFragmentPlaintextCapacity(hybridRatchetHeaderLength);
+  final shapes = <_FragmentShape>[];
+  final firstLength = assembledPlaintextLength < boundedFirstCapacity
+      ? assembledPlaintextLength
+      : boundedFirstCapacity;
+  shapes.add(_FragmentShape(offset: 0, length: firstLength));
+  var offset = firstLength;
+  while (offset < assembledPlaintextLength) {
+    if (shapes.length >= V3LmfFrameCodec.maxFragments) {
+      throw ArgumentError(
+        'Layergram v3 fragmented message exceeds its fragment limit',
+      );
+    }
+    final remaining = assembledPlaintextLength - offset;
+    final length = remaining < V3LmfFrameCodec.fragmentPlaintextBytes
+        ? remaining
+        : V3LmfFrameCodec.fragmentPlaintextBytes;
+    shapes.add(_FragmentShape(offset: offset, length: length));
+    offset += length;
+  }
+  return List<_FragmentShape>.unmodifiable(shapes);
+}
+
+int _firstFragmentPlaintextCapacity(int hybridRatchetHeaderLength) {
+  if (hybridRatchetHeaderLength < 0 ||
+      (hybridRatchetHeaderLength != 0 &&
+          (hybridRatchetHeaderLength <
+                  V3HybridRatchetHeaderCodec.minEncodedBytes ||
+              hybridRatchetHeaderLength >
+                  V3HybridRatchetHeaderCodec.maxEncodedBytes))) {
+    throw ArgumentError.value(
+      hybridRatchetHeaderLength,
+      'hybridRatchetHeaderLength',
+    );
+  }
+  final capacity = hybridRatchetHeaderLength == 0
+      ? V3LmfFrameCodec.fragmentPlaintextBytes
+      : V3LmfFrameCodec.maxPortableStegoFrameBytes -
+          V3LmfFrameCodec.headerBytes -
+          hybridRatchetHeaderLength -
+          V3LmfFrameCodec.authenticationTagBytes;
+  if (capacity < 1) {
+    throw ArgumentError(
+      'Layergram v3 HR3 leaves no portable first-fragment capacity',
+    );
+  }
+  return capacity < V3LmfFrameCodec.fragmentPlaintextBytes
+      ? capacity
+      : V3LmfFrameCodec.fragmentPlaintextBytes;
+}
+
 void _validateFragmentShape({
   required int fragmentIndex,
   required int fragmentCount,
   required int assembledPlaintextLength,
   required int ciphertextLength,
+  required int hybridRatchetHeaderLength,
 }) {
   if (fragmentCount < 1 || fragmentCount > V3LmfFrameCodec.maxFragments) {
     throw ArgumentError.value(
@@ -1110,14 +1497,6 @@ void _validateFragmentShape({
       'must identify one fragment in the declared set',
     );
   }
-  if (assembledPlaintextLength < 1 ||
-      assembledPlaintextLength > V3LmfFrameCodec.maxAssembledPlaintextBytes) {
-    throw ArgumentError.value(
-      assembledPlaintextLength,
-      'assembledPlaintextLength',
-      'is outside the Layergram v3 limit',
-    );
-  }
   if (ciphertextLength < 1 ||
       ciphertextLength > V3LmfFrameCodec.maxAssembledPlaintextBytes) {
     throw ArgumentError.value(
@@ -1127,24 +1506,21 @@ void _validateFragmentShape({
     );
   }
 
-  if (fragmentCount == 1) {
+  if (fragmentCount == 1 && hybridRatchetHeaderLength == 0) {
     if (fragmentIndex != 0 || ciphertextLength != assembledPlaintextLength) {
       throw ArgumentError('Non-canonical single-frame Layergram v3 message');
     }
     return;
   }
 
-  final expectedCount =
-      (assembledPlaintextLength + V3LmfFrameCodec.fragmentPlaintextBytes - 1) ~/
-          V3LmfFrameCodec.fragmentPlaintextBytes;
-  if (fragmentCount != expectedCount) {
+  final layout = _fragmentLayout(
+    assembledPlaintextLength: assembledPlaintextLength,
+    hybridRatchetHeaderLength: hybridRatchetHeaderLength,
+  );
+  if (fragmentCount != layout.length) {
     throw ArgumentError('Non-canonical Layergram v3 fragment count');
   }
-  final expectedLength = fragmentIndex == fragmentCount - 1
-      ? assembledPlaintextLength -
-          (fragmentIndex * V3LmfFrameCodec.fragmentPlaintextBytes)
-      : V3LmfFrameCodec.fragmentPlaintextBytes;
-  if (ciphertextLength != expectedLength) {
+  if (ciphertextLength != layout[fragmentIndex].length) {
     throw ArgumentError('Non-canonical Layergram v3 fragment length');
   }
 }
@@ -1225,4 +1601,12 @@ bool _constantTimeEquals(Uint8List left, Uint8List right) {
     difference |= left[index] ^ right[index];
   }
   return difference == 0;
+}
+
+bool _isAllZero(Uint8List value) {
+  var accumulator = 0;
+  for (final byte in value) {
+    accumulator |= byte;
+  }
+  return accumulator == 0;
 }

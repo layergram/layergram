@@ -102,6 +102,35 @@ macOS arm64, Android 14 arm64, iOS arm64 simulator, Linux x64, and Windows x64.
 This establishes deterministic identity assembly across the tested ABIs; it is
 not evidence for the future handshake or ratchet.
 
+## Commercial distribution and dependency gate
+
+The open-source Layergram repository is the shared protocol and security base
+for a separately distributed paid Premium application. Every dependency added
+to this base or to a future native SCKA backend therefore requires an exact
+versioned license review before adoption. The recorded terms must permit:
+
+- commercial use and paid distribution;
+- distribution through desktop and mobile application stores;
+- linking, embedding, and combination with a proprietary downstream Premium
+  binary without forcing disclosure of unrelated Premium source code;
+- preservation of the public Layergram source under its existing license; and
+- production redistribution of every transitive runtime artifact.
+
+The review must record the exact source/version, SPDX expression, transitive
+runtime dependencies, binary redistribution obligations, attribution, NOTICE,
+and source-offer duties. Non-commercial, field-of-use, unknown, or custom terms,
+and copyleft terms whose distribution obligations conflict with the Premium
+model, fail this engineering gate unless a specific legal review approves the
+exact use. Required license and notice material must ship with every affected
+artifact. This is a release-engineering rule, not legal advice.
+
+The currently vendored `mlkem-native` v2.0.0 library sources are offered by
+upstream under Apache-2.0 OR ISC OR MIT; Layergram records Apache-2.0 as its
+selected choice in `third_party/mlkem-native/SOURCE.json` and
+`README.layergram.md`. This checkpoint adds no new package or native dependency.
+No native SCKA implementation has been selected: both its cryptographic review
+and its commercial-license review remain activation gates.
+
 ## Remaining activation gates
 
 - Package and test the backend on Linux ARM64 and native Windows ARM64 if
@@ -113,6 +142,8 @@ not evidence for the future handshake or ratchet.
 - Complete Apple distribution signing/notarization and Android store-signing
   validation.
 - Complete supply-chain inventory and independent implementation audit.
+- Approve the exact native SCKA dependency and its full transitive license
+  inventory for both public and paid Premium distribution.
 - Specify and review the authenticated hybrid handshake and sparse PQ ratchet.
 
 Until all gates pass, the backend must not be described to users as active or

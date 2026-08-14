@@ -5,6 +5,8 @@ import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 import 'package:layergram/core/crypto/aux_record_cipher.dart';
+import 'package:layergram/core/crypto/v3/ec_double_ratchet_v3.dart';
+import 'package:layergram/core/crypto/v3/hybrid_ratchet_header_v3.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3_atomic_commit.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3_outbox.dart';
@@ -215,6 +217,20 @@ Future<List<V3LmfFrame>> _frames(SecretKey key) => V3LmfAead.sealFragmented(
       secretKey: key,
       nonceForFragment: (index) =>
           _bytes(V3LmfFrameCodec.nonceBytes, 0x51 + index),
+      hybridRatchetHeader: _hybridHeader(),
+    );
+
+V3HybridRatchetHeader _hybridHeader() => V3HybridRatchetHeader(
+      ecHeader: V3EcRatchetHeader(
+        ratchetPublicKey: _bytes(32, 0x21),
+        previousSendingChainLength: 3,
+        messageCounter: 5,
+      ),
+      sckaMessage: V3SckaMessage(
+        sendingEpoch: 7,
+        messageCounter: 9,
+        nativePayload: Uint8List(0),
+      ),
     );
 
 Uint8List _bytes(int length, int start) => Uint8List.fromList(

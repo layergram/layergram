@@ -4,6 +4,8 @@ import 'package:crypto/crypto.dart' as crypto;
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:layergram/core/crypto/v3/committed_record_v3.dart';
+import 'package:layergram/core/crypto/v3/ec_double_ratchet_v3.dart';
+import 'package:layergram/core/crypto/v3/hybrid_ratchet_header_v3.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3.dart';
 
 void main() {
@@ -212,6 +214,9 @@ Future<List<V3LmfFrame>> _delivery({
     plaintext: _bytes(300, 0x31),
     secretKey: SecretKey(_bytes(32, 0x11)),
     nonceForFragment: (index) => _bytes(12, 0x51 + index),
+    hybridRatchetHeader: _requiresHybrid(kind)
+        ? _hybridHeader(epoch: epoch, messageCounter: messageCounter)
+        : null,
   );
 }
 
@@ -231,8 +236,29 @@ V3LmfFrame _frame({
     nonce: _bytes(12, 0x51),
     ciphertext: _bytes(fragmentLength, 0x61),
     authenticationTag: _bytes(16, 0x71),
+    hybridRatchetHeader: _requiresHybrid(kind) ? _hybridHeader() : null,
   );
 }
+
+bool _requiresHybrid(V3LmfFrameKind kind) =>
+    kind == V3LmfFrameKind.application || kind == V3LmfFrameKind.pqRatchet;
+
+V3HybridRatchetHeader _hybridHeader({
+  int epoch = 7,
+  int messageCounter = 9,
+}) =>
+    V3HybridRatchetHeader(
+      ecHeader: V3EcRatchetHeader(
+        ratchetPublicKey: _bytes(32, 0x21),
+        previousSendingChainLength: 3,
+        messageCounter: 5,
+      ),
+      sckaMessage: V3SckaMessage(
+        sendingEpoch: epoch,
+        messageCounter: messageCounter,
+        nativePayload: Uint8List(0),
+      ),
+    );
 
 V3LmfMessageMetadata _metadata({
   required V3LmfFrameKind kind,

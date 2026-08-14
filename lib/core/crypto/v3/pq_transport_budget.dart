@@ -61,7 +61,11 @@ abstract final class V3PqStegoBudget {
     return StegoEncoder.requiredCarrierSlotsForBytes(byteCount);
   }
 
-  static int canonicalFragmentFrameBytes(int fragmentPlaintextBytes) {
+  static int canonicalFragmentFrameBytes(
+    int fragmentPlaintextBytes, {
+    int hybridRatchetHeaderBytes = 0,
+    bool embedsHybridRatchetHeader = true,
+  }) {
     if (fragmentPlaintextBytes <= 0 ||
         fragmentPlaintextBytes > V3LmfFrameCodec.fragmentPlaintextBytes) {
       throw ArgumentError.value(
@@ -71,23 +75,48 @@ abstract final class V3PqStegoBudget {
             '${V3LmfFrameCodec.fragmentPlaintextBytes}',
       );
     }
+    if (hybridRatchetHeaderBytes != 0) {
+      final firstCapacity = V3LmfFrameCodec.firstFragmentPlaintextCapacity(
+        hybridRatchetHeaderLength: hybridRatchetHeaderBytes,
+      );
+      if (embedsHybridRatchetHeader && fragmentPlaintextBytes > firstCapacity) {
+        throw ArgumentError.value(
+          fragmentPlaintextBytes,
+          'fragmentPlaintextBytes',
+          'exceeds the portable HR3 first-fragment capacity',
+        );
+      }
+    }
     return V3LmfFrameCodec.headerBytes +
+        (embedsHybridRatchetHeader ? hybridRatchetHeaderBytes : 0) +
         fragmentPlaintextBytes +
         V3LmfFrameCodec.authenticationTagBytes;
   }
 
   static int minimumVisibleCoverCharactersForCanonicalFragment(
-    int fragmentPlaintextBytes,
-  ) {
+    int fragmentPlaintextBytes, {
+    int hybridRatchetHeaderBytes = 0,
+    bool embedsHybridRatchetHeader = true,
+  }) {
     return StegoEncoder.minCoverLengthForBytes(
-      canonicalFragmentFrameBytes(fragmentPlaintextBytes),
+      canonicalFragmentFrameBytes(
+        fragmentPlaintextBytes,
+        hybridRatchetHeaderBytes: hybridRatchetHeaderBytes,
+        embedsHybridRatchetHeader: embedsHybridRatchetHeader,
+      ),
     );
   }
 
   static int minimumEncodedCharactersForCanonicalFragment(
-    int fragmentPlaintextBytes,
-  ) {
-    final frameBytes = canonicalFragmentFrameBytes(fragmentPlaintextBytes);
+    int fragmentPlaintextBytes, {
+    int hybridRatchetHeaderBytes = 0,
+    bool embedsHybridRatchetHeader = true,
+  }) {
+    final frameBytes = canonicalFragmentFrameBytes(
+      fragmentPlaintextBytes,
+      hybridRatchetHeaderBytes: hybridRatchetHeaderBytes,
+      embedsHybridRatchetHeader: embedsHybridRatchetHeader,
+    );
     return StegoEncoder.minCoverLengthForBytes(frameBytes) +
         StegoEncoder.minimumHiddenLengthForBytes(frameBytes);
   }

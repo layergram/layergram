@@ -5,6 +5,8 @@ import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:layergram/core/crypto/stego_encoder.dart';
+import 'package:layergram/core/crypto/v3/ec_double_ratchet_v3.dart';
+import 'package:layergram/core/crypto/v3/hybrid_ratchet_header_v3.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3.dart';
 
 void main() {
@@ -14,12 +16,17 @@ void main() {
 
   group('LMF v3 canonical codec', () {
     test('publishes fixed, bounded wire limits', () {
-      expect(V3LmfFrameCodec.headerBytes, 146);
+      expect(V3LmfFrameCodec.headerBytes, 180);
       expect(V3LmfFrameCodec.fragmentPlaintextBytes, 256);
       expect(V3LmfFrameCodec.maxFragments, 64);
       expect(V3LmfFrameCodec.maxAssembledPlaintextBytes, 16384);
-      expect(V3LmfFrameCodec.minBinaryFrameBytes, 163);
-      expect(V3LmfFrameCodec.maxBinaryFrameBytes, 16546);
+      expect(V3LmfFrameCodec.minBinaryFrameBytes, 197);
+      expect(V3LmfFrameCodec.maxBinaryFrameBytes, 16580);
+      expect(V3LmfFrameCodec.maxPortableStegoFrameBytes, 828);
+      expect(
+        V3LmfFrameCodec.maxLinkCharacters,
+        'layergram://m/'.length + V3LmfFrameCodec.maxTokenCharacters,
+      );
     });
 
     test('single-frame golden vector freezes binary and text armor', () async {
@@ -35,20 +42,21 @@ void main() {
 
       expect(
         _hex(binary),
-        '4c4d33030101009200190102030405060708090a0b0c0d0e0f10111213141516'
+        '4c4d3303010100b400190102030405060708090a0b0c0d0e0f10111213141516'
         '1718191a1b1c1d1e1f204142434445464748494a4b4c4d4e4f50515253545556'
         '5758595a5b5c5d5e5f608182838485868788898a8b8c8d8e8f90a1a2a3a4a5'
         'a6a7a8a9aaabacadaeafb0000000000000000700000000000000097735940000'
-        '00000100000019a0a1a2a3a4a5a6a7a8a9aaabaa79054837ac70de0f45f1e0'
-        '271dafb214c93730f4c52301f95926e9badcec3712cfdd6ef4b0b4eed6',
+        '00000100000019a0a1a2a3a4a5a6a7a8a9aaab000000000000000000000000'
+        '00000000000000000000000000000000000000000000aa79054837ac70de0f45f1e0'
+        '271dafb214c93730f4c52301f9cd648176ad87cc84dc532cbecb164569',
       );
       expect(
         token,
-        'm3.TE0zAwEBAJIAGQECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8g'
+        'm3.TE0zAwEBALQAGQECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8g'
         'QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVpbXF1eX2CBgoOEhYaHiImKi4yN'
         'jo-QoaKjpKWmp6ipqqusra6vsAAAAAAAAAAHAAAAAAAAAAl3NZQAAAAAAQAAABm'
-        'goaKjpKWmp6ipqquqeQVIN6xw3g9F8eAnHa-yFMk3MPTFIwH5WSbputzsNxLP3'
-        'W70sLTu1g',
+        'goaKjpKWmp6ipqqsAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAqnkF'
+        'SDescN4PRfHgJx2vshTJNzD0xSMB-c1kgXath8yE3FMsvssWRWk',
       );
       expect(
         V3LmfFrameCodec.encodeBinary(
@@ -69,6 +77,7 @@ void main() {
         plaintext: Uint8List.fromList(utf8.encode('three transports')),
         secretKey: key,
         nonce: _bytes(V3LmfFrameCodec.nonceBytes, 0xb0),
+        hybridRatchetHeader: _hybridHeader(),
       );
       final binary = V3LmfFrameCodec.encodeBinary(frame);
       final token = V3LmfFrameCodec.encodeToken(frame);
@@ -100,6 +109,84 @@ void main() {
       expect(
         V3LmfFrameCodec.encodeBinary(V3LmfFrameCodec.decodeStego(stego)),
         orderedEquals(binary),
+      );
+    });
+
+    test('carries and AEAD-authenticates the exact canonical HR3', () async {
+      final header = _hybridHeader(nativePayloadBytes: 32);
+      final plaintext = Uint8List.fromList(utf8.encode('hybrid'));
+      final frame = await V3LmfAead.sealSingle(
+        metadata: _metadata(kind: V3LmfFrameKind.application),
+        plaintext: plaintext,
+        secretKey: key,
+        nonce: _bytes(V3LmfFrameCodec.nonceBytes, 0xb8),
+        hybridRatchetHeader: header,
+      );
+      final encodedHeader = V3HybridRatchetHeaderCodec.encode(header);
+      final binary = V3LmfFrameCodec.encodeBinary(frame);
+      expect(frame.hybridRatchetHeaderLength, encodedHeader.length);
+      expect(frame.hybridRatchetHeaderBytes, encodedHeader);
+      expect(
+        frame.hybridRatchetHeaderDigest,
+        V3LmfFrameCodec.digestHybridRatchetHeader(header),
+      );
+      expect(
+        binary.length,
+        V3LmfFrameCodec.headerBytes +
+            encodedHeader.length +
+            plaintext.length +
+            V3LmfFrameCodec.authenticationTagBytes,
+      );
+
+      final decoded = V3LmfFrameCodec.decodeBinary(binary);
+      expect(decoded.hybridRatchetHeaderBytes, encodedHeader);
+      expect(decoded.hybridRatchetHeader!.sckaMessage.sendingEpoch, 7);
+      expect(
+        await V3LmfAead.openSingle(frame: decoded, secretKey: key),
+        plaintext,
+      );
+
+      final digestMismatch = Uint8List.fromList(binary)
+        ..[V3LmfFrameCodec.headerBytes + encodedHeader.length - 1] ^= 1;
+      expect(
+        () => V3LmfFrameCodec.decodeBinary(digestMismatch),
+        throwsFormatException,
+      );
+
+      final changedHeader = _hybridHeader(nativePayloadBytes: 33);
+      final changed = V3LmfFrame(
+        metadata: frame.metadata,
+        fragmentIndex: frame.fragmentIndex,
+        fragmentCount: frame.fragmentCount,
+        assembledPlaintextLength: frame.assembledPlaintextLength,
+        nonce: frame.nonce,
+        ciphertext: frame.ciphertext,
+        authenticationTag: frame.authenticationTag,
+        hybridRatchetHeader: changedHeader,
+      );
+      await expectLater(
+        V3LmfAead.openSingle(frame: changed, secretKey: key),
+        throwsA(isA<SecretBoxAuthenticationError>()),
+      );
+
+      await expectLater(
+        V3LmfAead.sealSingle(
+          metadata: _metadata(kind: V3LmfFrameKind.application),
+          plaintext: Uint8List.fromList(<int>[1]),
+          secretKey: key,
+          nonce: _bytes(V3LmfFrameCodec.nonceBytes, 0xb9),
+        ),
+        throwsArgumentError,
+      );
+      await expectLater(
+        V3LmfAead.sealSingle(
+          metadata: _metadata(kind: V3LmfFrameKind.application),
+          plaintext: Uint8List.fromList(<int>[1]),
+          secretKey: key,
+          nonce: _bytes(V3LmfFrameCodec.nonceBytes, 0xba),
+          hybridRatchetHeader: _hybridHeader(epoch: 8),
+        ),
+        throwsArgumentError,
       );
     });
 
@@ -226,6 +313,7 @@ void main() {
         '$link/extra',
         link.replaceFirst('layergram://', 'layergram://user@'),
         link.replaceFirst('layergram://m/', 'layergram://m:123/'),
+        'layergram://m/${'A' * (V3LmfFrameCodec.maxTokenCharacters + 1)}',
       ]) {
         expect(
           () => V3LmfFrameCodec.decodeLink(invalid),
@@ -312,7 +400,7 @@ void main() {
         ),
         _copyFrame(
           original,
-          metadata: _metadata(kind: V3LmfFrameKind.application),
+          metadata: _metadata(kind: V3LmfFrameKind.acknowledgement),
         ),
         _copyFrame(
           original,
@@ -408,6 +496,128 @@ void main() {
   });
 
   group('LMF v3 fragmentation and reassembly', () {
+    test('maximum HR3 enforces the single-frame plaintext boundary', () async {
+      final header = _hybridHeader(nativePayloadBytes: 512);
+      final exactPlaintext = _bytes(24, 0x21);
+      final exact = await V3LmfAead.sealSingle(
+        metadata: _metadata(kind: V3LmfFrameKind.application),
+        plaintext: exactPlaintext,
+        secretKey: key,
+        nonce: _bytes(V3LmfFrameCodec.nonceBytes, 0x21),
+        hybridRatchetHeader: header,
+      );
+      final encoded = V3LmfFrameCodec.encodeBinary(exact);
+      expect(encoded, hasLength(V3LmfFrameCodec.maxPortableStegoFrameBytes));
+      expect(
+        await V3LmfAead.openSingle(
+          frame: V3LmfFrameCodec.decodeBinary(encoded),
+          secretKey: key,
+        ),
+        orderedEquals(exactPlaintext),
+      );
+
+      await expectLater(
+        V3LmfAead.sealSingle(
+          metadata: _metadata(kind: V3LmfFrameKind.application),
+          plaintext: _bytes(25, 0x31),
+          secretKey: key,
+          nonce: _bytes(V3LmfFrameCodec.nonceBytes, 0x31),
+          hybridRatchetHeader: header,
+        ),
+        throwsArgumentError,
+      );
+      final fragmented = await V3LmfAead.sealFragmented(
+        metadata: _metadata(kind: V3LmfFrameKind.application),
+        plaintext: _bytes(25, 0x31),
+        secretKey: key,
+        nonceForFragment: (index) =>
+            _bytes(V3LmfFrameCodec.nonceBytes, 0x41 + index),
+        hybridRatchetHeader: header,
+      );
+      expect(fragmented, hasLength(2));
+      expect(
+        fragmented.map((frame) => frame.ciphertext.length),
+        <int>[24, 1],
+      );
+    });
+
+    test('keeps maximum HR3 frames portable across all three transports',
+        () async {
+      final header = _hybridHeader(nativePayloadBytes: 512);
+      final encodedHeader = V3HybridRatchetHeaderCodec.encode(header);
+      expect(encodedHeader, hasLength(608));
+      expect(
+        V3LmfFrameCodec.firstFragmentPlaintextCapacity(
+          hybridRatchetHeaderLength: encodedHeader.length,
+        ),
+        24,
+      );
+      expect(
+        V3LmfFrameCodec.maxAssembledPlaintextBytesForHybridHeader(
+          hybridRatchetHeaderLength: encodedHeader.length,
+        ),
+        16152,
+      );
+      final plaintext = _bytes(300, 0x31);
+      final frames = await V3LmfAead.sealFragmented(
+        metadata: _metadata(kind: V3LmfFrameKind.application),
+        plaintext: plaintext,
+        secretKey: key,
+        nonceForFragment: (index) =>
+            _bytes(V3LmfFrameCodec.nonceBytes, 0x30 + index),
+        hybridRatchetHeader: header,
+      );
+      expect(frames, hasLength(3));
+      expect(
+        frames.map((frame) => V3LmfFrameCodec.encodeBinary(frame).length),
+        <int>[828, 452, 216],
+      );
+      expect(frames.first.hybridRatchetHeaderBytes, encodedHeader);
+      expect(frames.skip(1).every((frame) => frame.hybridRatchetHeader == null),
+          isTrue);
+      for (final frame in frames) {
+        expect(frame.hybridRatchetHeaderLength, encodedHeader.length);
+        expect(
+          frame.hybridRatchetHeaderDigest,
+          frames.first.hybridRatchetHeaderDigest,
+        );
+        expect(V3LmfFrameCodec.fitsPortableText(frame), isTrue);
+        expect(V3LmfFrameCodec.fitsPortableLink(frame), isTrue);
+        final binaryLength = V3LmfFrameCodec.encodeBinary(frame).length;
+        final cover = 'A' * StegoEncoder.minCoverLengthForBytes(binaryLength);
+        expect(
+          V3LmfFrameCodec.fitsPortableStego(
+            frame: frame,
+            coverText: cover,
+          ),
+          isTrue,
+        );
+        final stego = V3LmfFrameCodec.encodeStego(
+          frame: frame,
+          coverText: cover,
+          maxTotalCharacters: V3LmfFrameCodec.portableShareCharacterLimit,
+        );
+        expect(stego.length, lessThanOrEqualTo(4000));
+        expect(
+          V3LmfFrameCodec.encodeBinary(V3LmfFrameCodec.decodeStego(stego)),
+          V3LmfFrameCodec.encodeBinary(frame),
+        );
+      }
+
+      final reassembler = V3LmfReassembler();
+      V3LmfReassemblyOutcome? complete;
+      for (final index in <int>[2, 1, 0]) {
+        final outcome = await reassembler.accept(
+          frame: frames[index],
+          secretKey: key,
+        );
+        if (outcome.isComplete) complete = outcome;
+      }
+      expect(complete?.plaintext, plaintext);
+      complete?.wipePlaintext();
+      reassembler.close();
+    });
+
     test('ML-KEM-sized payload is five bounded, portable frames', () async {
       final plaintext = _bytes(1088, 0x31);
       final frames = await V3LmfAead.sealFragmented(
@@ -425,7 +635,7 @@ void main() {
       );
       expect(
         frames.map((frame) => V3LmfFrameCodec.encodeBinary(frame).length),
-        <int>[418, 418, 418, 418, 226],
+        <int>[452, 452, 452, 452, 260],
       );
       for (final frame in frames) {
         expect(V3LmfFrameCodec.fitsPortableText(frame), isTrue);
@@ -449,7 +659,7 @@ void main() {
         0x19,
       );
       final single = await V3LmfAead.sealSingle(
-        metadata: _metadata(kind: V3LmfFrameKind.application),
+        metadata: _metadata(),
         plaintext: maximum,
         secretKey: key,
         nonce: _bytes(V3LmfFrameCodec.nonceBytes, 0x55),
@@ -459,6 +669,14 @@ void main() {
       expect(
         V3LmfFrameCodec.encodeToken(single),
         hasLength(V3LmfFrameCodec.maxTokenCharacters),
+      );
+      final maximumLink = V3LmfFrameCodec.encodeLink(single);
+      expect(maximumLink, hasLength(V3LmfFrameCodec.maxLinkCharacters));
+      expect(
+        V3LmfFrameCodec.encodeBinary(
+          V3LmfFrameCodec.decodeLink(maximumLink),
+        ),
+        orderedEquals(binary),
       );
       expect(
         await V3LmfAead.openSingle(
@@ -779,6 +997,28 @@ V3LmfFrame _copyFrame(
     nonce: nonce ?? frame.nonce,
     ciphertext: frame.ciphertext,
     authenticationTag: frame.authenticationTag,
+    hybridRatchetHeader: frame.hybridRatchetHeader,
+    hybridRatchetHeaderDigest: frame.hybridRatchetHeaderDigest,
+    hybridRatchetHeaderLength: frame.hybridRatchetHeaderLength,
+  );
+}
+
+V3HybridRatchetHeader _hybridHeader({
+  int epoch = 7,
+  int messageCounter = 9,
+  int nativePayloadBytes = 0,
+}) {
+  return V3HybridRatchetHeader(
+    ecHeader: V3EcRatchetHeader(
+      ratchetPublicKey: _bytes(32, 0x21),
+      previousSendingChainLength: 3,
+      messageCounter: 5,
+    ),
+    sckaMessage: V3SckaMessage(
+      sendingEpoch: epoch,
+      messageCounter: messageCounter,
+      nativePayload: _bytes(nativePayloadBytes, 0x61),
+    ),
   );
 }
 

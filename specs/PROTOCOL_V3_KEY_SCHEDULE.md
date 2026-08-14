@@ -6,9 +6,10 @@ This document freezes the first testable Layergram-v3 key-expansion boundary,
 hybrid message-key combination, fragment nonce derivation, acknowledgement
 schedule, committed application/control record, and Triple Ratchet snapshot
 envelope. The separate `PROTOCOL_V3_HANDSHAKE.md` defines the inactive
-candidate that supplies its authenticated inputs. The EC Double Ratchet engine
-and the ML-KEM Braid/SCKA backend boundary now exist, but no production SCKA
-backend or LMF integration exists and protocol v3 remains disabled.
+candidate that supplies its authenticated inputs. The EC Double Ratchet engine,
+ML-KEM Braid/SCKA backend boundary, and exact HR3-to-LMF authentication now
+exist, but no production SCKA backend or active session controller exists and
+protocol v3 remains disabled.
 
 `PROTOCOL_V3_SECURITY_GOALS.md` remains authoritative. This draft and its code
 must change if later transcript design, ML-KEM Braid integration, persistence
@@ -44,6 +45,8 @@ This checkpoint provides:
   epochs, bounded skipped keys, and an opaque native SCKA-state export;
 - a strict public `SK3` SCKA envelope, a canonical `HR3` EC+SCKA container,
   and a non-mutating backend contract for authenticated native state exports;
+- exact first-fragment HR3 carriage, digest-bound continuation fragments, and
+  portable adaptive fragmentation;
 - golden, negative, framing, reassembly, and atomic-commit tests.
 
 It deliberately does not provide:
@@ -52,8 +55,6 @@ It deliberately does not provide:
   candidate remains externally unreviewed);
 - a production ML-KEM Braid/SCKA implementation or reviewed native state
   exporter;
-- LMF carriage and AEAD authentication of the standalone `HR3` composite
-  header;
 - checkpoint compaction, replay-window retirement, or journal garbage
   collection;
 - activation in contacts, messaging, UI, backup, migration, or Premium paths.
@@ -215,10 +216,10 @@ The canonical standalone EC header is exactly 56 bytes:
 | 40 | 8 | previous sending-chain length `PN` |
 | 48 | 8 | message number `N` |
 
-The current LMF header does not yet embed this record. The future Triple
-Ratchet envelope must bind its exact 56 bytes, the opaque SCKA message, and all
-LMF metadata into AEAD associated data. Until that format is frozen, this
-header is a tested internal protocol component, not an accepted wire message.
+LMF carries this record only inside the canonical `HR3` container described
+below. Fragment zero authenticates the exact HR3 bytes as associated data;
+continuations authenticate the same HR3 length and digest. The record alone
+still cannot authorize a state transition.
 
 Send and receive operations never mutate committed state. They return a
 candidate message key and complete next EC state. Authentication failure wipes
@@ -289,9 +290,11 @@ The standalone hybrid container is:
 | 72 | N | exact canonical `SK3` envelope |
 
 An `HR3` is at most 608 bytes. Decoding validates outer lengths before nested
-parsing, and both nested records must be canonical. The format exists so a
-later LMF revision can authenticate one unambiguous byte string. It is not yet
-carried by LMF and cannot authorize a ratchet transition by itself.
+parsing, and both nested records must be canonical. LMF application and PQ
+control frames require the exact HR3 on fragment zero. Every frame authenticates
+its total length and `SHA-256("layergram/v3/lmf/hybrid-ratchet-header\0" || HR3)`;
+the SCKA epoch/counter must equal the visible LMF coordinates. HR3 still cannot
+authorize a ratchet transition by itself.
 
 SCKA send and receive results are candidates: each owns a new authenticated
 native export and an optional 32-byte epoch secret. The source export is never
@@ -341,10 +344,12 @@ nonce_seed = H("layergram/v3/triple-ratchet/nonce-seed\0", 32)
 The derived message ID must exactly match the authenticated LMF header. The
 message key is used for all canonical fragments of this one logical message.
 
-For fragment `i` of `count` and final assembled plaintext length `length`, let:
+For fragment `i` of `count`, final assembled plaintext length `length`, exact
+HR3 length `hr3_length`, and domain-separated 32-byte digest `hr3_digest`, let:
 
 ```text
 SHAPE = U16(i) || U16(count) || U32(length)
+        || U16(hr3_length) || hr3_digest
 
 nonce_i = HKDF(
   salt = 32 zero bytes,
@@ -354,7 +359,9 @@ nonce_i = HKDF(
   L    = 12)
 ```
 
-`SHAPE` must describe the exact canonical LMF fragmentation. The receiver must
+Application and PQ-control messages require a non-zero canonical HR3 length and
+digest; headerless kinds use zero length and 32 zero bytes. `SHAPE` must describe
+the exact canonical LMF fragmentation. The receiver must
 derive and compare both `message_id` and `nonce_i` before accepting the frame's
 ratchet transition. Distinct fragment indexes produce distinct nonces under the
 same message key.
@@ -577,8 +584,8 @@ Before this schedule can carry user messages, Layergram still requires:
   EC Double Ratchet construction;
 - a reviewed ML-KEM Braid backend implementing authenticated state
   export/import behind the frozen boundary;
-- LMF carriage and AEAD authentication of the standalone `HR3` header, plus
-  exact hybrid send/receive vectors;
+- one serialized session controller that joins exact HR3 send/receive
+  candidates, deferred continuation-key resolution, and snapshot revision CAS;
 - skipped-key expiry, checkpoint, compaction, replay-window, and garbage-
   collection rules;
 - idempotent external application materialization;

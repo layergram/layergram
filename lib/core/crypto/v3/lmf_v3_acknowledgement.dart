@@ -78,14 +78,17 @@ class V3LmfAcknowledgement {
         'targetFragmentCount',
       );
     }
-    if (targetFragmentCount > 1) {
-      final expectedFragmentCount = (targetAssembledPlaintextLength +
-              V3LmfFrameCodec.fragmentPlaintextBytes -
-              1) ~/
-          V3LmfFrameCodec.fragmentPlaintextBytes;
-      if (targetAssembledPlaintextLength <=
-              V3LmfFrameCodec.fragmentPlaintextBytes ||
-          targetFragmentCount != expectedFragmentCount) {
+    // Only headerless handshake targets expose enough information in AK3 to
+    // derive their canonical fragment count. Application and PQ-ratchet
+    // targets use an adaptive first-fragment capacity determined by HR3, while
+    // AK3 intentionally omits the HR3 binding to remain compact. Their exact
+    // shape is therefore validated by [forReceivedFrames] and, on receipt, by
+    // the authenticated exact-target match in the durable outbox.
+    if (targetKind == V3LmfFrameKind.handshake && targetFragmentCount > 1) {
+      final expectedFragmentCount = V3LmfFrameCodec.canonicalFragmentCount(
+        assembledPlaintextLength: targetAssembledPlaintextLength,
+      );
+      if (targetFragmentCount != expectedFragmentCount) {
         throw ArgumentError(
           'target fragment count does not match canonical fragmentation',
         );
@@ -320,6 +323,11 @@ bool _sameTarget(V3LmfFrame left, V3LmfFrame right) {
           right.metadata.expiresAtUnixSeconds &&
       left.fragmentCount == right.fragmentCount &&
       left.assembledPlaintextLength == right.assembledPlaintextLength &&
+      left.hybridRatchetHeaderLength == right.hybridRatchetHeaderLength &&
+      _bytesEqual(
+        left.hybridRatchetHeaderDigest,
+        right.hybridRatchetHeaderDigest,
+      ) &&
       _bytesEqual(left.metadata.senderBinding, right.metadata.senderBinding) &&
       _bytesEqual(
         left.metadata.recipientBinding,

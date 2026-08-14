@@ -8,6 +8,8 @@ import 'package:integration_test/integration_test.dart';
 import 'package:layergram/core/crypto/stego_encoder.dart';
 import 'package:layergram/core/crypto/seed_service.dart';
 import 'package:layergram/core/crypto/v3/committed_record_v3.dart';
+import 'package:layergram/core/crypto/v3/ec_double_ratchet_v3.dart';
+import 'package:layergram/core/crypto/v3/hybrid_ratchet_header_v3.dart';
 import 'package:layergram/core/crypto/v3/key_schedule_v3.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3_acknowledgement.dart';
@@ -217,12 +219,13 @@ void main() {
 
     expect(
       _toHex(goldenBytes),
-      '4c4d33030101008e00190102030405060708090a0b0c0d0e0f10111213141516'
+      '4c4d3303010100b400190102030405060708090a0b0c0d0e0f10111213141516'
       '1718191a1b1c1d1e1f204142434445464748494a4b4c4d4e4f50515253545556'
       '5758595a5b5c5d5e5f608182838485868788898a8b8c8d8e8f90a1a2a3a4a5'
-      'a6a7a8a9aaabacadaeafb0000000070000000000000009773594000000000100'
-      '000019a0a1a2a3a4a5a6a7a8a9aaabaa79054837ac70de0f45f1e0271dafb21'
-      '4c93730f4c52301f987ccf30812a75a51aea46274d3f1ac72',
+      'a6a7a8a9aaabacadaeafb0000000000000000700000000000000097735940000'
+      '00000100000019a0a1a2a3a4a5a6a7a8a9aaab000000000000000000000000'
+      '00000000000000000000000000000000000000000000aa79054837ac70de0f45f1e0'
+      '271dafb214c93730f4c52301f9cd648176ad87cc84dc532cbecb164569',
     );
     final token = V3LmfFrameCodec.encodeToken(golden);
     final link = V3LmfFrameCodec.encodeLink(golden);
@@ -297,16 +300,24 @@ void main() {
       epoch: 7,
       messageCounter: 9,
     );
+    final hybridHeader = _hybridHeader();
+    final hybridHeaderLength =
+        V3HybridRatchetHeaderCodec.encode(hybridHeader).length;
+    final hybridHeaderDigest =
+        V3LmfFrameCodec.digestHybridRatchetHeader(hybridHeader);
     final nonce = await message.nonceForFragment(
       fragmentIndex: 0,
       fragmentCount: 1,
       assembledPlaintextLength: plaintext.length,
+      hybridRatchetHeaderLength: hybridHeaderLength,
+      hybridRatchetHeaderDigest: hybridHeaderDigest,
     );
     final frame = await V3LmfAead.sealSingle(
       metadata: metadata,
       plaintext: plaintext,
       secretKey: message.secretKey,
       nonce: nonce,
+      hybridRatchetHeader: hybridHeader,
     );
     final application = V3CommittedRecord.fromDelivery(
       targetFrame: frame,
@@ -352,7 +363,7 @@ void main() {
     expect(decodedApplication.content, plaintext);
     expect(decodedApplication.assemblyId, V3LmfFrameCodec.assemblyId(frame));
     expect(decodedRatchet.sessionId, session.sessionId);
-    expect(_toHex(message.messageId), 'df4c0718893e931410cfec6b4209466b');
+    expect(_toHex(message.messageId), '044aaf313888fab0f9caa64f00a93eb5');
 
     decodedApplication.wipeContent();
     decodedRatchet.wipeSecrets();
@@ -381,6 +392,7 @@ void main() {
       secretKey: key,
       nonceForFragment: (index) =>
           _rangeBytes(V3LmfFrameCodec.nonceBytes, 0x51 + index),
+      hybridRatchetHeader: _hybridHeader(),
     );
 
     final inboxStore = _PackagingRecordStore();
@@ -497,6 +509,19 @@ Uint8List _rangeBytes(int length, int start) {
     List<int>.generate(length, (index) => (start + index) & 0xff),
   );
 }
+
+V3HybridRatchetHeader _hybridHeader() => V3HybridRatchetHeader(
+      ecHeader: V3EcRatchetHeader(
+        ratchetPublicKey: _rangeBytes(32, 0x21),
+        previousSendingChainLength: 3,
+        messageCounter: 5,
+      ),
+      sckaMessage: V3SckaMessage(
+        sendingEpoch: 7,
+        messageCounter: 9,
+        nativePayload: Uint8List(0),
+      ),
+    );
 
 class _PackagingRecordStore implements V3LmfRecordStore {
   final Map<String, Map<String, dynamic>> _records =
