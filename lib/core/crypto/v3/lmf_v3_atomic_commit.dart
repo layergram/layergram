@@ -32,10 +32,10 @@ typedef V3LmfAtomicEffectBuilder = FutureOr<V3LmfAtomicEffect> Function(
 
 /// Opaque higher-level state that must become durable as one unit.
 ///
-/// [applicationState] is the canonical future application/control record.
-/// [ratchetState] is the matching complete future ratchet snapshot. Their
-/// concrete encodings remain a WP-6 specification gate; this inactive layer
-/// only establishes their crash-consistent commit boundary.
+/// [applicationState] is the canonical inactive `AR3` application/control
+/// record. [ratchetState] is the matching complete inactive `TR3` Triple
+/// Ratchet snapshot. This layer establishes their crash-consistent commit
+/// boundary; the real handshake and ratchet transition engines remain gated.
 class V3LmfAtomicEffect {
   factory V3LmfAtomicEffect({
     required Uint8List applicationState,
@@ -155,9 +155,9 @@ class V3LmfAtomicCommitRestoreResult {
 /// * after the tombstone: the effect remains the durable source of truth while
 ///   inbox replay is suppressed.
 ///
-/// This journal does not define or implement the Triple Ratchet encoding. It
-/// also cannot make external side effects atomic: future integration must read
-/// application state from this journal or materialize it idempotently using
+/// This journal does not implement Triple Ratchet transitions. It also cannot
+/// make external side effects atomic: future integration must read application
+/// state from this journal or materialize it idempotently using
 /// [V3LmfCommittedEffect.messageRecordId].
 ///
 /// The inbox must be restored before this journal. If an effect-store write
@@ -170,7 +170,8 @@ class V3LmfAtomicCommitJournal {
     required V3LmfRecordStore store,
     required V3LmfDurableInbox inbox,
     this.maxCommittedEffects = 4096,
-    this.maxApplicationStateBytes = V3LmfFrameCodec.maxAssembledPlaintextBytes,
+    this.maxApplicationStateBytes =
+        V3LmfFrameCodec.maxAssembledPlaintextBytes + 1024,
     this.maxRatchetStateBytes = 256 * 1024,
     this.maxTotalStateBytes = 16 * 1024 * 1024,
     this.maxStoredRecords = 8192,
@@ -533,7 +534,7 @@ class V3LmfAtomicCommitJournal {
       ratchetState.fillRange(0, ratchetState.length, 0);
       throw const FormatException('Mismatched Layergram v3 effect digest');
     }
-    return V3LmfCommittedEffect._(
+    final result = V3LmfCommittedEffect._(
       storageId: stored.storageId,
       assemblyId: assemblyId,
       deliveryDigest: deliveryDigest,
@@ -548,6 +549,9 @@ class V3LmfAtomicCommitJournal {
         isUtc: true,
       ),
     );
+    applicationState.fillRange(0, applicationState.length, 0);
+    ratchetState.fillRange(0, ratchetState.length, 0);
+    return result;
   }
 
   void _validateEffectSize(V3LmfAtomicEffect effect) {
@@ -674,6 +678,8 @@ String _effectDigest({
   required Uint8List applicationState,
   required Uint8List ratchetState,
 }) {
+  final assemblyBytes = _decodeBinary(assemblyId, 32);
+  final deliveryBytes = _decodeBinary(deliveryDigest, 32);
   final versionsAndLengths = ByteData(12)
     ..setUint16(0, applicationStateVersion, Endian.big)
     ..setUint16(2, ratchetStateVersion, Endian.big)
@@ -681,12 +687,17 @@ String _effectDigest({
     ..setUint32(8, ratchetState.length, Endian.big);
   final builder = BytesBuilder(copy: false)
     ..add(utf8.encode('layergram/v3/lmf/atomic-effect\u0000'))
-    ..add(_decodeBinary(assemblyId, 32))
-    ..add(_decodeBinary(deliveryDigest, 32))
+    ..add(assemblyBytes)
+    ..add(deliveryBytes)
     ..add(versionsAndLengths.buffer.asUint8List())
     ..add(applicationState)
     ..add(ratchetState);
-  return _digest(builder.takeBytes());
+  try {
+    return _digest(builder.takeBytes());
+  } finally {
+    assemblyBytes.fillRange(0, assemblyBytes.length, 0);
+    deliveryBytes.fillRange(0, deliveryBytes.length, 0);
+  }
 }
 
 bool _sameEffect(V3LmfCommittedEffect left, V3LmfCommittedEffect right) {
@@ -717,8 +728,14 @@ void _validateVersion(int value, String name) {
 
 bool _isValidVersion(int value) => value > 0 && value <= 0xffff;
 
-String _digest(Uint8List bytes) =>
-    base64UrlEncode(crypto.sha256.convert(bytes).bytes).replaceAll('=', '');
+String _digest(Uint8List bytes) {
+  try {
+    return base64UrlEncode(crypto.sha256.convert(bytes).bytes)
+        .replaceAll('=', '');
+  } finally {
+    bytes.fillRange(0, bytes.length, 0);
+  }
+}
 
 String _encodeBinary(Uint8List bytes) =>
     base64UrlEncode(bytes).replaceAll('=', '');

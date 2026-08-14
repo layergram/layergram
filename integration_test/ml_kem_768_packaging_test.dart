@@ -7,6 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:layergram/core/crypto/stego_encoder.dart';
 import 'package:layergram/core/crypto/seed_service.dart';
+import 'package:layergram/core/crypto/v3/committed_record_v3.dart';
+import 'package:layergram/core/crypto/v3/key_schedule_v3.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3_acknowledgement.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3_atomic_commit.dart';
@@ -17,6 +19,7 @@ import 'package:layergram/core/crypto/v3/ml_kem_768.dart';
 import 'package:layergram/core/crypto/v3/ml_kem_768_ffi.dart';
 import 'package:layergram/core/crypto/v3/public_identity_v3.dart';
 import 'package:layergram/core/crypto/v3/public_identity_v3_validator.dart';
+import 'package:layergram/core/crypto/v3/triple_ratchet_state_v3.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -165,6 +168,102 @@ void main() {
     expect(completed?.plaintext, orderedEquals(plaintext));
     expect(reassembler.pendingAssemblyCount, 0);
     reassembler.close();
+  });
+
+  testWidgets('inactive v3 schedule and state codecs traverse packaged Dart',
+      (tester) async {
+    final session = await V3KeySchedule.deriveSession(
+      classicalHandshakeSecret: _rangeBytes(32, 0),
+      postQuantumHandshakeSecret: _rangeBytes(32, 0x20),
+      transcriptDigest: _rangeBytes(48, 0x40),
+    );
+    final message = await V3KeySchedule.deriveMessage(
+      ecMessageKey: _rangeBytes(32, 0x80),
+      pqMessageKey: _rangeBytes(32, 0xa0),
+      sessionId: session.sessionId,
+      direction: V3TrafficDirection.initiatorToResponder,
+      kind: V3LmfFrameKind.application,
+      epoch: 7,
+      messageCounter: 9,
+    );
+    final bindings = session.bindingsFor(
+      V3TrafficDirection.initiatorToResponder,
+    );
+    final plaintext = Uint8List.fromList('packaged hybrid schedule'.codeUnits);
+    final metadata = V3LmfMessageMetadata(
+      kind: V3LmfFrameKind.application,
+      senderBinding: bindings.senderBinding,
+      recipientBinding: bindings.recipientBinding,
+      messageId: message.messageId,
+      sessionId: session.sessionId,
+      epoch: 7,
+      messageCounter: 9,
+    );
+    final nonce = await message.nonceForFragment(
+      fragmentIndex: 0,
+      fragmentCount: 1,
+      assembledPlaintextLength: plaintext.length,
+    );
+    final frame = await V3LmfAead.sealSingle(
+      metadata: metadata,
+      plaintext: plaintext,
+      secretKey: message.secretKey,
+      nonce: nonce,
+    );
+    final application = V3CommittedRecord.fromDelivery(
+      targetFrame: frame,
+      content: plaintext,
+    );
+    final ratchet = V3TripleRatchetState(
+      role: V3SessionRole.initiator,
+      lifecycle: V3RatchetLifecycle.active,
+      revision: 1,
+      sessionId: session.sessionId,
+      transcriptDigest: session.transcriptDigest,
+      initiatorRoutingBinding: session.initiatorRoutingBinding,
+      responderRoutingBinding: session.responderRoutingBinding,
+      initiatorToResponderAckRootKey:
+          session.initiatorToResponderAckRootKey,
+      responderToInitiatorAckRootKey:
+          session.responderToInitiatorAckRootKey,
+      ecRootKey: session.ecRatchetRootKey,
+      ecSendingChainKey: _rangeBytes(32, 0x11),
+      ecReceivingChainKey: _rangeBytes(32, 0x31),
+      ecLocalDhPrivateKey: _rangeBytes(32, 0x51),
+      ecLocalDhPublicKey: _rangeBytes(32, 0x71),
+      ecRemoteDhPublicKey: _rangeBytes(32, 0x91),
+      ecSendCounter: 0,
+      ecReceiveCounter: 0,
+      ecPreviousSendingChainLength: 0,
+      pqRootKey: session.pqRatchetRootKey,
+      pqCurrentEpoch: 0,
+      pqSendingEpoch: 0,
+      pqReceivingEpoch: 0,
+      pqEpochStates: <V3PqEpochState>[
+        V3PqEpochState(
+          epoch: 0,
+          sendingChainKey: _rangeBytes(32, 0xb1),
+          receivingChainKey: _rangeBytes(32, 0xd1),
+        ),
+      ],
+      nativeSckaState: _rangeBytes(128, 0x21),
+    );
+    final encodedApplication = V3CommittedRecordCodec.encode(application);
+    final encodedRatchet = V3TripleRatchetStateCodec.encode(ratchet);
+    final decodedApplication =
+        V3CommittedRecordCodec.decode(encodedApplication);
+    final decodedRatchet = V3TripleRatchetStateCodec.decode(encodedRatchet);
+    expect(decodedApplication.content, plaintext);
+    expect(decodedApplication.assemblyId, V3LmfFrameCodec.assemblyId(frame));
+    expect(decodedRatchet.sessionId, session.sessionId);
+    expect(_toHex(message.messageId), 'df4c0718893e931410cfec6b4209466b');
+
+    decodedApplication.wipeContent();
+    decodedRatchet.wipeSecrets();
+    application.wipeContent();
+    ratchet.wipeSecrets();
+    message.close();
+    session.close();
   });
 
   testWidgets('inactive durable LMF v3 state survives a packaged restart',

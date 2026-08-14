@@ -139,7 +139,7 @@ share target after steganographic encoding. The final 64-byte fragment is 222
 binary bytes. These are frozen codec vectors, not cross-app reliability proof.
 
 The framing implementation is still isolated from active messaging and exposes
-no handshake key derivation. Its bounded durable inbox stores sealed frames
+no authenticated handshake. Its bounded durable inbox stores sealed frames
 before authentication, withholds partial plaintext, restores after restart, and
 writes a replay tombstone before cleanup. Its durable outbox retains the exact
 sealed bytes and applies authenticated cumulative ACKs using write-new-before-
@@ -149,8 +149,15 @@ record before binding that effect digest into the inbox tombstone. A crash in
 between restores the effect without running its builder or advancing the ratchet
 twice. Missing or mismatched effect/tombstone pairs fail closed.
 
-This freezes the persistence boundary, not the Triple Ratchet: concrete ratchet
-state encoding, checkpoint/compaction, ACK key and nonce derivation,
-resend/progress UX, real cross-app loss tests, and erasure coding remain
-activation gates. Effects outside the journal must later be materialized
-idempotently under its stable assembly-derived message ID.
+`PROTOCOL_V3_KEY_SCHEDULE.md` now freezes the next inactive boundary: mandatory
+hybrid EC/PQ message-key combination, transcript-bound session/routing/ACK
+expansion, deterministic fragment nonces, a canonical committed record, and a
+bounded complete Triple Ratchet snapshot envelope. The key schedule has public
+golden vectors and the concrete codecs pass through the atomic journal.
+
+This still does not complete the Triple Ratchet. The authenticated handshake,
+real v3 EC transitions, reviewed native ML-KEM Braid transitions and state
+export, checkpoint/compaction, replay retirement, resend/progress UX, real
+cross-app loss tests, and erasure coding remain activation gates. Effects
+outside the journal must later be materialized idempotently under their stable
+assembly-derived message ID.

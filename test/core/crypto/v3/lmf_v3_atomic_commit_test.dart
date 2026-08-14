@@ -3,14 +3,63 @@ import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:layergram/core/crypto/v3/committed_record_v3.dart';
+import 'package:layergram/core/crypto/v3/key_schedule_v3.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3_atomic_commit.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3_persistence.dart';
+import 'package:layergram/core/crypto/v3/triple_ratchet_state_v3.dart';
 
 void main() {
   final key = SecretKeyData(_bytes(32, 0x11));
 
   group('LMF v3 atomic application/ratchet commit', () {
+    test('commits concrete application and Triple Ratchet codecs together',
+        () async {
+      final store = _FaultStore();
+      final ready = await _readyDelivery(store: store, key: key);
+      final journal = V3LmfAtomicCommitJournal(
+        store: store,
+        inbox: ready.inbox,
+      );
+      await journal.restore();
+
+      final committed = await journal.commit(
+        delivery: ready.delivery,
+        builder: (plaintext) {
+          final application = V3CommittedRecord.fromDelivery(
+            targetFrame: ready.frames.first,
+            content: plaintext,
+          );
+          final ratchet = _concreteRatchetState(ready.frames.first);
+          try {
+            return V3LmfAtomicEffect(
+              applicationState: V3CommittedRecordCodec.encode(application),
+              ratchetState: V3TripleRatchetStateCodec.encode(ratchet),
+            );
+          } finally {
+            application.wipeContent();
+            ratchet.wipeSecrets();
+          }
+        },
+      );
+
+      final application = V3CommittedRecordCodec.decode(
+        committed.applicationState,
+      );
+      final ratchet = V3TripleRatchetStateCodec.decode(
+        committed.ratchetState,
+      );
+      expect(application.assemblyId, ready.delivery.assemblyId);
+      expect(application.stableRecordId, committed.messageRecordId);
+      expect(application.content, _bytes(300, 0x31));
+      expect(ratchet.sessionId, ready.frames.first.metadata.sessionId);
+      expect(ratchet.pqCurrentEpoch, 0);
+      expect(journal.totalStateBytes, 488 + 720);
+      application.wipeContent();
+      ratchet.wipeSecrets();
+    });
+
     test('persists one effect before the inbox tombstone', () async {
       final store = _FaultStore();
       final ready = await _readyDelivery(store: store, key: key);
@@ -471,6 +520,42 @@ V3LmfMessageMetadata _metadata({
       epoch: 7,
       messageCounter: 9,
     );
+
+V3TripleRatchetState _concreteRatchetState(V3LmfFrame frame) {
+  final metadata = frame.metadata;
+  return V3TripleRatchetState(
+    role: V3SessionRole.initiator,
+    lifecycle: V3RatchetLifecycle.active,
+    revision: 1,
+    sessionId: metadata.sessionId,
+    transcriptDigest: _bytes(48, 0x21),
+    initiatorRoutingBinding: metadata.senderBinding,
+    responderRoutingBinding: metadata.recipientBinding,
+    initiatorToResponderAckRootKey: _bytes(32, 0x31),
+    responderToInitiatorAckRootKey: _bytes(32, 0x51),
+    ecRootKey: _bytes(32, 0x71),
+    ecSendingChainKey: _bytes(32, 0x91),
+    ecReceivingChainKey: _bytes(32, 0xb1),
+    ecLocalDhPrivateKey: _bytes(32, 0xd1),
+    ecLocalDhPublicKey: _bytes(32, 0x11),
+    ecRemoteDhPublicKey: _bytes(32, 0x41),
+    ecSendCounter: 0,
+    ecReceiveCounter: 0,
+    ecPreviousSendingChainLength: 0,
+    pqRootKey: _bytes(32, 0x61),
+    pqCurrentEpoch: 0,
+    pqSendingEpoch: 0,
+    pqReceivingEpoch: 0,
+    pqEpochStates: <V3PqEpochState>[
+      V3PqEpochState(
+        epoch: 0,
+        sendingChainKey: _bytes(32, 0x81),
+        receivingChainKey: _bytes(32, 0xa1),
+      ),
+    ],
+    nativeSckaState: _bytes(128, 0xc1),
+  );
+}
 
 Map<String, dynamic> _effectPayload(_FaultStore store) => _deepCopy(
       store.records.values.singleWhere(

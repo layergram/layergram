@@ -1,0 +1,426 @@
+# Layergram Protocol v3 — Key Schedule and Durable State Draft
+
+Status: **normative research draft; inactive; not externally reviewed**
+
+This document freezes the first testable Layergram-v3 key-expansion boundary,
+hybrid message-key combination, fragment nonce derivation, acknowledgement
+schedule, committed application/control record, and Triple Ratchet snapshot
+envelope. It does not define or approve the authenticated handshake, implement
+the Double Ratchet or ML-KEM Braid transition engines, or enable protocol v3.
+
+`PROTOCOL_V3_SECURITY_GOALS.md` remains authoritative. This draft and its code
+must change if later transcript design, ML-KEM Braid integration, persistence
+review, or independent cryptographic review finds an unsafe construction.
+
+The design follows the hybrid composition in Signal's Triple Ratchet: the
+elliptic-curve Double Ratchet and Sparse Post-Quantum Ratchet produce separate
+32-byte message keys, which are combined by an extract-then-expand KDF. The
+selected primitive is HKDF-SHA-256 as specified by RFC 5869.
+
+Primary references:
+
+- <https://signal.org/docs/specifications/doubleratchet/>
+- <https://signal.org/docs/specifications/mlkembraid/>
+- <https://www.rfc-editor.org/rfc/rfc5869>
+
+## 1. Scope and activation boundary
+
+This checkpoint provides:
+
+- transcript-bound expansion of already-authenticated classical and
+  post-quantum handshake secrets;
+- independent EC-ratchet, PQ-ratchet, directional ACK, routing, and session-ID
+  outputs;
+- mandatory hybrid combination of one EC and one PQ message key;
+- deterministic, domain-separated message IDs, AES-256-GCM keys, and fragment
+  nonces;
+- directional ACK keys and nonces derived from visible canonical header fields;
+- a strict 188-byte-header application/control record;
+- a strict bounded Triple Ratchet snapshot containing EC state, at most two PQ
+  epochs, bounded skipped keys, and an opaque native SCKA-state export;
+- golden, negative, framing, reassembly, and atomic-commit tests.
+
+It deliberately does not provide:
+
+- the canonical handshake transcript or its identity/device proof;
+- a sender authentication or deniability proof;
+- the EC Double Ratchet transition engine for v3;
+- the ML-KEM Braid/SCKA state machine or reviewed native state exporter;
+- checkpoint compaction, replay-window retirement, or journal garbage
+  collection;
+- activation in contacts, messaging, UI, backup, migration, or Premium paths.
+
+All code remains isolated under `lib/core/crypto/v3/`. Protocol v2 remains the
+only active messaging protocol.
+
+## 2. Canonical notation
+
+- All multi-byte integers are unsigned big endian.
+- `||` means byte concatenation.
+- `U16`, `U32`, and `U64` mean fixed-width big-endian encodings.
+- Every counter represented as `U64` is limited to `0..2^63-1` so all shipped
+  Dart runtimes have the same accepted range.
+- `HKDF(salt, IKM, info, L)` means RFC-5869 HKDF-SHA-256 producing `L` bytes.
+- Every label below is exact UTF-8 and includes the final NUL byte shown as
+  `\0`.
+- The only registered suite is LMF suite `0x01`.
+- All-zero secret inputs, all-zero transcript digests, malformed lengths,
+  unknown roles/directions/kinds, and exhausted counters fail closed.
+
+Participant roles are stable for the life of a session:
+
+| ID | Role |
+|---:|---|
+| `0x01` | initiator |
+| `0x02` | responder |
+
+Traffic directions do not depend on which endpoint is currently local:
+
+| ID | Direction |
+|---:|---|
+| `0x01` | initiator to responder |
+| `0x02` | responder to initiator |
+
+## 3. Post-handshake session expansion
+
+The future authenticated handshake must provide:
+
+- `CS`: exactly 32 bytes of authenticated classical handshake secret;
+- `PS`: exactly 32 bytes of authenticated post-quantum handshake secret;
+- `TH`: exactly 48 bytes, the SHA-384 digest of the complete canonical
+  transcript.
+
+This schedule does not authorize a classical-only or PQ-only handshake. Both
+inputs are mandatory and must already bind both complete identities, devices,
+roles, suite, mode, capabilities, and handshake frames through `TH`.
+
+First isolate the input branches:
+
+```text
+CSEED = HKDF(
+  salt = TH,
+  IKM  = CS,
+  info = "layergram/v3/session/classical-extract\0",
+  L    = 32)
+
+PQSEED = HKDF(
+  salt = TH,
+  IKM  = PS,
+  info = "layergram/v3/session/post-quantum-extract\0",
+  L    = 32)
+```
+
+Every session output uses the Signal Triple-Ratchet hybrid ordering, with the
+post-quantum seed as HKDF salt and the classical seed as IKM:
+
+```text
+D(label, L) = HKDF(
+  salt = PQSEED,
+  IKM  = CSEED,
+  info = UTF8(label) || TH,
+  L    = L)
+```
+
+Outputs:
+
+| Output | Bytes | Exact label |
+|---|---:|---|
+| session ID | 16 | `layergram/v3/session/id\0` |
+| initiator routing binding | 32 | `layergram/v3/session/routing/initiator\0` |
+| responder routing binding | 32 | `layergram/v3/session/routing/responder\0` |
+| initial EC ratchet root | 32 | `layergram/v3/session/ec-ratchet-root\0` |
+| initial PQ ratchet root | 32 | `layergram/v3/session/pq-ratchet-root\0` |
+| initiator-to-responder ACK root | 32 | `layergram/v3/session/ack/initiator-to-responder\0` |
+| responder-to-initiator ACK root | 32 | `layergram/v3/session/ack/responder-to-initiator\0` |
+
+The two routing bindings are opaque session values, not identity IDs. A normal
+frame uses the sender role's binding first and the recipient role's binding
+second. A reply or ACK reverses them. The session ID and routing values are
+public once placed in an authenticated LMF header; the ratchet and ACK roots
+remain secret.
+
+## 4. Hybrid application/control message schedule
+
+For every non-ACK logical message the two ratchets must independently produce:
+
+- `ECMK`: one 32-byte EC Double Ratchet message key;
+- `PQMK`: one 32-byte Sparse Post-Quantum Ratchet message key.
+
+Missing, malformed, all-zero, stale, or ambiguous input from either ratchet is
+an error. No v3 frame may be sealed from only one branch.
+
+The canonical 32-byte message context `M` is:
+
+| Offset | Bytes | Field |
+|---:|---:|---|
+| 0 | 1 | protocol version `0x03` |
+| 1 | 1 | suite `0x01` |
+| 2 | 1 | traffic direction |
+| 3 | 1 | non-ACK frame kind |
+| 4 | 4 | PQ epoch |
+| 8 | 8 | message counter |
+| 16 | 16 | session ID |
+
+Define:
+
+```text
+H(label, L) = HKDF(
+  salt = PQMK,
+  IKM  = ECMK,
+  info = UTF8(label) || M,
+  L    = L)
+```
+
+Then derive:
+
+```text
+message_id = H("layergram/v3/triple-ratchet/message-id\0", 16)
+aead_key   = H("layergram/v3/triple-ratchet/aead-key\0", 32)
+nonce_seed = H("layergram/v3/triple-ratchet/nonce-seed\0", 32)
+```
+
+The derived message ID must exactly match the authenticated LMF header. The
+message key is used for all canonical fragments of this one logical message.
+
+For fragment `i` of `count` and final assembled plaintext length `length`, let:
+
+```text
+SHAPE = U16(i) || U16(count) || U32(length)
+
+nonce_i = HKDF(
+  salt = 32 zero bytes,
+  IKM  = nonce_seed,
+  info = "layergram/v3/triple-ratchet/fragment-nonce\0"
+         || M || message_id || SHAPE,
+  L    = 12)
+```
+
+`SHAPE` must describe the exact canonical LMF fragmentation. The receiver must
+derive and compare both `message_id` and `nonce_i` before accepting the frame's
+ratchet transition. Distinct fragment indexes produce distinct nonces under the
+same message key.
+
+Crashes and retries do not authorize resealing changed content under the same
+ratchet coordinates. The durable outbox must persist the complete sealed frame
+set before first export and every resend must reuse those exact bytes.
+
+## 5. ACK key and nonce schedule
+
+ACKs are not Triple-Ratchet application messages and never consume an EC or PQ
+message key. They use a direction-specific ACK root retained in the session
+snapshot. The ACK frame must have a fresh, non-zero 16-byte message ID whenever
+a new cumulative ACK is sealed. An ACK resend reuses the already-sealed bytes.
+
+The canonical 124-byte visible ACK context `A` is:
+
+| Offset | Bytes | Field |
+|---:|---:|---|
+| 0 | 1 | protocol version `0x03` |
+| 1 | 1 | suite `0x01` |
+| 2 | 1 | ACK traffic direction |
+| 3 | 1 | frame kind `0x04` |
+| 4 | 32 | sender routing binding |
+| 36 | 32 | recipient routing binding |
+| 68 | 16 | ACK message ID |
+| 84 | 16 | session ID |
+| 100 | 4 | ACK-envelope epoch |
+| 104 | 8 | ACK-envelope message counter |
+| 112 | 4 | sender-declared expiry |
+| 116 | 2 | fragment index `0` |
+| 118 | 2 | fragment count `1` |
+| 120 | 4 | final plaintext length `48` |
+
+For the directional root `ACKROOT`:
+
+```text
+ack_key = HKDF(
+  salt = session_id,
+  IKM  = ACKROOT,
+  info = "layergram/v3/ack/aead-key\0" || A,
+  L    = 32)
+
+ack_nonce = HKDF(
+  salt = session_id,
+  IKM  = ACKROOT,
+  info = "layergram/v3/ack/nonce\0" || A,
+  L    = 12)
+```
+
+Only header-visible values enter this derivation, so the receiver can derive
+the key before opening the 48-byte ACK plaintext. Session ID, direction, and
+both routing bindings must match the committed session exactly.
+
+## 6. Canonical committed application/control record
+
+The atomic journal's application byte string is the exact binary `AR3` record.
+It has a fixed 188-byte header followed by 1–16,384 content bytes:
+
+| Offset | Bytes | Field | Rule |
+|---:|---:|---|---|
+| 0 | 3 | magic | ASCII `AR3` |
+| 3 | 1 | format version | `0x01` |
+| 4 | 1 | suite | `0x01` |
+| 5 | 1 | record kind | application `1`, handshake control `2`, PQ control `3` |
+| 6 | 1 | flags | zero |
+| 7 | 1 | header length | `188` |
+| 8 | 4 | total record length | exact |
+| 12 | 32 | assembly digest | exact LMF assembly-ID digest bytes |
+| 44 | 16 | session ID | non-zero |
+| 60 | 16 | message ID | non-zero |
+| 76 | 32 | sender routing binding | non-zero |
+| 108 | 32 | recipient routing binding | non-zero |
+| 140 | 4 | epoch | authenticated target epoch |
+| 144 | 8 | message counter | authenticated target counter |
+| 152 | 4 | content length | 1–16,384 |
+| 156 | 32 | content digest | rule below |
+| 188 | N | content | exact complete delivered plaintext |
+
+The record kind maps one-to-one to the source LMF frame kind; ACK has no mapping
+and cannot create an atomic effect. The assembly digest is recomputed using the
+same domain and fields as `V3LmfFrameCodec.assemblyId`.
+
+```text
+content_digest = SHA-256(
+  "layergram/v3/committed-record/content\0"
+  || assembly_digest || U32(epoch) || U64(message_counter) || content)
+```
+
+The maximum encoded record is 16,572 bytes. The atomic journal therefore
+allows 17 KiB for this field so the full 16 KiB LMF plaintext remains
+representable. The stable external record ID remains
+`v3:<base64url(assembly_digest)>`.
+
+## 7. Canonical Triple Ratchet snapshot
+
+The journal's ratchet byte string is the exact binary `TR3` snapshot. It is a
+complete post-effect state, never a delta. The fixed header is 496 bytes:
+
+| Offset | Bytes | Field |
+|---:|---:|---|
+| 0 | 3 | magic `TR3` |
+| 3 | 1 | format version `0x01` |
+| 4 | 1 | suite `0x01` |
+| 5 | 1 | session role |
+| 6 | 1 | lifecycle: active `1`, suspended `2`, rekey-required `3`, broken `4` |
+| 7 | 1 | bit 0: remote EC DH public key present; all other bits zero |
+| 8 | 2 | header length `496` |
+| 10 | 4 | exact total length |
+| 14 | 8 | monotonic snapshot revision |
+| 22 | 16 | session ID |
+| 38 | 48 | canonical transcript digest |
+| 86 | 32 | initiator routing binding |
+| 118 | 32 | responder routing binding |
+| 150 | 32 | initiator-to-responder ACK root |
+| 182 | 32 | responder-to-initiator ACK root |
+| 214 | 32 | EC root key |
+| 246 | 32 | EC sending-chain key |
+| 278 | 32 | EC receiving-chain key |
+| 310 | 32 | EC local DH private seed |
+| 342 | 32 | EC local DH public key |
+| 374 | 32 | remote EC DH public key or canonical zeros |
+| 406 | 8 | EC send counter |
+| 414 | 8 | EC receive counter |
+| 422 | 8 | EC previous sending-chain length |
+| 430 | 32 | PQ root key |
+| 462 | 8 | current PQ epoch |
+| 470 | 8 | PQ sending epoch |
+| 478 | 8 | PQ receiving epoch |
+| 486 | 1 | retained PQ epoch count, 1–2 |
+| 487 | 1 | retained EC skipped-key count, 0–50 |
+| 488 | 1 | retained PQ skipped-key count, 0–50 |
+| 489 | 3 | reserved zeros |
+| 492 | 4 | opaque native SCKA-state length, 1–196,608 |
+
+The variable sections follow in this exact order:
+
+1. PQ epoch records, ascending and consecutive by epoch;
+2. EC skipped keys, ordered by ratchet public key then counter;
+3. PQ skipped keys, ordered by epoch then counter;
+4. the opaque native SCKA-state export.
+
+Each PQ epoch record is 96 bytes:
+
+```text
+U64(epoch) || U8(chain_flags) || 7 zero bytes
+|| U64(send_counter) || U64(receive_counter)
+|| 32-byte send key-or-zeros || 32-byte receive key-or-zeros
+```
+
+At least one chain flag must be set. A sealed chain has a zero counter and 32
+zero bytes. The newest retained epoch equals the current epoch; two retained
+epochs must be consecutive. The declared sending and receiving epochs must
+exist and retain their respective chain.
+
+Each EC skipped-key record is 80 bytes:
+
+```text
+32-byte ratchet public key || U64(counter) || 32-byte message key
+|| U64(local expiry seconds)
+```
+
+Each PQ skipped-key record is 56 bytes:
+
+```text
+U64(epoch) || U64(counter) || 32-byte message key
+|| U64(local expiry seconds)
+```
+
+Skipped-key identities must be unique. PQ skipped keys may reference only a
+retained epoch. Count limits are enforced before allocation. Time expiry is
+local policy and never trusts a peer clock.
+
+The opaque SCKA bytes are reserved for a future reviewed native ML-KEM Braid
+backend. They must be a backend-authenticated export and must not be a raw
+expanded ML-KEM private key copied into Dart. The current placeholder codec
+cannot establish that property; native export/import and validation remain an
+activation gate.
+
+The synchronous envelope codec also cannot prove that the stored local EC
+private seed corresponds to the stored local public key. The reviewed EC
+transition/import boundary must derive and compare that public key before this
+state can be activated or restored into a live ratchet.
+
+The maximum snapshot is 256 KiB, while the native SCKA section is capped at
+192 KiB. Encoding, decode, corruption, conflicting order, unknown values,
+zero required secrets, duplicate skipped keys, retired epochs, trailing bytes,
+and over-limit input fail closed. Secret buffers are copied on construction and
+best-effort overwritten when the state is discarded; perfect managed-runtime
+zeroization is not claimed.
+
+## 8. Persistence and crash rules
+
+For every complete non-ACK delivery:
+
+1. derive and authenticate both ratchet message keys and every fragment nonce;
+2. build one canonical `AR3` record from the complete plaintext;
+3. apply the EC and PQ transitions in private temporary state;
+4. encode the complete post-transition `TR3` snapshot;
+5. persist `AR3` and `TR3` together in one atomic journal effect;
+6. only then bind that effect digest into the inbox replay tombstone;
+7. expose or idempotently materialize the application record under its stable
+   assembly-derived record ID.
+
+A restored durable effect bypasses record/ratchet construction. A missing,
+unbound, mismatched, malformed, or divergent effect/tombstone pair fails closed.
+No effect may be collected until a separately durable ratchet checkpoint,
+application record, and replay window prove it safe.
+
+## 9. Remaining activation gates
+
+Before this schedule can carry user messages, Layergram still requires:
+
+- a frozen authenticated hybrid handshake and transcript with public vectors;
+- reviewed v3 Double Ratchet transition code;
+- EC state import that verifies the local private-seed/public-key pair;
+- a reviewed ML-KEM Braid backend with authenticated state export/import;
+- exact send/receive transition vectors proving matching EC and PQ message keys;
+- skipped-key expiry, checkpoint, compaction, replay-window, and garbage-
+  collection rules;
+- idempotent external application materialization;
+- full packaging, crash, migration, multi-device, passphrase, Maximum-mode,
+  text, link, QR, and steganography tests;
+- independent protocol and implementation audit with no unresolved high or
+  critical findings.
+
+Until those gates pass, this is a developer-only research implementation and
+must not be described to users as active quantum-resistant messaging.

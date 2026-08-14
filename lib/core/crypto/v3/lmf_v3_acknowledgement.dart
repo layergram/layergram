@@ -20,7 +20,8 @@ import 'lmf_v3.dart';
 ///
 /// This is plaintext only inside an LMF frame whose kind is
 /// [V3LmfFrameKind.acknowledgement]. The ACK frame must itself be protected by
-/// the future session/ratchet key and is never acknowledged, preventing loops.
+/// the direction-specific v3 ACK schedule and is never acknowledged,
+/// preventing loops.
 class V3LmfAcknowledgement {
   factory V3LmfAcknowledgement({
     required V3LmfSuite targetSuite,

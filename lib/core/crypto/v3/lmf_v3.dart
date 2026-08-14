@@ -612,9 +612,10 @@ abstract final class V3LmfFrameCodec {
 
 /// AES-256-GCM sealing boundary for LMF v3 frames.
 ///
-/// This class deliberately does not derive keys or nonces. The future
-/// handshake/ratchet specification must provide a unique nonce for every use of
-/// the same key and bind the key to the complete authenticated session.
+/// This class deliberately does not derive keys or nonces. In protocol-v3
+/// research flows, `V3KeySchedule` supplies the mandatory hybrid key and exact
+/// deterministic fragment nonce. Direct callers receive no session-wide nonce
+/// or ratchet-safety guarantee.
 abstract final class V3LmfAead {
   static final _algorithm = AesGcm.with256bits();
 

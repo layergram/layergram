@@ -26,14 +26,18 @@ This checkpoint provides:
 - inactive encrypted inbox/outbox persistence with write-before-delete recovery;
 - an inactive atomic-effect journal binding one application/control record and
   its matching ratchet snapshot to the inbox replay tombstone;
+- an inactive transcript-bound session expansion, mandatory hybrid EC/PQ
+  message schedule, deterministic fragment nonces, and directional ACK
+  schedule;
+- canonical committed application/control and Triple Ratchet snapshot codecs;
 - public golden and adversarial parser tests.
 
 It deliberately does not provide:
 
-- handshake or Triple Ratchet key derivation;
+- the authenticated handshake transcript or sender proof;
+- the real EC Double Ratchet or ML-KEM Braid transition engines;
 - sender proof of possession or contact authentication;
-- nonce derivation across a session;
-- the concrete application-record or Triple Ratchet state encoding;
+- reviewed native ML-KEM Braid state export/import;
 - atomicity for side effects written outside the v3 effect journal;
 - resend scheduling, erasure coding, notification, or progress UI;
 - erasure coding;
@@ -131,10 +135,13 @@ message counter, expiry, fragment index/count, final assembled length, nonce,
 and fragment length. Header, ciphertext, and tag tampering must fail before any
 partial application content is exposed.
 
-The future key schedule must guarantee nonce uniqueness for every use of the
-same key. The framing API requires the nonce explicitly and rejects duplicate
-nonces within one locally sealed fragment set; that local check is not a
-substitute for a reviewed session-wide construction.
+`PROTOCOL_V3_KEY_SCHEDULE.md` now derives one hybrid message key from mandatory
+EC and sparse-PQ message keys, plus a distinct deterministic nonce for every
+canonical fragment shape. The receiver must rederive and compare the message ID
+and nonce before committing the ratchet transition. The framing API still
+requires the nonce explicitly and rejects duplicates within one locally sealed
+fragment set; callers outside the v3 schedule receive no session-wide safety
+claim.
 
 ## 6. Canonical fragmentation
 
@@ -204,9 +211,11 @@ authenticated, single-fragment LMF frame of kind `0x04`:
 
 The bitmap is cumulative, non-empty, and has no set bits beyond the target
 fragment count. The ACK envelope MUST use the target suite and session ID and
-MUST reverse the target sender/recipient routing bindings. Its key comes from
-the future session/ratchet schedule. ACK frames are never acknowledged; loss of
-an ACK can therefore cause a safe duplicate resend but cannot create an
+MUST reverse the target sender/recipient routing bindings. Its key and nonce
+come from the direction-specific ACK root and exact visible header context in
+`PROTOCOL_V3_KEY_SCHEDULE.md`; every newly sealed cumulative ACK requires a
+fresh message ID. ACK frames are never acknowledged; loss of an ACK can
+therefore cause a safe exact-byte duplicate resend but cannot create an
 ACK-of-ACK loop.
 
 ### 7.2 Inbox commit order
@@ -237,8 +246,9 @@ Within this inactive boundary, the stable application record ID is derived from
 the assembly ID, so replay cannot allocate a second record. Exactly-once effects
 outside the journal are still not claimed: future message/UI repositories must
 read the journal as their source of truth or materialize its record idempotently
-under that stable ID. The concrete application and Triple Ratchet state codecs
-remain WP-6 gates.
+under that stable ID. The inactive canonical `AR3` and `TR3` codecs now provide
+the exact journal byte strings; the real transition engines and external
+materialization remain activation gates.
 
 Commit-tombstone retention is local and explicit. A tombstone may be purged only
 after the durable ratchet/application replay window will independently reject
@@ -260,8 +270,9 @@ ACK.
 
 The reference defaults bound the inbox to 256 sealed frame records, 128 KiB of
 sealed frame bytes, 4,096 commit tombstones, and 8,192 relevant physical
-records. The atomic-effect journal is bounded to 4,096 effects, 16 KiB per
-application record, 256 KiB per ratchet snapshot, 16 MiB total decoded state,
+records. The atomic-effect journal is bounded to 4,096 effects, 17 KiB per
+encoded application record (including its 188-byte header), 256 KiB per ratchet
+snapshot, 16 MiB total decoded state,
 and 8,192 relevant physical records. The outbox is bounded to 64 logical
 entries, 512 KiB of sealed frame bytes, and 256 physical revisions. Reassembly
 retains its separate limits of 8 pending assemblies and 64 KiB of authenticated
@@ -390,9 +401,11 @@ active. Nothing in this draft or codec changes identity import, message send,
 message decode, contact state, backups, migration, QR, UI, or Premium capability
 contracts.
 
-Before activation, the handshake/ratchet must define routing-binding, ACK-key,
-nonce, and concrete state derivation; the real application and Triple Ratchet
-codecs must use the atomic journal as their source of truth; checkpoint and
-garbage-collection rules must be frozen; resend/progress UX and real loss
-recovery must pass; all three transports must pass real cross-app tests; and the
-complete design and implementation must pass independent review.
+Before activation, the handshake must freeze the canonical authenticated
+transcript that feeds the new routing/session schedule; the real EC Double
+Ratchet and native ML-KEM Braid engines must produce and consume the frozen
+message/state formats; the application repository must use the atomic journal
+as its source of truth; checkpoint and garbage-collection rules must be frozen;
+resend/progress UX and real loss recovery must pass; all three transports must
+pass real cross-app tests; and the complete design and implementation must pass
+independent review.

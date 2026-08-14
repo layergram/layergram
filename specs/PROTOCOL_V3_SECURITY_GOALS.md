@@ -100,6 +100,12 @@ reviewed standard alternative or narrow its product claim explicitly.
 - Every v3 application message MUST derive its key from both a current
   classical Double Ratchet contribution and the required sparse post-quantum
   ratchet context through domain-separated extract-then-expand processing.
+- Every fragment nonce MUST be derived in a domain separate from the message
+  key, bind the complete canonical message/fragment context, and be verified by
+  the receiver before a ratchet transition commits.
+- ACK keys and nonces MUST use a direction-specific session root and the exact
+  visible canonical ACK header context. A newly sealed cumulative ACK MUST have
+  a fresh message ID; a resend MUST reuse the exact sealed bytes.
 - Missing, invalid, stale, or ambiguous post-quantum state MUST NOT be replaced
   by a classical-only key while the result is labelled v3.
 - The design MUST define forward secrecy and post-compromise recovery separately
