@@ -111,8 +111,9 @@ derivation namespace.
 
 The factory is intentionally absent from `IdentityManager`, providers, storage,
 backup, UI, contact import, and messaging. It is not a migration or activation:
-v2 remains preferred, and the handle exposes no handshake operations until the
-transcript specification passes its separate review gate.
+v2 remains preferred. Its private fields are now consumed only by the inactive
+handshake library part described below; no active application seam can reach
+that code.
 
 Imported identities have a distinct `V3PublicIdentityValidator` boundary. It
 first applies the strict canonical codec, then requires the native backend
@@ -155,9 +156,22 @@ expansion, deterministic fragment nonces, a canonical committed record, and a
 bounded complete Triple Ratchet snapshot envelope. The key schedule has public
 golden vectors and the concrete codecs pass through the atomic journal.
 
-This still does not complete the Triple Ratchet. The authenticated handshake,
-real v3 EC transitions, reviewed native ML-KEM Braid transitions and state
-export, checkpoint/compaction, replay retirement, resend/progress UX, real
-cross-app loss tests, and erasure coding remain activation gates. Effects
-outside the journal must later be materialized idempotently under their stable
+`PROTOCOL_V3_HANDSHAKE.md` now freezes an inactive three-message authenticated
+hybrid candidate. Both peers contribute an ephemeral X25519 key and an
+ML-KEM-768 encapsulation; five ordered X25519 outputs and both ordered ML-KEM
+secrets produce symmetric responder and initiator confirmation tags. Complete
+identities, installation devices, roles, mode, capabilities, record IDs, and
+every canonical handshake record are bound into the final SHA-384 transcript.
+The tags are deliberately symmetric rather than transferable signatures, so
+the candidate preserves a limited deniability design. Canonical pending-state
+records survive restart, and crossed offers use a clock-free deterministic
+tie-break.
+
+The handshake is still a research candidate and is not wired to bootstrap
+transport, contacts, messages, storage providers, UI, or Premium. Real v3 EC
+transitions, reviewed native ML-KEM Braid transitions and state export,
+controller-level device policy, durable pending-state storage,
+checkpoint/compaction, replay retirement, resend/progress UX, real cross-app
+loss tests, and erasure coding remain activation gates. Effects outside the
+journal must later be materialized idempotently under their stable
 assembly-derived message ID.

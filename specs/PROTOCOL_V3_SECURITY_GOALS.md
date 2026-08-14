@@ -73,7 +73,8 @@ The design MUST address at least:
 
 ## Handshake properties
 
-The handshake specification is not frozen yet. Any candidate MUST:
+`PROTOCOL_V3_HANDSHAKE.md` freezes the current inactive research candidate.
+It is not approved for activation and any candidate MUST:
 
 - bind both complete identities, both device identifiers and device keys,
   initiator/responder roles, protocol version, suite, capabilities, security

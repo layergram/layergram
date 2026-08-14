@@ -96,6 +96,104 @@ void main() {
     }
   });
 
+  testWidgets('inactive hybrid handshake traverses packaged ML-KEM and restart',
+      (tester) async {
+    const aliceMnemonic =
+        'abandon abandon abandon abandon abandon abandon abandon abandon '
+        'abandon abandon abandon abandon abandon abandon abandon abandon '
+        'abandon abandon abandon abandon abandon abandon abandon art';
+    const bobMnemonic = 'zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong';
+    final backend = MlKem768FfiBackend.openPackaged();
+    final factory = V3LocalIdentityFactory(
+      seedService: SeedService(),
+      mlKem768Backend: backend,
+    );
+    final alice = await factory.restorePrimary(mnemonic: aliceMnemonic);
+    final bob = await factory.restorePrimary(mnemonic: bobMnemonic);
+    final aliceDevice =
+        await V3LocalDeviceHandle.fromSeed(_rangeBytes(32, 0x11));
+    final bobDevice = await V3LocalDeviceHandle.fromSeed(_rangeBytes(32, 0x51));
+    V3InitiatorPendingHandshake? originalInitiator;
+    V3InitiatorPendingHandshake? restoredInitiator;
+    V3ResponderPendingHandshake? originalResponder;
+    V3ResponderPendingHandshake? restoredResponder;
+    V3HandshakeEstablishedMaterial? initiatorEstablished;
+    V3HandshakeEstablishedMaterial? responderEstablished;
+    try {
+      originalInitiator = await V3HybridHandshake.createOffer(
+        localIdentity: alice,
+        localDevice: aliceDevice,
+        remoteIdentity: bob.publicIdentity,
+        mode: V3HandshakeMode.normal,
+      );
+      restoredInitiator = V3HandshakePendingStateCodec.decodeInitiator(
+        V3HandshakePendingStateCodec.encodeInitiator(originalInitiator),
+      );
+      originalInitiator.close();
+
+      originalResponder = await V3HybridHandshake.createReply(
+        localIdentity: bob,
+        localDevice: bobDevice,
+        initiatorIdentity: alice.publicIdentity,
+        offer: V3HandshakeCodec.decodeOffer(
+          V3HandshakeCodec.encodeOffer(restoredInitiator.offer),
+        ),
+        expectedMode: V3HandshakeMode.normal,
+      );
+      restoredResponder = V3HandshakePendingStateCodec.decodeResponder(
+        V3HandshakePendingStateCodec.encodeResponder(originalResponder),
+      );
+      originalResponder.close();
+
+      final initiator = await V3HybridHandshake.acceptReply(
+        pending: restoredInitiator,
+        localIdentity: alice,
+        localDevice: aliceDevice,
+        responderIdentity: bob.publicIdentity,
+        reply: V3HandshakeCodec.decodeReply(
+          V3HandshakeCodec.encodeReply(restoredResponder.reply),
+        ),
+      );
+      initiatorEstablished = initiator.established;
+      responderEstablished = await V3HybridHandshake.acceptConfirmation(
+        pending: restoredResponder,
+        initiatorIdentity: alice.publicIdentity,
+        responderIdentity: bob.publicIdentity,
+        confirmation: V3HandshakeCodec.decodeConfirmation(
+          V3HandshakeCodec.encodeConfirmation(initiator.confirmation),
+        ),
+      );
+
+      expect(
+        initiatorEstablished.sessionKeys.sessionId,
+        orderedEquals(responderEstablished.sessionKeys.sessionId),
+      );
+      expect(
+        initiatorEstablished.sessionKeys.transcriptDigest,
+        orderedEquals(responderEstablished.sessionKeys.transcriptDigest),
+      );
+      expect(
+        initiatorEstablished.sessionKeys.ecRatchetRootKey,
+        orderedEquals(responderEstablished.sessionKeys.ecRatchetRootKey),
+      );
+      expect(
+        initiatorEstablished.sessionKeys.pqRatchetRootKey,
+        orderedEquals(responderEstablished.sessionKeys.pqRatchetRootKey),
+      );
+    } finally {
+      originalInitiator?.close();
+      restoredInitiator?.close();
+      originalResponder?.close();
+      restoredResponder?.close();
+      initiatorEstablished?.close();
+      responderEstablished?.close();
+      aliceDevice.close();
+      bobDevice.close();
+      await alice.close();
+      await bob.close();
+    }
+  });
+
   testWidgets('inactive LMF v3 framing traverses the packaged platform',
       (tester) async {
     final key = SecretKeyData(_rangeBytes(32, 0));
@@ -222,10 +320,8 @@ void main() {
       transcriptDigest: session.transcriptDigest,
       initiatorRoutingBinding: session.initiatorRoutingBinding,
       responderRoutingBinding: session.responderRoutingBinding,
-      initiatorToResponderAckRootKey:
-          session.initiatorToResponderAckRootKey,
-      responderToInitiatorAckRootKey:
-          session.responderToInitiatorAckRootKey,
+      initiatorToResponderAckRootKey: session.initiatorToResponderAckRootKey,
+      responderToInitiatorAckRootKey: session.responderToInitiatorAckRootKey,
       ecRootKey: session.ecRatchetRootKey,
       ecSendingChainKey: _rangeBytes(32, 0x11),
       ecReceivingChainKey: _rangeBytes(32, 0x31),

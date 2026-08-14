@@ -5,8 +5,9 @@ Status: **normative research draft; inactive; not externally reviewed**
 This document freezes the first testable Layergram-v3 key-expansion boundary,
 hybrid message-key combination, fragment nonce derivation, acknowledgement
 schedule, committed application/control record, and Triple Ratchet snapshot
-envelope. It does not define or approve the authenticated handshake, implement
-the Double Ratchet or ML-KEM Braid transition engines, or enable protocol v3.
+envelope. The separate `PROTOCOL_V3_HANDSHAKE.md` now defines the inactive
+candidate that supplies its authenticated inputs. Neither document implements
+the Double Ratchet or ML-KEM Braid transition engines or enables protocol v3.
 
 `PROTOCOL_V3_SECURITY_GOALS.md` remains authoritative. This draft and its code
 must change if later transcript design, ML-KEM Braid integration, persistence
@@ -42,8 +43,8 @@ This checkpoint provides:
 
 It deliberately does not provide:
 
-- the canonical handshake transcript or its identity/device proof;
-- a sender authentication or deniability proof;
+- an independently approved handshake or deniability claim (the separate
+  candidate remains externally unreviewed);
 - the EC Double Ratchet transition engine for v3;
 - the ML-KEM Braid/SCKA state machine or reviewed native state exporter;
 - checkpoint compaction, replay-window retirement, or journal garbage

@@ -14,11 +14,15 @@
 
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:cryptography/cryptography.dart';
 
 import '../seed_service.dart';
+import 'key_schedule_v3.dart';
 import 'ml_kem_768.dart';
 import 'public_identity_v3.dart';
+
+part 'handshake_v3.dart';
 
 /// In-memory ownership boundary for one complete protocol-v3 local identity.
 ///
@@ -31,12 +35,15 @@ final class V3LocalIdentityHandle {
     required this.publicIdentity,
     required Uint8List x25519PrivateSeed,
     required MlKem768PrivateKeyHandle mlKem768PrivateKeyHandle,
+    required MlKem768Backend mlKem768Backend,
   })  : _x25519PrivateSeed = Uint8List.fromList(x25519PrivateSeed),
-        _mlKem768PrivateKeyHandle = mlKem768PrivateKeyHandle;
+        _mlKem768PrivateKeyHandle = mlKem768PrivateKeyHandle,
+        _mlKem768Backend = mlKem768Backend;
 
   final V3PublicIdentity publicIdentity;
   final Uint8List _x25519PrivateSeed;
   final MlKem768PrivateKeyHandle _mlKem768PrivateKeyHandle;
+  final MlKem768Backend _mlKem768Backend;
 
   bool _isClosed = false;
 
@@ -44,9 +51,9 @@ final class V3LocalIdentityHandle {
 
   /// Destroys the private material owned by this identity handle.
   ///
-  /// The operation is idempotent. Handshake operations are intentionally not
-  /// exposed yet: they will be added only after the v3 transcript and state
-  /// machine have passed their separate specification gate.
+  /// The operation is idempotent. The only consumer of the private fields is
+  /// the still-inactive authenticated handshake part of this library; no
+  /// active identity, provider, messaging, storage, or UI seam can reach it.
   Future<void> close() async {
     if (_isClosed) return;
     _x25519PrivateSeed.fillRange(0, _x25519PrivateSeed.length, 0);
@@ -153,6 +160,7 @@ final class V3LocalIdentityFactory {
         publicIdentity: publicIdentity,
         x25519PrivateSeed: keySeeds.x25519Seed,
         mlKem768PrivateKeyHandle: mlKemKeyPair.privateKeyHandle,
+        mlKem768Backend: _mlKem768Backend,
       );
       transferredPrivateHandle = true;
       return identity;
