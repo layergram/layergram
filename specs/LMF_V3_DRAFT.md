@@ -357,6 +357,24 @@ storage under the active identity/passphrase scope. The record kind, assembly
 ID, ACK state, effect/receipt/checkpoint digests, application state, ratchet
 snapshot, frame bytes, and timestamps are not global cleartext markers.
 
+The inactive `V3SessionPersistenceScope` is the real-storage construction
+boundary for these components. It creates a dedicated `AuxRecordRepository`
+view pinned to the canonical 16-character base64url identity namespace and to
+an owned copy of exactly one primary- or passphrase-derived Aux key. Rejecting
+non-canonical tokens is mandatory because Aux records are selected by a
+delimiter-separated prefix. The owner then privately constructs the inbox,
+receive journal, send journal, outbox, AR3 materializer, checkpoint repository,
+and their single-authority controller over the same store. It MUST NOT reuse
+the active mutable Aux-repository singleton: switching that singleton while a
+journal is open could redirect later writes into another identity context.
+
+Restore first indexes every sealed inbox record with no frame key, restores the
+controller's durable TR3 truth, and only then permits deferred resolution by a
+future reviewed SCKA-backed resolver. Close drains the controller and inbox,
+removes the repository context, and destroys the owned key copy. A restore
+error is fail-stop for that owner and requires reconstruction. This boundary is
+not registered in providers and does not activate protocol v3.
+
 ### 7.4 Atomic-effect record invariants
 
 The journal record is keyed logically by the assembly ID and binds:

@@ -11,7 +11,9 @@ ML-KEM Braid/SCKA backend boundary, Sparse-PQ message chains, exact HR3-to-LMF
 authentication, candidate-only hybrid send/receive orchestration,
 deferred-fragment key resolution, and an inactive crash-consistent send/receive
 session coordinator, encrypted stable-ID AR3 materializer, and monotonic TR3
-checkpoint repository now exist. No production SCKA backend or active product
+checkpoint repository now exist. A scope-pinned owner also connects those
+components to Layergram's real encrypted Aux/Hive storage without registering
+them in the active application. No production SCKA backend or active product
 integration exists, and protocol v3 remains disabled.
 
 `PROTOCOL_V3_SECURITY_GOALS.md` remains authoritative. This draft and its code
@@ -63,6 +65,9 @@ This checkpoint provides:
   cumulative direction/revision/state receipts;
 - checkpoint-backed restore, explicit journal collection, and write-before-
   delete replacement of incoming tombstones with durable replay-window proofs;
+- one inactive scope-pinned Aux/Hive owner that privately constructs the full
+  journal/outbox/checkpoint topology, restores sealed frames before session
+  keys are requested, and destroys its copied storage key on close;
 - golden, negative, framing, reassembly, atomic-commit, exact-byte retry,
   capacity-preflight, ambiguous-write, restart, and ACK-ordering tests.
 
@@ -76,7 +81,8 @@ It deliberately does not provide:
   the durable AR3 source into the current message/UI repository;
 - replay-window expiry, skipped-key retirement, or rolling compaction of the
   cumulative checkpoint receipt history;
-- activation in contacts, messaging, UI, backup, migration, or Premium paths.
+- registration in providers or activation in contacts, messaging, UI, backup,
+  migration, or Premium paths.
 
 All code remains isolated under `lib/core/crypto/v3/`. Protocol v2 remains the
 only active messaging protocol.

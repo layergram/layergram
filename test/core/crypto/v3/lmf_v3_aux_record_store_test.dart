@@ -15,6 +15,7 @@ import 'package:layergram/core/crypto/v3/lmf_v3_atomic_commit.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3_outbox.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3_persistence.dart';
 import 'package:layergram/core/crypto/v3/session_checkpoint_v3.dart';
+import 'package:layergram/core/crypto/v3/session_persistence_scope_v3.dart';
 import 'package:layergram/core/crypto/v3/triple_ratchet_state_v3.dart';
 import 'package:layergram/core/storage/aux_record_repository.dart';
 import 'package:layergram/core/storage/local_database.dart';
@@ -268,6 +269,153 @@ void main() {
     application.fillRange(0, application.length, 0);
     ratchet.fillRange(0, ratchet.length, 0);
   });
+
+  test(
+      'scope owner pins real Aux storage across restart and identity isolation',
+      () async {
+    final frames = await _frames(messageKey);
+    final checkpoint = _checkpointSnapshot();
+    final first = await V3SessionPersistenceScope.open(
+      scopeToken: 'v3-runtime-scope',
+      auxStorageKey: auxiliaryKey,
+    );
+    final firstRestore = await first.restore(
+      checkpoints: <V3TripleRatchetState>[checkpoint],
+    );
+    expect(firstRestore.inbox.deferredFrames, 0);
+    expect(firstRestore.sessions.sessionRevisions.values, <int>[1]);
+    expect(firstRestore.sessions.checkpointCount, 1);
+
+    for (final frame in frames.reversed) {
+      expect(
+        (await first.inbox.persistDeferred(frame: frame)).status,
+        V3LmfInboxStatus.deferred,
+      );
+    }
+    _expectOnlyOpaqueRecords(box);
+    final external = box.values.join();
+    expect(external, isNot(contains('v3-runtime-scope')));
+    expect(external, isNot(contains(V3LmfDurableInbox.inboxRecordKind)));
+    expect(
+      external,
+      isNot(contains(V3SessionCheckpointRepository.recordKind)),
+    );
+    await first.close();
+    await expectLater(
+      first.resumeDeferred(keyResolver: (_) => messageKey),
+      throwsStateError,
+    );
+
+    // A distinct identity namespace cannot enumerate the pinned scope.
+    final isolated = await V3SessionPersistenceScope.open(
+      scopeToken: 'other-v3-scope12',
+      auxStorageKey: auxiliaryKey,
+    );
+    final isolatedRestore = await isolated.restore(
+      checkpoints: const <V3TripleRatchetState>[],
+    );
+    expect(isolatedRestore.inbox.deferredFrames, 0);
+    expect(isolatedRestore.sessions.sessionRevisions, isEmpty);
+    await isolated.close();
+
+    // The same opaque namespace with another passphrase-derived key can see
+    // only ciphertext-shaped records; it cannot restore their v3 meaning.
+    final wrongContextKey = await AuxRecordCipher.deriveAuxStorageKey(
+      _bytes(32, 0xd7),
+    );
+    final wrongContext = await V3SessionPersistenceScope.open(
+      scopeToken: 'v3-runtime-scope',
+      auxStorageKey: wrongContextKey,
+    );
+    final wrongRestore = await wrongContext.restore(
+      checkpoints: const <V3TripleRatchetState>[],
+    );
+    expect(wrongRestore.inbox.deferredFrames, 0);
+    expect(wrongRestore.sessions.sessionRevisions, isEmpty);
+    await wrongContext.close();
+
+    // The correct identity/passphrase context reconstructs its durable TR3
+    // checkpoint before any deferred frame key is requested.
+    final restored = await V3SessionPersistenceScope.open(
+      scopeToken: 'v3-runtime-scope',
+      auxStorageKey: auxiliaryKey,
+    );
+    final restoredState = await restored.restore(
+      checkpoints: const <V3TripleRatchetState>[],
+    );
+    expect(restoredState.inbox.deferredFrames, frames.length);
+    expect(restoredState.sessions.sessionRevisions.values, <int>[1]);
+    expect(restoredState.sessions.checkpointCount, 1);
+
+    var resolverCalls = 0;
+    final resumed = await restored.resumeDeferred(
+      keyResolver: (_) {
+        resolverCalls++;
+        return messageKey;
+      },
+    );
+    expect(resolverCalls, frames.length);
+    expect(resumed.deferredFrames, 0);
+    expect(resumed.deliveries, hasLength(1));
+    final plaintext = resumed.deliveries.single.plaintext;
+    expect(plaintext, orderedEquals(_bytes(300, 0x31)));
+    plaintext.fillRange(0, plaintext.length, 0);
+
+    await restored.close();
+    checkpoint.wipeSecrets();
+    expect(await auxiliaryKey.extractBytes(), hasLength(32));
+  });
+
+  test('scope owns a detached Aux key and fails stopped after restore errors',
+      () async {
+    final callerKey = SecretKeyData(
+      _bytes(32, 0x47),
+      overwriteWhenDestroyed: true,
+    );
+    final scope = await V3SessionPersistenceScope.open(
+      scopeToken: 'detached-key-001',
+      auxStorageKey: callerKey,
+    );
+    callerKey.destroy();
+
+    final invalidCheckpoint = _checkpointSnapshot(
+      lifecycle: V3RatchetLifecycle.suspended,
+    );
+    await expectLater(
+      scope.restore(
+        checkpoints: <V3TripleRatchetState>[invalidCheckpoint],
+      ),
+      throwsStateError,
+    );
+    expect(scope.requiresRecovery, isTrue);
+    await expectLater(
+      scope.restore(checkpoints: const <V3TripleRatchetState>[]),
+      throwsStateError,
+    );
+    await expectLater(
+      scope.resumeDeferred(keyResolver: (_) => messageKey),
+      throwsStateError,
+    );
+    await scope.close();
+    invalidCheckpoint.wipeSecrets();
+
+    final shortKey = SecretKeyData(_bytes(31, 0x71));
+    await expectLater(
+      V3SessionPersistenceScope.open(
+        scopeToken: 'a|x',
+        auxStorageKey: shortKey,
+      ),
+      throwsArgumentError,
+    );
+    await expectLater(
+      V3SessionPersistenceScope.open(
+        scopeToken: 'invalid-key-0001',
+        auxStorageKey: shortKey,
+      ),
+      throwsArgumentError,
+    );
+    expect(await shortKey.extractBytes(), orderedEquals(_bytes(31, 0x71)));
+  });
 }
 
 AuxRecordRepository _repository(SecretKey key, String scope) {
@@ -316,9 +464,12 @@ V3HybridRatchetHeader _hybridHeader() => V3HybridRatchetHeader(
       ),
     );
 
-V3TripleRatchetState _checkpointSnapshot() => V3TripleRatchetState(
+V3TripleRatchetState _checkpointSnapshot({
+  V3RatchetLifecycle lifecycle = V3RatchetLifecycle.active,
+}) =>
+    V3TripleRatchetState(
       role: V3SessionRole.initiator,
-      lifecycle: V3RatchetLifecycle.active,
+      lifecycle: lifecycle,
       revision: 1,
       sessionId: _bytes(V3LmfFrameCodec.sessionIdBytes, 0xa1),
       transcriptDigest: _bytes(48, 0x11),

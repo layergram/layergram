@@ -18,7 +18,10 @@ migration semantics.
   its own BIP39 recovery material and deterministically recreates its own v3
   bundle.
 - Switching identities switches the complete identity, device-session router,
-  contact state, ratchets, and encrypted storage context atomically.
+  contact state, ratchets, and encrypted storage context atomically. A v3
+  persistence scope for the old identity must be closed before the new scope is
+  opened; its dedicated repository and copied Aux key must never be reused
+  across the switch.
 - Passphrase-derived identities remain ephemeral and do not become enumerable
   saved profiles.
 - Backup implementations must treat the v3 bundle as public metadata but keep
