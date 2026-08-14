@@ -162,6 +162,7 @@ final class V3LmfReplayWindowBinding {
     required this.sessionKey,
     required this.ratchetRevision,
     required this.checkpointDigest,
+    required this.committedAt,
   });
 
   final String assemblyId;
@@ -170,6 +171,7 @@ final class V3LmfReplayWindowBinding {
   final String sessionKey;
   final int ratchetRevision;
   final String checkpointDigest;
+  final DateTime committedAt;
 }
 
 class V3LmfPersistenceLimitException implements Exception {
@@ -296,6 +298,7 @@ class V3LmfDurableInbox {
         sessionKey: record.sessionKey!,
         ratchetRevision: record.ratchetRevision!,
         checkpointDigest: record.checkpointDigest!,
+        committedAt: record.committedAt,
       );
     }
     return Map<String, V3LmfReplayWindowBinding>.unmodifiable(bindings);
@@ -1349,6 +1352,7 @@ V3LmfReplayWindowBinding _replayBinding(_CommittedRecord record) {
     sessionKey: record.sessionKey!,
     ratchetRevision: record.ratchetRevision!,
     checkpointDigest: record.checkpointDigest!,
+    committedAt: record.committedAt,
   );
 }
 

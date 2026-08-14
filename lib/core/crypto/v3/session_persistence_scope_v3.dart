@@ -24,6 +24,7 @@ import 'lmf_v3_persistence.dart';
 import 'session_checkpoint_v3.dart';
 import 'session_commit_controller_v3.dart';
 import 'session_send_journal_v3.dart';
+import 'session_retirement_journal_v3.dart';
 import 'triple_ratchet_state_v3.dart';
 
 /// Result of restoring one complete encrypted protocol-v3 persistence scope.
@@ -52,8 +53,8 @@ final class V3SessionPersistenceRestoreResult {
 /// or passphrase changes: a later context switch could otherwise redirect an
 /// open journal to a different storage key. This owner instead creates one
 /// dedicated repository, pins it to exactly one encrypted scope, and keeps all
-/// transport stores, journals, materializers, and checkpoints private behind
-/// one [V3SessionCommitController].
+/// transport stores, send/receive/retirement journals, materializers, and
+/// checkpoints private behind one [V3SessionCommitController].
 ///
 /// [open] copies and owns the supplied auxiliary key. [close] releases the
 /// repository context and destroys that owned copy after all journal and inbox
@@ -127,6 +128,7 @@ final class V3SessionPersistenceScope {
           store: store,
           maxSessions: maxSessions,
         ),
+        retirementJournal: V3SessionRetirementJournal(store: store),
         snapshotValidator: snapshotValidator,
         maxSessions: maxSessions,
       );

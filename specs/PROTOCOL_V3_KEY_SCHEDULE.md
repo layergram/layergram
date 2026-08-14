@@ -74,6 +74,9 @@ This checkpoint provides:
   `prepared` record freezes the exact compact proof, cumulative receipt, local
   proof age, and source checkpoint, and whose write-new-before-delete
   `checkpointReplaced` revision binds the exact replacement checkpoint digest;
+- single-authority ownership and scope-pinned Aux/Hive restore of that journal,
+  with fail-closed reconciliation against the exact durable checkpoint,
+  direction-bound receipt state, and incoming/outgoing compact proof;
 - golden, negative, framing, reassembly, atomic-commit, exact-byte retry,
   capacity-preflight, ambiguous-write, restart, and ACK-ordering tests.
 
@@ -85,9 +88,9 @@ It deliberately does not provide:
   exporter;
 - an active durable send controller, handshake bootstrap, or projection from
   the durable AR3 source into the current message/UI repository;
-- destructive replay/completion-proof retirement, integration of the prepared
-  retirement journal with the single session authority, or rolling compaction
-  of the cumulative checkpoint receipt history;
+- destructive replay/completion-proof retirement, coordinator-driven plan
+  preparation/checkpoint replacement, crash-window completion, or rolling
+  compaction of the cumulative checkpoint receipt history;
 - registration in providers or activation in contacts, messaging, UI, backup,
   migration, or Premium paths.
 
@@ -792,9 +795,14 @@ revision that additionally binds one different canonical replacement checkpoint
 digest. Ambiguous writes fail stopped until a fresh restore, equal-stage
 divergence fails closed, and a restored higher stage must exactly extend its
 prepared record. The journal intentionally exposes no collect/delete operation.
-Actual replay/completion-proof deletion, checkpoint replacement under the single
-session authority, restart reconciliation across all stores, and pruning
-cumulative receipts remain separate activation gates.
+The single session authority now claims and restores this journal from the same
+scope-pinned encrypted store. A `prepared` plan must still match the exact
+current checkpoint receipt and compact proof; a `checkpointReplaced` plan must
+match the exact replacement checkpoint, an absent retired receipt, and the
+still-present compact proof. Divergence fails restore closed and this checkpoint
+performs no deletion. Coordinator-driven preparation, checkpoint replacement,
+reconciliation of their intervening crash windows, actual compact-proof
+deletion, and pruning cumulative receipts remain separate activation gates.
 
 ## 10. Remaining activation gates
 
@@ -806,9 +814,9 @@ Before this schedule can carry user messages, Layergram still requires:
   export/import behind the frozen boundary;
 - independent review and production wiring of the inactive crash-consistent
   send/receive coordinator, including the reviewed native-state validator;
-- single-authority integration and crash-window reconciliation for the prepared
-  replay/completion retirement journal, followed by bounded rolling compaction
-  of cumulative checkpoint receipts under the frozen local policy;
+- coordinator-driven preparation, checkpoint replacement, and crash-window
+  reconciliation for replay/completion retirement, followed by bounded rolling
+  compaction of cumulative checkpoint receipts under the frozen local policy;
 - active message/UI repository projection from the idempotent durable AR3
   source;
 - full packaging, crash, migration, multi-device, passphrase, Maximum-mode,

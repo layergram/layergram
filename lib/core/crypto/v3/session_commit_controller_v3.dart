@@ -26,6 +26,7 @@ import 'lmf_v3_outbox.dart';
 import 'lmf_v3_persistence.dart';
 import 'session_send_journal_v3.dart';
 import 'session_checkpoint_v3.dart';
+import 'session_retirement_journal_v3.dart';
 import 'sparse_pq_ratchet_v3.dart';
 import 'triple_ratchet_engine_v3.dart';
 import 'triple_ratchet_state_v3.dart';
@@ -60,6 +61,7 @@ final class V3SessionCommitRestoreResult {
     this.pendingSendAssemblyIds = const <String>{},
     this.materializedRecordCount = 0,
     this.checkpointCount = 0,
+    this.retirementPlanCount = 0,
   });
 
   final Map<String, int> sessionRevisions;
@@ -69,6 +71,7 @@ final class V3SessionCommitRestoreResult {
   final Set<String> pendingSendAssemblyIds;
   final int materializedRecordCount;
   final int checkpointCount;
+  final int retirementPlanCount;
 }
 
 final class V3SessionCommitResult {
@@ -131,6 +134,11 @@ final class V3SessionCompactionResult {
 /// exact sealed bytes become exportable. When the optional durable-state pair
 /// is supplied, canonical AR3 records are materialized under stable IDs and a
 /// monotonic TR3 checkpoint is reconciled before a commit result is exposed.
+/// When a retirement journal is supplied, this authority also owns its entire
+/// lifecycle and fails restore closed unless every prepared/replaced plan still
+/// has the exact checkpoint, receipt state, and compact proof it requires. This
+/// integration never deletes the current retirement intent, compact proof, or
+/// receipt.
 /// Hybrid handshake/session creation, native SCKA semantics, projection into
 /// the real chat repository, replay-window expiry, and rolling receipt
 /// compaction remain activation gates.
@@ -141,13 +149,15 @@ final class V3SessionCommitController {
     V3LmfDurableOutbox? outbox,
     V3CommittedRecordMaterializer? committedRecordMaterializer,
     V3SessionCheckpointRepository? checkpointRepository,
+    V3SessionRetirementJournal? retirementJournal,
     this.snapshotValidator,
     this.maxSessions = 4096,
   })  : _journal = journal,
         _sendJournal = sendJournal,
         _outbox = outbox,
         _committedRecordMaterializer = committedRecordMaterializer,
-        _checkpointRepository = checkpointRepository {
+        _checkpointRepository = checkpointRepository,
+        _retirementJournal = retirementJournal {
     if (maxSessions <= 0) {
       throw ArgumentError.value(maxSessions, 'maxSessions');
     }
@@ -162,6 +172,11 @@ final class V3SessionCommitController {
         'Layergram v3 materializer and checkpoint repository must be configured together',
       );
     }
+    if (retirementJournal != null && checkpointRepository == null) {
+      throw ArgumentError(
+        'Layergram v3 retirement journal requires durable checkpoint storage',
+      );
+    }
   }
 
   final V3LmfAtomicCommitJournal _journal;
@@ -169,6 +184,7 @@ final class V3SessionCommitController {
   final V3LmfDurableOutbox? _outbox;
   final V3CommittedRecordMaterializer? _committedRecordMaterializer;
   final V3SessionCheckpointRepository? _checkpointRepository;
+  final V3SessionRetirementJournal? _retirementJournal;
   final V3SessionSnapshotValidator? snapshotValidator;
   final int maxSessions;
 
@@ -184,12 +200,14 @@ final class V3SessionCommitController {
   V3LmfOutboxAuthority? _outboxAuthority;
   V3CommittedRecordMaterializerAuthority? _materializerAuthority;
   V3SessionCheckpointAuthority? _checkpointAuthority;
+  V3SessionRetirementAuthority? _retirementAuthority;
   bool _restored = false;
   bool _closed = false;
   bool _recoveryRequired = false;
 
   int get sessionCount => _sessions.length;
-  bool get requiresRecovery => _recoveryRequired;
+  bool get requiresRecovery =>
+      _recoveryRequired || (_retirementJournal?.requiresRecovery ?? false);
 
   Future<V3SessionCommitRestoreResult> restore({
     required Iterable<V3TripleRatchetState> checkpoints,
@@ -201,7 +219,8 @@ final class V3SessionCommitController {
           _sendAuthority != null ||
           _outboxAuthority != null ||
           _materializerAuthority != null ||
-          _checkpointAuthority != null) {
+          _checkpointAuthority != null ||
+          _retirementAuthority != null) {
         throw StateError('Layergram v3 session controller was restored');
       }
 
@@ -222,6 +241,11 @@ final class V3SessionCommitController {
         }
         final materializer = _committedRecordMaterializer;
         final checkpointRepository = _checkpointRepository;
+        final retirementJournal = _retirementJournal;
+        if (retirementJournal != null) {
+          _retirementAuthority =
+              await retirementJournal.claimSessionCoordinatorAuthority();
+        }
         if (materializer != null) {
           _materializerAuthority =
               await materializer.claimSessionCoordinatorAuthority();
@@ -229,6 +253,23 @@ final class V3SessionCommitController {
               await checkpointRepository!.claimSessionCoordinatorAuthority();
           await materializer.restore(authority: _materializerAuthority);
           await checkpointRepository.restore(authority: _checkpointAuthority);
+        }
+
+        final restoredRetirement = retirementJournal == null
+            ? null
+            : await retirementJournal.restore(authority: _retirementAuthority);
+        final retirementPlansByAssembly = <String, V3SessionRetirementPlan>{};
+        for (final plan
+            in restoredRetirement?.plans ?? const <V3SessionRetirementPlan>[]) {
+          if (retirementPlansByAssembly.putIfAbsent(
+                plan.assemblyId,
+                () => plan,
+              ) !=
+              plan) {
+            throw const V3LmfPersistenceConflictException(
+              'multiple v3 retirement plans target one assembly',
+            );
+          }
         }
         var checkpointCount = 0;
         for (final checkpoint in checkpoints) {
@@ -316,12 +357,27 @@ final class V3SessionCommitController {
         if (checkpointRepository != null) {
           for (final binding in restoredJournal.replayWindowBindings.values) {
             final durable = durableCheckpoints[binding.sessionKey];
-            final receipt = durable?.receiptForAssembly(binding.assemblyId);
-            if (durable == null ||
-                receipt == null ||
-                receipt.direction != V3CheckpointEffectDirection.incoming ||
-                receipt.stableRecordId != binding.stableRecordId ||
-                receipt.ratchetRevision != binding.ratchetRevision) {
+            if (durable == null) {
+              throw const V3LmfPersistenceConflictException(
+                'v3 replay window has no matching durable checkpoint receipt',
+              );
+            }
+            final receipt = durable.receiptForAssembly(binding.assemblyId);
+            final retirement = retirementPlansByAssembly[binding.assemblyId];
+            final matchesReceipt = receipt != null &&
+                receipt.direction == V3CheckpointEffectDirection.incoming &&
+                receipt.stableRecordId == binding.stableRecordId &&
+                receipt.ratchetRevision == binding.ratchetRevision;
+            final matchesReplacedRetirement = receipt == null &&
+                _allowsReplacedRetirementReceipt(
+                  plan: retirement,
+                  direction: V3CheckpointEffectDirection.incoming,
+                  bindingSessionKey: binding.sessionKey,
+                  stableRecordId: binding.stableRecordId,
+                  ratchetRevision: binding.ratchetRevision,
+                  checkpointDigest: durable.checkpointDigest,
+                );
+            if (!matchesReceipt && !matchesReplacedRetirement) {
               throw const V3LmfPersistenceConflictException(
                 'v3 replay window has no matching durable checkpoint receipt',
               );
@@ -347,12 +403,27 @@ final class V3SessionCommitController {
           }
           for (final binding in restoredSendJournal.completionBindings.values) {
             final durable = durableCheckpoints[binding.sessionKey];
-            final receipt = durable?.receiptForAssembly(binding.assemblyId);
-            if (durable == null ||
-                receipt == null ||
-                receipt.direction != V3CheckpointEffectDirection.outgoing ||
-                receipt.stableRecordId != binding.stableRecordId ||
-                receipt.ratchetRevision != binding.ratchetRevision) {
+            if (durable == null) {
+              throw const V3LmfPersistenceConflictException(
+                'v3 send completion has no durable checkpoint receipt',
+              );
+            }
+            final receipt = durable.receiptForAssembly(binding.assemblyId);
+            final retirement = retirementPlansByAssembly[binding.assemblyId];
+            final matchesReceipt = receipt != null &&
+                receipt.direction == V3CheckpointEffectDirection.outgoing &&
+                receipt.stableRecordId == binding.stableRecordId &&
+                receipt.ratchetRevision == binding.ratchetRevision;
+            final matchesReplacedRetirement = receipt == null &&
+                _allowsReplacedRetirementReceipt(
+                  plan: retirement,
+                  direction: V3CheckpointEffectDirection.outgoing,
+                  bindingSessionKey: binding.sessionKey,
+                  stableRecordId: binding.stableRecordId,
+                  ratchetRevision: binding.ratchetRevision,
+                  checkpointDigest: durable.checkpointDigest,
+                );
+            if (!matchesReceipt && !matchesReplacedRetirement) {
               throw const V3LmfPersistenceConflictException(
                 'v3 send completion has no durable checkpoint receipt',
               );
@@ -361,6 +432,16 @@ final class V3SessionCommitController {
           for (final effect in restoredSendJournal.effects) {
             decodedSendEffects.add(_decodeSendEffect(effect));
           }
+        }
+
+        if (restoredRetirement != null) {
+          _validateRetirementPlans(
+            plans: restoredRetirement.plans,
+            checkpoints: durableCheckpoints,
+            incomingProofs: restoredJournal.replayWindowBindings,
+            outgoingProofs: restoredSendJournal?.completionBindings ??
+                const <String, V3SessionSendCompletionBinding>{},
+          );
         }
 
         final ordered = <_RestoredSessionEffect>[
@@ -586,6 +667,7 @@ final class V3SessionCommitController {
           ),
           materializedRecordCount: materializer?.recordCount ?? 0,
           checkpointCount: checkpointRepository?.checkpointCount ?? 0,
+          retirementPlanCount: restoredRetirement?.plans.length ?? 0,
         );
       } catch (_) {
         _recoveryRequired = true;
@@ -1290,19 +1372,91 @@ final class V3SessionCommitController {
                   );
                 }
               } finally {
-                for (final snapshot in _sessions.values) {
-                  snapshot.wipeSecrets();
+                try {
+                  final retirementJournal = _retirementJournal;
+                  if (retirementJournal != null) {
+                    await retirementJournal.close(
+                      authority: _retirementAuthority,
+                    );
+                  }
+                } finally {
+                  for (final snapshot in _sessions.values) {
+                    snapshot.wipeSecrets();
+                  }
+                  _sessions.clear();
+                  _effectRevisions.clear();
+                  _pendingInboxCommits.clear();
+                  _sendEffects.clear();
                 }
-                _sessions.clear();
-                _effectRevisions.clear();
-                _pendingInboxCommits.clear();
-                _sendEffects.clear();
               }
             }
           }
         }
       }
     });
+  }
+
+  void _validateRetirementPlans({
+    required List<V3SessionRetirementPlan> plans,
+    required Map<String, V3SessionCheckpoint> checkpoints,
+    required Map<String, V3LmfReplayWindowBinding> incomingProofs,
+    required Map<String, V3SessionSendCompletionBinding> outgoingProofs,
+  }) {
+    for (final plan in plans) {
+      final checkpoint = checkpoints[plan.sessionKey];
+      final expectedCheckpointDigest =
+          plan.stage == V3SessionRetirementStage.prepared
+              ? plan.sourceCheckpointDigest
+              : plan.replacementCheckpointDigest;
+      if (checkpoint == null ||
+          checkpoint.checkpointDigest != expectedCheckpointDigest) {
+        throw const V3LmfPersistenceConflictException(
+          'v3 retirement plan has no exact durable checkpoint',
+        );
+      }
+
+      final receipt = checkpoint.receiptForAssembly(plan.assemblyId);
+      if (plan.stage == V3SessionRetirementStage.prepared) {
+        if (receipt == null || !_retirementReceiptMatches(plan, receipt)) {
+          throw const V3LmfPersistenceConflictException(
+            'prepared v3 retirement plan lost its exact checkpoint receipt',
+          );
+        }
+      } else if (receipt != null) {
+        throw const V3LmfPersistenceConflictException(
+          'replaced v3 retirement checkpoint still contains retired receipt',
+        );
+      }
+
+      switch (plan.direction) {
+        case V3CheckpointEffectDirection.incoming:
+          final proof = incomingProofs[plan.assemblyId];
+          if (proof == null ||
+              proof.higherLevelCommitDigest != plan.proofDigest ||
+              proof.stableRecordId != plan.stableRecordId ||
+              proof.sessionKey != plan.sessionKey ||
+              proof.ratchetRevision != plan.ratchetRevision ||
+              !proof.committedAt.isAtSameMomentAs(plan.proofRecordedAt)) {
+            throw const V3LmfPersistenceConflictException(
+              'v3 retirement plan has no exact incoming replay proof',
+            );
+          }
+          break;
+        case V3CheckpointEffectDirection.outgoing:
+          final proof = outgoingProofs[plan.assemblyId];
+          if (proof == null ||
+              proof.effectDigest != plan.proofDigest ||
+              proof.stableRecordId != plan.stableRecordId ||
+              proof.sessionKey != plan.sessionKey ||
+              proof.ratchetRevision != plan.ratchetRevision ||
+              !proof.completedAt.isAtSameMomentAs(plan.proofRecordedAt)) {
+            throw const V3LmfPersistenceConflictException(
+              'v3 retirement plan has no exact outgoing completion proof',
+            );
+          }
+          break;
+      }
+    }
   }
 
   Future<void> _materializeAndCheckpointRestoredState({
@@ -2019,6 +2173,33 @@ bool _snapshotBytesEqual(
     _wipe(encodedRight);
   }
 }
+
+bool _allowsReplacedRetirementReceipt({
+  required V3SessionRetirementPlan? plan,
+  required V3CheckpointEffectDirection direction,
+  required String bindingSessionKey,
+  required String stableRecordId,
+  required int ratchetRevision,
+  required String? checkpointDigest,
+}) =>
+    plan != null &&
+    plan.stage == V3SessionRetirementStage.checkpointReplaced &&
+    plan.direction == direction &&
+    plan.sessionKey == bindingSessionKey &&
+    plan.stableRecordId == stableRecordId &&
+    plan.ratchetRevision == ratchetRevision &&
+    plan.replacementCheckpointDigest == checkpointDigest;
+
+bool _retirementReceiptMatches(
+  V3SessionRetirementPlan plan,
+  V3CheckpointReceipt receipt,
+) =>
+    receipt.direction == plan.direction &&
+    receipt.assemblyId == plan.assemblyId &&
+    receipt.stableRecordId == plan.stableRecordId &&
+    receipt.sessionKey == plan.sessionKey &&
+    receipt.ratchetRevision == plan.ratchetRevision &&
+    receipt.stateDigest == plan.stateDigest;
 
 bool _sameFrameSet(List<V3LmfFrame> left, List<V3LmfFrame> right) {
   if (left.length != right.length) return false;

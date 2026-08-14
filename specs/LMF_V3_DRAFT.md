@@ -458,11 +458,15 @@ and independent Sparse-PQ non-derivability checks pass. The inactive encrypted
 its locally measured age, and its source checkpoint in a `prepared` record. A
 write-new-before-delete `checkpointReplaced` revision binds the exact different
 replacement checkpoint digest and survives restart or an ambiguous write. It is
-deliberately non-destructive and exposes no collect/delete method. Wiring that
-journal into the sole session authority, reconciling every cross-store crash
-window, deleting the compact proof only after replacement-checkpoint durability,
-and rolling pruning of the bounded cumulative receipt set remain activation
-gates.
+deliberately non-destructive and exposes no collect/delete method. The sole
+session authority now claims it before caller validation, restores it from the
+same scope-pinned encrypted store, and rejects any plan that no longer matches
+its exact checkpoint stage, direction-bound receipt state, compact proof, and
+local proof timestamp. This restore performs no deletion. Coordinator-driven
+preparation and checkpoint replacement, reconciliation of their cross-store
+crash windows, deleting the compact proof only after replacement-checkpoint
+durability, and rolling pruning of the bounded cumulative receipt set remain
+activation gates.
 
 ### 7.6 Session-controller restore and commit invariants
 
@@ -601,10 +605,10 @@ frozen message/state formats and validate every opaque export; the inactive
 crash-consistent send/receive coordinator and its recovery paths must pass
 independent review and production wiring; the application repository must
 project from the durable stable-ID AR3 source; checkpoint-backed restore,
-compaction, and replay-window replacement must pass independent review, while
-the prepared retirement journal must be integrated with the single session
-authority for crash-consistent replay/completion deletion and rolling receipt
-compaction;
+compaction, replay-window replacement, and the integrated non-destructive
+retirement-journal restore must pass independent review, while coordinator-driven
+plan preparation, replacement-checkpoint reconciliation, crash-consistent
+replay/completion deletion, and rolling receipt compaction remain pending;
 resend/progress UX and real loss recovery must pass; all three transports must
 pass real cross-app tests; and the complete design and implementation must pass
 independent review.

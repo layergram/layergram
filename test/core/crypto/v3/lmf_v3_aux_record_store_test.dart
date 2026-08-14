@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -16,6 +17,7 @@ import 'package:layergram/core/crypto/v3/lmf_v3_outbox.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3_persistence.dart';
 import 'package:layergram/core/crypto/v3/session_checkpoint_v3.dart';
 import 'package:layergram/core/crypto/v3/session_persistence_scope_v3.dart';
+import 'package:layergram/core/crypto/v3/session_retirement_journal_v3.dart';
 import 'package:layergram/core/crypto/v3/triple_ratchet_state_v3.dart';
 import 'package:layergram/core/storage/aux_record_repository.dart';
 import 'package:layergram/core/storage/local_database.dart';
@@ -270,6 +272,56 @@ void main() {
     ratchet.fillRange(0, ratchet.length, 0);
   });
 
+  test('retirement plans stay opaque and identity scoped', () async {
+    final assemblyId = _canonicalId(32, 0x31);
+    final sessionKey = _canonicalId(16, 0x51);
+    final proofRecordedAt = DateTime.utc(2025, 8, 14);
+    const lifetime = Duration(days: 365);
+    final store = V3LmfAuxRecordStore(
+      _repository(auxiliaryKey, 'retirement-scope'),
+    );
+    final journal = V3SessionRetirementJournal(store: store);
+    await journal.restore();
+    await journal.prepare(
+      direction: V3CheckpointEffectDirection.incoming,
+      assemblyId: assemblyId,
+      proofDigest: _canonicalId(32, 0x71),
+      stableRecordId: 'v3:$assemblyId',
+      sessionKey: sessionKey,
+      ratchetRevision: 7,
+      stateDigest: _canonicalId(32, 0x91),
+      sourceCheckpointDigest: _canonicalId(32, 0xb1),
+      proofRecordedAt: proofRecordedAt,
+      preparedAt: proofRecordedAt.add(lifetime),
+      minimumProofLifetimeSeconds: lifetime.inSeconds,
+    );
+
+    _expectOnlyOpaqueRecords(box);
+    final external = box.values.join();
+    expect(
+      external,
+      isNot(contains(V3SessionRetirementJournal.recordKind)),
+    );
+    expect(external, isNot(contains(assemblyId)));
+    expect(external, isNot(contains(sessionKey)));
+    await journal.close();
+
+    final restored = V3SessionRetirementJournal(
+      store: V3LmfAuxRecordStore(
+        _repository(auxiliaryKey, 'retirement-scope'),
+      ),
+    );
+    expect((await restored.restore()).plans, hasLength(1));
+    final isolated = V3SessionRetirementJournal(
+      store: V3LmfAuxRecordStore(
+        _repository(auxiliaryKey, 'other-retire-scope'),
+      ),
+    );
+    expect((await isolated.restore()).plans, isEmpty);
+    await restored.close();
+    await isolated.close();
+  });
+
   test(
       'scope owner pins real Aux storage across restart and identity isolation',
       () async {
@@ -285,6 +337,7 @@ void main() {
     expect(firstRestore.inbox.deferredFrames, 0);
     expect(firstRestore.sessions.sessionRevisions.values, <int>[1]);
     expect(firstRestore.sessions.checkpointCount, 1);
+    expect(firstRestore.sessions.retirementPlanCount, 0);
 
     for (final frame in frames.reversed) {
       expect(
@@ -346,6 +399,7 @@ void main() {
     expect(restoredState.inbox.deferredFrames, frames.length);
     expect(restoredState.sessions.sessionRevisions.values, <int>[1]);
     expect(restoredState.sessions.checkpointCount, 1);
+    expect(restoredState.sessions.retirementPlanCount, 0);
 
     var resolverCalls = 0;
     final resumed = await restored.resumeDeferred(
@@ -433,6 +487,9 @@ void _expectOnlyOpaqueRecords(Box<Map> box) {
     expect((encrypted! as String).length, greaterThan(100));
   }
 }
+
+String _canonicalId(int length, int start) =>
+    base64UrlEncode(_bytes(length, start)).replaceAll('=', '');
 
 Future<List<V3LmfFrame>> _frames(SecretKey key) => V3LmfAead.sealFragmented(
       metadata: V3LmfMessageMetadata(

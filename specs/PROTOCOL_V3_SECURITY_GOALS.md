@@ -164,6 +164,12 @@ reviewed standard alternative or narrow its product claim explicitly.
   until restore. Merely reaching that stage MUST NOT by itself expose a generic
   proof-deletion API; deletion requires future single-authority cross-store
   reconciliation and a recoverable receipt-pruning transition.
+- The single authority MUST claim and restore the retirement journal from the
+  same encrypted scope. Restore MUST reject duplicate plans for one assembly and
+  MUST revalidate the exact current checkpoint stage, direction-bound receipt
+  state, compact proof digest/bindings, and locally recorded proof time before
+  accepting any plan. This validation MUST NOT delete any plan, proof, or
+  receipt.
 - One identity/passphrase-scoped authority MUST own journal mutation before
   session restore. Direct journal lifecycle calls and writes MUST be rejected
   after ownership; production wiring MUST neither retain nor expose the owned

@@ -16,6 +16,7 @@ import 'package:layergram/core/crypto/v3/pq_message_ratchet_v3.dart';
 import 'package:layergram/core/crypto/v3/session_commit_controller_v3.dart';
 import 'package:layergram/core/crypto/v3/session_checkpoint_v3.dart';
 import 'package:layergram/core/crypto/v3/session_send_journal_v3.dart';
+import 'package:layergram/core/crypto/v3/session_retirement_journal_v3.dart';
 import 'package:layergram/core/crypto/v3/sparse_pq_ratchet_v3.dart';
 import 'package:layergram/core/crypto/v3/triple_ratchet_engine_v3.dart';
 import 'package:layergram/core/crypto/v3/triple_ratchet_state_v3.dart';
@@ -464,6 +465,48 @@ void main() {
       expect(restored.restoreResult.committedSendEffectCount, 0);
       expect(restored.restoreResult.pendingSendAssemblyIds, isEmpty);
       expect(restored.backend.sendCalls, 1);
+
+      await restored.close();
+      fixture.checkpoint.wipeSecrets();
+    });
+
+    test('restores an exact prepared outgoing retirement plan', () async {
+      final fixture = await _SendFixture.create(durableState: true);
+      final result = await fixture.controller.sendMessage(
+        sessionId: fixture.checkpoint.sessionId,
+        expectedRevision: 0,
+        plaintext: _bytes(320, 0x89),
+        backend: fixture.backend,
+      );
+      await fixture.controller.applySendAcknowledgement(
+        acknowledgementFrame:
+            await _completeAckFrame(result.frames, fixture.checkpoint),
+      );
+      await fixture.controller.compactSession(fixture.checkpoint.sessionId);
+      await fixture.closeControllerOnly();
+      await _prepareOutgoingRetirementPlan(fixture.store);
+
+      final restored = await _SendFixture.create(
+        store: fixture.store,
+        checkpoint: fixture.checkpoint,
+        backend: fixture.backend,
+        durableState: true,
+        retirementState: true,
+      );
+      expect(restored.restoreResult.retirementPlanCount, 1);
+      expect(
+        fixture.store.records.values.where(
+          (payload) => payload['kind'] == V3SessionRetirementJournal.recordKind,
+        ),
+        hasLength(1),
+      );
+      expect(
+        fixture.store.records.values.where(
+          (payload) =>
+              payload['kind'] == V3SessionSendJournal.completionRecordKind,
+        ),
+        hasLength(1),
+      );
 
       await restored.close();
       fixture.checkpoint.wipeSecrets();
@@ -999,6 +1042,38 @@ void main() {
   });
 }
 
+Future<void> _prepareOutgoingRetirementPlan(_FaultStore store) async {
+  final checkpoint = store.records.values.singleWhere(
+    (payload) => payload['kind'] == V3SessionCheckpointRepository.recordKind,
+  );
+  final completion = store.records.values.singleWhere(
+    (payload) => payload['kind'] == V3SessionSendJournal.completionRecordKind,
+  );
+  final receipt = ((checkpoint['receipts'] as List<dynamic>).single as Map)
+      .cast<String, dynamic>();
+  final completedAt = DateTime.fromMillisecondsSinceEpoch(
+    completion['completedAt'] as int,
+    isUtc: true,
+  );
+  const lifetime = Duration(days: 365);
+  final journal = V3SessionRetirementJournal(store: store);
+  await journal.restore();
+  await journal.prepare(
+    direction: V3CheckpointEffectDirection.outgoing,
+    assemblyId: completion['assemblyId'] as String,
+    proofDigest: completion['effectDigest'] as String,
+    stableRecordId: completion['stableRecordId'] as String,
+    sessionKey: completion['sessionId'] as String,
+    ratchetRevision: completion['ratchetRevision'] as int,
+    stateDigest: receipt['stateDigest'] as String,
+    sourceCheckpointDigest: checkpoint['checkpointDigest'] as String,
+    proofRecordedAt: completedAt,
+    preparedAt: completedAt.add(lifetime),
+    minimumProofLifetimeSeconds: lifetime.inSeconds,
+  );
+  await journal.close();
+}
+
 final class _SendFixture {
   _SendFixture._({
     required this.store,
@@ -1026,6 +1101,7 @@ final class _SendFixture {
     _DeterministicEpochBackend? backend,
     int outboxMaxEntries = 64,
     bool durableState = false,
+    bool retirementState = false,
   }) async {
     final actualStore = store ?? _FaultStore();
     final pair = checkpoint == null ? await _pairedSnapshots() : null;
@@ -1052,6 +1128,9 @@ final class _SendFixture {
       outbox: outbox,
       committedRecordMaterializer: materializer,
       checkpointRepository: checkpointRepository,
+      retirementJournal: retirementState
+          ? V3SessionRetirementJournal(store: actualStore)
+          : null,
       snapshotValidator: actualBackend.validateSnapshot,
     );
     final restored = await controller.restore(
