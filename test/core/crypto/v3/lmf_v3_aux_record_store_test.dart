@@ -5,12 +5,17 @@ import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 import 'package:layergram/core/crypto/aux_record_cipher.dart';
+import 'package:layergram/core/crypto/v3/committed_record_materializer_v3.dart';
+import 'package:layergram/core/crypto/v3/committed_record_v3.dart';
 import 'package:layergram/core/crypto/v3/ec_double_ratchet_v3.dart';
 import 'package:layergram/core/crypto/v3/hybrid_ratchet_header_v3.dart';
+import 'package:layergram/core/crypto/v3/key_schedule_v3.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3_atomic_commit.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3_outbox.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3_persistence.dart';
+import 'package:layergram/core/crypto/v3/session_checkpoint_v3.dart';
+import 'package:layergram/core/crypto/v3/triple_ratchet_state_v3.dart';
 import 'package:layergram/core/storage/aux_record_repository.dart';
 import 'package:layergram/core/storage/local_database.dart';
 
@@ -185,6 +190,84 @@ void main() {
     );
     expect((await isolated.restore()).effects, isEmpty);
   });
+
+  test('materialized AR3 and TR3 checkpoint stay opaque and scoped', () async {
+    final frames = await _frames(messageKey);
+    final plaintext = _bytes(300, 0x31);
+    final record = V3CommittedRecord.fromDelivery(
+      targetFrame: frames.first,
+      content: plaintext,
+    );
+    final application = V3CommittedRecordCodec.encode(record);
+    final snapshot = _checkpointSnapshot();
+    final ratchet = V3TripleRatchetStateCodec.encode(snapshot);
+    final receipt = V3CheckpointReceipt.fromStates(
+      direction: V3CheckpointEffectDirection.incoming,
+      assemblyId: record.assemblyId,
+      applicationState: application,
+      ratchetState: ratchet,
+    );
+    final store = V3LmfAuxRecordStore(
+      _repository(auxiliaryKey, 'durable-state-scope'),
+    );
+    final materializer = V3CommittedRecordMaterializer(store: store);
+    final checkpoints = V3SessionCheckpointRepository(store: store);
+    await materializer.restore();
+    await checkpoints.restore();
+    await materializer.materialize(application);
+    await checkpoints.persist(
+      snapshot: snapshot,
+      receipts: <V3CheckpointReceipt>[receipt],
+    );
+
+    _expectOnlyOpaqueRecords(box);
+    final external = box.values.join();
+    expect(
+      external,
+      isNot(contains(V3CommittedRecordMaterializer.recordKind)),
+    );
+    expect(
+      external,
+      isNot(contains(V3SessionCheckpointRepository.recordKind)),
+    );
+    expect(external, isNot(contains(record.stableRecordId)));
+    await materializer.close();
+    await checkpoints.close();
+
+    final restoredStore = V3LmfAuxRecordStore(
+      _repository(auxiliaryKey, 'durable-state-scope'),
+    );
+    final restoredMaterializer = V3CommittedRecordMaterializer(
+      store: restoredStore,
+    );
+    final restoredCheckpoints = V3SessionCheckpointRepository(
+      store: restoredStore,
+    );
+    expect((await restoredMaterializer.restore()).records, hasLength(1));
+    expect((await restoredCheckpoints.restore()).checkpoints, hasLength(1));
+
+    final isolatedStore = V3LmfAuxRecordStore(
+      _repository(auxiliaryKey, 'other-durable-state-scope'),
+    );
+    final isolatedMaterializer = V3CommittedRecordMaterializer(
+      store: isolatedStore,
+    );
+    final isolatedCheckpoints = V3SessionCheckpointRepository(
+      store: isolatedStore,
+    );
+    expect((await isolatedMaterializer.restore()).records, isEmpty);
+    expect((await isolatedCheckpoints.restore()).checkpoints, isEmpty);
+
+    await restoredMaterializer.close();
+    await restoredCheckpoints.close();
+    await isolatedMaterializer.close();
+    await isolatedCheckpoints.close();
+    record.wipeContent();
+    snapshot.wipeSecrets();
+    plaintext.fillRange(0, plaintext.length, 0);
+    application.fillRange(0, application.length, 0);
+    ratchet.fillRange(0, ratchet.length, 0);
+  });
 }
 
 AuxRecordRepository _repository(SecretKey key, String scope) {
@@ -233,6 +316,51 @@ V3HybridRatchetHeader _hybridHeader() => V3HybridRatchetHeader(
       ),
     );
 
+V3TripleRatchetState _checkpointSnapshot() => V3TripleRatchetState(
+      role: V3SessionRole.initiator,
+      lifecycle: V3RatchetLifecycle.active,
+      revision: 1,
+      sessionId: _bytes(V3LmfFrameCodec.sessionIdBytes, 0xa1),
+      transcriptDigest: _bytes(48, 0x11),
+      initiatorRoutingBinding: _bytes(32, 0x21),
+      responderRoutingBinding: _bytes(32, 0x61),
+      initiatorToResponderAckRootKey: _bytes(32, 0x81),
+      responderToInitiatorAckRootKey: _bytes(32, 0xc1),
+      ecRootKey: _bytes(32, 0x12),
+      ecSendingChainKey: _bytes(32, 0x32),
+      ecReceivingChainKey: _bytes(32, 0x52),
+      ecLocalDhPrivateKey: _bytes(32, 0x72),
+      ecLocalDhPublicKey: _hex(
+        '5c117f7fa14c242bc843fd1bac49ad870c37b8e615da1b4fefe64859aff5245d',
+      ),
+      ecRemoteDhPublicKey: _bytes(32, 0x32),
+      ecSendCounter: 1,
+      ecReceiveCounter: 1,
+      ecPreviousSendingChainLength: 0,
+      pqRootKey: _bytes(32, 0x92),
+      pqCurrentEpoch: 0,
+      pqSendingEpoch: 0,
+      pqReceivingEpoch: 0,
+      pqEpochStates: <V3PqEpochState>[
+        V3PqEpochState(
+          epoch: 0,
+          sendingChainKey: _bytes(32, 0xb2),
+          sendCounter: 1,
+          receivingChainKey: _bytes(32, 0xd2),
+          receiveCounter: 1,
+        ),
+      ],
+      nativeSckaState: _bytes(64, 0xe2),
+    );
+
 Uint8List _bytes(int length, int start) => Uint8List.fromList(
       List<int>.generate(length, (index) => (start + index) & 0xff),
+    );
+
+Uint8List _hex(String value) => Uint8List.fromList(
+      List<int>.generate(
+        value.length ~/ 2,
+        (index) =>
+            int.parse(value.substring(index * 2, index * 2 + 2), radix: 16),
+      ),
     );

@@ -290,19 +290,21 @@ matching journal record, a journal effect paired with an unbound tombstone, or
 any digest mismatch is a fail-closed persistence conflict.
 
 Within this inactive boundary, the stable application record ID is derived from
-the assembly ID, so replay cannot allocate a second record. Exactly-once effects
-outside the journal are still not claimed: future message/UI repositories must
-read the journal as their source of truth or materialize its record idempotently
-under that stable ID. The inactive canonical `AR3` and `TR3` codecs now provide
-the exact journal byte strings. The inactive receive-commit controller claims
+the assembly ID, so replay cannot allocate a second record. The encrypted Aux
+materializer now persists the exact canonical AR3 bytes idempotently under that
+stable ID and rejects divergent content. Exactly-once visible UI effects are
+still not claimed: the active message/UI repository must project from this
+durable source without allocating a replacement ID. The inactive canonical
+`AR3` and `TR3` codecs provide the exact journal byte strings. The inactive
+receive-commit controller claims
 the journal before restore, validates AR3/TR3/session/routing bindings, and
 applies revision CAS before its candidate builder runs. The inactive resolver
 now binds an exact candidate snapshot into that controller after complete LMF
 authentication. A clean commit failure is retryable only while the controller
 still exposes the candidate's expected revision; a concurrently superseded
 candidate is wiped instead of being requeued. Reviewed native SCKA semantics,
-durable sending, crash-window reconciliation, and external materialization
-remain activation gates.
+active product wiring, and visible message-repository projection remain
+activation gates.
 
 Commit-tombstone retention is local and explicit. A tombstone may be purged only
 after the durable ratchet/application replay window will independently reject
@@ -342,14 +344,18 @@ and 8,192 relevant physical records. The outbox is bounded to 64 logical
 entries, 512 KiB of sealed frame bytes, and 256 physical revisions. The send
 journal is bounded to 4,096 effects, 17 KiB per AR3 record, 256 KiB per TR3
 snapshot, 512 KiB of sealed frames per effect, 32 MiB total retained state, and
-8,192 relevant physical records. Reassembly retains its separate limits of 8
-pending assemblies and 64 KiB of authenticated plaintext. Limit breaches fail
-closed without silently evicting valid state.
+8,192 relevant physical records. The AR3 materializer is bounded to 4,096
+logical records, 16 MiB of canonical record bytes, and 8,192 physical records.
+The checkpoint repository is bounded to 4,096 sessions, 4,096 cumulative
+receipts per session, 32 MiB retained state, and 8,192 physical records.
+Reassembly retains its separate limits of 8 pending assemblies and 64 KiB of
+authenticated plaintext. Limit breaches fail closed without silently evicting
+valid state.
 
 All records use Layergram's existing padded, outer-encrypted auxiliary-record
 storage under the active identity/passphrase scope. The record kind, assembly
-ID, ACK state, effect digest, application state, ratchet snapshot, frame bytes,
-and timestamps are not global cleartext markers.
+ID, ACK state, effect/receipt/checkpoint digests, application state, ratchet
+snapshot, frame bytes, and timestamps are not global cleartext markers.
 
 ### 7.4 Atomic-effect record invariants
 
@@ -377,13 +383,40 @@ requires a ratchet checkpoint/compaction rule that proves both application
 history and the replay window remain durable before an effect or its bound
 tombstone can be removed.
 
-### 7.5 Session-controller restore and commit invariants
+### 7.5 Durable AR3 materialization and TR3 checkpoint invariants
+
+The inactive materializer stores one exact canonical AR3 byte string under its
+assembly-derived stable record ID. Exact replay returns the existing record; a
+different byte string for the same ID is a persistence conflict. Restore
+accepts only strict canonical envelopes, bounds physical and logical records,
+and removes only exact duplicates. Any ambiguous write makes that instance
+fail stopped until fresh restore.
+
+The inactive checkpoint repository stores the complete canonical current TR3
+and a sorted cumulative set of transition receipts. Each receipt binds inbound
+or outbound direction, assembly/stable record ID, session, ratchet revision,
+and a digest over the exact AR3 and TR3 bytes. Checkpoint digests additionally
+bind stable role, transcript, routing and directional ACK-root lineage. Restore
+selects the highest revision only when every lower record has the same lineage
+and all of its receipts occur unchanged in the higher record. Equal-revision
+divergence, stale writes, receipt forks, malformed armor, and limit overflow
+fail closed. Replacement is write-new-before-delete; superseded cleanup failure
+does not invalidate the already selected higher record.
+
+The coordinator reconciles materialization and checkpoints before exposing a
+new commit result and on every restart. These checkpoints are not yet accepted
+as journal-replay shortcuts and do not authorize deletion. Until replay-window
+and compaction rules are separately frozen, every journal effect and tombstone
+remains authoritative and retained.
+
+### 7.6 Session-controller restore and commit invariants
 
 One inactive controller owns one journal for an encrypted identity/passphrase
 scope. It claims an unforgeable in-memory journal authority before journal
 restore; after that claim, direct `restore`, `commit`, `resume`, or `close`
-calls without the exact authority fail before reading plaintext or changing
-state. Passing a journal to the controller transfers its ownership: callers
+calls and effect-read calls without the exact authority fail before reading
+plaintext or changing state. Passing a journal to the controller transfers its
+ownership: callers
 MUST NOT retain it for concurrent direct use while controller restore begins,
 and production wiring MUST keep that journal private to the controller. The
 caller supplies a unique active checkpoint for every session represented by
@@ -411,9 +444,9 @@ The optional semantic snapshot validator is required at activation to invoke
 the reviewed native SCKA backend. The current controller alone does not prove
 that arbitrary caller-supplied EC/PQ candidate fields implement the specified
 cryptographic transition, and it does not define sending or external
-application materialization.
+projection into the active message/UI repository.
 
-### 7.6 ACK golden vector
+### 7.7 ACK golden vector
 
 For target suite `0x01`, kind `0x01`, five fragments, message ID `81 82 ...
 90`, epoch `7`, counter `9`, final length `1,088`, and received indexes `0, 2,
@@ -511,9 +544,9 @@ contracts.
 Before activation, the native ML-KEM Braid engine must produce and consume the
 frozen message/state formats and validate every opaque export; the inactive
 crash-consistent send/receive coordinator and its recovery paths must pass
-independent review and production wiring; the application repository must use
-the atomic journals as its source of truth; checkpoint and garbage-collection
-rules must be frozen;
+independent review and production wiring; the application repository must
+project from the durable stable-ID AR3 source; checkpoint-backed restore,
+compaction, replay-window, and garbage-collection rules must be frozen;
 resend/progress UX and real loss recovery must pass; all three transports must
 pass real cross-app tests; and the complete design and implementation must pass
 independent review.

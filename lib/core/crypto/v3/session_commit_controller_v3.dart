@@ -16,6 +16,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'committed_record_materializer_v3.dart';
 import 'committed_record_v3.dart';
 import 'ec_double_ratchet_v3.dart';
 import 'key_schedule_v3.dart';
@@ -24,6 +25,7 @@ import 'lmf_v3_atomic_commit.dart';
 import 'lmf_v3_outbox.dart';
 import 'lmf_v3_persistence.dart';
 import 'session_send_journal_v3.dart';
+import 'session_checkpoint_v3.dart';
 import 'sparse_pq_ratchet_v3.dart';
 import 'triple_ratchet_engine_v3.dart';
 import 'triple_ratchet_state_v3.dart';
@@ -56,6 +58,8 @@ final class V3SessionCommitRestoreResult {
     required this.pendingInboxCommitAssemblyIds,
     this.committedSendEffectCount = 0,
     this.pendingSendAssemblyIds = const <String>{},
+    this.materializedRecordCount = 0,
+    this.checkpointCount = 0,
   });
 
   final Map<String, int> sessionRevisions;
@@ -63,6 +67,8 @@ final class V3SessionCommitRestoreResult {
   final Set<String> pendingInboxCommitAssemblyIds;
   final int committedSendEffectCount;
   final Set<String> pendingSendAssemblyIds;
+  final int materializedRecordCount;
+  final int checkpointCount;
 }
 
 final class V3SessionCommitResult {
@@ -110,19 +116,25 @@ final class V3SessionSendResult {
 ///
 /// When [sendJournal] and [outbox] are supplied together, the same serialized
 /// authority also commits outgoing application/PQ transitions before their
-/// exact sealed bytes become exportable. Hybrid handshake/session creation,
-/// native SCKA semantics, effect materialization in the real chat repository,
-/// and journal compaction remain activation gates.
+/// exact sealed bytes become exportable. When the optional durable-state pair
+/// is supplied, canonical AR3 records are materialized under stable IDs and a
+/// monotonic TR3 checkpoint is reconciled before a commit result is exposed.
+/// Hybrid handshake/session creation, native SCKA semantics, projection into
+/// the real chat repository, and journal compaction remain activation gates.
 final class V3SessionCommitController {
   V3SessionCommitController({
     required V3LmfAtomicCommitJournal journal,
     V3SessionSendJournal? sendJournal,
     V3LmfDurableOutbox? outbox,
+    V3CommittedRecordMaterializer? committedRecordMaterializer,
+    V3SessionCheckpointRepository? checkpointRepository,
     this.snapshotValidator,
     this.maxSessions = 4096,
   })  : _journal = journal,
         _sendJournal = sendJournal,
-        _outbox = outbox {
+        _outbox = outbox,
+        _committedRecordMaterializer = committedRecordMaterializer,
+        _checkpointRepository = checkpointRepository {
     if (maxSessions <= 0) {
       throw ArgumentError.value(maxSessions, 'maxSessions');
     }
@@ -131,11 +143,19 @@ final class V3SessionCommitController {
         'Layergram v3 send journal and outbox must be configured together',
       );
     }
+    if ((committedRecordMaterializer == null) !=
+        (checkpointRepository == null)) {
+      throw ArgumentError(
+        'Layergram v3 materializer and checkpoint repository must be configured together',
+      );
+    }
   }
 
   final V3LmfAtomicCommitJournal _journal;
   final V3SessionSendJournal? _sendJournal;
   final V3LmfDurableOutbox? _outbox;
+  final V3CommittedRecordMaterializer? _committedRecordMaterializer;
+  final V3SessionCheckpointRepository? _checkpointRepository;
   final V3SessionSnapshotValidator? snapshotValidator;
   final int maxSessions;
 
@@ -149,6 +169,8 @@ final class V3SessionCommitController {
   V3LmfAtomicCommitAuthority? _authority;
   V3SessionSendJournalAuthority? _sendAuthority;
   V3LmfOutboxAuthority? _outboxAuthority;
+  V3CommittedRecordMaterializerAuthority? _materializerAuthority;
+  V3SessionCheckpointAuthority? _checkpointAuthority;
   bool _restored = false;
   bool _closed = false;
   bool _recoveryRequired = false;
@@ -164,7 +186,9 @@ final class V3SessionCommitController {
       if (_restored ||
           _authority != null ||
           _sendAuthority != null ||
-          _outboxAuthority != null) {
+          _outboxAuthority != null ||
+          _materializerAuthority != null ||
+          _checkpointAuthority != null) {
         throw StateError('Layergram v3 session controller was restored');
       }
 
@@ -181,6 +205,16 @@ final class V3SessionCommitController {
         if (sendJournal != null) {
           _sendAuthority = await sendJournal.claimSessionCoordinatorAuthority();
           _outboxAuthority = await outbox!.claimSessionSendAuthority();
+        }
+        final materializer = _committedRecordMaterializer;
+        final checkpointRepository = _checkpointRepository;
+        if (materializer != null) {
+          _materializerAuthority =
+              await materializer.claimSessionCoordinatorAuthority();
+          _checkpointAuthority =
+              await checkpointRepository!.claimSessionCoordinatorAuthority();
+          await materializer.restore(authority: _materializerAuthority);
+          await checkpointRepository.restore(authority: _checkpointAuthority);
         }
         var checkpointCount = 0;
         for (final checkpoint in checkpoints) {
@@ -338,6 +372,14 @@ final class V3SessionCommitController {
           }
         }
 
+        if (materializer != null) {
+          await _materializeAndCheckpointRestoredState(
+            working: working,
+            incomingEffects: decodedEffects,
+            outgoingEffects: decodedSendEffects,
+          );
+        }
+
         _sessions.addAll(working);
         working.clear();
         _effectRevisions.addAll(effectRevisions);
@@ -362,6 +404,8 @@ final class V3SessionCommitController {
                 .where((effect) => !effect.isFullyAcknowledged)
                 .map((effect) => effect.assemblyId),
           ),
+          materializedRecordCount: materializer?.recordCount ?? 0,
+          checkpointCount: checkpointRepository?.checkpointCount ?? 0,
         );
       } catch (_) {
         _recoveryRequired = true;
@@ -526,6 +570,7 @@ final class V3SessionCommitController {
         current.wipeSecrets();
         _sessions[key] = next;
         _sendEffects[effect.assemblyId] = effect;
+        await _materializeAndCheckpointSession(key);
         return V3SessionSendResult(
           assemblyId: effect.assemblyId,
           messageRecordId: effect.messageRecordId,
@@ -730,7 +775,10 @@ final class V3SessionCommitController {
         throw StateError('Layergram v3 session revision conflict');
       }
 
-      final existing = _journal.effectForAssembly(delivery.assemblyId);
+      final existing = _journal.effectForAssembly(
+        delivery.assemblyId,
+        authority: _authority,
+      );
       if (existing != null) {
         final revision = await _validateKnownEffect(
           effect: existing,
@@ -828,6 +876,7 @@ final class V3SessionCommitController {
         _sessions[sessionKey] = next;
         _effectRevisions[delivery.assemblyId] = next.revision;
         _pendingInboxCommits.remove(delivery.assemblyId);
+        await _materializeAndCheckpointSession(sessionKey);
         return V3SessionCommitResult(
           effect: committed,
           ratchetRevision: next.revision,
@@ -855,7 +904,10 @@ final class V3SessionCommitController {
         throw StateError('Layergram v3 delivery session is not registered');
       }
       _validateInboundRouting(current, target);
-      final existing = _journal.effectForAssembly(delivery.assemblyId);
+      final existing = _journal.effectForAssembly(
+        delivery.assemblyId,
+        authority: _authority,
+      );
       if (existing == null) {
         throw StateError('Layergram v3 delivery has no durable session effect');
       }
@@ -901,17 +953,162 @@ final class V3SessionCommitController {
               await outbox.close(authority: _outboxAuthority);
             }
           } finally {
-            for (final snapshot in _sessions.values) {
-              snapshot.wipeSecrets();
+            try {
+              final materializer = _committedRecordMaterializer;
+              if (materializer != null) {
+                await materializer.close(authority: _materializerAuthority);
+              }
+            } finally {
+              try {
+                final checkpointRepository = _checkpointRepository;
+                if (checkpointRepository != null) {
+                  await checkpointRepository.close(
+                    authority: _checkpointAuthority,
+                  );
+                }
+              } finally {
+                for (final snapshot in _sessions.values) {
+                  snapshot.wipeSecrets();
+                }
+                _sessions.clear();
+                _effectRevisions.clear();
+                _pendingInboxCommits.clear();
+                _sendEffects.clear();
+              }
             }
-            _sessions.clear();
-            _effectRevisions.clear();
-            _pendingInboxCommits.clear();
-            _sendEffects.clear();
           }
         }
       }
     });
+  }
+
+  Future<void> _materializeAndCheckpointRestoredState({
+    required Map<String, V3TripleRatchetState> working,
+    required List<_DecodedEffect> incomingEffects,
+    required List<_DecodedSendEffect> outgoingEffects,
+  }) async {
+    final receiptsBySession = <String, List<V3CheckpointReceipt>>{};
+    for (final decoded in incomingEffects) {
+      final receipt = await _materializeEffect(
+        direction: V3CheckpointEffectDirection.incoming,
+        assemblyId: decoded.effect.assemblyId,
+        applicationState: decoded.effect.applicationState,
+        ratchetState: decoded.effect.ratchetState,
+        persistedAt: decoded.effect.persistedAt,
+      );
+      if (receipt.sessionKey != decoded.sessionKey) {
+        throw const V3LmfPersistenceConflictException(
+          'restored v3 incoming receipt changed session binding',
+        );
+      }
+      receiptsBySession
+          .putIfAbsent(decoded.sessionKey, () => <V3CheckpointReceipt>[])
+          .add(receipt);
+    }
+    for (final decoded in outgoingEffects) {
+      final receipt = await _materializeEffect(
+        direction: V3CheckpointEffectDirection.outgoing,
+        assemblyId: decoded.effect.assemblyId,
+        applicationState: decoded.effect.applicationState,
+        ratchetState: decoded.effect.ratchetState,
+        persistedAt: decoded.effect.persistedAt,
+      );
+      if (receipt.sessionKey != decoded.sessionKey) {
+        throw const V3LmfPersistenceConflictException(
+          'restored v3 outgoing receipt changed session binding',
+        );
+      }
+      receiptsBySession
+          .putIfAbsent(decoded.sessionKey, () => <V3CheckpointReceipt>[])
+          .add(receipt);
+    }
+    final repository = _checkpointRepository!;
+    for (final entry in working.entries) {
+      await repository.persist(
+        snapshot: entry.value,
+        receipts: receiptsBySession[entry.key] ?? const <V3CheckpointReceipt>[],
+        authority: _checkpointAuthority,
+      );
+    }
+  }
+
+  Future<void> _materializeAndCheckpointSession(String sessionKey) async {
+    if (_committedRecordMaterializer == null) return;
+    final snapshot = _sessions[sessionKey];
+    if (snapshot == null) {
+      throw StateError('Layergram v3 checkpoint session is not registered');
+    }
+    final receipts = <V3CheckpointReceipt>[];
+    for (final assemblyId in _effectRevisions.keys) {
+      final effect = _journal.effectForAssembly(
+        assemblyId,
+        authority: _authority,
+      );
+      if (effect == null) {
+        throw const V3LmfPersistenceConflictException(
+          'indexed v3 incoming effect is missing from its journal',
+        );
+      }
+      final receipt = await _materializeEffect(
+        direction: V3CheckpointEffectDirection.incoming,
+        assemblyId: effect.assemblyId,
+        applicationState: effect.applicationState,
+        ratchetState: effect.ratchetState,
+        persistedAt: effect.persistedAt,
+      );
+      if (receipt.sessionKey == sessionKey) receipts.add(receipt);
+    }
+    for (final effect in _sendEffects.values) {
+      final receipt = await _materializeEffect(
+        direction: V3CheckpointEffectDirection.outgoing,
+        assemblyId: effect.assemblyId,
+        applicationState: effect.applicationState,
+        ratchetState: effect.ratchetState,
+        persistedAt: effect.persistedAt,
+      );
+      if (receipt.sessionKey == sessionKey) receipts.add(receipt);
+    }
+    await _checkpointRepository!.persist(
+      snapshot: snapshot,
+      receipts: receipts,
+      authority: _checkpointAuthority,
+    );
+  }
+
+  Future<V3CheckpointReceipt> _materializeEffect({
+    required V3CheckpointEffectDirection direction,
+    required String assemblyId,
+    required Uint8List applicationState,
+    required Uint8List ratchetState,
+    required DateTime persistedAt,
+  }) async {
+    final application = Uint8List.fromList(applicationState);
+    final ratchet = Uint8List.fromList(ratchetState);
+    try {
+      final receipt = V3CheckpointReceipt.fromStates(
+        direction: direction,
+        assemblyId: assemblyId,
+        applicationState: application,
+        ratchetState: ratchet,
+      );
+      final materialized = await _committedRecordMaterializer!.materialize(
+        application,
+        persistedAt: persistedAt,
+        authority: _materializerAuthority,
+      );
+      if (materialized.stableRecordId != receipt.stableRecordId ||
+          materialized.sessionKey != receipt.sessionKey) {
+        throw const V3LmfPersistenceConflictException(
+          'materialized v3 record differs from its checkpoint receipt',
+        );
+      }
+      return receipt;
+    } finally {
+      _wipe(application);
+      _wipe(ratchet);
+      _wipe(applicationState);
+      _wipe(ratchetState);
+    }
   }
 
   V3LmfFrame _validatedTarget(V3LmfDurableDelivery delivery) {

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:layergram/core/crypto/v3/committed_record_materializer_v3.dart';
 import 'package:layergram/core/crypto/v3/committed_record_v3.dart';
 import 'package:layergram/core/crypto/v3/ec_double_ratchet_v3.dart';
 import 'package:layergram/core/crypto/v3/hybrid_ratchet_header_v3.dart';
@@ -11,6 +12,7 @@ import 'package:layergram/core/crypto/v3/lmf_v3.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3_atomic_commit.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3_persistence.dart';
 import 'package:layergram/core/crypto/v3/session_commit_controller_v3.dart';
+import 'package:layergram/core/crypto/v3/session_checkpoint_v3.dart';
 import 'package:layergram/core/crypto/v3/triple_ratchet_state_v3.dart';
 
 void main() {
@@ -39,6 +41,11 @@ void main() {
       );
       expect(restored.sessionRevisions.values, <int>[0]);
       expect(restored.committedEffectCount, 0);
+      expect(() => journal.effects, throwsStateError);
+      expect(
+        () => journal.effectForAssembly('not-an-assembly'),
+        throwsStateError,
+      );
 
       var directBuilderCalls = 0;
       await expectLater(
@@ -91,6 +98,87 @@ void main() {
       current.wipeSecrets();
       await controller.close();
       await fixture.inbox.close();
+      fixture.checkpoint.wipeSecrets();
+    });
+
+    test('materializes and checkpoints an incoming commit across restart',
+        () async {
+      final fixture = await _Fixture.create(messageCount: 1);
+      final controller = V3SessionCommitController(
+        journal: V3LmfAtomicCommitJournal(
+          store: fixture.store,
+          inbox: fixture.inbox,
+        ),
+        committedRecordMaterializer: V3CommittedRecordMaterializer(
+          store: fixture.store,
+        ),
+        checkpointRepository: V3SessionCheckpointRepository(
+          store: fixture.store,
+        ),
+      );
+      final initialRestore = await controller.restore(
+        checkpoints: <V3TripleRatchetState>[fixture.checkpoint],
+      );
+      expect(initialRestore.materializedRecordCount, 0);
+      expect(initialRestore.checkpointCount, 1);
+      final committed = await controller.commitDelivery(
+        delivery: fixture.deliveries.single,
+        expectedRevision: 0,
+        transitionBuilder: (_, current, __) =>
+            _candidateFrom(current, receivingEpoch: 0),
+      );
+      expect(committed.ratchetRevision, 1);
+      expect(
+        fixture.store.records.values
+            .where(
+              (payload) =>
+                  payload['kind'] == V3CommittedRecordMaterializer.recordKind,
+            )
+            .length,
+        1,
+      );
+      final checkpointPayload = fixture.store.records.values.singleWhere(
+        (payload) =>
+            payload['kind'] == V3SessionCheckpointRepository.recordKind,
+      );
+      expect(checkpointPayload['revision'], 1);
+      expect(checkpointPayload['receipts'], hasLength(1));
+      await controller.close();
+      await fixture.inbox.close();
+
+      final restoredInbox = V3LmfDurableInbox(store: fixture.store);
+      await restoredInbox.restore(keyResolver: (_) => fixture.transportKey);
+      final restoredController = V3SessionCommitController(
+        journal: V3LmfAtomicCommitJournal(
+          store: fixture.store,
+          inbox: restoredInbox,
+        ),
+        committedRecordMaterializer: V3CommittedRecordMaterializer(
+          store: fixture.store,
+        ),
+        checkpointRepository: V3SessionCheckpointRepository(
+          store: fixture.store,
+        ),
+      );
+      final restored = await restoredController.restore(
+        checkpoints: <V3TripleRatchetState>[fixture.checkpoint],
+      );
+      expect(restored.sessionRevisions.values, <int>[1]);
+      expect(restored.committedEffectCount, 1);
+      expect(restored.materializedRecordCount, 1);
+      expect(restored.checkpointCount, 1);
+      expect(
+        fixture.store.records.values
+            .where(
+              (payload) =>
+                  payload['kind'] == V3CommittedRecordMaterializer.recordKind,
+            )
+            .length,
+        1,
+      );
+
+      await restoredController.close();
+      await restoredInbox.close();
       fixture.checkpoint.wipeSecrets();
     });
 

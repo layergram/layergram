@@ -140,6 +140,12 @@ reviewed standard alternative or narrow its product claim explicitly.
   either side is missing, unbound, malformed, or divergent.
 - No effect-journal entry may be removed until a separately durable ratchet
   checkpoint, application record, and replay window make that removal safe.
+- Durable AR3 materialization MUST use the assembly-derived stable record ID,
+  reuse exact bytes idempotently, and reject divergent bytes for the same ID.
+  A TR3 checkpoint MUST bind one stable session lineage and cumulative receipts
+  over the exact covered AR3/TR3 transitions. Until checkpoint-backed replay
+  and replay-window rules are frozen, neither record authorizes journal or
+  tombstone deletion.
 - One identity/passphrase-scoped authority MUST own journal mutation before
   session restore. Direct journal lifecycle calls and writes MUST be rejected
   after ownership; production wiring MUST neither retain nor expose the owned

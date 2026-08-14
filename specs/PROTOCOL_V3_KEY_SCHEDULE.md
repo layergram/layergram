@@ -10,7 +10,8 @@ candidate that supplies its authenticated inputs. The EC Double Ratchet engine,
 ML-KEM Braid/SCKA backend boundary, Sparse-PQ message chains, exact HR3-to-LMF
 authentication, candidate-only hybrid send/receive orchestration,
 deferred-fragment key resolution, and an inactive crash-consistent send/receive
-session coordinator now exist. No production SCKA backend or active product
+session coordinator, encrypted stable-ID AR3 materializer, and monotonic TR3
+checkpoint repository now exist. No production SCKA backend or active product
 integration exists, and protocol v3 remains disabled.
 
 `PROTOCOL_V3_SECURITY_GOALS.md` remains authoritative. This draft and its code
@@ -57,6 +58,9 @@ This checkpoint provides:
   its journals and outbox, reconstructs a unified contiguous per-session TR3
   revision chain, validates AR3/LMF/session bindings, and applies serialized
   revision CAS;
+- encrypted, bounded, idempotent AR3 materialization under the stable
+  assembly-derived record ID, plus write-new-before-delete TR3 checkpoints with
+  cumulative direction/revision/state receipts;
 - golden, negative, framing, reassembly, atomic-commit, exact-byte retry,
   capacity-preflight, ambiguous-write, restart, and ACK-ordering tests.
 
@@ -66,10 +70,10 @@ It deliberately does not provide:
   candidate remains externally unreviewed);
 - a production ML-KEM Braid/SCKA implementation or reviewed native state
   exporter;
-- an active durable send controller, handshake bootstrap, or real
-  application-repository materializer;
-- checkpoint compaction, replay-window retirement, or journal garbage
-  collection;
+- an active durable send controller, handshake bootstrap, or projection from
+  the durable AR3 source into the current message/UI repository;
+- checkpoint-as-restore-anchor compaction, replay-window retirement, or journal
+  garbage collection;
 - activation in contacts, messaging, UI, backup, migration, or Premium paths.
 
 All code remains isolated under `lib/core/crypto/v3/`. Protocol v2 remains the
@@ -679,8 +683,9 @@ present. Partial or unauthenticated ACKs never alter the send journal.
 
 The inactive `V3SessionCommitController` claims its receive journal and, when
 durable sending is configured, its send journal and outbox before restore, so
-direct lifecycle, commit, or export calls cannot race the coordinator after the
-claim. Passing these objects to the controller transfers exclusive ownership;
+direct lifecycle, mutation, effect/frame-read, or export calls cannot race the
+coordinator after the claim. Passing these objects to the controller transfers
+exclusive ownership;
 production wiring must not retain or expose them for concurrent use while
 restore begins. The controller requires a unique active checkpoint for every
 session in the encrypted identity/passphrase scope and accepts only application
@@ -702,6 +707,26 @@ prove that a caller-supplied hybrid candidate is cryptographically correct by
 revision shape alone; the reviewed EC/SCKA transition engines and validator
 must supply that proof.
 
+When configured, the same serialized controller also restores the encrypted
+AR3 materializer and checkpoint repository before journal replay. After replay,
+and after every new incoming or outgoing transition, it:
+
+1. materializes each exact canonical AR3 byte string under `v3:<assembly-id>`;
+2. rejects a different AR3 byte string for an already materialized stable ID;
+3. derives a direction-bound receipt over the exact AR3 and TR3 byte strings;
+4. persists the complete current TR3 plus the cumulative sorted receipt set;
+5. exposes the commit/send result only after those writes complete.
+
+Materializer and checkpoint writes have ambiguous outcomes on error and force
+fresh controller reconstruction. Restore makes partial progress idempotent: an
+already materialized exact AR3 is reused, and the checkpoint repository accepts
+only the same revision or a higher snapshot that preserves every prior receipt
+and the stable session lineage. The checkpoint is currently a consistency
+anchor, not a replay shortcut: all journal effects remain present and are fully
+replayed before the checkpoint is reconciled. Therefore no journal effect,
+inbox tombstone, replay entry, completed send effect, or outbox record is made
+collectable by this checkpoint alone.
+
 ## 10. Remaining activation gates
 
 Before this schedule can carry user messages, Layergram still requires:
@@ -712,9 +737,10 @@ Before this schedule can carry user messages, Layergram still requires:
   export/import behind the frozen boundary;
 - independent review and production wiring of the inactive crash-consistent
   send/receive coordinator, including the reviewed native-state validator;
-- skipped-key expiry, checkpoint, compaction, replay-window, and garbage-
-  collection rules;
-- idempotent external application materialization;
+- skipped-key expiry, checkpoint-backed restore/compaction, replay-window, and
+  garbage-collection rules;
+- active message/UI repository projection from the idempotent durable AR3
+  source;
 - full packaging, crash, migration, multi-device, passphrase, Maximum-mode,
   text, link, QR, and steganography tests;
 - independent protocol and implementation audit with no unresolved high or

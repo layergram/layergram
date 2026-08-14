@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:layergram/core/crypto/v3/committed_record_materializer_v3.dart';
 import 'package:layergram/core/crypto/v3/committed_record_v3.dart';
 import 'package:layergram/core/crypto/v3/key_schedule_v3.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3.dart';
@@ -13,6 +14,7 @@ import 'package:layergram/core/crypto/v3/lmf_v3_outbox.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3_persistence.dart';
 import 'package:layergram/core/crypto/v3/pq_message_ratchet_v3.dart';
 import 'package:layergram/core/crypto/v3/session_commit_controller_v3.dart';
+import 'package:layergram/core/crypto/v3/session_checkpoint_v3.dart';
 import 'package:layergram/core/crypto/v3/session_send_journal_v3.dart';
 import 'package:layergram/core/crypto/v3/sparse_pq_ratchet_v3.dart';
 import 'package:layergram/core/crypto/v3/triple_ratchet_engine_v3.dart';
@@ -63,6 +65,104 @@ void main() {
       current.wipeSecrets();
       _wipe(plaintext);
       await fixture.close();
+    });
+
+    test('materializes AR3 and checkpoints TR3 before exposing a send',
+        () async {
+      final fixture = await _SendFixture.create(durableState: true);
+      final result = await fixture.controller.sendMessage(
+        sessionId: fixture.checkpoint.sessionId,
+        expectedRevision: 0,
+        plaintext: _bytes(320, 0x49),
+        backend: fixture.backend,
+        persistedAt: DateTime.utc(2026, 8, 14),
+      );
+      expect(result.ratchetRevision, 1);
+      expect(
+        fixture.store.records.values
+            .where(
+              (payload) =>
+                  payload['kind'] == V3CommittedRecordMaterializer.recordKind,
+            )
+            .length,
+        1,
+      );
+      final checkpointPayload = fixture.store.records.values.singleWhere(
+        (payload) =>
+            payload['kind'] == V3SessionCheckpointRepository.recordKind,
+      );
+      expect(checkpointPayload['revision'], 1);
+      expect(checkpointPayload['receipts'], hasLength(1));
+      expect(
+        (checkpointPayload['receipts'] as List).single['assemblyId'],
+        result.assemblyId,
+      );
+      final backendCalls = fixture.backend.sendCalls;
+      await fixture.closeControllerOnly();
+
+      final restored = await _SendFixture.create(
+        store: fixture.store,
+        checkpoint: fixture.checkpoint,
+        backend: fixture.backend,
+        durableState: true,
+      );
+      expect(restored.restoreResult.materializedRecordCount, 1);
+      expect(restored.restoreResult.checkpointCount, 1);
+      expect(restored.restoreResult.pendingSendAssemblyIds, <String>{
+        result.assemblyId,
+      });
+      expect(restored.backend.sendCalls, backendCalls);
+      expect(
+        restored.store.records.values
+            .where(
+              (payload) =>
+                  payload['kind'] == V3CommittedRecordMaterializer.recordKind,
+            )
+            .length,
+        1,
+      );
+      await restored.close();
+      fixture.checkpoint.wipeSecrets();
+    });
+
+    test('ambiguous durable-state writes self-heal from committed send state',
+        () async {
+      for (final failingKind in <String>[
+        V3CommittedRecordMaterializer.recordKind,
+        V3SessionCheckpointRepository.recordKind,
+      ]) {
+        final store = _FaultStore();
+        final fixture = await _SendFixture.create(
+          store: store,
+          durableState: true,
+        );
+        store.durableThenThrowKind = failingKind;
+        await expectLater(
+          fixture.controller.sendMessage(
+            sessionId: fixture.checkpoint.sessionId,
+            expectedRevision: 0,
+            plaintext: _bytes(288, failingKind.length),
+            backend: fixture.backend,
+          ),
+          throwsStateError,
+        );
+        expect(fixture.controller.requiresRecovery, isTrue);
+        expect(fixture.backend.sendCalls, 1);
+        await fixture.closeControllerOnly();
+
+        final restored = await _SendFixture.create(
+          store: store,
+          checkpoint: fixture.checkpoint,
+          backend: fixture.backend,
+          durableState: true,
+        );
+        expect(restored.restoreResult.materializedRecordCount, 1);
+        expect(restored.restoreResult.checkpointCount, 1);
+        expect(restored.restoreResult.pendingSendAssemblyIds, hasLength(1));
+        expect(restored.backend.sendCalls, 1);
+        await restored.close();
+        fixture.checkpoint.wipeSecrets();
+      }
     });
 
     test('durable-then-throw send recovers without ratchet or AEAD rerun',
@@ -673,6 +773,7 @@ final class _SendFixture {
     V3TripleRatchetState? checkpoint,
     _DeterministicEpochBackend? backend,
     int outboxMaxEntries = 64,
+    bool durableState = false,
   }) async {
     final actualStore = store ?? _FaultStore();
     final pair = checkpoint == null ? await _pairedSnapshots() : null;
@@ -686,6 +787,10 @@ final class _SendFixture {
       maxEntries: outboxMaxEntries,
     );
     final sendJournal = V3SessionSendJournal(store: actualStore);
+    final materializer =
+        durableState ? V3CommittedRecordMaterializer(store: actualStore) : null;
+    final checkpointRepository =
+        durableState ? V3SessionCheckpointRepository(store: actualStore) : null;
     final controller = V3SessionCommitController(
       journal: V3LmfAtomicCommitJournal(
         store: actualStore,
@@ -693,6 +798,8 @@ final class _SendFixture {
       ),
       sendJournal: sendJournal,
       outbox: outbox,
+      committedRecordMaterializer: materializer,
+      checkpointRepository: checkpointRepository,
       snapshotValidator: actualBackend.validateSnapshot,
     );
     final restored = await controller.restore(

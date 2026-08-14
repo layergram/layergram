@@ -220,11 +220,18 @@ class V3LmfAtomicCommitJournal {
 
   int get totalStateBytes => _totalStateBytes;
 
-  List<V3LmfCommittedEffect> get effects =>
-      List<V3LmfCommittedEffect>.unmodifiable(_effects.values);
+  List<V3LmfCommittedEffect> get effects {
+    _ensureAuthority(null);
+    return List<V3LmfCommittedEffect>.unmodifiable(_effects.values);
+  }
 
-  V3LmfCommittedEffect? effectForAssembly(String assemblyId) =>
-      _effects[assemblyId];
+  V3LmfCommittedEffect? effectForAssembly(
+    String assemblyId, {
+    V3LmfAtomicCommitAuthority? authority,
+  }) {
+    _ensureAuthority(authority);
+    return _effects[assemblyId];
+  }
 
   /// Claims this journal for exactly one higher-level session coordinator.
   ///
