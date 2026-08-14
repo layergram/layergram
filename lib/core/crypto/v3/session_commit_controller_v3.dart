@@ -101,9 +101,7 @@ final class V3SessionSendResult {
   final List<V3LmfFrame> frames;
 }
 
-/// Explainable outcome of the non-destructive receipt-retirement checkpoint.
-/// A successful replacement still retains both the compact proof and the
-/// retirement journal record.
+/// Explainable outcome of one fully finalized receipt retirement.
 final class V3SessionReceiptRetirementResult {
   const V3SessionReceiptRetirementResult({
     required this.decision,
@@ -153,13 +151,12 @@ final class V3SessionCompactionResult {
 /// is supplied, canonical AR3 records are materialized under stable IDs and a
 /// monotonic TR3 checkpoint is reconciled before a commit result is exposed.
 /// When a retirement journal is supplied, this authority also owns its entire
-/// lifecycle and fails restore closed unless every prepared/replaced plan still
-/// has the exact checkpoint, receipt state, and compact proof it requires. This
-/// integration never deletes the current retirement intent, compact proof, or
-/// receipt.
+/// lifecycle, reconciles every prepared/replaced/final stage, and deletes only
+/// an exact compact proof followed by its finalized plan. Any interrupted
+/// boundary is resumed on restore before the session is exposed.
 /// Hybrid handshake/session creation, native SCKA semantics, projection into
-/// the real chat repository, replay-window expiry, and rolling receipt
-/// compaction remain activation gates.
+/// the real chat repository and independently reviewed replay-window expiry
+/// remain activation gates.
 final class V3SessionCommitController {
   V3SessionCommitController({
     required V3LmfAtomicCommitJournal journal,
@@ -362,7 +359,7 @@ final class V3SessionCommitController {
             checkpoints: durableCheckpoints,
           );
         }
-        final retirementPlans = retirementJournal == null
+        var retirementPlans = retirementJournal == null
             ? const <V3SessionRetirementPlan>[]
             : retirementJournal.plans(authority: _retirementAuthority);
         final retirementPlansByAssembly = <String, V3SessionRetirementPlan>{};
@@ -468,6 +465,13 @@ final class V3SessionCommitController {
             incomingProofs: restoredJournal.replayWindowBindings,
             outgoingProofs: restoredSendJournal?.completionBindings ??
                 const <String, V3SessionSendCompletionBinding>{},
+          );
+          await _finalizeRetirementPlans(
+            plans: retirementPlans,
+            checkpoints: durableCheckpoints,
+          );
+          retirementPlans = retirementJournal!.plans(
+            authority: _retirementAuthority,
           );
           await checkpointRepository!.cleanupValidatedRetirementSources(
             authority: _checkpointAuthority,
@@ -1371,11 +1375,12 @@ final class V3SessionCommitController {
     });
   }
 
-  /// Replaces the current checkpoint with an exact one-receipt-pruned copy.
+  /// Retires one eligible checkpoint receipt and its compact proof.
   ///
   /// Eligibility is recomputed from the committed snapshot and compact proof.
-  /// The retirement intent is written first, then the replacement checkpoint,
-  /// then the journal stage. The compact proof is deliberately retained.
+  /// The retirement intent, pending replacement, and self-contained final
+  /// checkpoint are each written before the exact compact proof and plan are
+  /// deleted. A restart resumes any interrupted boundary idempotently.
   Future<V3SessionReceiptRetirementResult> replaceEligibleCheckpointReceipt({
     required String assemblyId,
     required V3RetentionPolicy policy,
@@ -1438,31 +1443,6 @@ final class V3SessionCommitController {
         );
       }
       final existingPlan = existingPlans.isEmpty ? null : existingPlans.single;
-      if (existingPlan?.checkpointWasReplaced ?? false) {
-        if (!_retirementTransitionMatchesPlan(
-              plan: existingPlan!,
-              checkpoint: checkpoint,
-            ) ||
-            existingPlan.replacementCheckpointDigest !=
-                checkpoint.checkpointDigest) {
-          throw const V3LmfPersistenceConflictException(
-            'v3 retired receipt does not match its replacement checkpoint',
-          );
-        }
-        final decision = _evaluateRetirementEligibility(
-          policy: policy,
-          now: now,
-          current: current,
-          receipt: receipt,
-          materializer: materializer,
-        );
-        return V3SessionReceiptRetirementResult(
-          decision: decision,
-          planId: existingPlan.planId,
-          replacementCheckpointDigest: checkpoint.checkpointDigest,
-        );
-      }
-
       final decision = _evaluateRetirementEligibility(
         policy: policy,
         now: now,
@@ -1508,22 +1488,18 @@ final class V3SessionCommitController {
               minimumProofLifetimeSeconds: policy.minimumProofLifetimeSeconds,
               authority: _retirementAuthority,
             );
-        final replacement = await checkpoints.replaceReceiptForRetirement(
-          expectedSourceCheckpointDigest: plan.sourceCheckpointDigest,
-          receipt: receipt,
+        final finalized = await _finalizeRetirementPlan(
+          plan: plan,
+          checkpoint: checkpoint,
           persistedAt: now,
-          authority: _checkpointAuthority,
         );
-        final advanced = await retirement.markCheckpointReplaced(
-          planId: plan.planId,
-          expectedSourceCheckpointDigest: plan.sourceCheckpointDigest,
-          replacementCheckpointDigest: replacement.checkpointDigest,
-          authority: _retirementAuthority,
+        await checkpoints.cleanupValidatedRetirementSources(
+          authority: _checkpointAuthority,
         );
         return V3SessionReceiptRetirementResult(
           decision: decision,
-          planId: advanced.planId,
-          replacementCheckpointDigest: replacement.checkpointDigest,
+          planId: plan.planId,
+          replacementCheckpointDigest: finalized.checkpointDigest,
         );
       } catch (_) {
         if (retirement.requiresRecovery || checkpoints.requiresRecovery) {
@@ -1741,16 +1717,22 @@ final class V3SessionCommitController {
       final transition = checkpoint.retirementTransition;
       if (transition == null) continue;
       final plan = byAssembly[transition.retiredReceipt.assemblyId];
-      if (plan == null ||
-          !_retirementTransitionMatchesPlan(
-            plan: plan,
-            checkpoint: checkpoint,
-          )) {
+      if (plan == null) {
+        if (transition.isFinalized) continue;
+        throw const V3LmfPersistenceConflictException(
+          'pending v3 retirement checkpoint has no prepared plan',
+        );
+      }
+      if (!_retirementTransitionMatchesPlan(
+        plan: plan,
+        checkpoint: checkpoint,
+      )) {
         throw const V3LmfPersistenceConflictException(
           'v3 retirement checkpoint has no exact prepared plan',
         );
       }
-      if (plan.stage == V3SessionRetirementStage.prepared) {
+      if (!transition.isFinalized &&
+          plan.stage == V3SessionRetirementStage.prepared) {
         try {
           await journal.markCheckpointReplaced(
             planId: plan.planId,
@@ -1762,10 +1744,32 @@ final class V3SessionCommitController {
           if (journal.requiresRecovery) _recoveryRequired = true;
           rethrow;
         }
-      } else if (plan.replacementCheckpointDigest !=
-          checkpoint.checkpointDigest) {
+      } else if (!transition.isFinalized &&
+          (plan.stage != V3SessionRetirementStage.checkpointReplaced ||
+              plan.replacementCheckpointDigest !=
+                  checkpoint.checkpointDigest)) {
         throw const V3LmfPersistenceConflictException(
           'v3 retirement journal and checkpoint replacement diverged',
+        );
+      } else if (transition.isFinalized &&
+          plan.stage == V3SessionRetirementStage.checkpointReplaced) {
+        try {
+          await journal.markFinalCheckpointWritten(
+            planId: plan.planId,
+            expectedReplacementCheckpointDigest:
+                plan.replacementCheckpointDigest!,
+            finalCheckpointDigest: checkpoint.checkpointDigest,
+            authority: _retirementAuthority,
+          );
+        } catch (_) {
+          if (journal.requiresRecovery) _recoveryRequired = true;
+          rethrow;
+        }
+      } else if (transition.isFinalized &&
+          (plan.stage != V3SessionRetirementStage.finalCheckpointWritten ||
+              plan.finalCheckpointDigest != checkpoint.checkpointDigest)) {
+        throw const V3LmfPersistenceConflictException(
+          'v3 retirement journal and final checkpoint diverged',
         );
       }
     }
@@ -1785,10 +1789,13 @@ final class V3SessionCommitController {
         );
       }
       final checkpoint = checkpoints[plan.sessionKey];
-      final expectedCheckpointDigest =
-          plan.stage == V3SessionRetirementStage.prepared
-              ? plan.sourceCheckpointDigest
-              : plan.replacementCheckpointDigest;
+      final expectedCheckpointDigest = switch (plan.stage) {
+        V3SessionRetirementStage.prepared => plan.sourceCheckpointDigest,
+        V3SessionRetirementStage.checkpointReplaced =>
+          plan.replacementCheckpointDigest,
+        V3SessionRetirementStage.finalCheckpointWritten =>
+          plan.finalCheckpointDigest,
+      };
       if (checkpoint == null ||
           checkpoint.checkpointDigest != expectedCheckpointDigest) {
         throw const V3LmfPersistenceConflictException(
@@ -1816,6 +1823,7 @@ final class V3SessionCommitController {
       switch (plan.direction) {
         case V3CheckpointEffectDirection.incoming:
           final proof = incomingProofs[plan.assemblyId];
+          if (proof == null && plan.finalCheckpointWasWritten) break;
           if (proof == null ||
               proof.higherLevelCommitDigest != plan.proofDigest ||
               proof.stableRecordId != plan.stableRecordId ||
@@ -1829,6 +1837,7 @@ final class V3SessionCommitController {
           break;
         case V3CheckpointEffectDirection.outgoing:
           final proof = outgoingProofs[plan.assemblyId];
+          if (proof == null && plan.finalCheckpointWasWritten) break;
           if (proof == null ||
               proof.effectDigest != plan.proofDigest ||
               proof.stableRecordId != plan.stableRecordId ||
@@ -1841,6 +1850,134 @@ final class V3SessionCommitController {
           }
           break;
       }
+    }
+  }
+
+  Future<void> _finalizeRetirementPlans({
+    required List<V3SessionRetirementPlan> plans,
+    required Map<String, V3SessionCheckpoint> checkpoints,
+  }) async {
+    for (final originalPlan in plans) {
+      final checkpoint = checkpoints[originalPlan.sessionKey];
+      if (checkpoint == null) {
+        throw const V3LmfPersistenceConflictException(
+          'v3 retirement finalization lost its checkpoint',
+        );
+      }
+      final finalized = await _finalizeRetirementPlan(
+        plan: originalPlan,
+        checkpoint: checkpoint,
+        persistedAt: checkpoint.persistedAt,
+      );
+      checkpoints[originalPlan.sessionKey] = finalized;
+    }
+  }
+
+  Future<V3SessionCheckpoint> _finalizeRetirementPlan({
+    required V3SessionRetirementPlan plan,
+    required V3SessionCheckpoint checkpoint,
+    required DateTime persistedAt,
+  }) async {
+    final retirement = _retirementJournal!;
+    final checkpoints = _checkpointRepository!;
+    var currentPlan = retirement.planForId(
+          plan.planId,
+          authority: _retirementAuthority,
+        ) ??
+        plan;
+    var currentCheckpoint = checkpoint;
+    final receipt = currentCheckpoint.receiptForAssembly(plan.assemblyId) ??
+        currentCheckpoint.retirementTransition?.retiredReceipt;
+    if (receipt == null || !_retirementReceiptMatches(plan, receipt)) {
+      throw const V3LmfPersistenceConflictException(
+        'v3 retirement finalization lost its exact receipt',
+      );
+    }
+    try {
+      if (currentPlan.stage == V3SessionRetirementStage.prepared) {
+        currentCheckpoint = await checkpoints.replaceReceiptForRetirement(
+          expectedSourceCheckpointDigest: currentPlan.sourceCheckpointDigest,
+          receipt: receipt,
+          persistedAt: persistedAt,
+          authority: _checkpointAuthority,
+        );
+        currentPlan = await retirement.markCheckpointReplaced(
+          planId: currentPlan.planId,
+          expectedSourceCheckpointDigest: currentPlan.sourceCheckpointDigest,
+          replacementCheckpointDigest: currentCheckpoint.checkpointDigest,
+          authority: _retirementAuthority,
+        );
+      }
+      if (currentPlan.stage == V3SessionRetirementStage.checkpointReplaced) {
+        currentCheckpoint = await checkpoints.finalizeReceiptRetirement(
+          expectedPendingCheckpointDigest:
+              currentPlan.replacementCheckpointDigest!,
+          expectedSourceCheckpointDigest: currentPlan.sourceCheckpointDigest,
+          receipt: receipt,
+          proofDigest: currentPlan.proofDigest,
+          planId: currentPlan.planId,
+          persistedAt: persistedAt,
+          authority: _checkpointAuthority,
+        );
+        currentPlan = await retirement.markFinalCheckpointWritten(
+          planId: currentPlan.planId,
+          expectedReplacementCheckpointDigest:
+              currentPlan.replacementCheckpointDigest!,
+          finalCheckpointDigest: currentCheckpoint.checkpointDigest,
+          authority: _retirementAuthority,
+        );
+      }
+      if (!currentPlan.finalCheckpointWasWritten ||
+          currentPlan.finalCheckpointDigest !=
+              currentCheckpoint.checkpointDigest) {
+        throw const V3LmfPersistenceConflictException(
+          'v3 retirement did not reach its exact final checkpoint',
+        );
+      }
+      switch (currentPlan.direction) {
+        case V3CheckpointEffectDirection.incoming:
+          await _journal.deleteReplayWindowProof(
+            assemblyId: currentPlan.assemblyId,
+            expectedEffectDigest: currentPlan.proofDigest,
+            stableRecordId: currentPlan.stableRecordId,
+            sessionKey: currentPlan.sessionKey,
+            ratchetRevision: currentPlan.ratchetRevision,
+            committedAt: currentPlan.proofRecordedAt,
+            authority: _authority,
+          );
+          break;
+        case V3CheckpointEffectDirection.outgoing:
+          final sendJournal = _sendJournal;
+          if (sendJournal == null) {
+            throw StateError(
+              'Layergram v3 outgoing retirement has no send journal',
+            );
+          }
+          await sendJournal.deleteCompletionProof(
+            assemblyId: currentPlan.assemblyId,
+            expectedEffectDigest: currentPlan.proofDigest,
+            stableRecordId: currentPlan.stableRecordId,
+            sessionKey: currentPlan.sessionKey,
+            ratchetRevision: currentPlan.ratchetRevision,
+            completedAt: currentPlan.proofRecordedAt,
+            authority: _sendAuthority,
+          );
+          break;
+      }
+      await retirement.deleteFinalizedPlan(
+        planId: currentPlan.planId,
+        finalCheckpointDigest: currentCheckpoint.checkpointDigest,
+        authority: _retirementAuthority,
+      );
+      return currentCheckpoint;
+    } catch (_) {
+      if (retirement.requiresRecovery ||
+          checkpoints.requiresRecovery ||
+          _journal.requiresRecovery ||
+          (_sendJournal?.requiresRecovery ?? false)) {
+        _recoveryRequired = true;
+      }
+      rethrow;
     }
   }
 
@@ -2579,12 +2716,14 @@ bool _allowsReplacedRetirementReceipt({
   required String? checkpointDigest,
 }) =>
     plan != null &&
-    plan.stage == V3SessionRetirementStage.checkpointReplaced &&
+    plan.checkpointWasReplaced &&
     plan.direction == direction &&
     plan.sessionKey == bindingSessionKey &&
     plan.stableRecordId == stableRecordId &&
     plan.ratchetRevision == ratchetRevision &&
-    plan.replacementCheckpointDigest == checkpointDigest;
+    (plan.finalCheckpointWasWritten
+        ? plan.finalCheckpointDigest == checkpointDigest
+        : plan.replacementCheckpointDigest == checkpointDigest);
 
 bool _retirementReceiptMatches(
   V3SessionRetirementPlan plan,
@@ -2604,6 +2743,11 @@ bool _retirementTransitionMatchesPlan({
   final transition = checkpoint.retirementTransition;
   return transition != null &&
       transition.sourceCheckpointDigest == plan.sourceCheckpointDigest &&
+      (!transition.isFinalized ||
+          (transition.pendingCheckpointDigest ==
+                  plan.replacementCheckpointDigest &&
+              transition.proofDigest == plan.proofDigest &&
+              transition.planId == plan.planId)) &&
       checkpoint.sessionKey == plan.sessionKey &&
       checkpoint.revision >= plan.ratchetRevision &&
       _retirementReceiptMatches(plan, transition.retiredReceipt) &&

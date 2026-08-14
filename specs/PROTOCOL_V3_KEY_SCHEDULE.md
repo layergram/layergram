@@ -73,10 +73,12 @@ This checkpoint provides:
 - an encrypted, bounded, fail-stop `v3_session_retirement_v1` journal whose
   `prepared` record freezes the exact compact proof, cumulative receipt, local
   proof age, and source checkpoint, and whose write-new-before-delete
-  `checkpointReplaced` revision binds the exact replacement checkpoint digest;
+  `checkpointReplaced` and `finalCheckpointWritten` revisions bind the exact
+  pending and self-contained final checkpoint digests;
 - single-authority ownership and scope-pinned Aux/Hive restore of that journal,
   with fail-closed reconciliation against the exact durable checkpoint,
-  direction-bound receipt state, and incoming/outgoing compact proof;
+  direction-bound receipt state, incoming/outgoing compact proof, exact
+  proof/plan deletion, and bounded rolling receipt retirement;
 - golden, negative, framing, reassembly, atomic-commit, exact-byte retry,
   capacity-preflight, ambiguous-write, restart, and ACK-ordering tests.
 
@@ -88,9 +90,6 @@ It deliberately does not provide:
   exporter;
 - an active durable send controller, handshake bootstrap, or projection from
   the durable AR3 source into the current message/UI repository;
-- destructive replay/completion-proof and plan retirement, or rolling
-  compaction of more than one cumulative checkpoint receipt at one stable
-  revision;
 - registration in providers or activation in contacts, messaging, UI, backup,
   migration, or Premium paths.
 
@@ -786,32 +785,32 @@ An already durable completion proof remains valid when a later cumulative
 checkpoint retains the same immutable receipt.
 Direct tombstone/replay purging is rejected after coordinator ownership.
 The retention profile and non-destructive eligibility rules are frozen. The
-bounded encrypted `v3_session_retirement_v1` journal provides the
-non-destructive durable boundary: `prepared` binds direction,
+bounded encrypted `v3_session_retirement_v1` journal provides the durable
+retirement boundary: `prepared` binds direction,
 assembly, proof digest, stable record ID, session, ratchet revision, exact state
 receipt, source checkpoint digest, locally recorded proof/preparation times, and
 the minimum lifetime used; `checkpointReplaced` is a write-new-before-delete
 revision that additionally binds one different canonical replacement checkpoint
-digest. Ambiguous writes fail stopped until a fresh restore, equal-stage
-divergence fails closed, and a restored higher stage must exactly extend its
-prepared record. The journal intentionally exposes no collect/delete operation.
+digest; `finalCheckpointWritten` binds a self-contained final checkpoint whose
+canonical transition also binds the pending checkpoint digest, proof digest,
+plan ID, original source digest, and removed receipt. Ambiguous writes and
+deletes fail stopped until fresh restore, equal-stage divergence fails closed,
+and every restored higher stage must exactly extend its predecessors. Deletion
+is authority-gated and accepts only the exact finalized binding.
 The single session authority claims and restores this journal from the same
 scope-pinned encrypted store. It evaluates the frozen local policy, writes the
 prepared plan, then writes a same-revision checkpoint containing a canonical
 transition over the exact source checkpoint digest and the one removed receipt,
-and finally advances the plan. The compact proof is not deleted. Restore retains
-an interrupted source checkpoint until the separate plan validates, selects the
-unique exact replacement, advances a prepared plan when its replacement was
-already durable, and only then cleans the superseded source copy. A
-`checkpointReplaced` plan must match the exact replacement checkpoint, its
-embedded retired receipt, and the still-present compact proof. Divergence fails
-closed. Actual compact-proof and plan deletion, plus rolling removal of more
-than one receipt at the same stable revision, remain separate activation gates.
-Only one retirement plan may be pending for a session at this intermediate
-boundary; a different plan is rejected before any additional durable write.
-Until that final deletion step exists, the inactive coordinator rejects further
-ratchet advances for a session carrying any retirement plan, so an intermediate
-checkpoint cannot be silently superseded and become unrecoverable.
+advances the plan, writes the finalized checkpoint, and advances the final stage
+before deleting the exact compact proof and then the exact plan. Restore retains
+an interrupted predecessor chain, selects only its unique exact tip, reconciles
+any already durable stage, accepts a missing proof only after the final
+checkpoint is present, and resumes deletion idempotently. Source cleanup runs
+oldest-to-newest and stops on failure, preventing a disconnected surviving
+ancestor. One plan may be pending per session during an intermediate boundary;
+successful or recovered finalization removes it, so another receipt can be
+retired at the same stable ratchet revision with fixed-size latest-transition
+metadata. Divergence fails closed at every boundary.
 
 ## 10. Remaining activation gates
 
@@ -823,9 +822,6 @@ Before this schedule can carry user messages, Layergram still requires:
   export/import behind the frozen boundary;
 - independent review and production wiring of the inactive crash-consistent
   send/receive coordinator, including the reviewed native-state validator;
-- crash-consistent compact-proof and retirement-plan deletion after the durable
-  replacement boundary, followed by bounded rolling compaction of cumulative
-  checkpoint receipts under the frozen local policy;
 - active message/UI repository projection from the idempotent durable AR3
   source;
 - full packaging, crash, migration, multi-device, passphrase, Maximum-mode,

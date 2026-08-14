@@ -159,25 +159,26 @@ reviewed standard alternative or narrow its product claim explicitly.
   bounded, canonical, and written before any compact proof or cumulative receipt
   disappears. Its prepared state MUST bind the exact proof, direction-bound
   receipt, source checkpoint, locally measured age, and configured minimum
-  lifetime. A later durable stage MUST bind one exact replacement checkpoint
-  without weakening the prepared binding. Ambiguous writes MUST fail stopped
-  until restore. Merely reaching that stage MUST NOT by itself expose a generic
-  proof-deletion API. The coordinator MUST encode the source checkpoint digest
-  and exactly one removed receipt in the canonical replacement checkpoint,
-  write it before advancing the journal, and preserve the compact proof.
+  lifetime. Later durable stages MUST bind one exact pending replacement and one
+  self-contained final checkpoint without weakening the prepared binding. The
+  final checkpoint MUST bind the pending checkpoint, proof digest, plan ID,
+  source checkpoint, and exactly one removed receipt. Ambiguous writes or
+  deletes MUST fail stopped until restore. No generic proof-deletion API may be
+  exposed; only the single authority may delete an exact proof after the final
+  checkpoint is durable.
 - The single authority MUST claim and restore the retirement journal from the
   same encrypted scope. At most one retirement plan may be pending per session;
   restore MUST reject duplicate plans for one session or assembly and
   MUST revalidate the exact current checkpoint stage, direction-bound receipt
   state, compact proof digest/bindings, and locally recorded proof time before
-  accepting any plan. If a replacement write completed before a crash, restore
-  MUST validate that exact transition and idempotently advance the prepared
-  plan. An unverified replacement MUST NOT cause its source checkpoint to be
-  deleted. Validation may clean only the superseded source checkpoint; it MUST
-  NOT delete the plan or compact proof.
-- Until compact-proof and plan deletion are crash-consistently implemented, a
-  session with any retirement plan MUST reject further ratchet advances rather
-  than silently supersede its replacement checkpoint.
+  accepting any non-final plan. If a replacement or final write completed
+  before a crash, restore MUST validate that exact transition and idempotently
+  advance the journal. A missing compact proof is valid only with the exact
+  final stage. The coordinator MUST delete the proof before the plan, resume
+  either ambiguous deletion after restore, and clean retained checkpoint
+  ancestors without disconnecting a surviving older record. A pending plan MUST
+  block ratchet advance; successful finalization MUST remove it and allow
+  bounded rolling retirement at the same stable revision.
 - One identity/passphrase-scoped authority MUST own journal mutation before
   session restore. Direct journal lifecycle calls and writes MUST be rejected
   after ownership; production wiring MUST neither retain nor expose the owned

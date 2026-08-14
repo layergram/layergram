@@ -471,7 +471,8 @@ void main() {
       fixture.checkpoint.wipeSecrets();
     });
 
-    test('restores an exact prepared outgoing retirement plan', () async {
+    test('restart finalizes an exact prepared outgoing retirement plan',
+        () async {
       final fixture = await _SendFixture.create(durableState: true);
       final result = await fixture.controller.sendMessage(
         sessionId: fixture.checkpoint.sessionId,
@@ -494,26 +495,26 @@ void main() {
         durableState: true,
         retirementState: true,
       );
-      expect(restored.restoreResult.retirementPlanCount, 1);
+      expect(restored.restoreResult.retirementPlanCount, 0);
       expect(
         fixture.store.records.values.where(
           (payload) => payload['kind'] == V3SessionRetirementJournal.recordKind,
         ),
-        hasLength(1),
+        isEmpty,
       );
       expect(
         fixture.store.records.values.where(
           (payload) =>
               payload['kind'] == V3SessionSendJournal.completionRecordKind,
         ),
-        hasLength(1),
+        isEmpty,
       );
 
       await restored.close();
       fixture.checkpoint.wipeSecrets();
     });
 
-    test('replaces one eligible outgoing receipt and retains completion proof',
+    test('fully retires one eligible outgoing receipt and completion proof',
         () async {
       final fixture = await _SendFixture.create(
         durableState: true,
@@ -557,14 +558,19 @@ void main() {
           (payload) =>
               payload['kind'] == V3SessionSendJournal.completionRecordKind,
         ),
-        hasLength(1),
+        isEmpty,
       );
       expect(
-        fixture.store.records.values.singleWhere(
+        fixture.store.records.values.where(
           (payload) => payload['kind'] == V3SessionRetirementJournal.recordKind,
-        )['stage'],
-        V3SessionRetirementStage.checkpointReplaced.wireId,
+        ),
+        isEmpty,
       );
+      final transition =
+          (checkpoint['retirement'] as Map).cast<String, dynamic>();
+      expect(transition['pendingCheckpointDigest'], isNotNull);
+      expect(transition['proofDigest'], isNotNull);
+      expect(transition['planId'], isNotNull);
 
       await fixture.closeControllerOnly();
       final restored = await _SendFixture.create(
@@ -574,14 +580,14 @@ void main() {
         durableState: true,
         retirementState: true,
       );
-      expect(restored.restoreResult.retirementPlanCount, 1);
+      expect(restored.restoreResult.retirementPlanCount, 0);
       expect(restored.restoreResult.sessionRevisions.values.single, 1);
       expect(
         fixture.store.records.values.where(
           (payload) =>
               payload['kind'] == V3SessionSendJournal.completionRecordKind,
         ),
-        hasLength(1),
+        isEmpty,
       );
       await restored.close();
       fixture.checkpoint.wipeSecrets();

@@ -8,7 +8,7 @@ import 'package:layergram/core/crypto/v3/session_retirement_journal_v3.dart';
 
 void main() {
   group('inactive v3 session retirement journal', () {
-    test('persists prepared and checkpoint-replaced stages across restart',
+    test('persists all stages and deletes only an exact finalized plan',
         () async {
       final store = _Store()..failDeletes = true;
       final journal = V3SessionRetirementJournal(store: store);
@@ -29,6 +29,18 @@ void main() {
       expect(advanced.stage, V3SessionRetirementStage.checkpointReplaced);
       expect(advanced.replacementCheckpointDigest, replacement);
       expect(store.records, hasLength(2));
+      final finalDigest = _digest(0x72);
+      final finalized = await journal.markFinalCheckpointWritten(
+        planId: prepared.planId,
+        expectedReplacementCheckpointDigest: replacement,
+        finalCheckpointDigest: finalDigest,
+      );
+      expect(
+        finalized.stage,
+        V3SessionRetirementStage.finalCheckpointWritten,
+      );
+      expect(finalized.finalCheckpointDigest, finalDigest);
+      expect(store.records, hasLength(3));
       await journal.close();
 
       store.failDeletes = false;
@@ -37,8 +49,31 @@ void main() {
       expect(restored.plans, hasLength(1));
       expect(restored.plans.single.checkpointWasReplaced, isTrue);
       expect(restored.plans.single.replacementCheckpointDigest, replacement);
-      expect(restored.removedSupersededRecords, 1);
+      expect(restored.plans.single.finalCheckpointDigest, finalDigest);
+      expect(restored.removedSupersededRecords, 2);
       expect(store.records, hasLength(1));
+      await expectLater(
+        restoredJournal.deleteFinalizedPlan(
+          planId: prepared.planId,
+          finalCheckpointDigest: _digest(0x73),
+        ),
+        throwsA(isA<V3LmfPersistenceConflictException>()),
+      );
+      expect(
+        await restoredJournal.deleteFinalizedPlan(
+          planId: prepared.planId,
+          finalCheckpointDigest: finalDigest,
+        ),
+        isTrue,
+      );
+      expect(
+        await restoredJournal.deleteFinalizedPlan(
+          planId: prepared.planId,
+          finalCheckpointDigest: finalDigest,
+        ),
+        isFalse,
+      );
+      expect(store.records, isEmpty);
       await restoredJournal.close();
     });
 

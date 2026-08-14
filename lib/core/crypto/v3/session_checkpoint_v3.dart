@@ -124,16 +124,27 @@ final class V3CheckpointReceipt {
 }
 
 /// Canonical evidence that one checkpoint was replaced solely to retire one
-/// cumulative receipt. The compact replay/completion proof remains durable;
-/// this transition alone never authorizes deleting it.
+/// cumulative receipt. A pending transition still requires its external plan
+/// and compact proof. A finalized transition binds both plus its immediate
+/// predecessor, and therefore remains self-contained after their deletion.
 final class V3CheckpointRetirementTransition {
   const V3CheckpointRetirementTransition._({
     required this.sourceCheckpointDigest,
     required this.retiredReceipt,
+    required this.pendingCheckpointDigest,
+    required this.proofDigest,
+    required this.planId,
   });
 
   final String sourceCheckpointDigest;
   final V3CheckpointReceipt retiredReceipt;
+  final String? pendingCheckpointDigest;
+  final String? proofDigest;
+  final String? planId;
+
+  bool get isFinalized => pendingCheckpointDigest != null;
+  String get predecessorCheckpointDigest =>
+      pendingCheckpointDigest ?? sourceCheckpointDigest;
 }
 
 /// Highest durable TR3 snapshot for one session plus cumulative transition
@@ -168,7 +179,7 @@ final class V3SessionCheckpoint {
   int get retainedBytes =>
       _encodedSnapshot.length +
       receipts.length * 160 +
-      (retirementTransition == null ? 0 : 160);
+      (retirementTransition == null ? 0 : 320);
 
   V3TripleRatchetState decodeSnapshot() {
     final bytes = encodedSnapshot;
@@ -236,7 +247,7 @@ final class V3SessionCheckpointRepository {
   }
 
   static const String recordKind = 'v3_session_checkpoint_v1';
-  static const int _recordVersion = 2;
+  static const int _recordVersion = 3;
   static const int _maxTimestampMillis = 253402300799999;
 
   final V3LmfRecordStore _store;
@@ -247,7 +258,7 @@ final class V3SessionCheckpointRepository {
 
   final Map<String, V3SessionCheckpoint> _checkpoints =
       <String, V3SessionCheckpoint>{};
-  final Set<String> _pendingRetirementSourceStorageIds = <String>{};
+  final List<String> _pendingRetirementSourceStorageIds = <String>[];
   Future<void> _operationTail = Future<void>.value();
   bool _restored = false;
   bool _closed = false;
@@ -346,10 +357,23 @@ final class V3SessionCheckpointRepository {
             highest,
             candidates,
           );
+          final candidatesByDigest = <String, V3SessionCheckpoint>{
+            for (final candidate in candidates)
+              candidate.checkpointDigest: candidate,
+          };
+          for (final digest in retirementAncestors) {
+            final ancestor = candidatesByDigest[digest];
+            if (ancestor != null &&
+                !_pendingRetirementSourceStorageIds.contains(
+                  ancestor.storageId,
+                )) {
+              _pendingRetirementSourceStorageIds.add(ancestor.storageId);
+            }
+          }
+          final retirementAncestorSet = retirementAncestors.toSet();
           for (final candidate in candidates) {
             if (identical(candidate, highest)) continue;
-            if (retirementAncestors.contains(candidate.checkpointDigest)) {
-              _pendingRetirementSourceStorageIds.add(candidate.storageId);
+            if (retirementAncestorSet.contains(candidate.checkpointDigest)) {
               continue;
             }
             await _deleteIgnoringFailure(candidate.storageId);
@@ -523,6 +547,7 @@ final class V3SessionCheckpointRepository {
       if (existing.checkpointDigest != expectedSourceCheckpointDigest) {
         final transition = existing.retirementTransition;
         if (transition != null &&
+            !transition.isFinalized &&
             transition.sourceCheckpointDigest ==
                 expectedSourceCheckpointDigest &&
             _sameReceipt(transition.retiredReceipt, receipt) &&
@@ -533,7 +558,8 @@ final class V3SessionCheckpointRepository {
           'v3 retirement source checkpoint changed',
         );
       }
-      if (existing.retirementTransition != null) {
+      if (existing.retirementTransition != null &&
+          !existing.retirementTransition!.isFinalized) {
         throw const V3LmfPersistenceConflictException(
           'v3 checkpoint revision already contains a retirement transition',
         );
@@ -557,6 +583,9 @@ final class V3SessionCheckpointRepository {
       final transition = V3CheckpointRetirementTransition._(
         sourceCheckpointDigest: existing.checkpointDigest,
         retiredReceipt: receipt,
+        pendingCheckpointDigest: null,
+        proofDigest: null,
+        planId: null,
       );
       final digest = _checkpointDigest(
         sessionKey: existing.sessionKey,
@@ -614,8 +643,138 @@ final class V3SessionCheckpointRepository {
           _writeRecoveryRequired = true;
           rethrow;
         }
+        if (!_pendingRetirementSourceStorageIds.contains(existing.storageId)) {
+          _pendingRetirementSourceStorageIds.add(existing.storageId);
+        }
         existing._close();
-        await _deleteIgnoringFailure(existing.storageId);
+        return committed;
+      } finally {
+        candidate._close();
+      }
+    });
+  }
+
+  /// Writes the self-contained same-revision retirement checkpoint before the
+  /// external compact proof or retirement plan may be deleted.
+  Future<V3SessionCheckpoint> finalizeReceiptRetirement({
+    required String expectedPendingCheckpointDigest,
+    required String expectedSourceCheckpointDigest,
+    required V3CheckpointReceipt receipt,
+    required String proofDigest,
+    required String planId,
+    DateTime? persistedAt,
+    V3SessionCheckpointAuthority? authority,
+  }) {
+    return _serialized(() async {
+      _ensureAuthority(authority);
+      _ensureReady();
+      final existing = _checkpoints[receipt.sessionKey];
+      if (existing == null) {
+        throw StateError('Layergram v3 retirement has no pending checkpoint');
+      }
+      final existingTransition = existing.retirementTransition;
+      if (existing.checkpointDigest != expectedPendingCheckpointDigest) {
+        if (existingTransition != null &&
+            existingTransition.isFinalized &&
+            existingTransition.pendingCheckpointDigest ==
+                expectedPendingCheckpointDigest &&
+            existingTransition.sourceCheckpointDigest ==
+                expectedSourceCheckpointDigest &&
+            existingTransition.proofDigest == proofDigest &&
+            existingTransition.planId == planId &&
+            _sameReceipt(existingTransition.retiredReceipt, receipt)) {
+          return existing;
+        }
+        throw const V3LmfPersistenceConflictException(
+          'v3 retirement pending checkpoint changed',
+        );
+      }
+      if (existingTransition == null ||
+          existingTransition.isFinalized ||
+          existingTransition.sourceCheckpointDigest !=
+              expectedSourceCheckpointDigest ||
+          !_sameReceipt(existingTransition.retiredReceipt, receipt) ||
+          existing.receiptForAssembly(receipt.assemblyId) != null ||
+          !_isCanonicalDigest(proofDigest) ||
+          !_isCanonicalDigest(planId)) {
+        throw const V3LmfPersistenceConflictException(
+          'v3 retirement pending transition diverged',
+        );
+      }
+      final timestamp =
+          _validatedTimestamp(persistedAt ?? DateTime.now().toUtc());
+      if (timestamp.isBefore(existing.persistedAt)) {
+        throw const V3LmfPersistenceConflictException(
+          'v3 retirement final checkpoint timestamp moved backward',
+        );
+      }
+      final transition = V3CheckpointRetirementTransition._(
+        sourceCheckpointDigest: expectedSourceCheckpointDigest,
+        retiredReceipt: receipt,
+        pendingCheckpointDigest: expectedPendingCheckpointDigest,
+        proofDigest: proofDigest,
+        planId: planId,
+      );
+      final digest = _checkpointDigest(
+        sessionKey: existing.sessionKey,
+        revision: existing.revision,
+        lineageDigest: existing.lineageDigest,
+        snapshotDigest: existing.snapshotDigest,
+        receipts: existing.receipts,
+        retirementTransition: transition,
+      );
+      final candidate = V3SessionCheckpoint._(
+        storageId: '',
+        sessionKey: existing.sessionKey,
+        revision: existing.revision,
+        lineageDigest: existing.lineageDigest,
+        snapshotDigest: existing.snapshotDigest,
+        checkpointDigest: digest,
+        encodedSnapshot: existing._encodedSnapshot,
+        receipts: existing.receipts,
+        retirementTransition: transition,
+        persistedAt: timestamp,
+      );
+      try {
+        if (!_isExactRetirementFinalization(existing, candidate)) {
+          throw const V3LmfPersistenceConflictException(
+            'v3 retirement final checkpoint is not exact',
+          );
+        }
+        final prospectiveBytes = _totalRetainedBytes -
+            existing.retainedBytes +
+            candidate.retainedBytes;
+        if (prospectiveBytes > maxTotalRetainedBytes) {
+          throw const V3LmfPersistenceLimitException(
+            'v3 checkpoint retained-byte capacity exceeded',
+          );
+        }
+        V3SessionCheckpoint? committed;
+        try {
+          final storageId = await _store.write(_encodePayload(candidate));
+          committed = V3SessionCheckpoint._(
+            storageId: storageId,
+            sessionKey: candidate.sessionKey,
+            revision: candidate.revision,
+            lineageDigest: candidate.lineageDigest,
+            snapshotDigest: candidate.snapshotDigest,
+            checkpointDigest: candidate.checkpointDigest,
+            encodedSnapshot: candidate._encodedSnapshot,
+            receipts: candidate.receipts,
+            retirementTransition: candidate.retirementTransition,
+            persistedAt: candidate.persistedAt,
+          );
+          _checkpoints[committed.sessionKey] = committed;
+          _totalRetainedBytes = prospectiveBytes;
+        } catch (_) {
+          committed?._close();
+          _writeRecoveryRequired = true;
+          rethrow;
+        }
+        if (!_pendingRetirementSourceStorageIds.contains(existing.storageId)) {
+          _pendingRetirementSourceStorageIds.add(existing.storageId);
+        }
+        existing._close();
         return committed;
       } finally {
         candidate._close();
@@ -640,7 +799,9 @@ final class V3SessionCheckpointRepository {
           _pendingRetirementSourceStorageIds.remove(storageId);
           removed++;
         } catch (_) {
-          // A source duplicate is non-authoritative after plan validation.
+          // Delete oldest-to-newest and stop so a surviving older ancestor can
+          // never become disconnected from the selected final checkpoint.
+          break;
         }
       }
       return removed;
@@ -948,10 +1109,21 @@ V3CheckpointRetirementTransition? _decodeRetirementTransition(dynamic value) {
       'Invalid Layergram v3 checkpoint retirement transition',
     );
   }
-  const keys = <String>{'sourceCheckpointDigest', 'retiredReceipt', 'reserved'};
+  const keys = <String>{
+    'sourceCheckpointDigest',
+    'retiredReceipt',
+    'pendingCheckpointDigest',
+    'proofDigest',
+    'planId',
+    'reserved',
+  };
   if (map.length != keys.length ||
       !map.keys.every(keys.contains) ||
       map['sourceCheckpointDigest'] is! String ||
+      (map['pendingCheckpointDigest'] != null &&
+          map['pendingCheckpointDigest'] is! String) ||
+      (map['proofDigest'] != null && map['proofDigest'] is! String) ||
+      (map['planId'] != null && map['planId'] is! String) ||
       map['reserved'] != 0) {
     throw const FormatException(
       'Invalid Layergram v3 checkpoint retirement transition',
@@ -960,6 +1132,9 @@ V3CheckpointRetirementTransition? _decodeRetirementTransition(dynamic value) {
   return V3CheckpointRetirementTransition._(
     sourceCheckpointDigest: map['sourceCheckpointDigest'] as String,
     retiredReceipt: _decodeReceipt(map['retiredReceipt']),
+    pendingCheckpointDigest: map['pendingCheckpointDigest'] as String?,
+    proofDigest: map['proofDigest'] as String?,
+    planId: map['planId'] as String?,
   );
 }
 
@@ -970,6 +1145,9 @@ Map<String, dynamic>? _encodeRetirementTransition(
   return <String, dynamic>{
     'sourceCheckpointDigest': value.sourceCheckpointDigest,
     'retiredReceipt': _encodeReceipt(value.retiredReceipt),
+    'pendingCheckpointDigest': value.pendingCheckpointDigest,
+    'proofDigest': value.proofDigest,
+    'planId': value.planId,
     'reserved': 0,
   };
 }
@@ -983,8 +1161,22 @@ void _validateRetirementTransition(
 }) {
   if (value == null) return;
   final receipt = value.retiredReceipt;
+  final finalizedFields = <String?>[
+    value.pendingCheckpointDigest,
+    value.proofDigest,
+    value.planId,
+  ];
+  final allFinalized = finalizedFields.every((field) => field != null);
+  final allPending = finalizedFields.every((field) => field == null);
   if (!_isCanonicalDigest(value.sourceCheckpointDigest) ||
       value.sourceCheckpointDigest == checkpointDigest ||
+      (!allFinalized && !allPending) ||
+      (allFinalized &&
+          (!_isCanonicalDigest(value.pendingCheckpointDigest!) ||
+              !_isCanonicalDigest(value.proofDigest!) ||
+              !_isCanonicalDigest(value.planId!) ||
+              value.pendingCheckpointDigest == value.sourceCheckpointDigest ||
+              value.pendingCheckpointDigest == checkpointDigest)) ||
       receipt.sessionKey != sessionKey ||
       receipt.ratchetRevision <= 0 ||
       receipt.ratchetRevision > revision ||
@@ -1018,10 +1210,11 @@ V3SessionCheckpoint _selectCheckpointHistory(
     }
   }
   for (final candidate in byDigest.values) {
-    final sourceDigest = candidate.retirementTransition?.sourceCheckpointDigest;
+    final transition = candidate.retirementTransition;
+    final sourceDigest = transition?.predecessorCheckpointDigest;
     if (sourceDigest == null) continue;
     final source = byDigest[sourceDigest];
-    if (source != null && !_isExactReceiptReplacement(source, candidate)) {
+    if (source != null && !_isExactRetirementStep(source, candidate)) {
       throw const V3LmfPersistenceConflictException(
         'v3 checkpoint retirement chain is invalid',
       );
@@ -1058,7 +1251,7 @@ V3SessionCheckpoint _selectCheckpointRevisionTip(
   final childBySource = <String, V3SessionCheckpoint>{};
   final roots = <V3SessionCheckpoint>[];
   for (final candidate in candidates) {
-    final source = candidate.retirementTransition?.sourceCheckpointDigest;
+    final source = candidate.retirementTransition?.predecessorCheckpointDigest;
     if (source == null || !byDigest.containsKey(source)) {
       roots.add(candidate);
       continue;
@@ -1098,24 +1291,24 @@ V3SessionCheckpoint _selectCheckpointRevisionTip(
   return current;
 }
 
-Set<String> _retirementAncestorDigests(
+List<String> _retirementAncestorDigests(
   V3SessionCheckpoint selected,
   List<V3SessionCheckpoint> history,
 ) {
   final byDigest = <String, V3SessionCheckpoint>{
     for (final value in history) value.checkpointDigest: value,
   };
-  final ancestors = <String>{};
+  final ancestors = <String>[];
   var current = selected;
   final visited = <String>{selected.checkpointDigest};
   while (true) {
     final transition = current.retirementTransition;
-    if (transition == null) return ancestors;
-    final sourceDigest = transition.sourceCheckpointDigest;
-    if (!visited.add(sourceDigest)) return ancestors;
+    if (transition == null) return ancestors.reversed.toList();
+    final sourceDigest = transition.predecessorCheckpointDigest;
+    if (!visited.add(sourceDigest)) return ancestors.reversed.toList();
     final source = byDigest[sourceDigest];
     if (source == null || source.revision != selected.revision) {
-      return ancestors;
+      return ancestors.reversed.toList();
     }
     ancestors.add(sourceDigest);
     current = source;
@@ -1152,6 +1345,9 @@ bool _sameRetirementTransition(
 ) {
   if (left == null || right == null) return left == null && right == null;
   return left.sourceCheckpointDigest == right.sourceCheckpointDigest &&
+      left.pendingCheckpointDigest == right.pendingCheckpointDigest &&
+      left.proofDigest == right.proofDigest &&
+      left.planId == right.planId &&
       _sameReceipt(left.retiredReceipt, right.retiredReceipt);
 }
 
@@ -1161,6 +1357,7 @@ bool _isExactReceiptReplacement(
 ) {
   final transition = replacement.retirementTransition;
   if (transition == null ||
+      transition.isFinalized ||
       transition.sourceCheckpointDigest != source.checkpointDigest ||
       source.sessionKey != replacement.sessionKey ||
       source.revision != replacement.revision ||
@@ -1183,6 +1380,35 @@ bool _isExactReceiptReplacement(
   }
   return true;
 }
+
+bool _isExactRetirementFinalization(
+  V3SessionCheckpoint pending,
+  V3SessionCheckpoint finalized,
+) {
+  final pendingTransition = pending.retirementTransition;
+  final finalTransition = finalized.retirementTransition;
+  return pendingTransition != null &&
+      !pendingTransition.isFinalized &&
+      finalTransition != null &&
+      finalTransition.isFinalized &&
+      finalTransition.pendingCheckpointDigest == pending.checkpointDigest &&
+      finalTransition.sourceCheckpointDigest ==
+          pendingTransition.sourceCheckpointDigest &&
+      _sameReceipt(
+        finalTransition.retiredReceipt,
+        pendingTransition.retiredReceipt,
+      ) &&
+      _sameCheckpointStateAndReceipts(pending, finalized) &&
+      !finalized.persistedAt.isBefore(pending.persistedAt);
+}
+
+bool _isExactRetirementStep(
+  V3SessionCheckpoint source,
+  V3SessionCheckpoint replacement,
+) =>
+    replacement.retirementTransition?.isFinalized ?? false
+        ? _isExactRetirementFinalization(source, replacement)
+        : _isExactReceiptReplacement(source, replacement);
 
 bool _extendsCheckpoint(
   V3SessionCheckpoint earlier,
@@ -1331,6 +1557,9 @@ String _checkpointDigest({
   final receiptBytes = <Uint8List>[];
   Uint8List? retiredReceiptBytes;
   Uint8List? sourceCheckpoint;
+  Uint8List? pendingCheckpoint;
+  Uint8List? proofDigest;
+  Uint8List? planId;
   try {
     for (final receipt in receipts) {
       receiptBytes.add(_encodeReceiptDigestBytes(receipt));
@@ -1342,6 +1571,14 @@ String _checkpointDigest({
       );
       retiredReceiptBytes =
           _encodeReceiptDigestBytes(retirementTransition.retiredReceipt);
+      if (retirementTransition.isFinalized) {
+        pendingCheckpoint = _decodeBinary(
+          retirementTransition.pendingCheckpointDigest!,
+          32,
+        );
+        proofDigest = _decodeBinary(retirementTransition.proofDigest!, 32);
+        planId = _decodeBinary(retirementTransition.planId!, 32);
+      }
     }
     final label = utf8.encode('layergram/v3/checkpoint/record\u0000');
     final bytes = Uint8List(
@@ -1353,7 +1590,9 @@ String _checkpointDigest({
           receiptBytes.length * 73 +
           1 +
           32 +
-          73,
+          73 +
+          1 +
+          32 * 3,
     );
     var offset = 0;
     void append(List<int> value) {
@@ -1373,6 +1612,10 @@ String _checkpointDigest({
       append(<int>[retirementTransition == null ? 0 : 1]);
       append(sourceCheckpoint ?? Uint8List(32));
       append(retiredReceiptBytes ?? Uint8List(73));
+      append(<int>[retirementTransition?.isFinalized ?? false ? 1 : 0]);
+      append(pendingCheckpoint ?? Uint8List(32));
+      append(proofDigest ?? Uint8List(32));
+      append(planId ?? Uint8List(32));
       return _sha256Armored(bytes);
     } finally {
       _wipe(bytes);
@@ -1386,6 +1629,9 @@ String _checkpointDigest({
     }
     if (sourceCheckpoint != null) _wipe(sourceCheckpoint);
     if (retiredReceiptBytes != null) _wipe(retiredReceiptBytes);
+    if (pendingCheckpoint != null) _wipe(pendingCheckpoint);
+    if (proofDigest != null) _wipe(proofDigest);
+    if (planId != null) _wipe(planId);
   }
 }
 

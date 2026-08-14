@@ -62,6 +62,23 @@ void main() {
       ratchet.wipeSecrets();
     });
 
+    test('does not reissue inbox retirement authority after journal attach',
+        () async {
+      final store = _FaultStore();
+      final ready = await _readyDelivery(store: store, key: key);
+      final journal = V3LmfAtomicCommitJournal(
+        store: store,
+        inbox: ready.inbox,
+      );
+
+      await journal.restore();
+
+      await expectLater(
+        ready.inbox.attachAtomicCommitJournal(owner: Object()),
+        throwsStateError,
+      );
+    });
+
     test('persists one effect before the inbox tombstone', () async {
       final store = _FaultStore();
       final ready = await _readyDelivery(store: store, key: key);

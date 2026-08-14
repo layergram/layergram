@@ -215,6 +215,8 @@ class V3LmfAtomicCommitJournal {
   bool _restored = false;
   bool _closed = false;
   bool _writeRecoveryRequired = false;
+  final Object _inboxAttachmentOwner = Object();
+  V3LmfReplayWindowRetirementAuthority? _replayRetirementAuthority;
   V3LmfAtomicCommitAuthority? _authority;
   int _totalStateBytes = 0;
 
@@ -277,7 +279,9 @@ class V3LmfAtomicCommitJournal {
       if (_restored) {
         throw StateError('Layergram v3 atomic commit journal was restored');
       }
-      await _inbox.attachAtomicCommitJournal();
+      _replayRetirementAuthority = await _inbox.attachAtomicCommitJournal(
+        owner: _inboxAttachmentOwner,
+      );
       final records = await _store.readAll();
       final relevant = records
           .where((record) => record.payload['kind'] == recordKind)
@@ -620,12 +624,70 @@ class V3LmfAtomicCommitJournal {
     });
   }
 
+  /// Removes an exact compact replay proof only after the session coordinator
+  /// has durably finalized the receipt retirement in its checkpoint.
+  Future<bool> deleteReplayWindowProof({
+    required String assemblyId,
+    required String expectedEffectDigest,
+    required String stableRecordId,
+    required String sessionKey,
+    required int ratchetRevision,
+    required DateTime committedAt,
+    V3LmfAtomicCommitAuthority? authority,
+  }) {
+    return _serialized(() async {
+      _ensureCompactionAuthority(authority);
+      _ensureReady();
+      final inboxAuthority = _replayRetirementAuthority;
+      if (inboxAuthority == null) {
+        throw StateError('Layergram v3 replay retirement is not attached');
+      }
+      final existing = _inbox.replayWindowBindings[assemblyId];
+      if (existing == null) return false;
+      if (existing.higherLevelCommitDigest != expectedEffectDigest ||
+          existing.stableRecordId != stableRecordId ||
+          existing.sessionKey != sessionKey ||
+          existing.ratchetRevision != ratchetRevision ||
+          existing.committedAt.millisecondsSinceEpoch !=
+              committedAt.toUtc().millisecondsSinceEpoch) {
+        throw const V3LmfPersistenceConflictException(
+          'v3 replay-window deletion binding diverged',
+        );
+      }
+      try {
+        return await _inbox.deleteReplayWindowProof(
+          assemblyId: assemblyId,
+          higherLevelCommitDigest: expectedEffectDigest,
+          stableRecordId: stableRecordId,
+          sessionKey: sessionKey,
+          ratchetRevision: ratchetRevision,
+          committedAt: committedAt,
+          authority: inboxAuthority,
+        );
+      } catch (_) {
+        _writeRecoveryRequired = true;
+        rethrow;
+      }
+    });
+  }
+
   Future<void> close({V3LmfAtomicCommitAuthority? authority}) {
     return _serialized(() async {
       _ensureAuthority(authority);
       if (_closed) return;
       _closed = true;
-      _wipeAndClear();
+      final inboxAuthority = _replayRetirementAuthority;
+      try {
+        _wipeAndClear();
+      } finally {
+        if (inboxAuthority != null) {
+          await _inbox.detachAtomicCommitJournal(
+            owner: _inboxAttachmentOwner,
+            authority: inboxAuthority,
+          );
+          _replayRetirementAuthority = null;
+        }
+      }
     });
   }
 

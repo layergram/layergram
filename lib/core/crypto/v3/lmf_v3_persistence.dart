@@ -174,6 +174,12 @@ final class V3LmfReplayWindowBinding {
   final DateTime committedAt;
 }
 
+/// Unforgeable authority used by the atomic journal to retire an exact compact
+/// replay-window proof after a self-contained checkpoint finalization exists.
+final class V3LmfReplayWindowRetirementAuthority {
+  const V3LmfReplayWindowRetirementAuthority._();
+}
+
 class V3LmfPersistenceLimitException implements Exception {
   const V3LmfPersistenceLimitException(this.message);
 
@@ -257,6 +263,8 @@ class V3LmfDurableInbox {
   bool _restored = false;
   bool _closed = false;
   bool _atomicCommitJournalAttached = false;
+  Object? _atomicCommitJournalOwner;
+  V3LmfReplayWindowRetirementAuthority? _replayRetirementAuthority;
   int _persistedFrameBytes = 0;
 
   int get persistedFrameCount => _recordsByStorageId.length;
@@ -311,10 +319,44 @@ class V3LmfDurableInbox {
   /// The inactive atomic journal calls this during restore. It prevents an
   /// older transport-only commit path from racing or running after the journal
   /// has taken responsibility for application/ratchet durability.
-  Future<void> attachAtomicCommitJournal() {
+  Future<V3LmfReplayWindowRetirementAuthority> attachAtomicCommitJournal({
+    required Object owner,
+  }) {
     return _serialized(() async {
       _ensureReady();
+      if (_atomicCommitJournalAttached) {
+        throw StateError(
+          'Layergram v3 inbox already has an atomic commit journal',
+        );
+      }
       _atomicCommitJournalAttached = true;
+      _atomicCommitJournalOwner = owner;
+      final authority = V3LmfReplayWindowRetirementAuthority._();
+      _replayRetirementAuthority = authority;
+      return authority;
+    });
+  }
+
+  /// Releases the exact journal attachment when its owner is closed, allowing
+  /// an explicitly reconstructed journal to recover on the same inbox.
+  Future<void> detachAtomicCommitJournal({
+    required Object owner,
+    required V3LmfReplayWindowRetirementAuthority authority,
+  }) {
+    return _serialized(() async {
+      if (!_restored) {
+        throw StateError('Layergram v3 inbox must be restored before detach');
+      }
+      if (!_atomicCommitJournalAttached ||
+          !identical(_atomicCommitJournalOwner, owner) ||
+          !identical(_replayRetirementAuthority, authority)) {
+        throw StateError(
+          'Layergram v3 inbox atomic journal attachment diverged',
+        );
+      }
+      _atomicCommitJournalAttached = false;
+      _atomicCommitJournalOwner = null;
+      _replayRetirementAuthority = null;
     });
   }
 
@@ -783,6 +825,61 @@ class V3LmfDurableInbox {
       _committed[assemblyId] = compacted;
       await _deleteIgnoringFailure(existing.storageId);
       return _replayBinding(compacted);
+    });
+  }
+
+  /// Deletes only the exact compact proof authorized by the attached atomic
+  /// journal. Absence is idempotent for crash recovery; a full tombstone or a
+  /// divergent binding always fails closed.
+  Future<bool> deleteReplayWindowProof({
+    required String assemblyId,
+    required String higherLevelCommitDigest,
+    required String stableRecordId,
+    required String sessionKey,
+    required int ratchetRevision,
+    required DateTime committedAt,
+    required V3LmfReplayWindowRetirementAuthority authority,
+  }) {
+    return _serialized(() async {
+      _ensureReady();
+      if (!_atomicCommitJournalAttached ||
+          !identical(_replayRetirementAuthority, authority)) {
+        throw StateError(
+          'Layergram v3 replay retirement is owned by the atomic journal',
+        );
+      }
+      if (!_isCanonicalDigest(assemblyId) ||
+          !_isCanonicalDigest(higherLevelCommitDigest) ||
+          stableRecordId != 'v3:$assemblyId' ||
+          !_isCanonicalSessionKey(sessionKey) ||
+          ratchetRevision <= 0 ||
+          ratchetRevision > 0x7fffffffffffffff) {
+        throw const FormatException(
+          'Invalid Layergram v3 replay-window deletion binding',
+        );
+      }
+      final timestamp = committedAt.toUtc();
+      if (!_isValidEpochMilliseconds(timestamp.millisecondsSinceEpoch)) {
+        throw const FormatException(
+          'Invalid Layergram v3 replay-window deletion timestamp',
+        );
+      }
+      final existing = _committed[assemblyId];
+      if (existing == null) return false;
+      if (!existing.isReplayWindow ||
+          existing.higherLevelCommitDigest != higherLevelCommitDigest ||
+          existing.stableRecordId != stableRecordId ||
+          existing.sessionKey != sessionKey ||
+          existing.ratchetRevision != ratchetRevision ||
+          existing.committedAt.millisecondsSinceEpoch !=
+              timestamp.millisecondsSinceEpoch) {
+        throw const V3LmfPersistenceConflictException(
+          'v3 replay-window deletion proof diverged',
+        );
+      }
+      await _store.delete(existing.storageId);
+      _committed.remove(assemblyId);
+      return true;
     });
   }
 

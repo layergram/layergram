@@ -21,14 +21,13 @@ import 'package:crypto/crypto.dart' as crypto;
 import 'lmf_v3_persistence.dart';
 import 'session_checkpoint_v3.dart';
 
-/// Durable phase of one conservative proof-and-receipt retirement.
-///
-/// No phase means that a compact replay/completion proof may be deleted. The
-/// future session coordinator must first verify the replacement checkpoint,
-/// remove the compact proof, and only then collect this journal record.
+/// Durable phase of one conservative proof-and-receipt retirement. Only the
+/// final stage authorizes the coordinator to delete the exact compact proof and
+/// then this plan.
 enum V3SessionRetirementStage {
   prepared(0),
-  checkpointReplaced(1);
+  checkpointReplaced(1),
+  finalCheckpointWritten(2);
 
   const V3SessionRetirementStage(this.wireId);
 
@@ -57,6 +56,7 @@ final class V3SessionRetirementPlan {
     required this.stateDigest,
     required this.sourceCheckpointDigest,
     required this.replacementCheckpointDigest,
+    required this.finalCheckpointDigest,
     required this.proofRecordedAt,
     required this.preparedAt,
     required this.minimumProofLifetimeSeconds,
@@ -75,13 +75,15 @@ final class V3SessionRetirementPlan {
   final String stateDigest;
   final String sourceCheckpointDigest;
   final String? replacementCheckpointDigest;
+  final String? finalCheckpointDigest;
   final DateTime proofRecordedAt;
   final DateTime preparedAt;
   final int minimumProofLifetimeSeconds;
   final String recordDigest;
 
-  bool get checkpointWasReplaced =>
-      stage == V3SessionRetirementStage.checkpointReplaced;
+  bool get checkpointWasReplaced => stage.wireId >= 1;
+  bool get finalCheckpointWasWritten =>
+      stage == V3SessionRetirementStage.finalCheckpointWritten;
 }
 
 final class V3SessionRetirementRestoreResult {
@@ -94,20 +96,18 @@ final class V3SessionRetirementRestoreResult {
   final int removedSupersededRecords;
 }
 
-/// Unforgeable ownership token for the future unified retirement coordinator.
+/// Unforgeable ownership token for the unified retirement coordinator.
 final class V3SessionRetirementAuthority {
   const V3SessionRetirementAuthority._();
 }
 
-/// Crash-consistent, deliberately non-destructive retirement journal.
+/// Crash-consistent retirement journal.
 ///
 /// A prepared record freezes the exact cumulative checkpoint receipt, compact
 /// proof, local proof age, and source checkpoint selected for retirement. A
-/// second write binds the exact replacement checkpoint digest before any
-/// compact proof or cumulative receipt may disappear. The current class does
-/// not expose a delete/collect method: activation requires the session
-/// coordinator to verify both durable sides and implement recovery for every
-/// intervening crash window.
+/// second write binds the exact replacement checkpoint and a third binds the
+/// self-contained final checkpoint before the compact proof and plan are
+/// deleted. Every destructive operation is authority-gated and exact-bound.
 final class V3SessionRetirementJournal {
   V3SessionRetirementJournal({
     required V3LmfRecordStore store,
@@ -121,7 +121,7 @@ final class V3SessionRetirementJournal {
   }
 
   static const String recordKind = 'v3_session_retirement_v1';
-  static const int _recordVersion = 1;
+  static const int _recordVersion = 2;
   static const int _maxSigned63 = 0x7fffffffffffffff;
   static const int _maxTimestampMillis = 253402300799999;
 
@@ -227,7 +227,7 @@ final class V3SessionRetirementJournal {
                 'divergent v3 retirement records share one stage',
               );
             }
-          } else if (!_extendsPrepared(candidate, selected)) {
+          } else if (!_extendsRetirementStage(candidate, selected)) {
             throw const V3LmfPersistenceConflictException(
               'v3 retirement stage does not extend its prepared record',
             );
@@ -280,6 +280,7 @@ final class V3SessionRetirementJournal {
         stateDigest: stateDigest,
         sourceCheckpointDigest: sourceCheckpointDigest,
         replacementCheckpointDigest: null,
+        finalCheckpointDigest: null,
         proofRecordedAt: proofRecordedAt,
         preparedAt: preparedAt,
         minimumProofLifetimeSeconds: minimumProofLifetimeSeconds,
@@ -313,9 +314,8 @@ final class V3SessionRetirementJournal {
 
   /// Records the exact replacement checkpoint after it became durable.
   ///
-  /// This is write-new-before-delete. It still does not authorize removal of
-  /// the compact proof; the future coordinator must reconcile all three stores
-  /// after a restart before adding that final operation.
+  /// This is write-new-before-delete. It does not authorize removal of the
+  /// compact proof until the separate final checkpoint stage is durable.
   Future<V3SessionRetirementPlan> markCheckpointReplaced({
     required String planId,
     required String expectedSourceCheckpointDigest,
@@ -357,6 +357,7 @@ final class V3SessionRetirementJournal {
         stateDigest: current.stateDigest,
         sourceCheckpointDigest: current.sourceCheckpointDigest,
         replacementCheckpointDigest: replacementCheckpointDigest,
+        finalCheckpointDigest: null,
         proofRecordedAt: current.proofRecordedAt,
         preparedAt: current.preparedAt,
         minimumProofLifetimeSeconds: current.minimumProofLifetimeSeconds,
@@ -371,6 +372,103 @@ final class V3SessionRetirementJournal {
         _writeRecoveryRequired = true;
         rethrow;
       }
+    });
+  }
+
+  /// Records the exact self-contained final checkpoint before either compact
+  /// proof or plan is deleted.
+  Future<V3SessionRetirementPlan> markFinalCheckpointWritten({
+    required String planId,
+    required String expectedReplacementCheckpointDigest,
+    required String finalCheckpointDigest,
+    V3SessionRetirementAuthority? authority,
+  }) {
+    return _serialized(() async {
+      _ensureAuthority(authority);
+      _ensureReady();
+      final current = _plans[planId];
+      if (current == null || !current.checkpointWasReplaced) {
+        throw StateError(
+          'Layergram v3 retirement replacement checkpoint is not durable',
+        );
+      }
+      if (current.replacementCheckpointDigest !=
+              expectedReplacementCheckpointDigest ||
+          !_isCanonicalDigest(finalCheckpointDigest) ||
+          finalCheckpointDigest == expectedReplacementCheckpointDigest ||
+          finalCheckpointDigest == current.sourceCheckpointDigest) {
+        throw const V3LmfPersistenceConflictException(
+          'v3 retirement final checkpoint binding diverged',
+        );
+      }
+      if (current.finalCheckpointWasWritten) {
+        if (current.finalCheckpointDigest != finalCheckpointDigest) {
+          throw const V3LmfPersistenceConflictException(
+            'v3 retirement final checkpoint diverged',
+          );
+        }
+        return current;
+      }
+      final candidate = _validatedPlan(
+        storageId: '',
+        stage: V3SessionRetirementStage.finalCheckpointWritten,
+        direction: current.direction,
+        assemblyId: current.assemblyId,
+        proofDigest: current.proofDigest,
+        stableRecordId: current.stableRecordId,
+        sessionKey: current.sessionKey,
+        ratchetRevision: current.ratchetRevision,
+        stateDigest: current.stateDigest,
+        sourceCheckpointDigest: current.sourceCheckpointDigest,
+        replacementCheckpointDigest: current.replacementCheckpointDigest,
+        finalCheckpointDigest: finalCheckpointDigest,
+        proofRecordedAt: current.proofRecordedAt,
+        preparedAt: current.preparedAt,
+        minimumProofLifetimeSeconds: current.minimumProofLifetimeSeconds,
+      );
+      try {
+        final storageId = await _store.write(_encode(candidate));
+        final durable = _copyWith(candidate, storageId: storageId);
+        _plans[planId] = durable;
+        await _deleteIgnoringFailure(current.storageId);
+        return durable;
+      } catch (_) {
+        _writeRecoveryRequired = true;
+        rethrow;
+      }
+    });
+  }
+
+  /// Deletes an exact fully finalized plan. Absence is idempotent after an
+  /// ambiguous delete; any earlier stage or digest mismatch fails closed.
+  Future<bool> deleteFinalizedPlan({
+    required String planId,
+    required String finalCheckpointDigest,
+    V3SessionRetirementAuthority? authority,
+  }) {
+    return _serialized(() async {
+      _ensureAuthority(authority);
+      _ensureReady();
+      if (!_isCanonicalDigest(planId) ||
+          !_isCanonicalDigest(finalCheckpointDigest)) {
+        throw const FormatException('Invalid Layergram v3 retirement deletion');
+      }
+      final current = _plans[planId];
+      if (current == null) return false;
+      if (!current.finalCheckpointWasWritten ||
+          current.finalCheckpointDigest != finalCheckpointDigest) {
+        throw const V3LmfPersistenceConflictException(
+          'v3 retirement plan is not exactly finalized',
+        );
+      }
+      try {
+        await _store.delete(current.storageId);
+      } catch (_) {
+        _writeRecoveryRequired = true;
+        rethrow;
+      }
+      _plans.remove(planId);
+      return true;
     });
   }
 
@@ -399,6 +497,7 @@ final class V3SessionRetirementJournal {
       'stateDigest',
       'sourceCheckpointDigest',
       'replacementCheckpointDigest',
+      'finalCheckpointDigest',
       'proofRecordedAt',
       'preparedAt',
       'minimumProofLifetimeSeconds',
@@ -421,6 +520,8 @@ final class V3SessionRetirementJournal {
         payload['sourceCheckpointDigest'] is! String ||
         (payload['replacementCheckpointDigest'] != null &&
             payload['replacementCheckpointDigest'] is! String) ||
+        (payload['finalCheckpointDigest'] != null &&
+            payload['finalCheckpointDigest'] is! String) ||
         payload['proofRecordedAt'] is! int ||
         payload['preparedAt'] is! int ||
         payload['minimumProofLifetimeSeconds'] is! int ||
@@ -443,6 +544,7 @@ final class V3SessionRetirementJournal {
       sourceCheckpointDigest: payload['sourceCheckpointDigest'] as String,
       replacementCheckpointDigest:
           payload['replacementCheckpointDigest'] as String?,
+      finalCheckpointDigest: payload['finalCheckpointDigest'] as String?,
       proofRecordedAt: _timestamp(payload['proofRecordedAt'] as int),
       preparedAt: _timestamp(payload['preparedAt'] as int),
       minimumProofLifetimeSeconds:
@@ -467,6 +569,7 @@ final class V3SessionRetirementJournal {
     required String stateDigest,
     required String sourceCheckpointDigest,
     required String? replacementCheckpointDigest,
+    required String? finalCheckpointDigest,
     required DateTime proofRecordedAt,
     required DateTime preparedAt,
     required int minimumProofLifetimeSeconds,
@@ -487,11 +590,23 @@ final class V3SessionRetirementJournal {
         prepared.difference(proofAt).inSeconds < minimumProofLifetimeSeconds) {
       throw const FormatException('Invalid Layergram v3 retirement plan');
     }
+    final replacementValid = _isCanonicalDigest(
+      replacementCheckpointDigest ?? '',
+    );
+    final finalValid = _isCanonicalDigest(finalCheckpointDigest ?? '');
     if ((stage == V3SessionRetirementStage.prepared &&
-            replacementCheckpointDigest != null) ||
+            (replacementCheckpointDigest != null ||
+                finalCheckpointDigest != null)) ||
         (stage == V3SessionRetirementStage.checkpointReplaced &&
-            (!_isCanonicalDigest(replacementCheckpointDigest ?? '') ||
-                replacementCheckpointDigest == sourceCheckpointDigest))) {
+            (!replacementValid ||
+                replacementCheckpointDigest == sourceCheckpointDigest ||
+                finalCheckpointDigest != null)) ||
+        (stage == V3SessionRetirementStage.finalCheckpointWritten &&
+            (!replacementValid ||
+                !finalValid ||
+                replacementCheckpointDigest == sourceCheckpointDigest ||
+                finalCheckpointDigest == sourceCheckpointDigest ||
+                finalCheckpointDigest == replacementCheckpointDigest))) {
       throw const FormatException('Invalid Layergram v3 retirement transition');
     }
     final planId = _planId(
@@ -511,6 +626,7 @@ final class V3SessionRetirementJournal {
       stateDigest: stateDigest,
       sourceCheckpointDigest: sourceCheckpointDigest,
       replacementCheckpointDigest: replacementCheckpointDigest,
+      finalCheckpointDigest: finalCheckpointDigest,
       proofRecordedAt: proofAt,
       preparedAt: prepared,
       minimumProofLifetimeSeconds: minimumProofLifetimeSeconds,
@@ -528,6 +644,7 @@ final class V3SessionRetirementJournal {
       stateDigest: stateDigest,
       sourceCheckpointDigest: sourceCheckpointDigest,
       replacementCheckpointDigest: replacementCheckpointDigest,
+      finalCheckpointDigest: finalCheckpointDigest,
       proofRecordedAt: proofAt,
       preparedAt: prepared,
       minimumProofLifetimeSeconds: minimumProofLifetimeSeconds,
@@ -550,6 +667,7 @@ final class V3SessionRetirementJournal {
         'stateDigest': plan.stateDigest,
         'sourceCheckpointDigest': plan.sourceCheckpointDigest,
         'replacementCheckpointDigest': plan.replacementCheckpointDigest,
+        'finalCheckpointDigest': plan.finalCheckpointDigest,
         'proofRecordedAt': plan.proofRecordedAt.millisecondsSinceEpoch,
         'preparedAt': plan.preparedAt.millisecondsSinceEpoch,
         'minimumProofLifetimeSeconds': plan.minimumProofLifetimeSeconds,
@@ -624,19 +742,31 @@ V3SessionRetirementPlan _copyWith(
       stateDigest: value.stateDigest,
       sourceCheckpointDigest: value.sourceCheckpointDigest,
       replacementCheckpointDigest: value.replacementCheckpointDigest,
+      finalCheckpointDigest: value.finalCheckpointDigest,
       proofRecordedAt: value.proofRecordedAt,
       preparedAt: value.preparedAt,
       minimumProofLifetimeSeconds: value.minimumProofLifetimeSeconds,
       recordDigest: value.recordDigest,
     );
 
-bool _extendsPrepared(
-  V3SessionRetirementPlan prepared,
-  V3SessionRetirementPlan replacement,
-) =>
-    prepared.stage == V3SessionRetirementStage.prepared &&
-    replacement.stage == V3SessionRetirementStage.checkpointReplaced &&
-    _samePreparedIdentity(prepared, replacement);
+bool _extendsRetirementStage(
+  V3SessionRetirementPlan earlier,
+  V3SessionRetirementPlan later,
+) {
+  if (!_samePreparedIdentity(earlier, later) ||
+      earlier.stage.wireId >= later.stage.wireId) {
+    return false;
+  }
+  if (later.replacementCheckpointDigest == null ||
+      (earlier.stage.wireId >= 1 &&
+          earlier.replacementCheckpointDigest !=
+              later.replacementCheckpointDigest)) {
+    return false;
+  }
+  return earlier.stage != V3SessionRetirementStage.finalCheckpointWritten &&
+      (earlier.finalCheckpointDigest == null ||
+          earlier.finalCheckpointDigest == later.finalCheckpointDigest);
+}
 
 bool _samePreparedIdentity(
   V3SessionRetirementPlan left,
@@ -662,6 +792,7 @@ bool _samePlan(
     _samePreparedIdentity(left, right) &&
     left.stage == right.stage &&
     left.replacementCheckpointDigest == right.replacementCheckpointDigest &&
+    left.finalCheckpointDigest == right.finalCheckpointDigest &&
     left.recordDigest == right.recordDigest;
 
 String _planId({
@@ -690,6 +821,7 @@ String _recordDigest({
   required String stateDigest,
   required String sourceCheckpointDigest,
   required String? replacementCheckpointDigest,
+  required String? finalCheckpointDigest,
   required DateTime proofRecordedAt,
   required DateTime preparedAt,
   required int minimumProofLifetimeSeconds,
@@ -706,6 +838,9 @@ String _recordDigest({
   final replacement = replacementCheckpointDigest == null
       ? Uint8List(32)
       : _decodeDigest(replacementCheckpointDigest);
+  final finalized = finalCheckpointDigest == null
+      ? Uint8List(32)
+      : _decodeDigest(finalCheckpointDigest);
   final stable = utf8.encode(stableRecordId);
   final bytes = <int>[
     ...utf8.encode('layergram/v3/retirement/record\u0000'),
@@ -721,6 +856,7 @@ String _recordDigest({
     ..._decodeDigest(stateDigest),
     ..._decodeDigest(sourceCheckpointDigest),
     ...replacement,
+    ...finalized,
   ];
   return _digest(bytes);
 }

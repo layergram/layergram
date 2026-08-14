@@ -291,8 +291,7 @@ void main() {
       fixture.checkpoint.wipeSecrets();
     });
 
-    test(
-        'owns and validates a prepared retirement plan without deleting its proof',
+    test('restart finalizes a prepared retirement plan and deletes exact proof',
         () async {
       final fixture = await _Fixture.create(messageCount: 1);
       final controller = V3SessionCommitController(
@@ -350,7 +349,7 @@ void main() {
       final restored = await restoredController.restore(
         checkpoints: const <V3TripleRatchetState>[],
       );
-      expect(restored.retirementPlanCount, 1);
+      expect(restored.retirementPlanCount, 0);
       expect(() => retirementJournal.plans(), throwsStateError);
       await expectLater(retirementJournal.restore(), throwsStateError);
       await expectLater(retirementJournal.close(), throwsStateError);
@@ -358,14 +357,14 @@ void main() {
         fixture.store.records.values.where(
           (payload) => payload['kind'] == V3SessionRetirementJournal.recordKind,
         ),
-        hasLength(1),
+        isEmpty,
       );
       expect(
         fixture.store.records.values.where(
           (payload) =>
               payload['kind'] == V3LmfDurableInbox.replayWindowRecordKind,
         ),
-        hasLength(1),
+        isEmpty,
       );
 
       await restoredController.close();
@@ -373,7 +372,8 @@ void main() {
       fixture.checkpoint.wipeSecrets();
     });
 
-    test('rejects a second pending retirement for the same session', () async {
+    test('restart finalizes one retirement then rolls to the next receipt',
+        () async {
       final fixture = await _Fixture.create(messageCount: 2);
       final controller = _retirementController(fixture);
       await controller.restore(
@@ -407,39 +407,53 @@ void main() {
       final restored = await restoredController.restore(
         checkpoints: const <V3TripleRatchetState>[],
       );
-      expect(restored.retirementPlanCount, 1);
+      expect(restored.retirementPlanCount, 0);
 
-      await expectLater(
-        restoredController.replaceEligibleCheckpointReceipt(
-          assemblyId: fixture.deliveries.last.assemblyId,
-          policy: V3RetentionPolicy.custom(
-            skippedKeyLifetimeSeconds: 10,
-            minimumProofLifetimeSeconds: 20,
-          ),
-          now: DateTime.now().toUtc().add(const Duration(days: 366)),
+      final second = await restoredController.replaceEligibleCheckpointReceipt(
+        assemblyId: fixture.deliveries.last.assemblyId,
+        policy: V3RetentionPolicy.custom(
+          skippedKeyLifetimeSeconds: 10,
+          minimumProofLifetimeSeconds: 20,
         ),
-        throwsA(isA<V3LmfPersistenceConflictException>()),
+        now: DateTime.now().toUtc().add(const Duration(days: 366)),
       );
+      expect(second.decision.eligible, isTrue);
+      expect(second.checkpointWasReplaced, isTrue);
       expect(restoredController.requiresRecovery, isFalse);
       expect(
         fixture.store.records.values.where(
           (payload) => payload['kind'] == V3SessionRetirementJournal.recordKind,
         ),
-        hasLength(1),
+        isEmpty,
       );
       final checkpoint = fixture.store.records.values.singleWhere(
         (payload) =>
             payload['kind'] == V3SessionCheckpointRepository.recordKind,
       );
-      expect(checkpoint['receipts'], hasLength(2));
-      expect(checkpoint['retirement'], isNull);
+      expect(checkpoint['receipts'], isEmpty);
+      final transition =
+          (checkpoint['retirement'] as Map).cast<String, dynamic>();
+      expect(
+        (transition['retiredReceipt'] as Map)['assemblyId'],
+        fixture.deliveries.last.assemblyId,
+      );
+      expect(transition['pendingCheckpointDigest'], isNotNull);
+      expect(transition['proofDigest'], isNotNull);
+      expect(transition['planId'], isNotNull);
+      expect(
+        fixture.store.records.values.where(
+          (payload) =>
+              payload['kind'] == V3LmfDurableInbox.replayWindowRecordKind,
+        ),
+        isEmpty,
+      );
 
       await restoredController.close();
       await restoredInbox.close();
       fixture.checkpoint.wipeSecrets();
     });
 
-    test('replaces one eligible incoming receipt and keeps its compact proof',
+    test('fully retires one eligible incoming receipt and remains restartable',
         () async {
       final fixture = await _Fixture.create(messageCount: 1);
       final controller = _retirementController(fixture);
@@ -500,23 +514,16 @@ void main() {
           (payload) =>
               payload['kind'] == V3LmfDurableInbox.replayWindowRecordKind,
         ),
-        hasLength(1),
+        isEmpty,
       );
-      final retirement = fixture.store.records.values.singleWhere(
-        (payload) => payload['kind'] == V3SessionRetirementJournal.recordKind,
-      );
+      expect(transition['pendingCheckpointDigest'], isNotNull);
+      expect(transition['proofDigest'], isNotNull);
+      expect(transition['planId'], isNotNull);
       expect(
-        retirement['stage'],
-        V3SessionRetirementStage.checkpointReplaced.wireId,
-      );
-      await expectLater(
-        controller.commitDelivery(
-          delivery: fixture.deliveries.single,
-          expectedRevision: 1,
-          transitionBuilder: (_, current, __) =>
-              _candidateFrom(current, receivingEpoch: 0),
+        fixture.store.records.values.where(
+          (payload) => payload['kind'] == V3SessionRetirementJournal.recordKind,
         ),
-        throwsStateError,
+        isEmpty,
       );
 
       await controller.close();
@@ -530,18 +537,112 @@ void main() {
       final restored = await restoredController.restore(
         checkpoints: const <V3TripleRatchetState>[],
       );
-      expect(restored.retirementPlanCount, 1);
+      expect(restored.retirementPlanCount, 0);
       expect(restored.sessionRevisions.values.single, 1);
       expect(
         fixture.store.records.values.where(
           (payload) =>
               payload['kind'] == V3LmfDurableInbox.replayWindowRecordKind,
         ),
-        hasLength(1),
+        isEmpty,
       );
       await restoredController.close();
       await restoredInbox.close();
       fixture.checkpoint.wipeSecrets();
+    });
+
+    test('restart resumes every final retirement crash boundary', () async {
+      for (final boundary in <String>[
+        'final-checkpoint-write',
+        'compact-proof-delete',
+        'final-plan-delete',
+      ]) {
+        final fixture = await _Fixture.create(messageCount: 1);
+        final controller = _retirementController(fixture);
+        final committedAt = DateTime.now().toUtc();
+        await controller.restore(
+          checkpoints: <V3TripleRatchetState>[fixture.checkpoint],
+        );
+        await controller.commitDelivery(
+          delivery: fixture.deliveries.single,
+          expectedRevision: 0,
+          persistedAt: committedAt,
+          transitionBuilder: (_, current, __) => _candidateFrom(
+            current,
+            receivingEpoch: 0,
+            pqReceiveCounterIncrement: 1,
+          ),
+        );
+        await controller.compactSession(fixture.checkpoint.sessionId);
+        switch (boundary) {
+          case 'final-checkpoint-write':
+            fixture.store.durableWriteThenThrowFinalCheckpoint = true;
+            break;
+          case 'compact-proof-delete':
+            fixture.store.durableDeleteThenThrowKind =
+                V3LmfDurableInbox.replayWindowRecordKind;
+            break;
+          case 'final-plan-delete':
+            fixture.store.durableDeleteThenThrowRetirementStage =
+                V3SessionRetirementStage.finalCheckpointWritten.wireId;
+            break;
+        }
+        await expectLater(
+          controller.replaceEligibleCheckpointReceipt(
+            assemblyId: fixture.deliveries.single.assemblyId,
+            policy: V3RetentionPolicy.custom(
+              skippedKeyLifetimeSeconds: 1,
+              minimumProofLifetimeSeconds: 1,
+            ),
+            now: committedAt.add(const Duration(seconds: 2)),
+          ),
+          throwsStateError,
+          reason: boundary,
+        );
+        expect(controller.requiresRecovery, isTrue, reason: boundary);
+        await controller.close();
+        await fixture.inbox.close();
+
+        final restoredInbox = V3LmfDurableInbox(store: fixture.store);
+        await restoredInbox.restore(keyResolver: (_) => fixture.transportKey);
+        final restoredController = _retirementController(
+          fixture,
+          inbox: restoredInbox,
+        );
+        final restored = await restoredController.restore(
+          checkpoints: const <V3TripleRatchetState>[],
+        );
+        expect(restored.retirementPlanCount, 0, reason: boundary);
+        expect(restored.sessionRevisions.values.single, 1, reason: boundary);
+        expect(
+          fixture.store.records.values.where(
+            (payload) =>
+                payload['kind'] == V3SessionRetirementJournal.recordKind,
+          ),
+          isEmpty,
+          reason: boundary,
+        );
+        expect(
+          fixture.store.records.values.where(
+            (payload) =>
+                payload['kind'] == V3LmfDurableInbox.replayWindowRecordKind,
+          ),
+          isEmpty,
+          reason: boundary,
+        );
+        final checkpoint = fixture.store.records.values.singleWhere(
+          (payload) =>
+              payload['kind'] == V3SessionCheckpointRepository.recordKind,
+        );
+        final transition =
+            (checkpoint['retirement'] as Map).cast<String, dynamic>();
+        expect(transition['pendingCheckpointDigest'], isNotNull);
+        expect(transition['proofDigest'], isNotNull);
+        expect(transition['planId'], isNotNull);
+        await restoredController.close();
+        await restoredInbox.close();
+        fixture.checkpoint.wipeSecrets();
+      }
     });
 
     test('restart reconciles checkpoint durable before retirement stage',
@@ -641,7 +742,7 @@ void main() {
       final restored = await restoredController.restore(
         checkpoints: const <V3TripleRatchetState>[],
       );
-      expect(restored.retirementPlanCount, 1);
+      expect(restored.retirementPlanCount, 0);
       expect(
         fixture.store.records.values.where(
           (payload) =>
@@ -650,24 +751,24 @@ void main() {
         hasLength(1),
       );
       expect(
-        fixture.store.records.values.singleWhere(
+        fixture.store.records.values.where(
           (payload) => payload['kind'] == V3SessionRetirementJournal.recordKind,
-        )['stage'],
-        V3SessionRetirementStage.checkpointReplaced.wireId,
+        ),
+        isEmpty,
       );
       expect(
         fixture.store.records.values.where(
           (payload) =>
               payload['kind'] == V3LmfDurableInbox.replayWindowRecordKind,
         ),
-        hasLength(1),
+        isEmpty,
       );
       await restoredController.close();
       await restoredInbox.close();
       fixture.checkpoint.wipeSecrets();
     });
 
-    test('restart accepts retirement stage durable before its write returned',
+    test('restart completes a retirement stage durable before write returned',
         () async {
       final fixture = await _Fixture.create(messageCount: 1);
       final initial = V3SessionCommitController(
@@ -699,30 +800,17 @@ void main() {
       await fixture.inbox.close();
       await _prepareIncomingRetirementPlan(fixture.store);
 
-      final preparedPayload = fixture.store.records.values.singleWhere(
-        (payload) => payload['kind'] == V3SessionRetirementJournal.recordKind,
-      );
-      final preparedAt = DateTime.fromMillisecondsSinceEpoch(
-        preparedPayload['preparedAt'] as int,
-        isUtc: true,
-      );
       final restoredInbox = V3LmfDurableInbox(store: fixture.store);
       await restoredInbox.restore(keyResolver: (_) => fixture.transportKey);
       final controller = _retirementController(
         fixture,
         inbox: restoredInbox,
       );
-      await controller.restore(checkpoints: const <V3TripleRatchetState>[]);
       fixture.store.durableWriteThenThrowKind =
           V3SessionRetirementJournal.recordKind;
       await expectLater(
-        controller.replaceEligibleCheckpointReceipt(
-          assemblyId: fixture.deliveries.single.assemblyId,
-          policy: V3RetentionPolicy.custom(
-            skippedKeyLifetimeSeconds: 1,
-            minimumProofLifetimeSeconds: 1,
-          ),
-          now: preparedAt,
+        controller.restore(
+          checkpoints: const <V3TripleRatchetState>[],
         ),
         throwsStateError,
       );
@@ -745,19 +833,19 @@ void main() {
       final restored = await finalController.restore(
         checkpoints: const <V3TripleRatchetState>[],
       );
-      expect(restored.retirementPlanCount, 1);
+      expect(restored.retirementPlanCount, 0);
       expect(
-        fixture.store.records.values.singleWhere(
+        fixture.store.records.values.where(
           (payload) => payload['kind'] == V3SessionRetirementJournal.recordKind,
-        )['stage'],
-        V3SessionRetirementStage.checkpointReplaced.wireId,
+        ),
+        isEmpty,
       );
       expect(
         fixture.store.records.values.where(
           (payload) =>
               payload['kind'] == V3LmfDurableInbox.replayWindowRecordKind,
         ),
-        hasLength(1),
+        isEmpty,
       );
       await finalController.close();
       await finalInbox.close();
@@ -1952,8 +2040,10 @@ final class _FaultStore implements V3LmfRecordStore {
   var _nextId = 0;
   String? failKindOnce;
   String? durableWriteThenThrowKind;
+  bool durableWriteThenThrowFinalCheckpoint = false;
   String? failDeleteKindOnce;
   String? durableDeleteThenThrowKind;
+  int? durableDeleteThenThrowRetirementStage;
 
   @override
   Future<String> write(Map<String, dynamic> payload) async {
@@ -1963,6 +2053,14 @@ final class _FaultStore implements V3LmfRecordStore {
     }
     final id = 'record-${_nextId++}';
     records[id] = _deepCopy(payload);
+    final retirement = payload['retirement'];
+    if (durableWriteThenThrowFinalCheckpoint &&
+        payload['kind'] == V3SessionCheckpointRepository.recordKind &&
+        retirement is Map &&
+        retirement['pendingCheckpointDigest'] != null) {
+      durableWriteThenThrowFinalCheckpoint = false;
+      throw StateError('injected ambiguous final-checkpoint write');
+    }
     if (payload['kind'] == durableWriteThenThrowKind) {
       durableWriteThenThrowKind = null;
       throw StateError('injected ambiguous write');
@@ -1988,8 +2086,12 @@ final class _FaultStore implements V3LmfRecordStore {
       throw StateError('injected pre-delete failure');
     }
     final removed = records.remove(storageId);
-    if (removed?['kind'] == durableDeleteThenThrowKind) {
+    final stageMatches =
+        removed?['kind'] == V3SessionRetirementJournal.recordKind &&
+            removed?['stage'] == durableDeleteThenThrowRetirementStage;
+    if (removed?['kind'] == durableDeleteThenThrowKind || stageMatches) {
       durableDeleteThenThrowKind = null;
+      durableDeleteThenThrowRetirementStage = null;
       throw StateError('injected ambiguous delete');
     }
   }

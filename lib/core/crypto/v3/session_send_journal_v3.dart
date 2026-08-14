@@ -544,6 +544,55 @@ final class V3SessionSendJournal {
     });
   }
 
+  /// Deletes only the exact compact completion proof authorized by the session
+  /// coordinator after a self-contained checkpoint finalization is durable.
+  Future<bool> deleteCompletionProof({
+    required String assemblyId,
+    required String expectedEffectDigest,
+    required String stableRecordId,
+    required String sessionKey,
+    required int ratchetRevision,
+    required DateTime completedAt,
+    V3SessionSendJournalAuthority? authority,
+  }) {
+    return _serialized(() async {
+      _ensureCompactionAuthority(authority);
+      _ensureReady();
+      if (!_isCanonicalDigest(assemblyId) ||
+          !_isCanonicalDigest(expectedEffectDigest) ||
+          stableRecordId != 'v3:$assemblyId' ||
+          !_isCanonicalId(sessionKey, 16) ||
+          ratchetRevision <= 0 ||
+          ratchetRevision > 0x7fffffffffffffff) {
+        throw const FormatException('Invalid v3 send-completion deletion');
+      }
+      final timestamp = completedAt.toUtc();
+      final existing = _completions[assemblyId];
+      if (existing == null) return false;
+      if (!_completionCoversEffect(
+            existing,
+            effectDigest: expectedEffectDigest,
+            stableRecordId: stableRecordId,
+            sessionKey: sessionKey,
+            ratchetRevision: ratchetRevision,
+          ) ||
+          existing.completedAt.millisecondsSinceEpoch !=
+              timestamp.millisecondsSinceEpoch) {
+        throw const V3LmfPersistenceConflictException(
+          'v3 send-completion deletion proof diverged',
+        );
+      }
+      try {
+        await _store.delete(existing.storageId);
+      } catch (_) {
+        _writeRecoveryRequired = true;
+        rethrow;
+      }
+      _completions.remove(assemblyId);
+      return true;
+    });
+  }
+
   Future<void> close({V3SessionSendJournalAuthority? authority}) {
     return _serialized(() async {
       _ensureAuthority(authority);
