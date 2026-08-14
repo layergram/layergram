@@ -151,6 +151,7 @@ final class V3CommittedRecord {
   Uint8List get senderBinding => Uint8List.fromList(_senderBinding);
   Uint8List get recipientBinding => Uint8List.fromList(_recipientBinding);
   Uint8List get contentDigest => Uint8List.fromList(_contentDigest);
+  int get contentLength => _content.length;
 
   Uint8List get content {
     _ensureNotWiped();

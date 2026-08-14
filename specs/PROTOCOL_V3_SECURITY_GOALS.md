@@ -133,6 +133,17 @@ reviewed standard alternative or narrow its product claim explicitly.
   either side is missing, unbound, malformed, or divergent.
 - No effect-journal entry may be removed until a separately durable ratchet
   checkpoint, application record, and replay window make that removal safe.
+- One identity/passphrase-scoped authority MUST own journal mutation before
+  session restore. Direct journal lifecycle calls and writes MUST be rejected
+  after ownership; production wiring MUST neither retain nor expose the owned
+  journal for concurrent direct use. Every session transition MUST be
+  serialized under revision compare-and-swap before its builder can observe
+  plaintext or candidate state.
+- Restore MUST accept only a contiguous effect chain above a unique registered
+  checkpoint and MUST verify canonical AR3/TR3, session, routing, stable ACK
+  roots, active lifecycle, and EC private/public consistency. A prepared effect
+  with an ambiguous persistence result MUST force controller reconstruction and
+  restore before any further transition.
 
 ## Asynchronous and multi-device properties
 

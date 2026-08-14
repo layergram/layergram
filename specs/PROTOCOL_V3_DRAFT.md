@@ -154,6 +154,15 @@ record before binding that effect digest into the inbox tombstone. A crash in
 between restores the effect without running its builder or advancing the ratchet
 twice. Missing or mismatched effect/tombstone pairs fail closed.
 
+An inactive identity/passphrase-scoped receive-commit controller now claims the
+atomic journal before restore, reconstructs each registered session through a
+contiguous TR3 revision chain, validates canonical AR3/LMF/routing bindings, and
+serializes revision compare-and-swap before invoking a candidate builder. It
+advances the in-memory snapshot only after the durable effect and replay
+tombstone both succeed; an ambiguous post-candidate failure requires a fresh
+restore. This is the persistence authority boundary, not an active or complete
+Triple Ratchet integration.
+
 `PROTOCOL_V3_KEY_SCHEDULE.md` now freezes the next inactive boundary: mandatory
 hybrid EC/PQ message-key combination, transcript-bound session/routing/ACK
 expansion, deterministic fragment nonces, a canonical committed record, and a
@@ -174,9 +183,10 @@ tie-break.
 The handshake is still a research candidate and is not wired to bootstrap
 transport, contacts, messages, storage providers, UI, or Premium. The v3 EC
 transition engine and HR3 transport are now implemented as inactive components.
-Reviewed native ML-KEM Braid transitions and state export, a single serialized
-send/receive controller, controller-level device policy, durable pending-state storage,
-checkpoint/compaction, replay retirement, resend/progress UX, real cross-app
-loss tests, and erasure coding remain activation gates. Effects outside the
-journal must later be materialized idempotently under their stable
-assembly-derived message ID.
+The receive-commit controller still depends on a reviewed native ML-KEM Braid
+transition/state validator and trusted candidate construction. A complete send
+controller, deferred continuation-key resolution, controller-level device
+policy, durable pending-state storage, checkpoint/compaction, replay retirement,
+resend/progress UX, real cross-app loss tests, and erasure coding remain
+activation gates. Effects outside the journal must later be materialized
+idempotently under their stable assembly-derived message ID.

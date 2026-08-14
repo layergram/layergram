@@ -7,9 +7,10 @@ hybrid message-key combination, fragment nonce derivation, acknowledgement
 schedule, committed application/control record, and Triple Ratchet snapshot
 envelope. The separate `PROTOCOL_V3_HANDSHAKE.md` defines the inactive
 candidate that supplies its authenticated inputs. The EC Double Ratchet engine,
-ML-KEM Braid/SCKA backend boundary, and exact HR3-to-LMF authentication now
-exist, but no production SCKA backend or active session controller exists and
-protocol v3 remains disabled.
+ML-KEM Braid/SCKA backend boundary, exact HR3-to-LMF authentication, and an
+inactive receive-commit session controller now exist. No production SCKA
+backend or active send/receive integration exists, and protocol v3 remains
+disabled.
 
 `PROTOCOL_V3_SECURITY_GOALS.md` remains authoritative. This draft and its code
 must change if later transcript design, ML-KEM Braid integration, persistence
@@ -47,6 +48,9 @@ This checkpoint provides:
   and a non-mutating backend contract for authenticated native state exports;
 - exact first-fragment HR3 carriage, digest-bound continuation fragments, and
   portable adaptive fragmentation;
+- one inactive identity/passphrase-scoped receive-commit controller that owns
+  its atomic journal, reconstructs contiguous per-session TR3 revisions,
+  validates AR3/LMF/session bindings, and applies serialized revision CAS;
 - golden, negative, framing, reassembly, and atomic-commit tests.
 
 It deliberately does not provide:
@@ -55,6 +59,8 @@ It deliberately does not provide:
   candidate remains externally unreviewed);
 - a production ML-KEM Braid/SCKA implementation or reviewed native state
   exporter;
+- an active send controller, deferred continuation-key resolver, handshake
+  bootstrap, or real application-repository materializer;
 - checkpoint compaction, replay-window retirement, or journal garbage
   collection;
 - activation in contacts, messaging, UI, backup, migration, or Premium paths.
@@ -576,6 +582,30 @@ unbound, mismatched, malformed, or divergent effect/tombstone pair fails closed.
 No effect may be collected until a separately durable ratchet checkpoint,
 application record, and replay window prove it safe.
 
+The inactive `V3SessionCommitController` claims its journal before restore, so
+direct journal lifecycle or commit calls cannot race the coordinator after the
+claim. Passing a journal to the controller transfers exclusive ownership;
+production wiring must not retain or expose it for concurrent use while restore
+begins. The controller requires a unique active checkpoint for every session in
+the encrypted identity/passphrase scope and accepts only application or
+PQ-control receive deliveries with the exact local session/routing bindings.
+Restore sorts durable effects by session and revision and requires a contiguous
+`checkpoint.revision + 1` chain. A new transition builder runs only after its
+caller-supplied expected revision matches the current committed revision. The
+controller updates its in-memory snapshot only after both the effect and bound
+replay tombstone succeed. Once a prepared effect could have become durable, any
+error makes that controller fail stopped until a fresh inbox, journal, and
+controller restore storage.
+
+The controller validates the canonical TR3 envelope and derives the stored
+X25519 public key from its private seed before accepting a checkpoint or
+candidate. Its optional backend validator is mandatory for future activation:
+without a reviewed implementation authenticating and semantically validating
+the opaque native SCKA export, the controller remains research-only. It does not
+prove that a caller-supplied hybrid candidate is cryptographically correct by
+revision shape alone; the reviewed EC/SCKA transition engines and validator
+must supply that proof.
+
 ## 10. Remaining activation gates
 
 Before this schedule can carry user messages, Layergram still requires:
@@ -584,8 +614,9 @@ Before this schedule can carry user messages, Layergram still requires:
   EC Double Ratchet construction;
 - a reviewed ML-KEM Braid backend implementing authenticated state
   export/import behind the frozen boundary;
-- one serialized session controller that joins exact HR3 send/receive
-  candidates, deferred continuation-key resolution, and snapshot revision CAS;
+- completion of the current serialized receive-commit controller with exact
+  EC/SCKA candidate construction, a send controller, deferred continuation-key
+  resolution, and reviewed native-state validation;
 - skipped-key expiry, checkpoint, compaction, replay-window, and garbage-
   collection rules;
 - idempotent external application materialization;

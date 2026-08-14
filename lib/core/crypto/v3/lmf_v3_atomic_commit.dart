@@ -140,6 +140,17 @@ class V3LmfAtomicCommitRestoreResult {
   final Set<String> pendingInboxCommitAssemblyIds;
 }
 
+/// Unforgeable ownership token for the inactive v3 session coordinator.
+///
+/// A coordinator claims the journal before restore. From that point on direct
+/// lifecycle or commit calls are rejected unless they present this exact
+/// token. This keeps one serialized authority above a journal while preserving
+/// the lower-level journal API for isolated tests and pre-controller research
+/// callers.
+final class V3LmfAtomicCommitAuthority {
+  const V3LmfAtomicCommitAuthority._();
+}
+
 /// Inactive crash-consistent commit boundary above [V3LmfDurableInbox].
 ///
 /// The single encrypted journal record contains both the future application
@@ -202,6 +213,7 @@ class V3LmfAtomicCommitJournal {
   bool _restored = false;
   bool _closed = false;
   bool _writeRecoveryRequired = false;
+  V3LmfAtomicCommitAuthority? _authority;
   int _totalStateBytes = 0;
 
   int get committedEffectCount => _effects.length;
@@ -214,8 +226,34 @@ class V3LmfAtomicCommitJournal {
   V3LmfCommittedEffect? effectForAssembly(String assemblyId) =>
       _effects[assemblyId];
 
-  Future<V3LmfAtomicCommitRestoreResult> restore() {
+  /// Claims this journal for exactly one higher-level session coordinator.
+  ///
+  /// The claim must happen before restore, closing the race window in which a
+  /// direct caller could commit between restore and coordinator attachment.
+  Future<V3LmfAtomicCommitAuthority> claimSessionCoordinatorAuthority() {
     return _serialized(() async {
+      _ensureOpen();
+      if (_restored) {
+        throw StateError(
+          'Layergram v3 atomic journal authority must be claimed before restore',
+        );
+      }
+      if (_authority != null) {
+        throw StateError(
+          'Layergram v3 atomic journal already has a session coordinator',
+        );
+      }
+      final authority = V3LmfAtomicCommitAuthority._();
+      _authority = authority;
+      return authority;
+    });
+  }
+
+  Future<V3LmfAtomicCommitRestoreResult> restore({
+    V3LmfAtomicCommitAuthority? authority,
+  }) {
+    return _serialized(() async {
+      _ensureAuthority(authority);
       _ensureOpen();
       if (_restored) {
         throw StateError('Layergram v3 atomic commit journal was restored');
@@ -319,8 +357,10 @@ class V3LmfAtomicCommitJournal {
     required V3LmfDurableDelivery delivery,
     required V3LmfAtomicEffectBuilder builder,
     DateTime? persistedAt,
+    V3LmfAtomicCommitAuthority? authority,
   }) {
     return _serialized(() async {
+      _ensureAuthority(authority);
       _ensureReady();
       _rejectAcknowledgement(delivery);
       final deliveryDigest = _deliveryDigest(delivery.frames);
@@ -434,8 +474,10 @@ class V3LmfAtomicCommitJournal {
   /// Completes the inbox tombstone for an effect persisted before a crash.
   Future<V3LmfCommittedEffect> resume({
     required V3LmfDurableDelivery delivery,
+    V3LmfAtomicCommitAuthority? authority,
   }) {
     return _serialized(() async {
+      _ensureAuthority(authority);
       _ensureReady();
       _rejectAcknowledgement(delivery);
       final existing = _effects[delivery.assemblyId];
@@ -452,8 +494,9 @@ class V3LmfAtomicCommitJournal {
     });
   }
 
-  Future<void> close() {
+  Future<void> close({V3LmfAtomicCommitAuthority? authority}) {
     return _serialized(() async {
+      _ensureAuthority(authority);
       if (_closed) return;
       _closed = true;
       _wipeAndClear();
@@ -652,6 +695,15 @@ class V3LmfAtomicCommitJournal {
       throw StateError(
         'Layergram v3 atomic commit journal must be reconstructed and '
         'restored after an indeterminate effect write',
+      );
+    }
+  }
+
+  void _ensureAuthority(V3LmfAtomicCommitAuthority? authority) {
+    final claimed = _authority;
+    if (claimed != null && !identical(claimed, authority)) {
+      throw StateError(
+        'Layergram v3 atomic journal is owned by a session coordinator',
       );
     }
   }

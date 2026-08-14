@@ -21,6 +21,7 @@ import 'package:layergram/core/crypto/v3/ml_kem_768.dart';
 import 'package:layergram/core/crypto/v3/ml_kem_768_ffi.dart';
 import 'package:layergram/core/crypto/v3/public_identity_v3.dart';
 import 'package:layergram/core/crypto/v3/public_identity_v3_validator.dart';
+import 'package:layergram/core/crypto/v3/session_commit_controller_v3.dart';
 import 'package:layergram/core/crypto/v3/triple_ratchet_state_v3.dart';
 
 void main() {
@@ -499,6 +500,136 @@ void main() {
       V3LmfOutboxAckStatus.complete,
     );
   });
+
+  testWidgets('inactive v3 session controller restores a committed revision',
+      (tester) async {
+    final transportKey = SecretKeyData(_rangeBytes(32, 0x31));
+    final localPair = await X25519().newKeyPairFromSeed(_rangeBytes(32, 0x51));
+    final remotePair = await X25519().newKeyPairFromSeed(_rangeBytes(32, 0x91));
+    final localPrivate =
+        Uint8List.fromList(await localPair.extractPrivateKeyBytes());
+    final localPublic =
+        Uint8List.fromList((await localPair.extractPublicKey()).bytes);
+    final remotePublic =
+        Uint8List.fromList((await remotePair.extractPublicKey()).bytes);
+    final sessionId = _rangeBytes(V3LmfFrameCodec.sessionIdBytes, 0x11);
+    final initiatorBinding =
+        _rangeBytes(V3LmfFrameCodec.routingBindingBytes, 0x21);
+    final responderBinding =
+        _rangeBytes(V3LmfFrameCodec.routingBindingBytes, 0x61);
+    final checkpoint = V3TripleRatchetState(
+      role: V3SessionRole.initiator,
+      lifecycle: V3RatchetLifecycle.active,
+      revision: 0,
+      sessionId: sessionId,
+      transcriptDigest: _rangeBytes(48, 0xa1),
+      initiatorRoutingBinding: initiatorBinding,
+      responderRoutingBinding: responderBinding,
+      initiatorToResponderAckRootKey: _rangeBytes(32, 0x41),
+      responderToInitiatorAckRootKey: _rangeBytes(32, 0x81),
+      ecRootKey: _rangeBytes(32, 0x12),
+      ecSendingChainKey: _rangeBytes(32, 0x32),
+      ecReceivingChainKey: _rangeBytes(32, 0x52),
+      ecLocalDhPrivateKey: localPrivate,
+      ecLocalDhPublicKey: localPublic,
+      ecRemoteDhPublicKey: remotePublic,
+      ecSendCounter: 0,
+      ecReceiveCounter: 0,
+      ecPreviousSendingChainLength: 0,
+      pqRootKey: _rangeBytes(32, 0x72),
+      pqCurrentEpoch: 0,
+      pqSendingEpoch: 0,
+      pqReceivingEpoch: 0,
+      pqEpochStates: <V3PqEpochState>[
+        V3PqEpochState(
+          epoch: 0,
+          sendingChainKey: _rangeBytes(32, 0x92),
+          receivingChainKey: _rangeBytes(32, 0xb2),
+        ),
+      ],
+      nativeSckaState: _rangeBytes(128, 0xd2),
+    );
+    localPrivate.fillRange(0, localPrivate.length, 0);
+
+    final plaintext = _rangeBytes(80, 0x31);
+    final frame = await V3LmfAead.sealSingle(
+      metadata: V3LmfMessageMetadata(
+        kind: V3LmfFrameKind.application,
+        senderBinding: responderBinding,
+        recipientBinding: initiatorBinding,
+        messageId: _rangeBytes(V3LmfFrameCodec.messageIdBytes, 0xc1),
+        sessionId: sessionId,
+        epoch: 0,
+        messageCounter: 0,
+      ),
+      plaintext: plaintext,
+      secretKey: transportKey,
+      nonce: _rangeBytes(V3LmfFrameCodec.nonceBytes, 0x71),
+      hybridRatchetHeader: V3HybridRatchetHeader(
+        ecHeader: V3EcRatchetHeader(
+          ratchetPublicKey: remotePublic,
+          previousSendingChainLength: 0,
+          messageCounter: 0,
+        ),
+        sckaMessage: V3SckaMessage(
+          sendingEpoch: 0,
+          messageCounter: 0,
+          nativePayload: _rangeBytes(24, 0xe1),
+        ),
+      ),
+    );
+    final store = _PackagingRecordStore();
+    final inbox = V3LmfDurableInbox(store: store);
+    await inbox.restore(keyResolver: (_) => transportKey);
+    final received = await inbox.receive(
+      frame: frame,
+      secretKey: transportKey,
+    );
+    final controller = V3SessionCommitController(
+      journal: V3LmfAtomicCommitJournal(store: store, inbox: inbox),
+    );
+    await controller.restore(
+      checkpoints: <V3TripleRatchetState>[checkpoint],
+    );
+    expect(
+      (await controller.commitDelivery(
+        delivery: received.delivery!,
+        expectedRevision: 0,
+        transitionBuilder: (_, current, __) =>
+            _packagedControllerCandidate(current),
+      ))
+          .ratchetRevision,
+      1,
+    );
+    await controller.close();
+    await inbox.close();
+
+    final restoredInbox = V3LmfDurableInbox(store: store);
+    final inboxRestore = await restoredInbox.restore(
+      keyResolver: (_) => transportKey,
+    );
+    expect(inboxRestore.deliveries, isEmpty);
+    final restoredController = V3SessionCommitController(
+      journal: V3LmfAtomicCommitJournal(
+        store: store,
+        inbox: restoredInbox,
+      ),
+    );
+    final controllerRestore = await restoredController.restore(
+      checkpoints: <V3TripleRatchetState>[checkpoint],
+    );
+    expect(controllerRestore.sessionRevisions.values, <int>[1]);
+    final restoredSnapshot = await restoredController.snapshotForSession(
+      sessionId,
+    );
+    expect(restoredSnapshot.revision, 1);
+    expect(restoredSnapshot.ecReceiveCounter, 1);
+
+    restoredSnapshot.wipeSecrets();
+    await restoredController.close();
+    await restoredInbox.close();
+    checkpoint.wipeSecrets();
+  });
 }
 
 String _toHex(Uint8List value) =>
@@ -522,6 +653,66 @@ V3HybridRatchetHeader _hybridHeader() => V3HybridRatchetHeader(
         nativePayload: Uint8List(0),
       ),
     );
+
+V3TripleRatchetState _packagedControllerCandidate(
+  V3TripleRatchetState current,
+) {
+  final ecRoot = current.ecRootKey;
+  final ecSending = current.ecSendingChainKey;
+  final ecReceiving = current.ecReceivingChainKey;
+  final ecPrivate = current.ecLocalDhPrivateKey;
+  final ecPublic = current.ecLocalDhPublicKey;
+  final ecRemote = current.ecRemoteDhPublicKey!;
+  final pqRoot = current.pqRootKey;
+  final epochs = current.pqEpochStates;
+  final ecSkipped = current.ecSkippedMessageKeys;
+  final pqSkipped = current.pqSkippedMessageKeys;
+  final nativeState = current.nativeSckaState;
+  try {
+    return current.replaceHybridState(
+      expectedRevision: current.revision,
+      ecRootKey: ecRoot,
+      ecSendingChainKey: ecSending,
+      ecReceivingChainKey: ecReceiving,
+      ecLocalDhPrivateKey: ecPrivate,
+      ecLocalDhPublicKey: ecPublic,
+      ecRemoteDhPublicKey: ecRemote,
+      ecSendCounter: current.ecSendCounter,
+      ecReceiveCounter: current.ecReceiveCounter + 1,
+      ecPreviousSendingChainLength: current.ecPreviousSendingChainLength,
+      ecSkippedMessageKeys: ecSkipped,
+      pqRootKey: pqRoot,
+      pqCurrentEpoch: current.pqCurrentEpoch,
+      pqSendingEpoch: current.pqSendingEpoch,
+      pqReceivingEpoch: current.pqReceivingEpoch,
+      pqEpochStates: epochs,
+      pqSkippedMessageKeys: pqSkipped,
+      nativeSckaState: nativeState,
+    );
+  } finally {
+    for (final value in <Uint8List?>[
+      ecRoot,
+      ecSending,
+      ecReceiving,
+      ecPrivate,
+      ecPublic,
+      ecRemote,
+      pqRoot,
+      nativeState,
+    ]) {
+      value?.fillRange(0, value.length, 0);
+    }
+    for (final value in epochs) {
+      value.wipeSecrets();
+    }
+    for (final value in ecSkipped) {
+      value.wipeSecret();
+    }
+    for (final value in pqSkipped) {
+      value.wipeSecret();
+    }
+  }
+}
 
 class _PackagingRecordStore implements V3LmfRecordStore {
   final Map<String, Map<String, dynamic>> _records =

@@ -290,7 +290,10 @@ the assembly ID, so replay cannot allocate a second record. Exactly-once effects
 outside the journal are still not claimed: future message/UI repositories must
 read the journal as their source of truth or materialize its record idempotently
 under that stable ID. The inactive canonical `AR3` and `TR3` codecs now provide
-the exact journal byte strings; the real transition engines and external
+the exact journal byte strings. The inactive receive-commit controller claims
+the journal before restore, validates AR3/TR3/session/routing bindings, and
+applies revision CAS before its candidate builder runs. Reviewed native SCKA
+semantics, complete transition integration, sending, and external
 materialization remain activation gates.
 
 Commit-tombstone retention is local and explicit. A tombstone may be purged only
@@ -352,7 +355,43 @@ requires a ratchet checkpoint/compaction rule that proves both application
 history and the replay window remain durable before an effect or its bound
 tombstone can be removed.
 
-### 7.5 ACK golden vector
+### 7.5 Session-controller restore and commit invariants
+
+One inactive controller owns one journal for an encrypted identity/passphrase
+scope. It claims an unforgeable in-memory journal authority before journal
+restore; after that claim, direct `restore`, `commit`, `resume`, or `close`
+calls without the exact authority fail before reading plaintext or changing
+state. Passing a journal to the controller transfers its ownership: callers
+MUST NOT retain it for concurrent direct use while controller restore begins,
+and production wiring MUST keep that journal private to the controller. The
+caller supplies a unique active checkpoint for every session represented by
+the journal.
+
+For each durable effect, the controller decodes canonical AR3 and TR3 bytes,
+requires the exact target assembly/session/message/routing/epoch/counter and
+content length, and reconstructs a strictly contiguous TR3 revision chain from
+the registered checkpoint. Stable role, transcript, routing bindings, ACK
+roots, active lifecycle, and X25519 private/public consistency cannot change.
+Application and PQ-control deliveries must use the inbound routing direction
+for the local role and carry HR3 on fragment zero.
+
+New commits are serialized and compare the caller's expected revision before
+the transition builder runs. The builder sees only temporary plaintext and a
+detached current snapshot. Its candidate must advance exactly one revision and
+pass the same stable-session and snapshot validation. In-memory state advances
+only after the journal effect and bound inbox tombstone both complete. If an
+error occurs after a complete candidate is prepared, the controller fails
+stopped even when the exact persistence outcome is unknown. A fresh restore
+selects the durable truth and may resume only the missing tombstone without
+running the builder or advancing the ratchet again.
+
+The optional semantic snapshot validator is required at activation to invoke
+the reviewed native SCKA backend. The current controller alone does not prove
+that arbitrary caller-supplied EC/PQ candidate fields implement the specified
+cryptographic transition, and it does not define sending or external
+application materialization.
+
+### 7.6 ACK golden vector
 
 For target suite `0x01`, kind `0x01`, five fragments, message ID `81 82 ...
 90`, epoch `7`, counter `9`, final length `1,088`, and received indexes `0, 2,
@@ -448,10 +487,11 @@ message decode, contact state, backups, migration, QR, UI, or Premium capability
 contracts.
 
 Before activation, the native ML-KEM Braid engine must produce and consume the
-frozen message/state formats; one serialized session controller must join the
-EC/SCKA candidates, deferred continuation processing, atomic journal, and
-snapshot revision checks; the application repository must use that journal as
-its source of truth; checkpoint and garbage-collection rules must be frozen;
+frozen message/state formats and validate every opaque export; the current
+receive-commit controller must be completed with reviewed EC/SCKA candidate
+construction, sending, and deferred continuation processing; the application
+repository must use the atomic journal as its source of truth; checkpoint and
+garbage-collection rules must be frozen;
 resend/progress UX and real loss recovery must pass; all three transports must
 pass real cross-app tests; and the complete design and implementation must pass
 independent review.
