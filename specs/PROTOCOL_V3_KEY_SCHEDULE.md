@@ -61,6 +61,8 @@ This checkpoint provides:
 - encrypted, bounded, idempotent AR3 materialization under the stable
   assembly-derived record ID, plus write-new-before-delete TR3 checkpoints with
   cumulative direction/revision/state receipts;
+- checkpoint-backed restore, explicit journal collection, and write-before-
+  delete replacement of incoming tombstones with durable replay-window proofs;
 - golden, negative, framing, reassembly, atomic-commit, exact-byte retry,
   capacity-preflight, ambiguous-write, restart, and ACK-ordering tests.
 
@@ -72,8 +74,8 @@ It deliberately does not provide:
   exporter;
 - an active durable send controller, handshake bootstrap, or projection from
   the durable AR3 source into the current message/UI repository;
-- checkpoint-as-restore-anchor compaction, replay-window retirement, or journal
-  garbage collection;
+- replay-window expiry, skipped-key retirement, or rolling compaction of the
+  cumulative checkpoint receipt history;
 - activation in contacts, messaging, UI, backup, migration, or Premium paths.
 
 All code remains isolated under `lib/core/crypto/v3/`. Protocol v2 remains the
@@ -721,11 +723,43 @@ Materializer and checkpoint writes have ambiguous outcomes on error and force
 fresh controller reconstruction. Restore makes partial progress idempotent: an
 already materialized exact AR3 is reused, and the checkpoint repository accepts
 only the same revision or a higher snapshot that preserves every prior receipt
-and the stable session lineage. The checkpoint is currently a consistency
-anchor, not a replay shortcut: all journal effects remain present and are fully
-replayed before the checkpoint is reconciled. Therefore no journal effect,
-inbox tombstone, replay entry, completed send effect, or outbox record is made
-collectable by this checkpoint alone.
+and the stable session lineage.
+
+The highest encrypted checkpoint is the durable restore anchor. It may advance
+an older caller bootstrap snapshot, or restore a known session without a caller
+snapshot, only when its stable lineage and canonical snapshot validate. Journal
+effects above that revision still form one contiguous chain. Effects at or
+below it are not replayed: their exact direction-bound receipt and independently
+materialized AR3 bytes MUST match before they are treated as covered.
+
+Compaction is explicit and serialized by the same coordinator. For an incoming
+effect it MUST verify the materialized AR3, exact cumulative receipt, and
+current checkpoint, then write a `v3_lmf_replay_v1` entry before deleting the
+full inbox tombstone or journal effect. The replay entry retains the complete
+ACK/target binding, higher-level effect digest, stable AR3 ID, session, ratchet
+revision, and checkpoint digest. Restore prefers it over an exact older
+tombstone; a missing journal effect is valid only for such an entry. Malformed
+compact replay state is retained and fails closed.
+If the compact proof was written but deletion failed, a later cumulative
+checkpoint MAY be used to retry collection when it still contains the exact
+same direction, assembly, stable record ID, session, ratchet revision, and
+state receipt. The proof keeps its original checkpoint digest as evidence of
+the earlier write-before-delete boundary.
+
+An outgoing effect is collectable only after its authenticated complete ACK is
+durable in the send journal, its outbox entry is absent, and the same AR3/TR3
+coverage checks pass. The coordinator MUST write a
+`v3_send_completion_v1` proof binding the effect digest, stable record ID,
+session, ratchet revision, and checkpoint digest before deleting the full send
+effect. On restore every cumulative incoming or outgoing receipt MUST retain
+either its exact full journal effect or its corresponding compact proof; losing
+both fails closed. Deletion errors with ambiguous durable outcomes force a fresh
+restore; that restore uses the checkpoint and never reruns ratchet or AEAD work.
+An already durable completion proof remains valid when a later cumulative
+checkpoint retains the same immutable receipt.
+Direct tombstone/replay purging is rejected after coordinator ownership.
+Replay-window expiry and pruning cumulative receipts remain separate activation
+gates because they require the final skipped-key retirement policy.
 
 ## 10. Remaining activation gates
 
@@ -737,8 +771,8 @@ Before this schedule can carry user messages, Layergram still requires:
   export/import behind the frozen boundary;
 - independent review and production wiring of the inactive crash-consistent
   send/receive coordinator, including the reviewed native-state validator;
-- skipped-key expiry, checkpoint-backed restore/compaction, replay-window, and
-  garbage-collection rules;
+- skipped-key expiry, replay-window expiry, and bounded rolling compaction of
+  cumulative checkpoint receipts;
 - active message/UI repository projection from the idempotent durable AR3
   source;
 - full packaging, crash, migration, multi-device, passphrase, Maximum-mode,

@@ -46,6 +46,17 @@ void main() {
         () => journal.effectForAssembly('not-an-assembly'),
         throwsStateError,
       );
+      await expectLater(
+        fixture.inbox.purgeCommittedBefore(DateTime.now().toUtc()),
+        throwsStateError,
+      );
+      await expectLater(
+        journal.collectCompactedEffect(
+          assemblyId: fixture.deliveries.single.assemblyId,
+          expectedEffectDigest: fixture.deliveries.single.assemblyId,
+        ),
+        throwsStateError,
+      );
 
       var directBuilderCalls = 0;
       await expectLater(
@@ -175,6 +186,507 @@ void main() {
             )
             .length,
         1,
+      );
+
+      await restoredController.close();
+      await restoredInbox.close();
+      fixture.checkpoint.wipeSecrets();
+    });
+
+    test(
+        'compacts incoming journal into replay window and restores from durable checkpoint',
+        () async {
+      final fixture = await _Fixture.create(messageCount: 1);
+      final controller = V3SessionCommitController(
+        journal: V3LmfAtomicCommitJournal(
+          store: fixture.store,
+          inbox: fixture.inbox,
+        ),
+        committedRecordMaterializer: V3CommittedRecordMaterializer(
+          store: fixture.store,
+        ),
+        checkpointRepository: V3SessionCheckpointRepository(
+          store: fixture.store,
+        ),
+      );
+      await controller.restore(
+        checkpoints: <V3TripleRatchetState>[fixture.checkpoint],
+      );
+      await controller.commitDelivery(
+        delivery: fixture.deliveries.single,
+        expectedRevision: 0,
+        transitionBuilder: (_, current, __) =>
+            _candidateFrom(current, receivingEpoch: 0),
+      );
+
+      final compacted = await controller.compactSession(
+        fixture.checkpoint.sessionId,
+      );
+      expect(compacted.collectedIncomingEffects, 1);
+      expect(compacted.collectedOutgoingEffects, 0);
+      expect(compacted.replayWindowEntries, 1);
+      expect(
+        fixture.store.records.values.where(
+          (payload) => payload['kind'] == V3LmfAtomicCommitJournal.recordKind,
+        ),
+        isEmpty,
+      );
+      expect(
+        fixture.store.records.values.where(
+          (payload) => payload['kind'] == V3LmfDurableInbox.committedRecordKind,
+        ),
+        isEmpty,
+      );
+      expect(
+        fixture.store.records.values.where(
+          (payload) =>
+              payload['kind'] == V3LmfDurableInbox.replayWindowRecordKind,
+        ),
+        hasLength(1),
+      );
+      final replay = await fixture.inbox.receive(
+        frame: fixture.frames.single,
+        secretKey: fixture.transportKey,
+      );
+      expect(replay.status, V3LmfInboxStatus.committedReplay);
+
+      await controller.close();
+      await fixture.inbox.close();
+      final restoredInbox = V3LmfDurableInbox(store: fixture.store);
+      final inboxRestore = await restoredInbox.restore(
+        keyResolver: (_) => fixture.transportKey,
+      );
+      expect(inboxRestore.deliveries, isEmpty);
+      final restoredController = V3SessionCommitController(
+        journal: V3LmfAtomicCommitJournal(
+          store: fixture.store,
+          inbox: restoredInbox,
+        ),
+        committedRecordMaterializer: V3CommittedRecordMaterializer(
+          store: fixture.store,
+        ),
+        checkpointRepository: V3SessionCheckpointRepository(
+          store: fixture.store,
+        ),
+      );
+      final restored = await restoredController.restore(
+        checkpoints: const <V3TripleRatchetState>[],
+      );
+      expect(restored.sessionRevisions.values, <int>[1]);
+      expect(restored.committedEffectCount, 0);
+      final replayAfterRestart = await restoredInbox.receive(
+        frame: fixture.frames.single,
+        secretKey: fixture.transportKey,
+      );
+      expect(replayAfterRestart.status, V3LmfInboxStatus.committedReplay);
+      final secondCompaction = await restoredController.compactSession(
+        fixture.checkpoint.sessionId,
+      );
+      expect(secondCompaction.collectedIncomingEffects, 0);
+
+      await restoredController.close();
+      await restoredInbox.close();
+      fixture.checkpoint.wipeSecrets();
+    });
+
+    test('restore rejects a checkpoint whose replay-window proof was lost',
+        () async {
+      final fixture = await _Fixture.create(messageCount: 1);
+      final controller = V3SessionCommitController(
+        journal: V3LmfAtomicCommitJournal(
+          store: fixture.store,
+          inbox: fixture.inbox,
+        ),
+        committedRecordMaterializer: V3CommittedRecordMaterializer(
+          store: fixture.store,
+        ),
+        checkpointRepository: V3SessionCheckpointRepository(
+          store: fixture.store,
+        ),
+      );
+      await controller.restore(
+        checkpoints: <V3TripleRatchetState>[fixture.checkpoint],
+      );
+      await controller.commitDelivery(
+        delivery: fixture.deliveries.single,
+        expectedRevision: 0,
+        transitionBuilder: (_, current, __) =>
+            _candidateFrom(current, receivingEpoch: 0),
+      );
+      await controller.compactSession(fixture.checkpoint.sessionId);
+      final replay = fixture.store.records.entries.singleWhere(
+        (entry) =>
+            entry.value['kind'] == V3LmfDurableInbox.replayWindowRecordKind,
+      );
+      fixture.store.records.remove(replay.key);
+      await controller.close();
+      await fixture.inbox.close();
+
+      final restoredInbox = V3LmfDurableInbox(store: fixture.store);
+      await restoredInbox.restore(keyResolver: (_) => fixture.transportKey);
+      final restoredController = V3SessionCommitController(
+        journal: V3LmfAtomicCommitJournal(
+          store: fixture.store,
+          inbox: restoredInbox,
+        ),
+        committedRecordMaterializer: V3CommittedRecordMaterializer(
+          store: fixture.store,
+        ),
+        checkpointRepository: V3SessionCheckpointRepository(
+          store: fixture.store,
+        ),
+      );
+      try {
+        await expectLater(
+          restoredController.restore(
+            checkpoints: const <V3TripleRatchetState>[],
+          ),
+          throwsA(isA<V3LmfPersistenceConflictException>()),
+        );
+        expect(restoredController.requiresRecovery, isTrue);
+      } finally {
+        await restoredController.close();
+        await restoredInbox.close();
+        fixture.checkpoint.wipeSecrets();
+      }
+    });
+
+    test('ambiguous journal collection keeps replay suppression recoverable',
+        () async {
+      final fixture = await _Fixture.create(messageCount: 1);
+      final controller = V3SessionCommitController(
+        journal: V3LmfAtomicCommitJournal(
+          store: fixture.store,
+          inbox: fixture.inbox,
+        ),
+        committedRecordMaterializer: V3CommittedRecordMaterializer(
+          store: fixture.store,
+        ),
+        checkpointRepository: V3SessionCheckpointRepository(
+          store: fixture.store,
+        ),
+      );
+      await controller.restore(
+        checkpoints: <V3TripleRatchetState>[fixture.checkpoint],
+      );
+      await controller.commitDelivery(
+        delivery: fixture.deliveries.single,
+        expectedRevision: 0,
+        transitionBuilder: (_, current, __) =>
+            _candidateFrom(current, receivingEpoch: 0),
+      );
+      fixture.store.durableDeleteThenThrowKind =
+          V3LmfAtomicCommitJournal.recordKind;
+      await expectLater(
+        controller.compactSession(fixture.checkpoint.sessionId),
+        throwsStateError,
+      );
+      expect(controller.requiresRecovery, isTrue);
+      expect(
+        fixture.store.records.values.where(
+          (payload) =>
+              payload['kind'] == V3LmfDurableInbox.replayWindowRecordKind,
+        ),
+        hasLength(1),
+      );
+      expect(
+        fixture.store.records.values.where(
+          (payload) => payload['kind'] == V3LmfAtomicCommitJournal.recordKind,
+        ),
+        isEmpty,
+      );
+
+      await controller.close();
+      await fixture.inbox.close();
+      final restoredInbox = V3LmfDurableInbox(store: fixture.store);
+      await restoredInbox.restore(keyResolver: (_) => fixture.transportKey);
+      final restoredController = V3SessionCommitController(
+        journal: V3LmfAtomicCommitJournal(
+          store: fixture.store,
+          inbox: restoredInbox,
+        ),
+        committedRecordMaterializer: V3CommittedRecordMaterializer(
+          store: fixture.store,
+        ),
+        checkpointRepository: V3SessionCheckpointRepository(
+          store: fixture.store,
+        ),
+      );
+      final restored = await restoredController.restore(
+        checkpoints: const <V3TripleRatchetState>[],
+      );
+      expect(restored.sessionRevisions.values, <int>[1]);
+      expect(restored.committedEffectCount, 0);
+      expect(
+        (await restoredInbox.receive(
+          frame: fixture.frames.single,
+          secretKey: fixture.transportKey,
+        ))
+            .status,
+        V3LmfInboxStatus.committedReplay,
+      );
+
+      await restoredController.close();
+      await restoredInbox.close();
+      fixture.checkpoint.wipeSecrets();
+    });
+
+    test('retries pre-delete compaction after a cumulative checkpoint advances',
+        () async {
+      final fixture = await _Fixture.create(messageCount: 2);
+      final controller = V3SessionCommitController(
+        journal: V3LmfAtomicCommitJournal(
+          store: fixture.store,
+          inbox: fixture.inbox,
+        ),
+        committedRecordMaterializer: V3CommittedRecordMaterializer(
+          store: fixture.store,
+        ),
+        checkpointRepository: V3SessionCheckpointRepository(
+          store: fixture.store,
+        ),
+      );
+      await controller.restore(
+        checkpoints: <V3TripleRatchetState>[fixture.checkpoint],
+      );
+      await controller.commitDelivery(
+        delivery: fixture.deliveries.first,
+        expectedRevision: 0,
+        transitionBuilder: (_, current, __) =>
+            _candidateFrom(current, receivingEpoch: 0),
+      );
+      fixture.store.failDeleteKindOnce = V3LmfAtomicCommitJournal.recordKind;
+      await expectLater(
+        controller.compactSession(fixture.checkpoint.sessionId),
+        throwsStateError,
+      );
+      expect(controller.requiresRecovery, isTrue);
+      final earlierCheckpointDigest = fixture.store.records.values.singleWhere(
+        (payload) =>
+            payload['kind'] == V3LmfDurableInbox.replayWindowRecordKind,
+      )['checkpointDigest'];
+      expect(
+        fixture.store.records.values.where(
+          (payload) => payload['kind'] == V3LmfAtomicCommitJournal.recordKind,
+        ),
+        hasLength(1),
+      );
+      await controller.close();
+      await fixture.inbox.close();
+
+      final restoredInbox = V3LmfDurableInbox(store: fixture.store);
+      final inboxRestore = await restoredInbox.restore(
+        keyResolver: (_) => fixture.transportKey,
+      );
+      expect(inboxRestore.deliveries, hasLength(1));
+      final restoredController = V3SessionCommitController(
+        journal: V3LmfAtomicCommitJournal(
+          store: fixture.store,
+          inbox: restoredInbox,
+        ),
+        committedRecordMaterializer: V3CommittedRecordMaterializer(
+          store: fixture.store,
+        ),
+        checkpointRepository: V3SessionCheckpointRepository(
+          store: fixture.store,
+        ),
+      );
+      final restored = await restoredController.restore(
+        checkpoints: const <V3TripleRatchetState>[],
+      );
+      expect(restored.sessionRevisions.values, <int>[1]);
+      expect(restored.committedEffectCount, 1);
+      await restoredController.commitDelivery(
+        delivery: inboxRestore.deliveries.single,
+        expectedRevision: 1,
+        transitionBuilder: (_, current, __) =>
+            _candidateFrom(current, receivingEpoch: 0),
+      );
+      final currentCheckpointDigest = fixture.store.records.values.singleWhere(
+        (payload) =>
+            payload['kind'] == V3SessionCheckpointRepository.recordKind,
+      )['checkpointDigest'];
+      expect(currentCheckpointDigest, isNot(earlierCheckpointDigest));
+
+      final compacted = await restoredController.compactSession(
+        fixture.checkpoint.sessionId,
+      );
+      expect(compacted.collectedIncomingEffects, 2);
+      expect(
+        fixture.store.records.values.where(
+          (payload) => payload['kind'] == V3LmfAtomicCommitJournal.recordKind,
+        ),
+        isEmpty,
+      );
+      expect(
+        fixture.store.records.values.where(
+          (payload) =>
+              payload['kind'] == V3LmfDurableInbox.replayWindowRecordKind,
+        ),
+        hasLength(2),
+      );
+
+      await restoredController.close();
+      await restoredInbox.close();
+      fixture.checkpoint.wipeSecrets();
+    });
+
+    test('corrupt compact replay proof fails closed and is retained', () async {
+      final fixture = await _Fixture.create(messageCount: 1);
+      final controller = V3SessionCommitController(
+        journal: V3LmfAtomicCommitJournal(
+          store: fixture.store,
+          inbox: fixture.inbox,
+        ),
+        committedRecordMaterializer: V3CommittedRecordMaterializer(
+          store: fixture.store,
+        ),
+        checkpointRepository: V3SessionCheckpointRepository(
+          store: fixture.store,
+        ),
+      );
+      await controller.restore(
+        checkpoints: <V3TripleRatchetState>[fixture.checkpoint],
+      );
+      await controller.commitDelivery(
+        delivery: fixture.deliveries.single,
+        expectedRevision: 0,
+        transitionBuilder: (_, current, __) =>
+            _candidateFrom(current, receivingEpoch: 0),
+      );
+      await controller.compactSession(fixture.checkpoint.sessionId);
+      await controller.close();
+      await fixture.inbox.close();
+
+      final replayEntry = fixture.store.records.entries.singleWhere(
+        (entry) =>
+            entry.value['kind'] == V3LmfDurableInbox.replayWindowRecordKind,
+      );
+      replayEntry.value['checkpointDigest'] = 'not-canonical';
+      final restoredInbox = V3LmfDurableInbox(store: fixture.store);
+      await expectLater(
+        restoredInbox.restore(keyResolver: (_) => fixture.transportKey),
+        throwsFormatException,
+      );
+      expect(fixture.store.records.containsKey(replayEntry.key), isTrue);
+
+      await restoredInbox.close();
+      fixture.checkpoint.wipeSecrets();
+    });
+
+    test('checkpoint restore fails closed if compacted AR3 is missing',
+        () async {
+      final fixture = await _Fixture.create(messageCount: 1);
+      final controller = V3SessionCommitController(
+        journal: V3LmfAtomicCommitJournal(
+          store: fixture.store,
+          inbox: fixture.inbox,
+        ),
+        committedRecordMaterializer: V3CommittedRecordMaterializer(
+          store: fixture.store,
+        ),
+        checkpointRepository: V3SessionCheckpointRepository(
+          store: fixture.store,
+        ),
+      );
+      await controller.restore(
+        checkpoints: <V3TripleRatchetState>[fixture.checkpoint],
+      );
+      await controller.commitDelivery(
+        delivery: fixture.deliveries.single,
+        expectedRevision: 0,
+        transitionBuilder: (_, current, __) =>
+            _candidateFrom(current, receivingEpoch: 0),
+      );
+      await controller.compactSession(fixture.checkpoint.sessionId);
+      await controller.close();
+      await fixture.inbox.close();
+      final materialized = fixture.store.records.entries.singleWhere(
+        (entry) =>
+            entry.value['kind'] == V3CommittedRecordMaterializer.recordKind,
+      );
+      fixture.store.records.remove(materialized.key);
+
+      final restoredInbox = V3LmfDurableInbox(store: fixture.store);
+      await restoredInbox.restore(keyResolver: (_) => fixture.transportKey);
+      final restoredController = V3SessionCommitController(
+        journal: V3LmfAtomicCommitJournal(
+          store: fixture.store,
+          inbox: restoredInbox,
+        ),
+        committedRecordMaterializer: V3CommittedRecordMaterializer(
+          store: fixture.store,
+        ),
+        checkpointRepository: V3SessionCheckpointRepository(
+          store: fixture.store,
+        ),
+      );
+      await expectLater(
+        restoredController.restore(
+          checkpoints: const <V3TripleRatchetState>[],
+        ),
+        throwsA(isA<V3LmfPersistenceConflictException>()),
+      );
+      expect(restoredController.requiresRecovery, isTrue);
+
+      await restoredController.close();
+      await restoredInbox.close();
+      fixture.checkpoint.wipeSecrets();
+    });
+
+    test('checkpoint restore rejects a replay proof rebound to another session',
+        () async {
+      final fixture = await _Fixture.create(messageCount: 1);
+      final controller = V3SessionCommitController(
+        journal: V3LmfAtomicCommitJournal(
+          store: fixture.store,
+          inbox: fixture.inbox,
+        ),
+        committedRecordMaterializer: V3CommittedRecordMaterializer(
+          store: fixture.store,
+        ),
+        checkpointRepository: V3SessionCheckpointRepository(
+          store: fixture.store,
+        ),
+      );
+      await controller.restore(
+        checkpoints: <V3TripleRatchetState>[fixture.checkpoint],
+      );
+      await controller.commitDelivery(
+        delivery: fixture.deliveries.single,
+        expectedRevision: 0,
+        transitionBuilder: (_, current, __) =>
+            _candidateFrom(current, receivingEpoch: 0),
+      );
+      await controller.compactSession(fixture.checkpoint.sessionId);
+      await controller.close();
+      await fixture.inbox.close();
+      final replayEntry = fixture.store.records.entries.singleWhere(
+        (entry) =>
+            entry.value['kind'] == V3LmfDurableInbox.replayWindowRecordKind,
+      );
+      replayEntry.value['sessionId'] =
+          base64UrlEncode(_bytes(16, 0xf1)).replaceAll('=', '');
+
+      final restoredInbox = V3LmfDurableInbox(store: fixture.store);
+      await restoredInbox.restore(keyResolver: (_) => fixture.transportKey);
+      final restoredController = V3SessionCommitController(
+        journal: V3LmfAtomicCommitJournal(
+          store: fixture.store,
+          inbox: restoredInbox,
+        ),
+        committedRecordMaterializer: V3CommittedRecordMaterializer(
+          store: fixture.store,
+        ),
+        checkpointRepository: V3SessionCheckpointRepository(
+          store: fixture.store,
+        ),
+      );
+      await expectLater(
+        restoredController.restore(
+          checkpoints: const <V3TripleRatchetState>[],
+        ),
+        throwsA(isA<V3LmfPersistenceConflictException>()),
       );
 
       await restoredController.close();
@@ -810,6 +1322,8 @@ final class _FaultStore implements V3LmfRecordStore {
       <String, Map<String, dynamic>>{};
   var _nextId = 0;
   String? failKindOnce;
+  String? failDeleteKindOnce;
+  String? durableDeleteThenThrowKind;
 
   @override
   Future<String> write(Map<String, dynamic> payload) async {
@@ -834,6 +1348,15 @@ final class _FaultStore implements V3LmfRecordStore {
 
   @override
   Future<void> delete(String storageId) async {
-    records.remove(storageId);
+    final stored = records[storageId];
+    if (stored?['kind'] == failDeleteKindOnce) {
+      failDeleteKindOnce = null;
+      throw StateError('injected pre-delete failure');
+    }
+    final removed = records.remove(storageId);
+    if (removed?['kind'] == durableDeleteThenThrowKind) {
+      durableDeleteThenThrowKind = null;
+      throw StateError('injected ambiguous delete');
+    }
   }
 }

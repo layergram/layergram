@@ -378,10 +378,19 @@ journal is attached to an inbox, transport-only tombstones are rejected; a
 pre-existing unbound tombstone also rejects journal commit before the builder
 can observe the already-consumed delivery.
 
-Effect-journal garbage collection is deliberately not defined yet. Activation
-requires a ratchet checkpoint/compaction rule that proves both application
-history and the replay window remain durable before an effect or its bound
-tombstone can be removed.
+Effect-journal collection is explicit and coordinator-owned. An incoming effect
+is collectable only after its exact AR3 is independently materialized and its
+exact AR3/TR3 state receipt occurs in the current durable session checkpoint.
+The coordinator first writes a compact `v3_lmf_replay_v1` record containing the
+complete ACK/target binding, higher-level effect digest, stable record ID,
+session, ratchet revision, and checkpoint digest. Only then may it delete the
+older tombstone and journal effect. Restore accepts a missing effect only when
+this replay-window record exists with the exact higher-level binding. A corrupt
+replay-window record is retained and fails closed rather than silently making
+the old message eligible again. If marker creation succeeds but journal
+deletion does not, that marker remains valid under a later checkpoint whose
+cumulative receipts still contain the exact transition; retry therefore does
+not deadlock compaction merely because the checkpoint digest advanced.
 
 ### 7.5 Durable AR3 materialization and TR3 checkpoint invariants
 
@@ -404,10 +413,25 @@ fail closed. Replacement is write-new-before-delete; superseded cleanup failure
 does not invalidate the already selected higher record.
 
 The coordinator reconciles materialization and checkpoints before exposing a
-new commit result and on every restart. These checkpoints are not yet accepted
-as journal-replay shortcuts and do not authorize deletion. Until replay-window
-and compaction rules are separately frozen, every journal effect and tombstone
-remains authoritative and retained.
+new commit result and on every restart. The highest checkpoint is then the
+restore anchor: an older caller bootstrap may be advanced only on the same
+stable lineage, covered journal effects at or below its revision are checked
+against exact receipts/materialized bytes without reapplying their state, and
+only later effects are replayed as one contiguous chain. A fully acknowledged
+outgoing effect is collectable only after its outbox materialization is absent
+and the same receipt/materialization checks pass. Before deleting that send
+effect, the coordinator writes a compact `v3_send_completion_v1` proof binding
+the effect digest, stable record ID, session, ratchet revision, and checkpoint
+digest. Every cumulative checkpoint receipt MUST therefore retain either its
+full journal effect or its exact incoming replay/outgoing completion proof;
+loss of both fails restore closed. A previously written compact proof continues
+to cover that same immutable receipt when a later checkpoint advances without
+dropping it.
+
+Replay-window entries are not time-purged by this coordinator. The existing
+explicit purge API is blocked after journal ownership. Final skipped-key expiry,
+safe replay-window expiry, and rolling pruning of the bounded cumulative receipt
+set remain activation gates.
 
 ### 7.6 Session-controller restore and commit invariants
 
@@ -546,7 +570,8 @@ frozen message/state formats and validate every opaque export; the inactive
 crash-consistent send/receive coordinator and its recovery paths must pass
 independent review and production wiring; the application repository must
 project from the durable stable-ID AR3 source; checkpoint-backed restore,
-compaction, replay-window, and garbage-collection rules must be frozen;
+compaction, and replay-window replacement must pass independent review, while
+skipped-key/replay-window expiry and rolling receipt compaction must be frozen;
 resend/progress UX and real loss recovery must pass; all three transports must
 pass real cross-app tests; and the complete design and implementation must pass
 independent review.

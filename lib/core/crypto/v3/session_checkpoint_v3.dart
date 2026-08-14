@@ -168,6 +168,14 @@ final class V3SessionCheckpoint {
     return null;
   }
 
+  /// Confirms a candidate snapshot belongs to this checkpoint's immutable
+  /// session/role/transcript/routing lineage without exposing secret bytes.
+  bool matchesLineage(V3TripleRatchetState snapshot) {
+    return revision >= snapshot.revision &&
+        sessionKey == _sessionKey(snapshot.sessionId) &&
+        lineageDigest == _lineageDigest(snapshot);
+  }
+
   void _close() => _wipe(_encodedSnapshot);
 }
 
@@ -190,8 +198,9 @@ final class V3SessionCheckpointAuthority {
 ///
 /// Checkpoint writes are write-new-before-delete. Restore selects the highest
 /// revision only after proving one stable lineage and monotonic receipt
-/// inclusion. No journal/tombstone is deleted by this repository: using the
-/// receipts for garbage collection remains a separate activation gate.
+/// inclusion. The session coordinator, not this repository, verifies these
+/// receipts together with AR3 materialization and replay/outbox state before
+/// journal collection.
 final class V3SessionCheckpointRepository {
   V3SessionCheckpointRepository({
     required V3LmfRecordStore store,

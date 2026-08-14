@@ -143,9 +143,16 @@ reviewed standard alternative or narrow its product claim explicitly.
 - Durable AR3 materialization MUST use the assembly-derived stable record ID,
   reuse exact bytes idempotently, and reject divergent bytes for the same ID.
   A TR3 checkpoint MUST bind one stable session lineage and cumulative receipts
-  over the exact covered AR3/TR3 transitions. Until checkpoint-backed replay
-  and replay-window rules are frozen, neither record authorizes journal or
-  tombstone deletion.
+  over the exact covered AR3/TR3 transitions. An incoming tombstone MUST be
+  replaced write-before-delete by an exact durable replay-window proof before
+  its effect is collected. A completed outgoing effect MUST be collected only
+  after its outbox copy is absent and a durable completion proof has been
+  written. Every checkpoint receipt MUST retain its full effect or the exact
+  compact proof; loss of both MUST fail restore closed. A compact proof already
+  written before an interrupted deletion MUST remain usable under a later
+  checkpoint that cumulatively retains the same receipt. Replay-window expiry
+  MUST remain disabled until skipped-key retirement independently rejects the
+  corresponding input.
 - One identity/passphrase-scoped authority MUST own journal mutation before
   session restore. Direct journal lifecycle calls and writes MUST be rejected
   after ownership; production wiring MUST neither retain nor expose the owned

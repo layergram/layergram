@@ -75,14 +75,38 @@ final class V3SessionSendEffect {
   }
 }
 
+/// Durable proof that an outgoing journal effect was collected only after its
+/// complete authenticated ACK became durable and its outbox copy disappeared.
+final class V3SessionSendCompletionBinding {
+  const V3SessionSendCompletionBinding._({
+    required this.assemblyId,
+    required this.effectDigest,
+    required this.stableRecordId,
+    required this.sessionKey,
+    required this.ratchetRevision,
+    required this.checkpointDigest,
+    required this.completedAt,
+  });
+
+  final String assemblyId;
+  final String effectDigest;
+  final String stableRecordId;
+  final String sessionKey;
+  final int ratchetRevision;
+  final String checkpointDigest;
+  final DateTime completedAt;
+}
+
 final class V3SessionSendJournalRestoreResult {
   const V3SessionSendJournalRestoreResult({
     required this.effects,
     required this.removedSupersededRecords,
+    this.completionBindings = const <String, V3SessionSendCompletionBinding>{},
   });
 
   final List<V3SessionSendEffect> effects;
   final int removedSupersededRecords;
+  final Map<String, V3SessionSendCompletionBinding> completionBindings;
 }
 
 /// Unforgeable ownership token for the unified v3 session coordinator.
@@ -119,6 +143,7 @@ final class V3SessionSendJournal {
   }
 
   static const String recordKind = 'v3_send_effect_v1';
+  static const String completionRecordKind = 'v3_send_completion_v1';
 
   final V3LmfRecordStore _store;
   final int maxEffects;
@@ -130,6 +155,8 @@ final class V3SessionSendJournal {
 
   final Map<String, V3SessionSendEffect> _effects =
       <String, V3SessionSendEffect>{};
+  final Map<String, _SendCompletionRecord> _completions =
+      <String, _SendCompletionRecord>{};
   Future<void> _operationTail = Future<void>.value();
   V3SessionSendJournalAuthority? _authority;
   bool _restored = false;
@@ -140,6 +167,7 @@ final class V3SessionSendJournal {
   int get effectCount => _effects.length;
   int get totalRetainedBytes => _totalRetainedBytes;
   bool get requiresRecovery => _writeRecoveryRequired;
+  int get completionCount => _completions.length;
   List<V3SessionSendEffect> effects({
     V3SessionSendJournalAuthority? authority,
   }) {
@@ -185,7 +213,11 @@ final class V3SessionSendJournal {
       }
       final storedRecords = await _store.readAll();
       final relevant = storedRecords
-          .where((record) => record.payload['kind'] == recordKind)
+          .where(
+            (record) =>
+                record.payload['kind'] == recordKind ||
+                record.payload['kind'] == completionRecordKind,
+          )
           .toList(growable: false);
       if (relevant.length > maxStoredRecords) {
         throw const V3LmfPersistenceLimitException(
@@ -197,13 +229,28 @@ final class V3SessionSendJournal {
       final decoded = <V3SessionSendEffect>[];
       try {
         for (final stored in relevant) {
+          if (stored.payload['kind'] == completionRecordKind) {
+            final completion = _decodeCompletion(stored);
+            final previous = _completions[completion.assemblyId];
+            if (previous != null && !_sameCompletion(previous, completion)) {
+              throw const V3LmfPersistenceConflictException(
+                'conflicting v3 send-completion records',
+              );
+            }
+            if (previous == null) {
+              _completions[completion.assemblyId] = completion;
+            } else {
+              await _deleteIgnoringFailure(completion.storageId);
+            }
+            continue;
+          }
           final effect = _decode(stored);
           decoded.add(effect);
           grouped
               .putIfAbsent(effect.assemblyId, () => <V3SessionSendEffect>[])
               .add(effect);
         }
-        if (grouped.length > maxEffects) {
+        if (grouped.length > maxEffects || _completions.length > maxEffects) {
           throw const V3LmfPersistenceLimitException(
             'v3 send-journal effect limit exceeded',
           );
@@ -238,10 +285,26 @@ final class V3SessionSendJournal {
             await _deleteIgnoringFailure(candidate.storageId);
           }
         }
+        for (final completion in _completions.values) {
+          final effect = _effects[completion.assemblyId];
+          if (effect != null &&
+              (!effect.isFullyAcknowledged ||
+                  effect.effectDigest != completion.effectDigest)) {
+            throw const V3LmfPersistenceConflictException(
+              'v3 send completion does not match its durable effect',
+            );
+          }
+        }
         _restored = true;
         return V3SessionSendJournalRestoreResult(
           effects: effects(authority: authority),
           removedSupersededRecords: superseded,
+          completionBindings:
+              Map<String, V3SessionSendCompletionBinding>.unmodifiable(
+            _completions.map(
+              (key, value) => MapEntry(key, value.binding),
+            ),
+          ),
         );
       } finally {
         for (final effect in decoded) {
@@ -272,6 +335,11 @@ final class V3SessionSendJournal {
       final canonicalFrames = _validateCompleteFrameSet(frames);
       _validateStateSizes(applicationState, ratchetState, canonicalFrames);
       final assemblyId = V3LmfFrameCodec.assemblyId(canonicalFrames.first);
+      if (_completions.containsKey(assemblyId)) {
+        throw const V3LmfPersistenceConflictException(
+          'v3 completed send assembly cannot be reused',
+        );
+      }
       final existing = _effects[assemblyId];
       final timestamp = (persistedAt ?? DateTime.now()).toUtc();
       if (!_validTimestamp(timestamp.millisecondsSinceEpoch)) {
@@ -371,6 +439,103 @@ final class V3SessionSendJournal {
     });
   }
 
+  /// Deletes a fully acknowledged outgoing effect after the session
+  /// coordinator has independently verified AR3 materialization, checkpoint
+  /// coverage, and an empty outbox entry.
+  Future<bool> collectFullyAcknowledged({
+    required String assemblyId,
+    required String expectedEffectDigest,
+    required String stableRecordId,
+    required String sessionKey,
+    required int ratchetRevision,
+    required String checkpointDigest,
+    V3SessionSendJournalAuthority? authority,
+  }) {
+    return _serialized(() async {
+      _ensureCompactionAuthority(authority);
+      _ensureReady();
+      final effect = _effects[assemblyId];
+      if (!_isCanonicalDigest(assemblyId) ||
+          !_isCanonicalDigest(expectedEffectDigest) ||
+          stableRecordId != 'v3:$assemblyId' ||
+          !_isCanonicalId(sessionKey, 16) ||
+          ratchetRevision <= 0 ||
+          ratchetRevision > 0x7fffffffffffffff ||
+          !_isCanonicalDigest(checkpointDigest)) {
+        throw const FormatException('Invalid v3 send-completion proof');
+      }
+      final existingCompletion = _completions[assemblyId];
+      if (effect == null) {
+        if (existingCompletion == null ||
+            !_completionCoversEffect(
+              existingCompletion,
+              effectDigest: expectedEffectDigest,
+              stableRecordId: stableRecordId,
+              sessionKey: sessionKey,
+              ratchetRevision: ratchetRevision,
+            )) {
+          throw const V3LmfPersistenceConflictException(
+            'v3 collected send has no matching completion proof',
+          );
+        }
+        return false;
+      }
+      if (!effect.isFullyAcknowledged ||
+          effect.effectDigest != expectedEffectDigest) {
+        throw const V3LmfPersistenceConflictException(
+          'v3 outgoing effect is not collectable',
+        );
+      }
+      if (existingCompletion != null &&
+          !_completionCoversEffect(
+            existingCompletion,
+            effectDigest: expectedEffectDigest,
+            stableRecordId: stableRecordId,
+            sessionKey: sessionKey,
+            ratchetRevision: ratchetRevision,
+          )) {
+        throw const V3LmfPersistenceConflictException(
+          'v3 send-completion proof diverged',
+        );
+      }
+      if (existingCompletion == null) {
+        if (_completions.length >= maxEffects) {
+          throw const V3LmfPersistenceLimitException(
+            'v3 send-completion capacity exceeded',
+          );
+        }
+        final candidate = _SendCompletionRecord(
+          storageId: '',
+          assemblyId: assemblyId,
+          effectDigest: expectedEffectDigest,
+          stableRecordId: stableRecordId,
+          sessionKey: sessionKey,
+          ratchetRevision: ratchetRevision,
+          checkpointDigest: checkpointDigest,
+          completedAt: effect.updatedAt,
+        );
+        try {
+          final storageId = await _store.write(_encodeCompletion(candidate));
+          _ensureOpen();
+          _completions[assemblyId] = candidate.copyWithStorageId(storageId);
+        } catch (_) {
+          _writeRecoveryRequired = true;
+          rethrow;
+        }
+      }
+      try {
+        await _store.delete(effect.storageId);
+      } catch (_) {
+        _writeRecoveryRequired = true;
+        rethrow;
+      }
+      _effects.remove(assemblyId);
+      _totalRetainedBytes -= effect.retainedBytes;
+      effect._wipe();
+      return true;
+    });
+  }
+
   Future<void> close({V3SessionSendJournalAuthority? authority}) {
     return _serialized(() async {
       _ensureAuthority(authority);
@@ -380,6 +545,7 @@ final class V3SessionSendJournal {
         effect._wipe();
       }
       _effects.clear();
+      _completions.clear();
       _totalRetainedBytes = 0;
     });
   }
@@ -491,6 +657,82 @@ final class V3SessionSendJournal {
       _wipeBytes(ratchet);
     }
   }
+
+  _SendCompletionRecord _decodeCompletion(V3LmfStoredRecord stored) {
+    final payload = stored.payload;
+    const expectedKeys = <String>{
+      'kind',
+      'v',
+      'assemblyId',
+      'effectDigest',
+      'stableRecordId',
+      'sessionId',
+      'ratchetRevision',
+      'checkpointDigest',
+      'completedAt',
+      'reserved',
+    };
+    if (payload.length != expectedKeys.length ||
+        !payload.keys.every(expectedKeys.contains) ||
+        payload['kind'] != completionRecordKind ||
+        payload['v'] != 1 ||
+        payload['reserved'] != 0) {
+      throw const FormatException('Invalid v3 send-completion record');
+    }
+    final assemblyId = payload['assemblyId'];
+    final effectDigest = payload['effectDigest'];
+    final stableRecordId = payload['stableRecordId'];
+    final sessionKey = payload['sessionId'];
+    final ratchetRevision = payload['ratchetRevision'];
+    final checkpointDigest = payload['checkpointDigest'];
+    final completedAt = payload['completedAt'];
+    if (assemblyId is! String ||
+        !_isCanonicalDigest(assemblyId) ||
+        effectDigest is! String ||
+        !_isCanonicalDigest(effectDigest) ||
+        stableRecordId != 'v3:$assemblyId' ||
+        sessionKey is! String ||
+        !_isCanonicalId(sessionKey, 16) ||
+        ratchetRevision is! int ||
+        ratchetRevision <= 0 ||
+        ratchetRevision > 0x7fffffffffffffff ||
+        checkpointDigest is! String ||
+        !_isCanonicalDigest(checkpointDigest) ||
+        !_validTimestamp(completedAt)) {
+      throw const FormatException('Invalid v3 send-completion proof');
+    }
+    final result = _SendCompletionRecord(
+      storageId: stored.storageId,
+      assemblyId: assemblyId,
+      effectDigest: effectDigest,
+      stableRecordId: stableRecordId as String,
+      sessionKey: sessionKey,
+      ratchetRevision: ratchetRevision,
+      checkpointDigest: checkpointDigest,
+      completedAt: DateTime.fromMillisecondsSinceEpoch(
+        completedAt as int,
+        isUtc: true,
+      ),
+    );
+    if (!_mapEquals(_encodeCompletion(result), payload)) {
+      throw const FormatException('Non-canonical v3 send completion');
+    }
+    return result;
+  }
+
+  Map<String, dynamic> _encodeCompletion(_SendCompletionRecord completion) =>
+      <String, dynamic>{
+        'kind': completionRecordKind,
+        'v': 1,
+        'assemblyId': completion.assemblyId,
+        'effectDigest': completion.effectDigest,
+        'stableRecordId': completion.stableRecordId,
+        'sessionId': completion.sessionKey,
+        'ratchetRevision': completion.ratchetRevision,
+        'checkpointDigest': completion.checkpointDigest,
+        'completedAt': completion.completedAt.millisecondsSinceEpoch,
+        'reserved': 0,
+      };
 
   V3SessionSendEffect _createEffect({
     required String storageId,
@@ -651,6 +893,60 @@ final class V3SessionSendJournal {
       );
     }
   }
+
+  void _ensureCompactionAuthority(V3SessionSendJournalAuthority? authority) {
+    final claimed = _authority;
+    if (claimed == null || !identical(claimed, authority)) {
+      throw StateError(
+        'Layergram v3 send compaction requires coordinator authority',
+      );
+    }
+  }
+}
+
+final class _SendCompletionRecord {
+  const _SendCompletionRecord({
+    required this.storageId,
+    required this.assemblyId,
+    required this.effectDigest,
+    required this.stableRecordId,
+    required this.sessionKey,
+    required this.ratchetRevision,
+    required this.checkpointDigest,
+    required this.completedAt,
+  });
+
+  final String storageId;
+  final String assemblyId;
+  final String effectDigest;
+  final String stableRecordId;
+  final String sessionKey;
+  final int ratchetRevision;
+  final String checkpointDigest;
+  final DateTime completedAt;
+
+  V3SessionSendCompletionBinding get binding =>
+      V3SessionSendCompletionBinding._(
+        assemblyId: assemblyId,
+        effectDigest: effectDigest,
+        stableRecordId: stableRecordId,
+        sessionKey: sessionKey,
+        ratchetRevision: ratchetRevision,
+        checkpointDigest: checkpointDigest,
+        completedAt: completedAt,
+      );
+
+  _SendCompletionRecord copyWithStorageId(String value) =>
+      _SendCompletionRecord(
+        storageId: value,
+        assemblyId: assemblyId,
+        effectDigest: effectDigest,
+        stableRecordId: stableRecordId,
+        sessionKey: sessionKey,
+        ratchetRevision: ratchetRevision,
+        checkpointDigest: checkpointDigest,
+        completedAt: completedAt,
+      );
 }
 
 List<V3LmfFrame> _validateCompleteFrameSet(List<V3LmfFrame> frames) {
@@ -703,9 +999,8 @@ String _effectDigest({
     );
   final label = utf8.encode('layergram/v3/send-effect\u0000');
   final assembly = utf8.encode(assemblyId);
-  final frameBytes = frames
-      .map(V3LmfFrameCodec.encodeBinary)
-      .toList(growable: false);
+  final frameBytes =
+      frames.map(V3LmfFrameCodec.encodeBinary).toList(growable: false);
   final totalLength = label.length +
       assembly.length +
       header.lengthInBytes +
@@ -791,6 +1086,30 @@ bool _sameFrameSet(List<V3LmfFrame> left, List<V3LmfFrame> right) {
   return true;
 }
 
+bool _sameCompletion(
+  _SendCompletionRecord left,
+  _SendCompletionRecord right,
+) =>
+    left.assemblyId == right.assemblyId &&
+    left.effectDigest == right.effectDigest &&
+    left.stableRecordId == right.stableRecordId &&
+    left.sessionKey == right.sessionKey &&
+    left.ratchetRevision == right.ratchetRevision &&
+    left.checkpointDigest == right.checkpointDigest &&
+    left.completedAt == right.completedAt;
+
+bool _completionCoversEffect(
+  _SendCompletionRecord value, {
+  required String effectDigest,
+  required String stableRecordId,
+  required String sessionKey,
+  required int ratchetRevision,
+}) =>
+    value.effectDigest == effectDigest &&
+    value.stableRecordId == stableRecordId &&
+    value.sessionKey == sessionKey &&
+    value.ratchetRevision == ratchetRevision;
+
 String _encodeBinary(Uint8List bytes) =>
     base64UrlEncode(bytes).replaceAll('=', '');
 
@@ -818,6 +1137,20 @@ Uint8List _decodeBinary(String armored, int maxBytes) {
   }
   return bytes;
 }
+
+bool _isCanonicalId(String value, int byteLength) {
+  Uint8List? decoded;
+  try {
+    decoded = _decodeBinary(value, byteLength);
+    return decoded.length == byteLength;
+  } on FormatException {
+    return false;
+  } finally {
+    if (decoded != null) _wipeBytes(decoded);
+  }
+}
+
+bool _isCanonicalDigest(String value) => _isCanonicalId(value, 32);
 
 bool _mapEquals(Map<String, dynamic> left, Map<String, dynamic> right) {
   if (left.length != right.length) return false;

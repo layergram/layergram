@@ -97,6 +97,18 @@ final class V3SessionSendResult {
   final List<V3LmfFrame> frames;
 }
 
+final class V3SessionCompactionResult {
+  const V3SessionCompactionResult({
+    required this.collectedIncomingEffects,
+    required this.collectedOutgoingEffects,
+    required this.replayWindowEntries,
+  });
+
+  final int collectedIncomingEffects;
+  final int collectedOutgoingEffects;
+  final int replayWindowEntries;
+}
+
 /// Inactive single-authority coordinator for protocol-v3 session commits.
 ///
 /// One instance owns one [V3LmfAtomicCommitJournal] for an encrypted
@@ -120,7 +132,8 @@ final class V3SessionSendResult {
 /// is supplied, canonical AR3 records are materialized under stable IDs and a
 /// monotonic TR3 checkpoint is reconciled before a commit result is exposed.
 /// Hybrid handshake/session creation, native SCKA semantics, projection into
-/// the real chat repository, and journal compaction remain activation gates.
+/// the real chat repository, replay-window expiry, and rolling receipt
+/// compaction remain activation gates.
 final class V3SessionCommitController {
   V3SessionCommitController({
     required V3LmfAtomicCommitJournal journal,
@@ -193,6 +206,7 @@ final class V3SessionCommitController {
       }
 
       final working = <String, V3TripleRatchetState>{};
+      final durableCheckpoints = <String, V3SessionCheckpoint>{};
       final decodedEffects = <_DecodedEffect>[];
       final decodedSendEffects = <_DecodedSendEffect>[];
       try {
@@ -249,9 +263,75 @@ final class V3SessionCommitController {
           }
         }
 
+        // Once present, the encrypted checkpoint repository is the durable
+        // restore anchor. It may advance an older caller bootstrap snapshot,
+        // but it must never be older than or fork from that caller state.
+        if (checkpointRepository != null) {
+          for (final durable in checkpointRepository.checkpoints(
+            authority: _checkpointAuthority,
+          )) {
+            durableCheckpoints[durable.sessionKey] = durable;
+            _validateDurableCheckpointMaterialization(durable);
+            final candidate = durable.decodeSnapshot();
+            var retained = false;
+            try {
+              await _validateSnapshot(candidate);
+              final caller = working[durable.sessionKey];
+              if (caller == null) {
+                if (working.length >= maxSessions) {
+                  throw const V3LmfPersistenceLimitException(
+                    'v3 session checkpoint limit exceeded',
+                  );
+                }
+                working[durable.sessionKey] = candidate;
+                retained = true;
+                continue;
+              }
+              if (!durable.matchesLineage(caller) ||
+                  caller.revision > durable.revision) {
+                throw const V3LmfPersistenceConflictException(
+                  'durable v3 checkpoint does not extend caller state',
+                );
+              }
+              if (caller.revision == durable.revision &&
+                  !_snapshotBytesEqual(caller, candidate)) {
+                throw const V3LmfPersistenceConflictException(
+                  'durable v3 checkpoint forks caller state',
+                );
+              }
+              if (caller.revision < durable.revision) {
+                caller.wipeSecrets();
+                working[durable.sessionKey] = candidate;
+                retained = true;
+              }
+            } finally {
+              if (!retained) candidate.wipeSecrets();
+            }
+          }
+        }
+
         final restoredJournal = await _journal.restore(
           authority: _authority,
         );
+        if (checkpointRepository != null) {
+          for (final binding in restoredJournal.replayWindowBindings.values) {
+            final durable = durableCheckpoints[binding.sessionKey];
+            final receipt = durable?.receiptForAssembly(binding.assemblyId);
+            if (durable == null ||
+                receipt == null ||
+                receipt.direction != V3CheckpointEffectDirection.incoming ||
+                receipt.stableRecordId != binding.stableRecordId ||
+                receipt.ratchetRevision != binding.ratchetRevision) {
+              throw const V3LmfPersistenceConflictException(
+                'v3 replay window has no matching durable checkpoint receipt',
+              );
+            }
+          }
+        } else if (restoredJournal.replayWindowBindings.isNotEmpty) {
+          throw const V3LmfPersistenceConflictException(
+            'v3 replay window requires durable checkpoint configuration',
+          );
+        }
         for (final effect in restoredJournal.effects) {
           decodedEffects.add(_decodeEffect(effect));
         }
@@ -259,6 +339,25 @@ final class V3SessionCommitController {
             ? null
             : await sendJournal.restore(authority: _sendAuthority);
         if (restoredSendJournal != null) {
+          if (checkpointRepository == null &&
+              restoredSendJournal.completionBindings.isNotEmpty) {
+            throw const V3LmfPersistenceConflictException(
+              'v3 send completion requires durable checkpoint configuration',
+            );
+          }
+          for (final binding in restoredSendJournal.completionBindings.values) {
+            final durable = durableCheckpoints[binding.sessionKey];
+            final receipt = durable?.receiptForAssembly(binding.assemblyId);
+            if (durable == null ||
+                receipt == null ||
+                receipt.direction != V3CheckpointEffectDirection.outgoing ||
+                receipt.stableRecordId != binding.stableRecordId ||
+                receipt.ratchetRevision != binding.ratchetRevision) {
+              throw const V3LmfPersistenceConflictException(
+                'v3 send completion has no durable checkpoint receipt',
+              );
+            }
+          }
           for (final effect in restoredSendJournal.effects) {
             decodedSendEffects.add(_decodeSendEffect(effect));
           }
@@ -286,6 +385,48 @@ final class V3SessionCommitController {
             );
           }
           final incoming = restored.incoming;
+          if (restored.revision <= previous.revision) {
+            final durable = durableCheckpoints[restored.sessionKey];
+            if (durable == null) {
+              throw const V3LmfPersistenceConflictException(
+                'v3 journal effect precedes an unproven caller checkpoint',
+              );
+            }
+            if (incoming != null) {
+              _validateCheckpointCoverage(
+                checkpoint: durable,
+                direction: V3CheckpointEffectDirection.incoming,
+                assemblyId: incoming.effect.assemblyId,
+                applicationState: incoming.effect.applicationState,
+                ratchetState: incoming.effect.ratchetState,
+              );
+              if (effectRevisions.containsKey(incoming.effect.assemblyId) ||
+                  sendEffects.containsKey(incoming.effect.assemblyId)) {
+                throw const V3LmfPersistenceConflictException(
+                  'duplicate v3 session effect assembly',
+                );
+              }
+              effectRevisions[incoming.effect.assemblyId] =
+                  incoming.snapshot.revision;
+            } else {
+              final outgoing = restored.outgoing!;
+              _validateCheckpointCoverage(
+                checkpoint: durable,
+                direction: V3CheckpointEffectDirection.outgoing,
+                assemblyId: outgoing.effect.assemblyId,
+                applicationState: outgoing.effect.applicationState,
+                ratchetState: outgoing.effect.ratchetState,
+              );
+              if (effectRevisions.containsKey(outgoing.effect.assemblyId) ||
+                  sendEffects.containsKey(outgoing.effect.assemblyId)) {
+                throw const V3LmfPersistenceConflictException(
+                  'duplicate v3 session effect assembly',
+                );
+              }
+              sendEffects[outgoing.effect.assemblyId] = outgoing.effect;
+            }
+            continue;
+          }
           if (incoming != null) {
             await _validateTransition(
               previous: previous,
@@ -320,6 +461,45 @@ final class V3SessionCommitController {
           final candidate = restored.takeSnapshot();
           previous.wipeSecrets();
           working[restored.sessionKey] = candidate;
+        }
+
+        // Every cumulative checkpoint receipt must retain one independently
+        // durable journal proof. Before compaction that proof is the complete
+        // effect; afterwards it is the write-before-delete replay/completion
+        // marker. Otherwise deleting both records could silently turn state
+        // loss into an apparently clean checkpoint restore.
+        if (checkpointRepository != null) {
+          for (final durable in durableCheckpoints.values) {
+            for (final receipt in durable.receipts) {
+              switch (receipt.direction) {
+                case V3CheckpointEffectDirection.incoming:
+                  if (effectRevisions.containsKey(receipt.assemblyId)) {
+                    continue;
+                  }
+                  if (!restoredJournal.replayWindowBindings.containsKey(
+                    receipt.assemblyId,
+                  )) {
+                    throw const V3LmfPersistenceConflictException(
+                      'v3 incoming checkpoint receipt lost its journal proof',
+                    );
+                  }
+                  break;
+                case V3CheckpointEffectDirection.outgoing:
+                  if (sendEffects.containsKey(receipt.assemblyId)) {
+                    continue;
+                  }
+                  if (!(restoredSendJournal?.completionBindings.containsKey(
+                        receipt.assemblyId,
+                      ) ??
+                      false)) {
+                    throw const V3LmfPersistenceConflictException(
+                      'v3 outgoing checkpoint receipt lost its journal proof',
+                    );
+                  }
+                  break;
+              }
+            }
+          }
         }
 
         for (final assemblyId
@@ -934,6 +1114,149 @@ final class V3SessionCommitController {
     });
   }
 
+  /// Safely compacts journal state covered by one durable session checkpoint.
+  ///
+  /// Incoming effects first replace their bound inbox tombstone with a compact
+  /// replay-window record. Outgoing effects are collectable only after a full
+  /// authenticated ACK and physical outbox removal. AR3 materialization and an
+  /// exact cumulative checkpoint receipt are revalidated before every delete.
+  Future<V3SessionCompactionResult> compactSession(Uint8List sessionId) {
+    return _serialized(() async {
+      _ensureReady();
+      final materializer = _committedRecordMaterializer;
+      final checkpoints = _checkpointRepository;
+      if (materializer == null || checkpoints == null) {
+        throw StateError('Layergram v3 durable compaction is not configured');
+      }
+      final sessionKey = _sessionKey(sessionId);
+      final current = _sessions[sessionKey];
+      if (current == null) {
+        throw StateError('Layergram v3 session is not registered');
+      }
+      final checkpoint = checkpoints.checkpointForSession(
+        sessionId,
+        authority: _checkpointAuthority,
+      );
+      if (checkpoint == null || checkpoint.revision != current.revision) {
+        throw const V3LmfPersistenceConflictException(
+          'v3 session has no current durable checkpoint',
+        );
+      }
+      final durableSnapshot = checkpoint.decodeSnapshot();
+      try {
+        if (!_snapshotBytesEqual(current, durableSnapshot)) {
+          throw const V3LmfPersistenceConflictException(
+            'v3 durable checkpoint differs from current session state',
+          );
+        }
+      } finally {
+        durableSnapshot.wipeSecrets();
+      }
+
+      var incomingCollected = 0;
+      var outgoingCollected = 0;
+      try {
+        for (final receipt in checkpoint.receipts) {
+          if (receipt.sessionKey != sessionKey ||
+              receipt.ratchetRevision > checkpoint.revision) {
+            throw const V3LmfPersistenceConflictException(
+              'v3 checkpoint contains an invalid compaction receipt',
+            );
+          }
+          if (receipt.direction == V3CheckpointEffectDirection.incoming) {
+            final effect = _journal.effectForAssembly(
+              receipt.assemblyId,
+              authority: _authority,
+            );
+            if (effect == null) continue;
+            _validateCheckpointCoverage(
+              checkpoint: checkpoint,
+              direction: V3CheckpointEffectDirection.incoming,
+              assemblyId: effect.assemblyId,
+              applicationState: effect.applicationState,
+              ratchetState: effect.ratchetState,
+            );
+            final replay = await _journal.retireTombstoneToReplayWindow(
+              assemblyId: effect.assemblyId,
+              expectedEffectDigest: effect.effectDigest,
+              stableRecordId: receipt.stableRecordId,
+              sessionKey: receipt.sessionKey,
+              ratchetRevision: receipt.ratchetRevision,
+              checkpointDigest: checkpoint.checkpointDigest,
+              authority: _authority,
+            );
+            if (replay.stableRecordId != receipt.stableRecordId ||
+                replay.sessionKey != receipt.sessionKey ||
+                replay.ratchetRevision != receipt.ratchetRevision) {
+              throw const V3LmfPersistenceConflictException(
+                'v3 replay window differs from checkpoint receipt',
+              );
+            }
+            if (await _journal.collectCompactedEffect(
+              assemblyId: effect.assemblyId,
+              expectedEffectDigest: effect.effectDigest,
+              authority: _authority,
+            )) {
+              _effectRevisions.remove(effect.assemblyId);
+              _pendingInboxCommits.remove(effect.assemblyId);
+              incomingCollected++;
+            }
+            continue;
+          }
+
+          final sendJournal = _sendJournal;
+          final outbox = _outbox;
+          if (sendJournal == null || outbox == null) continue;
+          final effect = sendJournal.effectForAssembly(
+            receipt.assemblyId,
+            authority: _sendAuthority,
+          );
+          if (effect == null || !effect.isFullyAcknowledged) continue;
+          if (outbox.entry(
+                effect.assemblyId,
+                authority: _outboxAuthority,
+              ) !=
+              null) {
+            throw const V3LmfPersistenceConflictException(
+              'v3 acknowledged send effect still has an outbox entry',
+            );
+          }
+          _validateCheckpointCoverage(
+            checkpoint: checkpoint,
+            direction: V3CheckpointEffectDirection.outgoing,
+            assemblyId: effect.assemblyId,
+            applicationState: effect.applicationState,
+            ratchetState: effect.ratchetState,
+          );
+          final effectDigest = effect.effectDigest;
+          if (await sendJournal.collectFullyAcknowledged(
+            assemblyId: effect.assemblyId,
+            expectedEffectDigest: effectDigest,
+            stableRecordId: receipt.stableRecordId,
+            sessionKey: receipt.sessionKey,
+            ratchetRevision: receipt.ratchetRevision,
+            checkpointDigest: checkpoint.checkpointDigest,
+            authority: _sendAuthority,
+          )) {
+            _sendEffects.remove(effect.assemblyId);
+            outgoingCollected++;
+          }
+        }
+      } catch (_) {
+        if (_journal.requiresRecovery ||
+            (_sendJournal?.requiresRecovery ?? false)) {
+          _recoveryRequired = true;
+        }
+        rethrow;
+      }
+      return V3SessionCompactionResult(
+        collectedIncomingEffects: incomingCollected,
+        collectedOutgoingEffects: outgoingCollected,
+        replayWindowEntries: incomingCollected,
+      );
+    });
+  }
+
   Future<void> close() {
     return _serialized(() async {
       if (_closed) return;
@@ -988,6 +1311,16 @@ final class V3SessionCommitController {
     required List<_DecodedSendEffect> outgoingEffects,
   }) async {
     final receiptsBySession = <String, List<V3CheckpointReceipt>>{};
+    final repository = _checkpointRepository!;
+    for (final entry in working.entries) {
+      final existing = repository.checkpointForSession(
+        entry.value.sessionId,
+        authority: _checkpointAuthority,
+      );
+      if (existing != null) {
+        receiptsBySession[entry.key] = existing.receipts.toList();
+      }
+    }
     for (final decoded in incomingEffects) {
       final receipt = await _materializeEffect(
         direction: V3CheckpointEffectDirection.incoming,
@@ -1001,9 +1334,11 @@ final class V3SessionCommitController {
           'restored v3 incoming receipt changed session binding',
         );
       }
-      receiptsBySession
-          .putIfAbsent(decoded.sessionKey, () => <V3CheckpointReceipt>[])
-          .add(receipt);
+      _mergeCheckpointReceipt(
+        receiptsBySession.putIfAbsent(
+            decoded.sessionKey, () => <V3CheckpointReceipt>[]),
+        receipt,
+      );
     }
     for (final decoded in outgoingEffects) {
       final receipt = await _materializeEffect(
@@ -1018,11 +1353,12 @@ final class V3SessionCommitController {
           'restored v3 outgoing receipt changed session binding',
         );
       }
-      receiptsBySession
-          .putIfAbsent(decoded.sessionKey, () => <V3CheckpointReceipt>[])
-          .add(receipt);
+      _mergeCheckpointReceipt(
+        receiptsBySession.putIfAbsent(
+            decoded.sessionKey, () => <V3CheckpointReceipt>[]),
+        receipt,
+      );
     }
-    final repository = _checkpointRepository!;
     for (final entry in working.entries) {
       await repository.persist(
         snapshot: entry.value,
@@ -1038,7 +1374,12 @@ final class V3SessionCommitController {
     if (snapshot == null) {
       throw StateError('Layergram v3 checkpoint session is not registered');
     }
-    final receipts = <V3CheckpointReceipt>[];
+    final existingCheckpoint = _checkpointRepository!.checkpointForSession(
+      snapshot.sessionId,
+      authority: _checkpointAuthority,
+    );
+    final receipts =
+        existingCheckpoint?.receipts.toList() ?? <V3CheckpointReceipt>[];
     for (final assemblyId in _effectRevisions.keys) {
       final effect = _journal.effectForAssembly(
         assemblyId,
@@ -1056,7 +1397,9 @@ final class V3SessionCommitController {
         ratchetState: effect.ratchetState,
         persistedAt: effect.persistedAt,
       );
-      if (receipt.sessionKey == sessionKey) receipts.add(receipt);
+      if (receipt.sessionKey == sessionKey) {
+        _mergeCheckpointReceipt(receipts, receipt);
+      }
     }
     for (final effect in _sendEffects.values) {
       final receipt = await _materializeEffect(
@@ -1066,9 +1409,11 @@ final class V3SessionCommitController {
         ratchetState: effect.ratchetState,
         persistedAt: effect.persistedAt,
       );
-      if (receipt.sessionKey == sessionKey) receipts.add(receipt);
+      if (receipt.sessionKey == sessionKey) {
+        _mergeCheckpointReceipt(receipts, receipt);
+      }
     }
-    await _checkpointRepository!.persist(
+    await _checkpointRepository.persist(
       snapshot: snapshot,
       receipts: receipts,
       authority: _checkpointAuthority,
@@ -1109,6 +1454,91 @@ final class V3SessionCommitController {
       _wipe(applicationState);
       _wipe(ratchetState);
     }
+  }
+
+  void _validateCheckpointCoverage({
+    required V3SessionCheckpoint checkpoint,
+    required V3CheckpointEffectDirection direction,
+    required String assemblyId,
+    required Uint8List applicationState,
+    required Uint8List ratchetState,
+  }) {
+    Uint8List? materializedBytes;
+    try {
+      final receipt = checkpoint.receiptForAssembly(assemblyId);
+      if (receipt == null ||
+          receipt.direction != direction ||
+          !receipt.matchesStates(
+            direction: direction,
+            applicationState: applicationState,
+            ratchetState: ratchetState,
+          )) {
+        throw const V3LmfPersistenceConflictException(
+          'v3 journal effect is not covered by its durable checkpoint',
+        );
+      }
+      final materialized = _committedRecordMaterializer!.recordForStableId(
+        receipt.stableRecordId,
+        authority: _materializerAuthority,
+      );
+      if (materialized == null ||
+          materialized.assemblyId != assemblyId ||
+          materialized.sessionKey != receipt.sessionKey) {
+        throw const V3LmfPersistenceConflictException(
+          'v3 checkpoint receipt has no materialized application record',
+        );
+      }
+      materializedBytes = materialized.encodedRecord;
+      if (!_bytesEqual(materializedBytes, applicationState)) {
+        throw const V3LmfPersistenceConflictException(
+          'v3 materialized application record differs from journal effect',
+        );
+      }
+    } finally {
+      if (materializedBytes != null) _wipe(materializedBytes);
+      _wipe(applicationState);
+      _wipe(ratchetState);
+    }
+  }
+
+  void _validateDurableCheckpointMaterialization(
+    V3SessionCheckpoint checkpoint,
+  ) {
+    for (final receipt in checkpoint.receipts) {
+      final materialized = _committedRecordMaterializer!.recordForStableId(
+        receipt.stableRecordId,
+        authority: _materializerAuthority,
+      );
+      if (materialized == null ||
+          materialized.assemblyId != receipt.assemblyId ||
+          materialized.sessionKey != receipt.sessionKey ||
+          receipt.sessionKey != checkpoint.sessionKey ||
+          receipt.ratchetRevision > checkpoint.revision) {
+        throw const V3LmfPersistenceConflictException(
+          'v3 durable checkpoint has missing application materialization',
+        );
+      }
+    }
+  }
+
+  void _mergeCheckpointReceipt(
+    List<V3CheckpointReceipt> receipts,
+    V3CheckpointReceipt candidate,
+  ) {
+    for (final existing in receipts) {
+      if (existing.assemblyId != candidate.assemblyId) continue;
+      if (existing.direction != candidate.direction ||
+          existing.stableRecordId != candidate.stableRecordId ||
+          existing.sessionKey != candidate.sessionKey ||
+          existing.ratchetRevision != candidate.ratchetRevision ||
+          existing.stateDigest != candidate.stateDigest) {
+        throw const V3LmfPersistenceConflictException(
+          'v3 checkpoint receipt diverged for one assembly',
+        );
+      }
+      return;
+    }
+    receipts.add(candidate);
   }
 
   V3LmfFrame _validatedTarget(V3LmfDurableDelivery delivery) {

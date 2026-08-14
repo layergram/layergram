@@ -151,6 +151,27 @@ class V3LmfInboxRestoreResult {
   final int suppressedCommittedFrames;
 }
 
+/// Durable proof that a full inbox tombstone was retired into the compact
+/// replay window only after its application record and ratchet checkpoint
+/// became independently durable.
+final class V3LmfReplayWindowBinding {
+  const V3LmfReplayWindowBinding._({
+    required this.assemblyId,
+    required this.higherLevelCommitDigest,
+    required this.stableRecordId,
+    required this.sessionKey,
+    required this.ratchetRevision,
+    required this.checkpointDigest,
+  });
+
+  final String assemblyId;
+  final String higherLevelCommitDigest;
+  final String stableRecordId;
+  final String sessionKey;
+  final int ratchetRevision;
+  final String checkpointDigest;
+}
+
 class V3LmfPersistenceLimitException implements Exception {
   const V3LmfPersistenceLimitException(this.message);
 
@@ -208,6 +229,7 @@ class V3LmfDurableInbox {
 
   static const String inboxRecordKind = 'v3_lmf_in_v1';
   static const String committedRecordKind = 'v3_lmf_done_v1';
+  static const String replayWindowRecordKind = 'v3_lmf_replay_v1';
 
   final V3LmfRecordStore _store;
   final int maxPersistedFrames;
@@ -257,6 +279,28 @@ class V3LmfDurableInbox {
     );
   }
 
+  /// Replay-window entries that already replaced their full commit tombstone.
+  ///
+  /// The returned proof is immutable and contains no message plaintext. The
+  /// atomic journal uses it to distinguish a safely compacted binding from a
+  /// missing effect/tombstone pair after restart.
+  Map<String, V3LmfReplayWindowBinding> get replayWindowBindings {
+    _ensureReady();
+    final bindings = <String, V3LmfReplayWindowBinding>{};
+    for (final MapEntry(key: assemblyId, value: record) in _committed.entries) {
+      if (!record.isReplayWindow) continue;
+      bindings[assemblyId] = V3LmfReplayWindowBinding._(
+        assemblyId: assemblyId,
+        higherLevelCommitDigest: record.higherLevelCommitDigest!,
+        stableRecordId: record.stableRecordId!,
+        sessionKey: record.sessionKey!,
+        ratchetRevision: record.ratchetRevision!,
+        checkpointDigest: record.checkpointDigest!,
+      );
+    }
+    return Map<String, V3LmfReplayWindowBinding>.unmodifiable(bindings);
+  }
+
   int get readyDeliveryCount => _ready.length;
 
   /// Makes higher-level digest binding mandatory for this inbox lifetime.
@@ -283,7 +327,9 @@ class V3LmfDurableInbox {
       final records = await _store.readAll();
       final relevantRecordCount = records.where((record) {
         final kind = record.payload['kind'];
-        return kind == inboxRecordKind || kind == committedRecordKind;
+        return kind == inboxRecordKind ||
+            kind == committedRecordKind ||
+            kind == replayWindowRecordKind;
       }).length;
       if (relevantRecordCount > maxStoredRecords) {
         throw const V3LmfPersistenceLimitException(
@@ -293,11 +339,17 @@ class V3LmfDurableInbox {
       var discardedCorrupt = 0;
       var suppressedCommitted = 0;
 
-      // Tombstones must be known before any sealed frame is replayed.
+      // Tombstones and their compact replay-window replacements must be known
+      // before any sealed frame is replayed.
       for (final stored in records) {
-        if (stored.payload['kind'] != committedRecordKind) continue;
+        final kind = stored.payload['kind'];
+        if (kind != committedRecordKind && kind != replayWindowRecordKind) {
+          continue;
+        }
         try {
-          final committed = _decodeCommitted(stored);
+          final committed = kind == committedRecordKind
+              ? _decodeCommitted(stored)
+              : _decodeReplayWindow(stored);
           final previous = _committed[committed.assemblyId];
           if (previous == null) {
             _committed[committed.assemblyId] = committed;
@@ -307,7 +359,18 @@ class V3LmfDurableInbox {
                 'conflicting commit tombstones for one v3 assembly',
               );
             }
-            if (committed.committedAt.isBefore(previous.committedAt)) {
+            if (previous.isReplayWindow &&
+                committed.isReplayWindow &&
+                !_sameReplayProof(previous, committed)) {
+              throw const V3LmfPersistenceConflictException(
+                'conflicting replay-window proofs for one v3 assembly',
+              );
+            }
+            final preferCommitted =
+                committed.isReplayWindow && !previous.isReplayWindow ||
+                    committed.isReplayWindow == previous.isReplayWindow &&
+                        committed.committedAt.isBefore(previous.committedAt);
+            if (preferCommitted) {
               _committed[committed.assemblyId] = committed;
               await _deleteIgnoringFailure(previous.storageId);
             } else {
@@ -315,6 +378,12 @@ class V3LmfDurableInbox {
             }
           }
         } on FormatException {
+          if (kind == replayWindowRecordKind) {
+            // Once its journal effect is collected this record is the sole
+            // transport replay barrier. Corruption must fail closed and must
+            // never be converted into silent replay eligibility.
+            rethrow;
+          }
           discardedCorrupt++;
           await _deleteIgnoringFailure(stored.storageId);
         }
@@ -630,19 +699,111 @@ class V3LmfDurableInbox {
     });
   }
 
+  /// Replaces a full commit tombstone with a compact replay-window proof.
+  ///
+  /// The replacement is written before the tombstone is deleted. Callers must
+  /// first verify the exact higher-level effect is materialized and covered by
+  /// [checkpointDigest]. Repeating the exact operation is idempotent; any
+  /// divergent proof for the same assembly fails closed.
+  Future<V3LmfReplayWindowBinding> retireCommittedToReplayWindow({
+    required String assemblyId,
+    required String higherLevelCommitDigest,
+    required String stableRecordId,
+    required String sessionKey,
+    required int ratchetRevision,
+    required String checkpointDigest,
+  }) {
+    return _serialized(() async {
+      _ensureReady();
+      if (!_isCanonicalDigest(assemblyId) ||
+          !_isCanonicalDigest(higherLevelCommitDigest) ||
+          stableRecordId != 'v3:$assemblyId' ||
+          !_isCanonicalSessionKey(sessionKey) ||
+          ratchetRevision <= 0 ||
+          ratchetRevision > 0x7fffffffffffffff ||
+          !_isCanonicalDigest(checkpointDigest)) {
+        throw const FormatException(
+          'Invalid Layergram v3 replay-window proof',
+        );
+      }
+      final existing = _committed[assemblyId];
+      if (existing == null ||
+          existing.higherLevelCommitDigest != higherLevelCommitDigest) {
+        throw const V3LmfPersistenceConflictException(
+          'v3 replay-window retirement has no matching commit tombstone',
+        );
+      }
+      if (existing.isReplayWindow) {
+        if (existing.stableRecordId != stableRecordId ||
+            existing.sessionKey != sessionKey ||
+            existing.ratchetRevision != ratchetRevision ||
+            existing.checkpointDigest != checkpointDigest) {
+          throw const V3LmfPersistenceConflictException(
+            'v3 replay-window retirement proof diverged',
+          );
+        }
+        return _replayBinding(existing);
+      }
+
+      final payload = <String, dynamic>{
+        'kind': replayWindowRecordKind,
+        'v': 1,
+        'assemblyId': assemblyId,
+        'ack': _encodeBinary(
+          V3LmfAcknowledgementCodec.encode(existing.acknowledgement),
+        ),
+        'target': _encodeBinary(
+          V3LmfFrameCodec.encodeBinary(existing.targetFrame),
+        ),
+        'higherLevelCommitDigest': higherLevelCommitDigest,
+        'stableRecordId': stableRecordId,
+        'sessionId': sessionKey,
+        'ratchetRevision': ratchetRevision,
+        'checkpointDigest': checkpointDigest,
+        'committedAt': existing.committedAt.millisecondsSinceEpoch,
+        'reserved': 0,
+      };
+      final storageId = await _store.write(payload);
+      _ensureOpen();
+      final compacted = _CommittedRecord(
+        storageId: storageId,
+        assemblyId: assemblyId,
+        acknowledgement: existing.acknowledgement,
+        targetFrame: existing.targetFrame,
+        higherLevelCommitDigest: higherLevelCommitDigest,
+        committedAt: existing.committedAt,
+        stableRecordId: stableRecordId,
+        sessionKey: sessionKey,
+        ratchetRevision: ratchetRevision,
+        checkpointDigest: checkpointDigest,
+      );
+      _committed[assemblyId] = compacted;
+      await _deleteIgnoringFailure(existing.storageId);
+      return _replayBinding(compacted);
+    });
+  }
+
   /// Explicit local-retention maintenance. No remote timestamp is trusted.
   ///
-  /// The caller must purge only after its durable ratchet/application replay
-  /// window will independently reject every corresponding old message.
+  /// This legacy maintenance path removes only unbound transport tombstones.
+  /// Higher-level-bound tombstones and compact replay-window records are never
+  /// eligible here; their eventual expiry requires the future skipped-key
+  /// retirement policy.
   Future<int> purgeCommittedBefore(DateTime cutoff) {
     return _serialized(() async {
       _ensureReady();
+      if (_atomicCommitJournalAttached) {
+        throw StateError(
+          'Layergram v3 replay retention is owned by the session coordinator',
+        );
+      }
       final normalized = cutoff.toUtc();
       final entries = _committed.values
           .where(
             (entry) =>
-                entry.committedAt.isBefore(normalized) ||
-                entry.committedAt.isAtSameMomentAs(normalized),
+                entry.higherLevelCommitDigest == null &&
+                (entry.committedAt.isBefore(normalized) ||
+                    entry.committedAt.isAtSameMomentAs(normalized)),
           )
           .toList(growable: false);
       var removed = 0;
@@ -932,6 +1093,83 @@ class V3LmfDurableInbox {
     );
   }
 
+  _CommittedRecord _decodeReplayWindow(V3LmfStoredRecord stored) {
+    final payload = stored.payload;
+    const expectedKeys = <String>{
+      'kind',
+      'v',
+      'assemblyId',
+      'ack',
+      'target',
+      'higherLevelCommitDigest',
+      'stableRecordId',
+      'sessionId',
+      'ratchetRevision',
+      'checkpointDigest',
+      'committedAt',
+      'reserved',
+    };
+    if (payload.length != expectedKeys.length ||
+        !payload.keys.every(expectedKeys.contains) ||
+        payload['kind'] != replayWindowRecordKind ||
+        payload['v'] != 1 ||
+        payload['reserved'] != 0) {
+      throw const FormatException('Invalid Layergram v3 replay-window record');
+    }
+    final assemblyId = payload['assemblyId'];
+    final ackArmored = payload['ack'];
+    final targetArmored = payload['target'];
+    final higherLevelCommitDigest = payload['higherLevelCommitDigest'];
+    final stableRecordId = payload['stableRecordId'];
+    final sessionKey = payload['sessionId'];
+    final ratchetRevision = payload['ratchetRevision'];
+    final checkpointDigest = payload['checkpointDigest'];
+    final committedAt = payload['committedAt'];
+    if (assemblyId is! String ||
+        !_isCanonicalDigest(assemblyId) ||
+        ackArmored is! String ||
+        targetArmored is! String ||
+        higherLevelCommitDigest is! String ||
+        !_isCanonicalDigest(higherLevelCommitDigest) ||
+        stableRecordId != 'v3:$assemblyId' ||
+        sessionKey is! String ||
+        !_isCanonicalSessionKey(sessionKey) ||
+        ratchetRevision is! int ||
+        ratchetRevision <= 0 ||
+        ratchetRevision > 0x7fffffffffffffff ||
+        checkpointDigest is! String ||
+        !_isCanonicalDigest(checkpointDigest) ||
+        !_isValidEpochMilliseconds(committedAt)) {
+      throw const FormatException('Invalid Layergram v3 replay-window proof');
+    }
+    final acknowledgement = V3LmfAcknowledgementCodec.decode(
+      _decodeBinary(ackArmored, V3LmfAcknowledgementCodec.encodedBytes),
+    );
+    final target = V3LmfFrameCodec.decodeBinary(
+      _decodeBinary(targetArmored, V3LmfFrameCodec.maxBinaryFrameBytes),
+    );
+    if (V3LmfFrameCodec.assemblyId(target) != assemblyId ||
+        !_ackMatchesFrame(acknowledgement, target) ||
+        !acknowledgement.isComplete) {
+      throw const FormatException('Mismatched Layergram v3 replay window');
+    }
+    return _CommittedRecord(
+      storageId: stored.storageId,
+      assemblyId: assemblyId,
+      acknowledgement: acknowledgement,
+      targetFrame: target,
+      higherLevelCommitDigest: higherLevelCommitDigest,
+      committedAt: DateTime.fromMillisecondsSinceEpoch(
+        committedAt as int,
+        isUtc: true,
+      ),
+      stableRecordId: stableRecordId as String,
+      sessionKey: sessionKey,
+      ratchetRevision: ratchetRevision,
+      checkpointDigest: checkpointDigest,
+    );
+  }
+
   Future<void> _deleteIgnoringFailure(String storageId) async {
     try {
       await _store.delete(storageId);
@@ -993,6 +1231,10 @@ class _CommittedRecord {
     required this.targetFrame,
     required this.higherLevelCommitDigest,
     required this.committedAt,
+    this.stableRecordId,
+    this.sessionKey,
+    this.ratchetRevision,
+    this.checkpointDigest,
   });
 
   final String storageId;
@@ -1001,6 +1243,12 @@ class _CommittedRecord {
   final V3LmfFrame targetFrame;
   final String? higherLevelCommitDigest;
   final DateTime committedAt;
+  final String? stableRecordId;
+  final String? sessionKey;
+  final int? ratchetRevision;
+  final String? checkpointDigest;
+
+  bool get isReplayWindow => checkpointDigest != null;
 }
 
 String _assemblyIndexKey(String assemblyId, int fragmentIndex) =>
@@ -1045,6 +1293,18 @@ bool _isCanonicalDigest(String value) {
   }
 }
 
+bool _isCanonicalSessionKey(String value) {
+  Uint8List? decoded;
+  try {
+    decoded = _decodeBinary(value, 16);
+    return decoded.length == 16;
+  } on FormatException {
+    return false;
+  } finally {
+    if (decoded != null) decoded.fillRange(0, decoded.length, 0);
+  }
+}
+
 bool _isValidEpochMilliseconds(Object? value) =>
     value is int && value >= 0 && value <= 8640000000000000;
 
@@ -1069,6 +1329,27 @@ bool _sameCommittedTarget(_CommittedRecord left, _CommittedRecord right) {
         V3LmfFrameCodec.encodeBinary(left.targetFrame),
         V3LmfFrameCodec.encodeBinary(right.targetFrame),
       );
+}
+
+bool _sameReplayProof(_CommittedRecord left, _CommittedRecord right) {
+  return left.stableRecordId == right.stableRecordId &&
+      left.sessionKey == right.sessionKey &&
+      left.ratchetRevision == right.ratchetRevision &&
+      left.checkpointDigest == right.checkpointDigest;
+}
+
+V3LmfReplayWindowBinding _replayBinding(_CommittedRecord record) {
+  if (!record.isReplayWindow || record.higherLevelCommitDigest == null) {
+    throw StateError('Layergram v3 record is not a replay-window proof');
+  }
+  return V3LmfReplayWindowBinding._(
+    assemblyId: record.assemblyId,
+    higherLevelCommitDigest: record.higherLevelCommitDigest!,
+    stableRecordId: record.stableRecordId!,
+    sessionKey: record.sessionKey!,
+    ratchetRevision: record.ratchetRevision!,
+    checkpointDigest: record.checkpointDigest!,
+  );
 }
 
 bool _bytesEqual(Uint8List left, Uint8List right) {

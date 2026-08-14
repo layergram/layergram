@@ -402,6 +402,247 @@ void main() {
       fixture.checkpoint.wipeSecrets();
     });
 
+    test('collects only checkpointed fully acknowledged sends', () async {
+      final fixture = await _SendFixture.create(durableState: true);
+      final result = await fixture.controller.sendMessage(
+        sessionId: fixture.checkpoint.sessionId,
+        expectedRevision: 0,
+        plaintext: _bytes(384, 0x86),
+        backend: fixture.backend,
+      );
+      final beforeAck = await fixture.controller.compactSession(
+        fixture.checkpoint.sessionId,
+      );
+      expect(beforeAck.collectedOutgoingEffects, 0);
+      expect(
+        fixture.store.records.values.where(
+          (payload) => payload['kind'] == V3SessionSendJournal.recordKind,
+        ),
+        hasLength(1),
+      );
+
+      final ack = await _completeAckFrame(result.frames, fixture.checkpoint);
+      expect(
+        await fixture.controller.applySendAcknowledgement(
+          acknowledgementFrame: ack,
+        ),
+        V3LmfOutboxAckStatus.complete,
+      );
+      final compacted = await fixture.controller.compactSession(
+        fixture.checkpoint.sessionId,
+      );
+      expect(compacted.collectedIncomingEffects, 0);
+      expect(compacted.collectedOutgoingEffects, 1);
+      expect(
+        fixture.store.records.values.where(
+          (payload) => payload['kind'] == V3SessionSendJournal.recordKind,
+        ),
+        isEmpty,
+      );
+      expect(
+        fixture.store.records.values.where(
+          (payload) =>
+              payload['kind'] == V3SessionSendJournal.completionRecordKind,
+        ),
+        hasLength(1),
+      );
+      expect(
+        fixture.store.records.values.where(
+          (payload) => payload['kind'] == V3LmfDurableOutbox.outboxRecordKind,
+        ),
+        isEmpty,
+      );
+
+      await fixture.closeControllerOnly();
+      final restored = await _SendFixture.create(
+        store: fixture.store,
+        checkpoint: fixture.checkpoint,
+        backend: fixture.backend,
+        durableState: true,
+      );
+      expect(restored.restoreResult.sessionRevisions.values, <int>[1]);
+      expect(restored.restoreResult.committedSendEffectCount, 0);
+      expect(restored.restoreResult.pendingSendAssemblyIds, isEmpty);
+      expect(restored.backend.sendCalls, 1);
+
+      await restored.close();
+      fixture.checkpoint.wipeSecrets();
+    });
+
+    test('restore rejects a checkpoint whose send-completion proof was lost',
+        () async {
+      final fixture = await _SendFixture.create(durableState: true);
+      final result = await fixture.controller.sendMessage(
+        sessionId: fixture.checkpoint.sessionId,
+        expectedRevision: 0,
+        plaintext: _bytes(240, 0x8a),
+        backend: fixture.backend,
+      );
+      await fixture.controller.applySendAcknowledgement(
+        acknowledgementFrame:
+            await _completeAckFrame(result.frames, fixture.checkpoint),
+      );
+      await fixture.controller.compactSession(fixture.checkpoint.sessionId);
+      final completion = fixture.store.records.entries.singleWhere(
+        (entry) =>
+            entry.value['kind'] == V3SessionSendJournal.completionRecordKind,
+      );
+      fixture.store.records.remove(completion.key);
+      await fixture.closeControllerOnly();
+
+      final inbox = V3LmfDurableInbox(store: fixture.store);
+      await inbox.restore(keyResolver: (_) => null);
+      final controller = V3SessionCommitController(
+        journal: V3LmfAtomicCommitJournal(
+          store: fixture.store,
+          inbox: inbox,
+        ),
+        sendJournal: V3SessionSendJournal(store: fixture.store),
+        outbox: V3LmfDurableOutbox(store: fixture.store),
+        committedRecordMaterializer:
+            V3CommittedRecordMaterializer(store: fixture.store),
+        checkpointRepository:
+            V3SessionCheckpointRepository(store: fixture.store),
+        snapshotValidator: fixture.backend.validateSnapshot,
+      );
+      try {
+        await expectLater(
+          controller.restore(
+            checkpoints: <V3TripleRatchetState>[fixture.checkpoint],
+          ),
+          throwsA(isA<V3LmfPersistenceConflictException>()),
+        );
+        expect(controller.requiresRecovery, isTrue);
+      } finally {
+        await controller.close();
+        await inbox.close();
+        fixture.checkpoint.wipeSecrets();
+      }
+    });
+
+    test('ambiguous acknowledged-send collection restores from checkpoint',
+        () async {
+      final store = _FaultStore();
+      final fixture = await _SendFixture.create(
+        store: store,
+        durableState: true,
+      );
+      final result = await fixture.controller.sendMessage(
+        sessionId: fixture.checkpoint.sessionId,
+        expectedRevision: 0,
+        plaintext: _bytes(256, 0x87),
+        backend: fixture.backend,
+      );
+      await fixture.controller.applySendAcknowledgement(
+        acknowledgementFrame:
+            await _completeAckFrame(result.frames, fixture.checkpoint),
+      );
+      store.durableDeleteThenThrowKind = V3SessionSendJournal.recordKind;
+      await expectLater(
+        fixture.controller.compactSession(fixture.checkpoint.sessionId),
+        throwsStateError,
+      );
+      expect(fixture.controller.requiresRecovery, isTrue);
+      expect(
+        store.records.values.where(
+          (payload) => payload['kind'] == V3SessionSendJournal.recordKind,
+        ),
+        isEmpty,
+      );
+      await fixture.closeControllerOnly();
+
+      final restored = await _SendFixture.create(
+        store: store,
+        checkpoint: fixture.checkpoint,
+        backend: fixture.backend,
+        durableState: true,
+      );
+      expect(restored.restoreResult.sessionRevisions.values, <int>[1]);
+      expect(restored.restoreResult.committedSendEffectCount, 0);
+      expect(restored.restoreResult.pendingSendAssemblyIds, isEmpty);
+      expect(restored.backend.sendCalls, 1);
+
+      await restored.close();
+      fixture.checkpoint.wipeSecrets();
+    });
+
+    test('retries pre-delete send collection after checkpoint advancement',
+        () async {
+      final store = _FaultStore();
+      final fixture = await _SendFixture.create(
+        store: store,
+        durableState: true,
+      );
+      final first = await fixture.controller.sendMessage(
+        sessionId: fixture.checkpoint.sessionId,
+        expectedRevision: 0,
+        plaintext: _bytes(256, 0x88),
+        backend: fixture.backend,
+      );
+      await fixture.controller.applySendAcknowledgement(
+        acknowledgementFrame:
+            await _completeAckFrame(first.frames, fixture.checkpoint),
+      );
+      store.failDeleteKindOnce = V3SessionSendJournal.recordKind;
+      await expectLater(
+        fixture.controller.compactSession(fixture.checkpoint.sessionId),
+        throwsStateError,
+      );
+      expect(fixture.controller.requiresRecovery, isTrue);
+      final earlierCheckpointDigest = store.records.values.singleWhere(
+        (payload) =>
+            payload['kind'] == V3SessionSendJournal.completionRecordKind,
+      )['checkpointDigest'];
+      expect(
+        store.records.values.where(
+          (payload) => payload['kind'] == V3SessionSendJournal.recordKind,
+        ),
+        hasLength(1),
+      );
+      await fixture.closeControllerOnly();
+
+      final restored = await _SendFixture.create(
+        store: store,
+        checkpoint: fixture.checkpoint,
+        backend: fixture.backend,
+        durableState: true,
+      );
+      expect(restored.restoreResult.sessionRevisions.values, <int>[1]);
+      expect(restored.restoreResult.committedSendEffectCount, 1);
+      await restored.controller.sendMessage(
+        sessionId: fixture.checkpoint.sessionId,
+        expectedRevision: 1,
+        plaintext: _bytes(192, 0x98),
+        backend: fixture.backend,
+      );
+      final currentCheckpointDigest = store.records.values.singleWhere(
+        (payload) =>
+            payload['kind'] == V3SessionCheckpointRepository.recordKind,
+      )['checkpointDigest'];
+      expect(currentCheckpointDigest, isNot(earlierCheckpointDigest));
+
+      final compacted = await restored.controller.compactSession(
+        fixture.checkpoint.sessionId,
+      );
+      expect(compacted.collectedOutgoingEffects, 1);
+      expect(
+        store.records.values.where(
+          (payload) => payload['kind'] == V3SessionSendJournal.recordKind,
+        ),
+        hasLength(1),
+      );
+      expect(
+        store.records.values.where(
+          (payload) =>
+              payload['kind'] == V3SessionSendJournal.completionRecordKind,
+        ),
+        hasLength(1),
+      );
+
+      await restored.close();
+      fixture.checkpoint.wipeSecrets();
+    });
+
     test('unauthenticated ACK is rejected without poisoning clean retry',
         () async {
       final fixture = await _SendFixture.create();
@@ -603,6 +844,17 @@ void main() {
       expect(() => fixture.sendJournal.effects(), throwsStateError);
       expect(
         () => fixture.sendJournal.effectForAssembly('not-an-assembly'),
+        throwsStateError,
+      );
+      await expectLater(
+        fixture.sendJournal.collectFullyAcknowledged(
+          assemblyId: 'not-an-assembly',
+          expectedEffectDigest: 'not-a-digest',
+          stableRecordId: 'not-a-record',
+          sessionKey: 'not-a-session',
+          ratchetRevision: 1,
+          checkpointDigest: 'not-a-checkpoint',
+        ),
         throwsStateError,
       );
       await fixture.close();
@@ -1176,6 +1428,8 @@ final class _FaultStore implements V3LmfRecordStore {
       <String, Map<String, dynamic>>{};
   var _nextId = 0;
   String? durableThenThrowKind;
+  String? failDeleteKindOnce;
+  String? durableDeleteThenThrowKind;
 
   @override
   Future<String> write(Map<String, dynamic> payload) async {
@@ -1200,7 +1454,16 @@ final class _FaultStore implements V3LmfRecordStore {
 
   @override
   Future<void> delete(String storageId) async {
-    records.remove(storageId);
+    final stored = records[storageId];
+    if (stored?['kind'] == failDeleteKindOnce) {
+      failDeleteKindOnce = null;
+      throw StateError('injected pre-delete failure');
+    }
+    final removed = records.remove(storageId);
+    if (removed?['kind'] == durableDeleteThenThrowKind) {
+      durableDeleteThenThrowKind = null;
+      throw StateError('injected durable-then-throw delete');
+    }
   }
 }
 

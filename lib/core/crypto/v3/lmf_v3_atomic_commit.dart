@@ -133,11 +133,13 @@ class V3LmfAtomicCommitRestoreResult {
     required this.effects,
     required this.removedExactDuplicates,
     required this.pendingInboxCommitAssemblyIds,
+    this.replayWindowBindings = const <String, V3LmfReplayWindowBinding>{},
   });
 
   final List<V3LmfCommittedEffect> effects;
   final int removedExactDuplicates;
   final Set<String> pendingInboxCommitAssemblyIds;
+  final Map<String, V3LmfReplayWindowBinding> replayWindowBindings;
 }
 
 /// Unforgeable ownership token for the inactive v3 session coordinator.
@@ -219,6 +221,8 @@ class V3LmfAtomicCommitJournal {
   int get committedEffectCount => _effects.length;
 
   int get totalStateBytes => _totalStateBytes;
+
+  bool get requiresRecovery => _writeRecoveryRequired;
 
   List<V3LmfCommittedEffect> get effects {
     _ensureAuthority(null);
@@ -313,6 +317,7 @@ class V3LmfAtomicCommitJournal {
         rethrow;
       }
       final pendingInboxCommits = <String>{};
+      final replayBindings = _inbox.replayWindowBindings;
       try {
         final inboxBindings = _inbox.committedHigherLevelBindings;
         for (final binding in inboxBindings.entries) {
@@ -321,6 +326,15 @@ class V3LmfAtomicCommitJournal {
             if (effect != null) {
               throw const V3LmfPersistenceConflictException(
                 'v3 effect has an unbound transport commit tombstone',
+              );
+            }
+            continue;
+          }
+          final replay = replayBindings[binding.key];
+          if (effect == null && replay != null) {
+            if (replay.higherLevelCommitDigest != binding.value) {
+              throw const V3LmfPersistenceConflictException(
+                'v3 replay-window binding differs from its commit digest',
               );
             }
             continue;
@@ -352,6 +366,7 @@ class V3LmfAtomicCommitJournal {
         pendingInboxCommitAssemblyIds: Set<String>.unmodifiable(
           pendingInboxCommits,
         ),
+        replayWindowBindings: replayBindings,
       );
     });
   }
@@ -498,6 +513,102 @@ class V3LmfAtomicCommitJournal {
         higherLevelCommitDigest: existing.effectDigest,
       );
       return existing;
+    });
+  }
+
+  /// Deletes an incoming journal effect only after the inbox contains an
+  /// exact durable replay-window replacement for its bound tombstone.
+  Future<bool> collectCompactedEffect({
+    required String assemblyId,
+    required String expectedEffectDigest,
+    V3LmfAtomicCommitAuthority? authority,
+  }) {
+    return _serialized(() async {
+      _ensureCompactionAuthority(authority);
+      _ensureReady();
+      final replay = _inbox.replayWindowBindings[assemblyId];
+      if (replay == null ||
+          replay.higherLevelCommitDigest != expectedEffectDigest) {
+        throw const V3LmfPersistenceConflictException(
+          'v3 atomic effect is not covered by the replay window',
+        );
+      }
+      final effect = _effects[assemblyId];
+      if (effect == null) return false;
+      if (effect.effectDigest != expectedEffectDigest) {
+        throw const V3LmfPersistenceConflictException(
+          'v3 compacted atomic effect digest diverged',
+        );
+      }
+      try {
+        await _store.delete(effect.storageId);
+      } catch (_) {
+        _writeRecoveryRequired = true;
+        rethrow;
+      }
+      _effects.remove(assemblyId);
+      _totalStateBytes -= effect.stateBytes;
+      effect._wipe();
+      return true;
+    });
+  }
+
+  /// Establishes the write-before-delete replay-window proof used by
+  /// [collectCompactedEffect].
+  Future<V3LmfReplayWindowBinding> retireTombstoneToReplayWindow({
+    required String assemblyId,
+    required String expectedEffectDigest,
+    required String stableRecordId,
+    required String sessionKey,
+    required int ratchetRevision,
+    required String checkpointDigest,
+    V3LmfAtomicCommitAuthority? authority,
+  }) {
+    return _serialized(() async {
+      _ensureCompactionAuthority(authority);
+      _ensureReady();
+      if (!_isCanonicalDigest(assemblyId) ||
+          !_isCanonicalDigest(expectedEffectDigest) ||
+          stableRecordId != 'v3:$assemblyId' ||
+          !_isCanonicalId(sessionKey, V3LmfFrameCodec.sessionIdBytes) ||
+          ratchetRevision <= 0 ||
+          ratchetRevision > 0x7fffffffffffffff ||
+          !_isCanonicalDigest(checkpointDigest)) {
+        throw const FormatException(
+          'Invalid Layergram v3 replay-window proof',
+        );
+      }
+      final effect = _effects[assemblyId];
+      if (effect != null && effect.effectDigest != expectedEffectDigest) {
+        throw const V3LmfPersistenceConflictException(
+          'v3 replay-window effect digest diverged',
+        );
+      }
+      final existingReplay = _inbox.replayWindowBindings[assemblyId];
+      if (existingReplay != null) {
+        // A marker written before an interrupted journal deletion remains a
+        // valid proof when a later cumulative checkpoint advances. Its own
+        // checkpoint digest records the earlier write-before-delete boundary;
+        // the coordinator separately verifies the current checkpoint still
+        // contains this exact receipt before requesting compaction.
+        if (existingReplay.higherLevelCommitDigest != expectedEffectDigest ||
+            existingReplay.stableRecordId != stableRecordId ||
+            existingReplay.sessionKey != sessionKey ||
+            existingReplay.ratchetRevision != ratchetRevision) {
+          throw const V3LmfPersistenceConflictException(
+            'v3 replay-window retirement proof diverged',
+          );
+        }
+        return existingReplay;
+      }
+      return _inbox.retireCommittedToReplayWindow(
+        assemblyId: assemblyId,
+        higherLevelCommitDigest: expectedEffectDigest,
+        stableRecordId: stableRecordId,
+        sessionKey: sessionKey,
+        ratchetRevision: ratchetRevision,
+        checkpointDigest: checkpointDigest,
+      );
     });
   }
 
@@ -714,6 +825,15 @@ class V3LmfAtomicCommitJournal {
       );
     }
   }
+
+  void _ensureCompactionAuthority(V3LmfAtomicCommitAuthority? authority) {
+    final claimed = _authority;
+    if (claimed == null || !identical(claimed, authority)) {
+      throw StateError(
+        'Layergram v3 compaction requires session-coordinator authority',
+      );
+    }
+  }
 }
 
 String _deliveryDigest(List<V3LmfFrame> frames) {
@@ -835,6 +955,18 @@ bool _isCanonicalDigest(String value) {
     return _encodeBinary(_decodeBinary(value, 32)) == value;
   } on FormatException {
     return false;
+  }
+}
+
+bool _isCanonicalId(String value, int byteLength) {
+  Uint8List? decoded;
+  try {
+    decoded = _decodeBinary(value, byteLength);
+    return decoded.length == byteLength;
+  } on FormatException {
+    return false;
+  } finally {
+    if (decoded != null) decoded.fillRange(0, decoded.length, 0);
   }
 }
 
