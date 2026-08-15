@@ -38,6 +38,17 @@ void main() {
     expect(selected['license'], 'Apache-2.0');
     expect(selected['productionRegistered'], isFalse);
 
+    final scaffold = receipt['layergramOwnedScaffold'] as Map<String, dynamic>;
+    expect(scaffold['crate'], 'layergram-scka');
+    expect(scaffold['license'], 'Apache-2.0');
+    expect(scaffold['rustVersion'], '1.87.0');
+    expect(scaffold['cargoLockPackageCount'], 1);
+    expect(scaffold['thirdPartyDependencies'], isEmpty);
+    expect(scaffold['abiVersion'], 1);
+    expect(scaffold['protocolRevision'], 1);
+    expect(scaffold['stateFormatVersion'], 1);
+    expect(scaffold['runtimeStatus'], 'not-ready-not-registered-not-linked');
+
     final primitive =
         receipt['incrementalMlKemPrimitiveCandidate'] as Map<String, dynamic>;
     expect(primitive['crate'], 'libcrux-ml-kem');
@@ -55,7 +66,42 @@ void main() {
     final effects = receipt['checkpointEffects'] as Map<String, dynamic>;
     expect(effects['thirdPartyCodeImported'], isFalse);
     expect(effects['runtimeDependencyAdded'], isFalse);
+    expect(effects['layergramOwnedScaffoldAdded'], isTrue);
     expect(effects['pubspecChanged'], isFalse);
     expect(effects['protocolV3Activated'], isFalse);
+  });
+
+  test('Layergram SCKA scaffold is dependency-free and not packaged', () {
+    final manifest =
+        File('native/layergram_scka/Cargo.toml').readAsStringSync();
+    final lock = File('native/layergram_scka/Cargo.lock').readAsStringSync();
+    final header = File(
+      'native/layergram_scka/include/layergram_scka.h',
+    ).readAsStringSync();
+
+    expect(manifest, contains('license = "Apache-2.0"'));
+    expect(manifest, contains('[dependencies]\n\n[profile.release]'));
+    expect(
+      RegExp(r'^\[\[package\]\]$', multiLine: true).allMatches(lock),
+      hasLength(1),
+    );
+    expect(lock, isNot(contains('source = ')));
+    expect(header, contains('LG_SCKA_V1_ERR_NOT_READY = -2'));
+
+    for (final path in <String>[
+      'pubspec.yaml',
+      'LayergramMlKem.podspec',
+      'ios/Podfile',
+      'macos/Podfile',
+      'android/app/src/main/cpp/CMakeLists.txt',
+      'linux/CMakeLists.txt',
+      'windows/CMakeLists.txt',
+    ]) {
+      expect(
+        File(path).readAsStringSync(),
+        isNot(contains('layergram_scka')),
+        reason: '$path must not package the inactive SCKA scaffold',
+      );
+    }
   });
 }

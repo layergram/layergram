@@ -1,6 +1,6 @@
 # ML-KEM Braid / SCKA backend decision
 
-Status: **implementation path selected; no production backend; protocol v3 inactive**
+Status: **inactive ABI scaffold frozen; no production backend; protocol v3 inactive**
 
 Layergram needs an ML-KEM Braid revision-1 backend to provide the Sparse
 Continuous Key Agreement input to its inactive Triple Ratchet. This component
@@ -60,6 +60,12 @@ failed backend; the future provider registration must separately allowlist the
 exact approved implementation ID. None of these controls replaces
 cryptographic review.
 
+The Layergram-owned Rust crate under `native/layergram_scka` now freezes the
+minimal ABI and outer authenticated state envelope described in
+`SCKA_NATIVE_ABI.md`. It has no dependency and is not linked into any app. Its
+self-test and every correctly shaped state operation return `NOT_READY`, so the
+scaffold cannot satisfy the Dart admission gate or activate protocol v3.
+
 ## Incremental ML-KEM primitive candidate
 
 The only primitive selected for further prototyping is
@@ -74,8 +80,9 @@ runtime graph. No GPL, AGPL, LGPL, non-commercial, or field-of-use term appeared
 in that selected feature graph. The exact observed package list is recorded in
 the machine receipt.
 
-This is a candidate approval only. No Cargo package or native binary is added
-by this checkpoint. Before adoption, Layergram must commit a pinned Cargo.lock,
+This is a candidate approval only. The dependency-free Layergram scaffold adds
+no third-party Cargo package and is not linked into an application binary.
+Before adopting the primitive, Layergram must update the pinned Cargo.lock,
 store all required license and notice texts, verify the resolved target-specific
 graph for every release ABI, and repeat the license review. Store distribution,
 commercial use, source/notice obligations, and proprietary Premium combination
@@ -83,9 +90,9 @@ must all remain acceptable.
 
 ## Packaging direction
 
-The future backend should be a Layergram-owned Rust static library behind a C
-ABI, embedded into the same platform artifacts already used by the ML-KEM
-primitive wrapper:
+The future backend remains a Layergram-owned Rust static library behind the
+frozen C ABI. Once implemented and approved, it will be embedded into the same
+platform artifacts already used by the ML-KEM primitive wrapper:
 
 - iOS: statically linked into the signed application process;
 - macOS: signed embedded framework or static library with no loader search-path
@@ -99,11 +106,15 @@ must be allowlisted and test hooks must be absent. The Rust toolchain, panic
 policy, allocator behavior, symbol stripping, reproducibility, notices, and
 store packaging are separate release gates.
 
+The scaffold is currently compiled independently and is not referenced by
+CocoaPods, Gradle, CMake, the Windows runner, or Flutter FFI.
+
 ## Remaining security gates
 
-- specify the complete native state envelope, including version, suite, role,
-  session binding, rollback metadata, authenticity, and size bounds;
-- freeze a minimal C ABI with explicit input/output lengths and status codes;
+- derive and persist the separate state-sealing key, then bind its native state
+  revision atomically to the exact outer TR3 revision;
+- freeze the encrypted state-machine payload after the erasure-code and
+  incremental ML-KEM representations have been independently reviewed;
 - implement revision-1 state transitions independently from the specification;
 - generate independent public vectors and compare with a separately executed
   conforming implementation without linking its code;

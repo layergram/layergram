@@ -24,7 +24,12 @@ decision. The official Signal SPQR implementation is explicitly rejected for
 embedding because it is AGPL-3.0-only; no code from it is imported. The receipt
 selects a specification-first Layergram-owned Apache-2.0 implementation path
 and records `libcrux-ml-kem` only as a commercially compatible incremental
-ML-KEM primitive candidate. No Rust or SCKA runtime dependency is added yet.
+ML-KEM primitive candidate.
+
+`native/layergram_scka` is a dependency-free Apache-2.0 Rust scaffold. It
+freezes the inactive C ABI and `LS3` state envelope but deliberately returns
+`NOT_READY`; it is not referenced by application packaging or Dart FFI. The
+state payload and actual ML-KEM Braid transitions remain unimplemented.
 
 ## Reproducible checks
 
@@ -39,6 +44,23 @@ LAYERGRAM_MLKEM_SANITIZE=1 \
   LAYERGRAM_MLKEM_LINUX_BUILD_DIR="$PWD/.dart_tool/layergram_pq/linux-sanitized" \
   tool/pq/test_native_linux.sh
 ```
+
+Run the inactive SCKA scaffold contract on POSIX hosts, all Apple compilation
+targets, or Windows x64 respectively:
+
+```sh
+tool/pq/test_scka_scaffold_posix.sh
+tool/pq/test_scka_scaffold_apple.sh
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File `
+  tool\pq\test_scka_scaffold_windows.ps1
+```
+
+The Apple check builds separate static libraries for iOS device ARM64 and iOS
+simulator ARM64/x86_64. This is target-specific compilation evidence, not a
+simulator runtime test, physical-device test, or packaged-app integration.
 
 Build the packaged Android, Apple, and Windows artifacts on their respective
 hosts:

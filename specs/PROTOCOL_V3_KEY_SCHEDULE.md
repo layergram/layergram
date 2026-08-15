@@ -308,6 +308,14 @@ implementation ID, exact revision `1`, and self-test before invoking native
 state semantics. Future provider registration must separately allowlist the
 exact approved implementation ID.
 
+`SCKA_NATIVE_ABI.md` freezes the inactive Layergram-owned C ABI and outer `LS3`
+state envelope. Its separate 32-byte state-sealing key uses the reserved future
+label `"layergram/v3/session/scka-state-seal\0"`; the current session expansion
+and TR3 do not yet derive or persist that key. Therefore the Rust scaffold
+returns `NOT_READY`, is not registered, and is not linked into the app. Wiring
+the new key and requiring native-state revision equality with the serialized
+TR3 revision are activation gates, not optional hardening.
+
 The public SCKA message uses a canonical `SK3` envelope:
 
 | Offset | Bytes | Field |

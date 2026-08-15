@@ -27,6 +27,22 @@
     "wireCompatibilityTarget": "ML-KEM Braid revision 1",
     "productionRegistered": false
   },
+  "layergramOwnedScaffold": {
+    "crate": "layergram-scka",
+    "version": "0.1.0",
+    "rustVersion": "1.87.0",
+    "rustToolchainFile": "native/layergram_scka/rust-toolchain.toml",
+    "license": "Apache-2.0",
+    "cargoLockPackageCount": 1,
+    "thirdPartyDependencies": [],
+    "abiVersion": 1,
+    "protocolRevision": 1,
+    "stateFormatVersion": 1,
+    "implementationId": "layergram-scka-scaffold-r1-abi1",
+    "runtimeStatus": "not-ready-not-registered-not-linked",
+    "stateEnvelopeSpecification": "specs/SCKA_NATIVE_ABI.md",
+    "publicHeader": "native/layergram_scka/include/layergram_scka.h"
+  },
   "incrementalMlKemPrimitiveCandidate": {
     "crate": "libcrux-ml-kem",
     "version": "0.0.10",
@@ -60,14 +76,15 @@
   "checkpointEffects": {
     "thirdPartyCodeImported": false,
     "runtimeDependencyAdded": false,
+    "layergramOwnedScaffoldAdded": true,
     "pubspecChanged": false,
     "protocolV3Activated": false
   },
   "remainingGates": [
-    "pin a Layergram-owned Rust crate and Cargo.lock before adding any native runtime",
     "verify every resolved Cargo package license, checksum, notice, and source obligation",
     "implement revision-1 state transitions from the public-domain specification without copying AGPL implementation code",
-    "freeze and review the narrow C ABI and authenticated state export format",
+    "derive and persist the separate SCKA state-sealing key and bind native revision atomically to TR3 revision",
+    "freeze the encrypted state-machine payload after independent encoder and incremental-ML-KEM review",
     "run upstream primitive vectors plus independent cross-implementation ML-KEM Braid vectors",
     "package and test every shipped Apple, Android, Windows, and Linux ABI",
     "complete fuzzing, sanitizer, crash, rollback, replay, and secret-lifecycle tests",
