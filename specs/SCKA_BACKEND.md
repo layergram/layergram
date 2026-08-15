@@ -1,8 +1,9 @@
 # ML-KEM Braid / SCKA backend decision
 
-Status: **inactive ABI; outer state envelope and canonical inner payload
-implemented; erasure representation and incremental primitive boundary frozen;
-no transition engine or production backend; protocol v3 inactive**
+Status: **inactive ABI; outer state envelope, canonical inner payload, and
+ratcheted authenticator implemented; erasure representation and incremental
+primitive boundary frozen; no transition engine or production backend;
+protocol v3 inactive**
 
 Layergram needs an ML-KEM Braid revision-1 backend to provide the Sparse
 Continuous Key Agreement input to its inactive Triple Ratchet. This component
@@ -99,9 +100,14 @@ payload is now frozen separately in `SCKA_STATE_PAYLOAD.md`.
 The `LB3` codec represents all 11 revision-1 states, duplicates and
 cross-checks the authenticated `LS3` role/session/revision/epoch metadata,
 validates sender/receiver parity and ML-KEM key relationships, bounds canonical
-encoder/decoder progress, and zeroizes its owned plaintext. It does not yet
-implement any state transition, KDF, MAC, entropy call, or public-message codec,
-and it has no C ABI callsite.
+encoder/decoder progress, and zeroizes its owned plaintext.
+
+The private module frozen in `SCKA_AUTHENTICATOR.md` now implements the exact
+Layergram revision-1 protocol domain, `KDF_AUTH`, `KDF_OK`, full-length
+HMAC-SHA-256 header/ciphertext tags, constant-time verification, detached
+authenticator successors, and zeroizing epoch-key ownership. It does not yet
+implement any state transition, entropy call, or public-message codec, and it
+has no C ABI callsite.
 
 ## Incremental ML-KEM primitive, inactive internal adoption
 
@@ -127,10 +133,9 @@ toolchain feasibility only; it is not production approval or cryptographic
 validation.
 
 The dependency is pinned in the inactive native crate together with `zeroize`
-1.8.1. `sha2` 0.10.9 is test-only. The exact applicable dependency graph and
-notices are recorded in `native/layergram_scka/THIRD_PARTY_NOTICES.md` and the
-machine-readable receipt. The crate is still not linked into an application
-binary.
+1.8.1. The exact applicable dependency graph and notices are recorded in
+`native/layergram_scka/THIRD_PARTY_NOTICES.md` and the machine-readable receipt.
+The crate is still not linked into an application binary.
 
 Before any packaged use, Layergram must regenerate and verify the resolved
 target-specific graph for every release ABI and repeat the license/notice
@@ -157,6 +162,19 @@ than adding an RNG dependency or silently choosing an entropy source. A future
 ABI implementation must obtain a fresh nonce from the approved OS CSPRNG,
 ensure one seal per candidate revision, and persist the exact sealed bytes.
 
+## Ratcheted-authenticator primitives, inactive internal adoption
+
+The implementation pins RustCrypto `hkdf` 0.12.4, `hmac` 0.12.1, and `sha2`
+0.10.9 with default features disabled. Each offers an Apache-2.0 licensing path.
+Their applicable graph is already composed of the permissive packages recorded
+in the notice, plus the two newly locked `hkdf` and `hmac` packages. No GPL,
+AGPL, LGPL, non-commercial, or field-of-use term is selected.
+
+`SCKA_AUTHENTICATOR.md` freezes the exact ASCII Layergram protocol domain and
+independent golden outputs. RustCrypto HMAC verification supplies the
+constant-time tag comparison. This is an inactive primitive checkpoint, not an
+independent cryptographic audit or approval of the eventual state machine.
+
 ## Packaging direction
 
 The future backend remains a Layergram-owned Rust static library behind the
@@ -180,7 +198,8 @@ CocoaPods, Gradle, CMake, the Windows runner, or Flutter FFI.
 
 ## Remaining security gates
 
-- implement revision-1 state transitions independently from the specification;
+- complete revision-1 state transitions independently from the specification
+  around the frozen authenticator primitives;
 - generate independent public vectors and compare with a separately executed
   conforming implementation without linking its code;
 - verify erasure-code behavior, epoch uniqueness, output-key agreement,

@@ -178,7 +178,8 @@ reserved fields, decoder ordering/duplication/completion, impossible progress,
 and the explicit wipe path.
 
 Activation still requires the complete revision-1 transition engine,
-ratcheted authenticator and KDF, approved OS entropy, authenticated
+integration and review of the ratcheted authenticator and KDF frozen in
+`SCKA_AUTHENTICATOR.md`, approved OS entropy, authenticated
 public-message codec, cross-implementation vectors, fuzzing and sanitizers,
 panic containment, crash/restart/rollback/concurrency tests, packaged physical
 device traversal, and independent cryptographic and implementation review.

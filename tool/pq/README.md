@@ -34,7 +34,9 @@ disconnected Layergram-owned erasure-code and incremental-ML-KEM boundary
 modules specified by `specs/SCKA_ERASURE_CODE.md` and
 `specs/SCKA_INCREMENTAL_MLKEM.md`. Its disconnected `LB3` codec freezes the
 canonical plaintext representation for all 11 revision-1 states as specified
-by `specs/SCKA_STATE_PAYLOAD.md`. Actual ML-KEM Braid transitions remain
+by `specs/SCKA_STATE_PAYLOAD.md`. The private authenticator module freezes the
+Layergram protocol domain, revision-1 KDFs, and HMAC behavior specified by
+`specs/SCKA_AUTHENTICATOR.md`. Actual ML-KEM Braid transitions remain
 unimplemented.
 
 ## Reproducible checks

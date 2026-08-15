@@ -13,13 +13,17 @@ dual licensed. The complete Apache License 2.0 text is the repository root
 | `aes-gcm` | 0.10.3 | Apache-2.0 alternative |
 | `aead` | 0.5.2 | Apache-2.0 alternative |
 | `aes` | 0.8.4 | Apache-2.0 alternative |
+| `block-buffer` | 0.10.4 | Apache-2.0 alternative |
 | `cfg-if` | 1.0.4 | Apache-2.0 alternative |
 | `cipher` | 0.4.4 | Apache-2.0 alternative |
 | `cpufeatures` | 0.2.17 | Apache-2.0 alternative |
 | `crypto-common` | 0.1.7 | Apache-2.0 alternative |
 | `ctr` | 0.9.2 | Apache-2.0 alternative |
+| `digest` | 0.10.7 | Apache-2.0 alternative |
 | `generic-array` | 0.14.7 | MIT |
 | `ghash` | 0.5.1 | Apache-2.0 alternative |
+| `hkdf` | 0.12.4 | Apache-2.0 alternative |
+| `hmac` | 0.12.1 | Apache-2.0 alternative |
 | `inout` | 0.1.4 | Apache-2.0 alternative |
 | `opaque-debug` | 0.3.1 | Apache-2.0 alternative |
 | `polyval` | 0.6.2 | Apache-2.0 alternative |
@@ -42,13 +46,15 @@ dual licensed. The complete Apache License 2.0 text is the repository root
 | `libc` | 0.2.189 | Apache-2.0 alternative |
 | `rand` | 0.10.2 | Apache-2.0 alternative |
 | `rand_core` | 0.10.1 | Apache-2.0 alternative |
+| `sha2` | 0.10.9 | Apache-2.0 alternative |
 | `zeroize` | 1.8.1 | Apache-2.0 alternative |
 
-The test-only `sha2` 0.10.9 graph additionally contributes `block-buffer` and
-`digest`; those packages and `sha2` provide an Apache-2.0 licensing alternative
-and are not linked into release artifacts. `cfg-if`, `cpufeatures`,
-`crypto-common`, `generic-array`, `typenum`, and `version_check` are also used
-by the normal/build AES-GCM graph and are therefore listed above.
+The normal/build ratcheted-authenticator graph adds `hkdf` 0.12.4 and `hmac`
+0.12.1 and promotes the already locked `sha2` 0.10.9, `block-buffer` 0.10.4,
+and `digest` 0.10.7 packages from test-only use. Each provides an Apache-2.0
+licensing alternative. `cfg-if`, `cpufeatures`, `crypto-common`,
+`generic-array`, `typenum`, `version_check`, and `subtle` are shared with other
+normal/build paths and are listed once above.
 `generic-array` 0.14.7 is MIT licensed; its exact license is retained at
 `licenses/MIT-generic-array.txt`.
 

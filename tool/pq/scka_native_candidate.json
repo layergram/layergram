@@ -33,13 +33,15 @@
     "rustVersion": "1.87.0",
     "rustToolchainFile": "native/layergram_scka/rust-toolchain.toml",
     "license": "Apache-2.0",
-    "cargoLockPackageCount": 96,
+    "cargoLockPackageCount": 98,
     "thirdPartyDependencies": [
       "aes =0.8.4 (normal, zeroizing AES key schedule)",
       "aes-gcm =0.10.3 (normal, inactive internal LS3 envelope)",
+      "hkdf =0.12.4 (normal, inactive ratcheted authenticator)",
+      "hmac =0.12.1 (normal, inactive ratcheted authenticator)",
       "libcrux-ml-kem =0.0.10 (normal, inactive internal module)",
-      "zeroize =1.8.1 (normal, inactive internal module)",
-      "sha2 =0.10.9 (dev-only KAT digest)"
+      "sha2 =0.10.9 (normal, inactive ratcheted authenticator and KAT digest)",
+      "zeroize =1.8.1 (normal, inactive internal module)"
     ],
     "abiVersion": 1,
     "protocolRevision": 1,
@@ -48,6 +50,7 @@
     "runtimeStatus": "not-ready-not-registered-not-linked",
     "stateEnvelopeSpecification": "specs/SCKA_NATIVE_ABI.md",
     "statePayloadSpecification": "specs/SCKA_STATE_PAYLOAD.md",
+    "authenticatorSpecification": "specs/SCKA_AUTHENTICATOR.md",
     "publicHeader": "native/layergram_scka/include/layergram_scka.h"
   },
   "incrementalMlKemPrimitiveCandidate": {
@@ -96,7 +99,7 @@
       "rand_core 0.10.1 — MIT OR Apache-2.0",
       "zeroize 1.8.1 — MIT OR Apache-2.0"
     ],
-    "testOnlyDependencyLicenses": [
+    "sharedNormalHashDependencyLicenses": [
       "sha2 0.10.9 — MIT OR Apache-2.0",
       "block-buffer 0.10.4 — MIT OR Apache-2.0",
       "cfg-if 1.0.4 — MIT OR Apache-2.0",
@@ -162,6 +165,49 @@
     "notices": "native/layergram_scka/THIRD_PARTY_NOTICES.md",
     "bsdLicense": "native/layergram_scka/licenses/BSD-3-Clause-subtle.txt"
   },
+  "ratchetedAuthenticatorPrimitives": {
+    "hkdf": {
+      "crate": "hkdf",
+      "version": "0.12.4",
+      "checksum": "7b5f8eb2ad728638ea2c7d47a21db23b7b58a72ed6a38256b8a1849f15fbbdf7",
+      "license": "MIT OR Apache-2.0",
+      "selectedLicense": "Apache-2.0",
+      "defaultFeatures": false
+    },
+    "hmac": {
+      "crate": "hmac",
+      "version": "0.12.1",
+      "checksum": "6c49c37c09c17a53d937dfbb742eb3a961d65a994e6bcdcf37e7399d0cc8ab5e",
+      "license": "MIT OR Apache-2.0",
+      "selectedLicense": "Apache-2.0",
+      "defaultFeatures": false
+    },
+    "sha2": {
+      "crate": "sha2",
+      "version": "0.10.9",
+      "checksum": "a7507d819769d01a365ab707794a4084392c824f54a7a6a7862f8c3d0892b283",
+      "license": "MIT OR Apache-2.0",
+      "selectedLicense": "Apache-2.0",
+      "defaultFeatures": false
+    },
+    "runtimeOrBuildDependencyLicenses": [
+      "block-buffer 0.10.4 — MIT OR Apache-2.0",
+      "cfg-if 1.0.4 — MIT OR Apache-2.0",
+      "cpufeatures 0.2.17 — MIT OR Apache-2.0",
+      "crypto-common 0.1.7 — MIT OR Apache-2.0",
+      "digest 0.10.7 — MIT OR Apache-2.0",
+      "generic-array 0.14.7 — MIT",
+      "hkdf 0.12.4 — MIT OR Apache-2.0",
+      "hmac 0.12.1 — MIT OR Apache-2.0",
+      "sha2 0.10.9 — MIT OR Apache-2.0",
+      "subtle 2.6.1 — BSD-3-Clause",
+      "typenum 1.20.1 — MIT OR Apache-2.0",
+      "version_check 0.9.5 — MIT OR Apache-2.0"
+    ],
+    "engineeringLicenseGate": "pass-inactive-internal-adoption",
+    "notices": "native/layergram_scka/THIRD_PARTY_NOTICES.md",
+    "bsdLicense": "native/layergram_scka/licenses/BSD-3-Clause-subtle.txt"
+  },
   "layergramOwnedAuthenticatedStateEnvelope": {
     "implementation": "native/layergram_scka/src/state_envelope.rs",
     "specification": "specs/SCKA_NATIVE_ABI.md",
@@ -200,6 +246,27 @@
     "productionRegistered": false,
     "independentlyReviewed": false
   },
+  "layergramOwnedRatchetedAuthenticator": {
+    "implementation": "native/layergram_scka/src/braid_authenticator.rs",
+    "specification": "specs/SCKA_AUTHENTICATOR.md",
+    "license": "Apache-2.0",
+    "protocolInfo": "LayergramV3_MLKEM768_HMAC-SHA256",
+    "authKeyBytes": 32,
+    "macBytes": 32,
+    "headerBytes": 64,
+    "authenticatedCiphertextBytes": 1088,
+    "signed63Epochs": true,
+    "constantTimeVerification": true,
+    "typedOutputKeyRatchet": true,
+    "ciphertextPartsTypedSeparately": true,
+    "immutableSuccessorState": true,
+    "zeroizingOutputKeyOwner": true,
+    "independentGoldenVectors": true,
+    "publicAbiConnected": false,
+    "transitionEngineConnected": false,
+    "productionRegistered": false,
+    "independentlyReviewed": false
+  },
   "layergramOwnedErasureCode": {
     "implementation": "native/layergram_scka/src/erasure.rs",
     "specification": "specs/SCKA_ERASURE_CODE.md",
@@ -224,11 +291,12 @@
     "incrementalMlKemBoundaryAdded": true,
     "authenticatedStateEnvelopeBoundaryAdded": true,
     "canonicalStateMachinePayloadAdded": true,
+    "ratchetedAuthenticatorAdded": true,
     "protocolV3Activated": false
   },
   "remainingGates": [
     "repeat locked target-specific dependency and notice review before every packaged release",
-    "implement revision-1 state transitions from the public-domain specification without copying AGPL implementation code",
+    "complete revision-1 state transitions around the frozen authenticator from the public-domain specification without copying AGPL implementation code",
     "connect the already-derived SCKA state-sealing key only after the complete state machine is approved and bind native revision atomically to TR3 revision",
     "independently review the frozen canonical LB3 plaintext state-machine payload and its opaque incremental-continuation version binding",
     "run upstream primitive vectors plus independent cross-implementation ML-KEM Braid vectors",

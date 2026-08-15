@@ -42,8 +42,8 @@ void main() {
     expect(scaffold['crate'], 'layergram-scka');
     expect(scaffold['license'], 'Apache-2.0');
     expect(scaffold['rustVersion'], '1.87.0');
-    expect(scaffold['cargoLockPackageCount'], 96);
-    expect(scaffold['thirdPartyDependencies'], hasLength(5));
+    expect(scaffold['cargoLockPackageCount'], 98);
+    expect(scaffold['thirdPartyDependencies'], hasLength(7));
     expect(scaffold['abiVersion'], 1);
     expect(scaffold['protocolRevision'], 1);
     expect(scaffold['stateFormatVersion'], 1);
@@ -69,7 +69,7 @@ void main() {
     expect(probe['sharedSecretBytes'], 32);
     for (final key in <String>[
       'runtimeOrBuildDependencyLicenses',
-      'testOnlyDependencyLicenses',
+      'sharedNormalHashDependencyLicenses',
     ]) {
       final dependencyLicenses = primitive[key] as List<dynamic>;
       for (final license in dependencyLicenses.cast<String>()) {
@@ -122,6 +122,29 @@ void main() {
     expect(
         File(envelopePrimitive['bsdLicense'] as String).existsSync(), isTrue);
 
+    final authenticatorPrimitives =
+        receipt['ratchetedAuthenticatorPrimitives'] as Map<String, dynamic>;
+    for (final entry in <Map<String, dynamic>>[
+      authenticatorPrimitives['hkdf'] as Map<String, dynamic>,
+      authenticatorPrimitives['hmac'] as Map<String, dynamic>,
+      authenticatorPrimitives['sha2'] as Map<String, dynamic>,
+    ]) {
+      expect(entry['selectedLicense'], 'Apache-2.0');
+      expect(entry['defaultFeatures'], isFalse);
+    }
+    for (final license
+        in (authenticatorPrimitives['runtimeOrBuildDependencyLicenses']
+                as List<dynamic>)
+            .cast<String>()) {
+      expect(license, isNot(contains('AGPL')));
+      expect(license, isNot(contains('LGPL')));
+      expect(license, isNot(matches(RegExp(r'(^|[^A])GPL'))));
+    }
+    expect(
+      File(authenticatorPrimitives['notices'] as String).existsSync(),
+      isTrue,
+    );
+
     final envelope = receipt['layergramOwnedAuthenticatedStateEnvelope']
         as Map<String, dynamic>;
     expect(envelope['algorithm'], 'AES-256-GCM');
@@ -152,6 +175,28 @@ void main() {
     expect(payload['transitionEngineConnected'], isFalse);
     expect(payload['productionRegistered'], isFalse);
 
+    final authenticator =
+        receipt['layergramOwnedRatchetedAuthenticator'] as Map<String, dynamic>;
+    expect(authenticator['license'], 'Apache-2.0');
+    expect(
+      authenticator['protocolInfo'],
+      'LayergramV3_MLKEM768_HMAC-SHA256',
+    );
+    expect(authenticator['authKeyBytes'], 32);
+    expect(authenticator['macBytes'], 32);
+    expect(authenticator['headerBytes'], 64);
+    expect(authenticator['authenticatedCiphertextBytes'], 1088);
+    expect(authenticator['signed63Epochs'], isTrue);
+    expect(authenticator['constantTimeVerification'], isTrue);
+    expect(authenticator['typedOutputKeyRatchet'], isTrue);
+    expect(authenticator['ciphertextPartsTypedSeparately'], isTrue);
+    expect(authenticator['immutableSuccessorState'], isTrue);
+    expect(authenticator['zeroizingOutputKeyOwner'], isTrue);
+    expect(authenticator['independentGoldenVectors'], isTrue);
+    expect(authenticator['publicAbiConnected'], isFalse);
+    expect(authenticator['transitionEngineConnected'], isFalse);
+    expect(authenticator['productionRegistered'], isFalse);
+
     final effects = receipt['checkpointEffects'] as Map<String, dynamic>;
     expect(effects['thirdPartyCodeImported'], isFalse);
     expect(effects['runtimeDependencyAddedToInactiveNativeCrate'], isTrue);
@@ -161,6 +206,7 @@ void main() {
     expect(effects['incrementalMlKemBoundaryAdded'], isTrue);
     expect(effects['authenticatedStateEnvelopeBoundaryAdded'], isTrue);
     expect(effects['canonicalStateMachinePayloadAdded'], isTrue);
+    expect(effects['ratchetedAuthenticatorAdded'], isTrue);
     expect(effects['pubspecChanged'], isFalse);
     expect(effects['protocolV3Activated'], isFalse);
   });
@@ -191,6 +237,14 @@ void main() {
     );
     expect(
       manifest,
+      contains('hkdf = { version = "=0.12.4", default-features = false }'),
+    );
+    expect(
+      manifest,
+      contains('hmac = { version = "=0.12.1", default-features = false }'),
+    );
+    expect(
+      manifest,
       contains(
         'libcrux-ml-kem = { version = "=0.0.10", '
         'default-features = false, features = ["incremental", "mlkem768"] }',
@@ -208,10 +262,12 @@ void main() {
     );
     expect(
       RegExp(r'^\[\[package\]\]$', multiLine: true).allMatches(lock),
-      hasLength(96),
+      hasLength(98),
     );
     expect(lock, contains('name = "aes-gcm"'));
     expect(lock, contains('name = "aes"'));
+    expect(lock, contains('name = "hkdf"'));
+    expect(lock, contains('name = "hmac"'));
     expect(lock, contains('name = "libcrux-ml-kem"'));
     expect(lock, contains('name = "zeroize"'));
     expect(lock, contains('name = "sha2"'));
@@ -221,6 +277,9 @@ void main() {
       'native/layergram_scka/THIRD_PARTY_NOTICES.md',
     ).readAsStringSync();
     expect(notices, contains('libcrux-ml-kem'));
+    expect(notices, contains('hkdf'));
+    expect(notices, contains('hmac'));
+    expect(notices, contains('sha2'));
     expect(notices, contains('Unicode-3.0'));
     expect(notices, contains('generic-array'));
     expect(notices, contains('subtle'));
@@ -253,9 +312,11 @@ void main() {
 
     expect(nativeEntry, contains('mod incremental_mlkem;'));
     expect(nativeEntry, contains('mod state_envelope;'));
+    expect(nativeEntry, contains('mod braid_authenticator;'));
     expect(nativeEntry, contains('mod braid_state_payload;'));
     expect(nativeEntry, isNot(contains('incremental_mlkem::')));
     expect(nativeEntry, isNot(contains('state_envelope::')));
+    expect(nativeEntry, isNot(contains('braid_authenticator::')));
     expect(nativeEntry, isNot(contains('braid_state_payload::')));
     expect(source, contains('validate_pk_bytes'));
     expect(source, contains('checked_seed.zeroize()'));
@@ -281,6 +342,20 @@ void main() {
     expect(payload, contains('self.encoded.zeroize()'));
     expect(
       File('specs/SCKA_STATE_PAYLOAD.md').readAsStringSync(),
+      contains('protocol v3 inactive'),
+    );
+    final authenticator = File(
+      'native/layergram_scka/src/braid_authenticator.rs',
+    ).readAsStringSync();
+    expect(
+      authenticator,
+      contains('PROTOCOL_INFO: &[u8] = b"LayergramV3_MLKEM768_HMAC-SHA256"'),
+    );
+    expect(authenticator, contains('Hkdf::<Sha256>::new'));
+    expect(authenticator, contains('mac.verify_slice(expected_mac)'));
+    expect(authenticator, contains('self.root_key.zeroize()'));
+    expect(
+      File('specs/SCKA_AUTHENTICATOR.md').readAsStringSync(),
       contains('protocol v3 inactive'),
     );
   });

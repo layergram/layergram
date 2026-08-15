@@ -1,14 +1,15 @@
 # Layergram SCKA native ABI and state envelope v1
 
-Status: **frozen inactive scaffold, implemented internal outer envelope and
-canonical inner payload, erasure representation, and incremental primitive
-boundary; no transitions; protocol v3 inactive**
+Status: **frozen inactive scaffold, implemented internal outer envelope,
+canonical inner payload, and ratcheted authenticator; erasure representation
+and incremental primitive boundary frozen; no transitions; protocol v3
+inactive**
 
 This document freezes the first Layergram-owned C ABI and authenticated state
 envelope for an eventual independent implementation of ML-KEM Braid revision 1.
-The current Rust crate implements and tests the outer `LS3` envelope and inner
-`LB3` payload behind internal modules, while deliberately returning
-`LG_SCKA_V1_ERR_NOT_READY`
+The current Rust crate implements and tests the outer `LS3` envelope, inner
+`LB3` payload, and revision-1 authenticator primitives behind internal modules,
+while deliberately returning `LG_SCKA_V1_ERR_NOT_READY`
 from its self-test and every correctly shaped state operation. It cannot be
 registered as a `V3SckaBackend` and does not make Layergram quantum-resistant.
 
@@ -148,6 +149,12 @@ ordering, and state-specific progress, and wipes its owned plaintext on drop.
 Changing a field layout or the opaque incremental continuation representation
 requires a new payload-format migration decision; it cannot reinterpret an
 existing `LB3` payload or weaken `LS3` bindings.
+
+The root and MAC keys stored inside `LB3` are interpreted only through the
+exact `KDF_AUTH`, `KDF_OK`, and HMAC domains frozen in
+`SCKA_AUTHENTICATOR.md`. The implementation derives immutable successor state
+and zeroizing output-key owners but remains disconnected from payload parsing,
+state transitions, and the C ABI.
 
 The standalone public-message erasure representation is frozen in
 `SCKA_ERASURE_CODE.md`. The version-locked incremental primitive boundary and
