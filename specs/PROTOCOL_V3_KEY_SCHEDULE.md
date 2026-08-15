@@ -300,7 +300,13 @@ input export unchanged, return a distinct candidate export, bind the export to
 the session ID and stable role, validate it before and after every transition,
 and internally version and authenticate it. The export MUST NOT be an expanded
 ML-KEM private key copied into Dart. No production backend is registered in
-this checkpoint.
+this checkpoint. `SCKA_BACKEND.md` records the commercially compatible
+implementation path and rejects embedding the AGPL-only reference code.
+Initialization, send, receive, and durable-state restore validation MUST pass
+through `V3SparsePqRatchet`, which checks the canonical diagnostic
+implementation ID, exact revision `1`, and self-test before invoking native
+state semantics. Future provider registration must separately allowlist the
+exact approved implementation ID.
 
 The public SCKA message uses a canonical `SK3` envelope:
 

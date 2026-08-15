@@ -143,6 +143,13 @@ void main() {
       expect(sharedSecret, originalSecret);
       final originalState = Uint8List.fromList(state);
 
+      await V3SparsePqRatchet.validateAuthenticatedState(
+        backend: backend,
+        role: V3SessionRole.initiator,
+        sessionId: sessionId,
+        authenticatedState: state,
+      );
+
       final sent = await V3SparsePqRatchet.sendCandidate(
         backend: backend,
         role: V3SessionRole.initiator,
@@ -177,6 +184,59 @@ void main() {
       expect(() => received.nextAuthenticatedState, throwsStateError);
       expect(() => sent.epochSecret?.secret, throwsStateError);
       expect(() => received.epochSecret?.secret, throwsStateError);
+      expect(backend.selfTestCalls, 4);
+    });
+
+    test('backend self-test failure stops before state initialization',
+        () async {
+      final backend = _DeterministicTestSckaBackend(selfTestResult: false);
+      await expectLater(
+        V3SparsePqRatchet.initialize(
+          backend: backend,
+          role: V3SessionRole.initiator,
+          sessionId: _bytes(16, 0x11),
+          sharedSecret: _bytes(32, 0x31),
+        ),
+        throwsStateError,
+      );
+      expect(backend.selfTestCalls, 1);
+      expect(backend.initializeCalls, 0);
+    });
+
+    test('unknown protocol revision stops before backend self-test', () async {
+      final backend = _DeterministicTestSckaBackend(
+        testProtocolRevision:
+            V3SparsePqRatchet.requiredBackendProtocolRevision + 1,
+      );
+      await expectLater(
+        V3SparsePqRatchet.initialize(
+          backend: backend,
+          role: V3SessionRole.initiator,
+          sessionId: _bytes(16, 0x11),
+          sharedSecret: _bytes(32, 0x31),
+        ),
+        throwsStateError,
+      );
+      expect(backend.selfTestCalls, 0);
+      expect(backend.initializeCalls, 0);
+    });
+
+    test('non-canonical implementation ID stops before backend self-test',
+        () async {
+      final backend = _DeterministicTestSckaBackend(
+        testImplementationId: 'Signal SPQR/1.5.3',
+      );
+      await expectLater(
+        V3SparsePqRatchet.initialize(
+          backend: backend,
+          role: V3SessionRole.initiator,
+          sessionId: _bytes(16, 0x11),
+          sharedSecret: _bytes(32, 0x31),
+        ),
+        throwsStateError,
+      );
+      expect(backend.selfTestCalls, 0);
+      expect(backend.initializeCalls, 0);
     });
 
     test('fails closed when backend returns an unbound candidate', () async {
@@ -245,10 +305,31 @@ final class _DeterministicTestSckaBackend implements V3SckaBackend {
   _DeterministicTestSckaBackend({
     this.corruptNextState = false,
     this.changeReceivingEpoch = false,
+    this.selfTestResult = true,
+    this.testImplementationId = 'layergram-test-scka/1',
+    this.testProtocolRevision =
+        V3SparsePqRatchet.requiredBackendProtocolRevision,
   });
 
   final bool corruptNextState;
   final bool changeReceivingEpoch;
+  final bool selfTestResult;
+  final String testImplementationId;
+  final int testProtocolRevision;
+  int initializeCalls = 0;
+  int selfTestCalls = 0;
+
+  @override
+  String get implementationId => testImplementationId;
+
+  @override
+  int get protocolRevision => testProtocolRevision;
+
+  @override
+  Future<bool> selfTest() async {
+    selfTestCalls++;
+    return selfTestResult;
+  }
 
   @override
   Future<Uint8List> initializeAuthenticatedState({
@@ -256,6 +337,7 @@ final class _DeterministicTestSckaBackend implements V3SckaBackend {
     required Uint8List sessionId,
     required Uint8List sharedSecret,
   }) async {
+    initializeCalls++;
     final digest = crypto.sha256.convert(<int>[
       role.wireId,
       ...sessionId,

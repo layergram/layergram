@@ -1504,12 +1504,22 @@ V3TripleRatchetState _snapshot({
 final class _DeterministicEpochBackend implements V3SckaBackend {
   int sendCalls = 0;
 
+  @override
+  String get implementationId => 'layergram-test-send-scka/1';
+
+  @override
+  int get protocolRevision => V3SparsePqRatchet.requiredBackendProtocolRevision;
+
+  @override
+  Future<bool> selfTest() async => true;
+
   static Uint8List state(V3SessionRole role, Uint8List sessionId, int epoch) {
     return Uint8List.fromList(<int>[role.wireId, ...sessionId, epoch]);
   }
 
   Future<void> validateSnapshot(V3TripleRatchetState snapshot) =>
-      validateAuthenticatedState(
+      V3SparsePqRatchet.validateAuthenticatedState(
+        backend: this,
         role: snapshot.role,
         sessionId: snapshot.sessionId,
         authenticatedState: snapshot.nativeSckaState,

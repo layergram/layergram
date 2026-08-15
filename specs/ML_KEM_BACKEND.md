@@ -128,8 +128,13 @@ The currently vendored `mlkem-native` v2.0.0 library sources are offered by
 upstream under Apache-2.0 OR ISC OR MIT; Layergram records Apache-2.0 as its
 selected choice in `third_party/mlkem-native/SOURCE.json` and
 `README.layergram.md`. This checkpoint adds no new package or native dependency.
-No native SCKA implementation has been selected: both its cryptographic review
-and its commercial-license review remain activation gates.
+The SCKA implementation path is now selected in `SCKA_BACKEND.md`: the
+AGPL-only Signal reference implementation is excluded, while an independent
+Layergram-owned Apache-2.0 implementation from the public-domain specification
+is the approved direction. `libcrux-ml-kem` 0.0.10 is only a permissively
+licensed incremental-primitive candidate; no SCKA runtime dependency or
+production implementation is registered. Cryptographic review, the final
+transitive license review, and packaging remain activation gates.
 
 ## Remaining activation gates
 

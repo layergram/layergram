@@ -190,6 +190,23 @@ final class V3SckaReceiveCandidate {
 /// No production implementation is registered yet. Therefore this interface
 /// alone does not activate or claim a post-quantum Layergram session.
 abstract interface class V3SckaBackend {
+  /// Stable build identity used for diagnostics and release inventory.
+  ///
+  /// This value is process-local metadata. It is not encoded into SK3, HR3,
+  /// TR3, or any other protocol record.
+  String get implementationId;
+
+  /// Exact ML-KEM Braid protocol revision implemented by this backend.
+  int get protocolRevision;
+
+  /// Runs the backend's immutable implementation and primitive self-tests.
+  ///
+  /// A successful result is necessary but not sufficient for production
+  /// approval. A production implementation may cache a successful result only
+  /// within the current process and binary. Independent review and per-ABI
+  /// packaging tests remain mandatory.
+  Future<bool> selfTest();
+
   Future<Uint8List> initializeAuthenticatedState({
     required V3SessionRole role,
     required Uint8List sessionId,
@@ -225,6 +242,8 @@ abstract interface class V3SckaBackend {
 abstract final class V3SparsePqRatchet {
   static const int stateSecretBytes = 32;
   static const int maxAuthenticatedStateBytes = 192 * 1024;
+  static const int requiredBackendProtocolRevision = 1;
+  static const int maxBackendImplementationIdBytes = 96;
 
   static Future<Uint8List> initialize({
     required V3SckaBackend backend,
@@ -239,6 +258,7 @@ abstract final class V3SparsePqRatchet {
     Uint8List? backendState;
     Uint8List? candidate;
     try {
+      await _ensureBackendReady(backend);
       backendSession = Uint8List.fromList(checkedSession);
       backendSecret = Uint8List.fromList(checkedSecret);
       backendState = await backend.initializeAuthenticatedState(
@@ -267,6 +287,32 @@ abstract final class V3SparsePqRatchet {
     }
   }
 
+  /// Validates one durable native state through the admitted backend.
+  ///
+  /// Future checkpoint/session restore wiring must use this adapter instead of
+  /// invoking [V3SckaBackend.validateAuthenticatedState] directly.
+  static Future<void> validateAuthenticatedState({
+    required V3SckaBackend backend,
+    required V3SessionRole role,
+    required Uint8List sessionId,
+    required Uint8List authenticatedState,
+  }) async {
+    final checkedSession = _validatedSessionId(sessionId);
+    final checkedState = _validatedStateExport(authenticatedState);
+    try {
+      await _ensureBackendReady(backend);
+      await _validateBackendState(
+        backend: backend,
+        role: role,
+        sessionId: checkedSession,
+        state: checkedState,
+      );
+    } finally {
+      _wipe(checkedSession);
+      _wipe(checkedState);
+    }
+  }
+
   static Future<V3SckaSendCandidate> sendCandidate({
     required V3SckaBackend backend,
     required V3SessionRole role,
@@ -279,6 +325,7 @@ abstract final class V3SparsePqRatchet {
     Uint8List? backendState;
     V3SckaSendCandidate? candidate;
     try {
+      await _ensureBackendReady(backend);
       await _validateBackendState(
         backend: backend,
         role: role,
@@ -328,6 +375,7 @@ abstract final class V3SparsePqRatchet {
     Uint8List? backendState;
     V3SckaReceiveCandidate? candidate;
     try {
+      await _ensureBackendReady(backend);
       await _validateBackendState(
         backend: backend,
         role: role,
@@ -387,6 +435,45 @@ abstract final class V3SparsePqRatchet {
       _wipe(backendState);
     }
   }
+
+  static Future<void> _ensureBackendReady(V3SckaBackend backend) async {
+    final implementationId = backend.implementationId;
+    if (!_isCanonicalImplementationId(implementationId)) {
+      throw StateError(
+        'Layergram v3 SCKA backend implementation ID is invalid',
+      );
+    }
+    if (backend.protocolRevision != requiredBackendProtocolRevision) {
+      throw StateError(
+        'Layergram v3 SCKA backend protocol revision is unsupported',
+      );
+    }
+    if (!await backend.selfTest()) {
+      throw StateError('Layergram v3 SCKA backend self-test failed');
+    }
+  }
+}
+
+bool _isCanonicalImplementationId(String value) {
+  if (value.isEmpty ||
+      value.length > V3SparsePqRatchet.maxBackendImplementationIdBytes) {
+    return false;
+  }
+  final first = value.codeUnitAt(0);
+  final firstIsLowercase = first >= 0x61 && first <= 0x7a;
+  final firstIsDigit = first >= 0x30 && first <= 0x39;
+  if (!firstIsLowercase && !firstIsDigit) return false;
+  for (final codeUnit in value.codeUnits) {
+    final isLowercase = codeUnit >= 0x61 && codeUnit <= 0x7a;
+    final isDigit = codeUnit >= 0x30 && codeUnit <= 0x39;
+    final isPunctuation = codeUnit == 0x2b ||
+        codeUnit == 0x2d ||
+        codeUnit == 0x2e ||
+        codeUnit == 0x2f ||
+        codeUnit == 0x5f;
+    if (!isLowercase && !isDigit && !isPunctuation) return false;
+  }
+  return true;
 }
 
 Uint8List _validatedSessionId(Uint8List value) {

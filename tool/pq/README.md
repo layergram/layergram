@@ -19,6 +19,13 @@ the actual wrapper, verifies opaque-handle lifecycle and zeroization, checks
 implicit rejection and invalid inputs, and confirms that the production ABI
 uses the OS CSPRNG while excluding deterministic test hooks.
 
+`scka_native_candidate.json` records the separate ML-KEM Braid/SCKA backend
+decision. The official Signal SPQR implementation is explicitly rejected for
+embedding because it is AGPL-3.0-only; no code from it is imported. The receipt
+selects a specification-first Layergram-owned Apache-2.0 implementation path
+and records `libcrux-ml-kem` only as a commercially compatible incremental
+ML-KEM primitive candidate. No Rust or SCKA runtime dependency is added yet.
+
 ## Reproducible checks
 
 Run the host-native wrapper, vector, production-ABI, and sanitizer checks:

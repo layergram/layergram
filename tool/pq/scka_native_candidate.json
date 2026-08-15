@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "status": "implementation-path-selected-not-production-approved",
+  "observedOn": "2026-08-15",
+  "protocol": {
+    "name": "ML-KEM Braid",
+    "revision": 1,
+    "lastUpdated": "2025-09-26",
+    "specification": "https://signal.org/docs/specifications/mlkembraid/",
+    "iprStatement": "public-domain"
+  },
+  "referenceImplementation": {
+    "repository": "https://github.com/signalapp/sparsepostquantumratchet.git",
+    "release": "v1.5.3",
+    "commit": "fd320484dcec89004021e6fdc7481825f5f261fa",
+    "crate": "spqr",
+    "crateVersion": "1.5.3",
+    "license": "AGPL-3.0-only",
+    "decision": "rejected-for-linking-or-embedding",
+    "reason": "The shared public codebase is merged into a separately distributed proprietary paid Premium binary. Layergram will not import, adapt, link, or embed this AGPL-only implementation without a separate compatible license and specific legal approval."
+  },
+  "selectedImplementationPath": {
+    "owner": "Layergram",
+    "license": "Apache-2.0",
+    "sourceRule": "independent-implementation-from-public-domain-specification",
+    "forbiddenSource": "signalapp/sparsepostquantumratchet implementation code",
+    "wireCompatibilityTarget": "ML-KEM Braid revision 1",
+    "productionRegistered": false
+  },
+  "incrementalMlKemPrimitiveCandidate": {
+    "crate": "libcrux-ml-kem",
+    "version": "0.0.10",
+    "checksum": "1d8160f7d64fd2716b4fd05cc886a042f8dcda18d9206c0d506e2c67bdf97daa",
+    "repository": "https://github.com/cryspen/libcrux",
+    "reviewedCommit": "9ea7743c201ae861625dccb171f7c42d6b831927",
+    "license": "Apache-2.0",
+    "defaultFeatures": false,
+    "features": [
+      "incremental",
+      "mlkem768"
+    ],
+    "engineeringLicenseGate": "pass-candidate-only",
+    "runtimeOrBuildDependencyLicenses": [
+      "hax-lib 0.3.7 — Apache-2.0",
+      "hax-lib-macros 0.3.7 — Apache-2.0",
+      "proc-macro2 1.0.107 — MIT OR Apache-2.0",
+      "quote 1.0.47 — MIT OR Apache-2.0",
+      "syn 2.0.119 — MIT OR Apache-2.0",
+      "unicode-ident 1.0.24 — (MIT OR Apache-2.0) AND Unicode-3.0",
+      "libcrux-intrinsics 0.0.8 — Apache-2.0",
+      "libcrux-platform 0.0.3 — Apache-2.0",
+      "libcrux-secrets 0.0.6 — Apache-2.0",
+      "libcrux-sha3 0.0.10 — Apache-2.0",
+      "libcrux-traits 0.0.8 — Apache-2.0",
+      "libc 0.2.189 — MIT OR Apache-2.0",
+      "rand 0.10.2 — MIT OR Apache-2.0",
+      "rand_core 0.10.1 — MIT OR Apache-2.0"
+    ]
+  },
+  "checkpointEffects": {
+    "thirdPartyCodeImported": false,
+    "runtimeDependencyAdded": false,
+    "pubspecChanged": false,
+    "protocolV3Activated": false
+  },
+  "remainingGates": [
+    "pin a Layergram-owned Rust crate and Cargo.lock before adding any native runtime",
+    "verify every resolved Cargo package license, checksum, notice, and source obligation",
+    "implement revision-1 state transitions from the public-domain specification without copying AGPL implementation code",
+    "freeze and review the narrow C ABI and authenticated state export format",
+    "run upstream primitive vectors plus independent cross-implementation ML-KEM Braid vectors",
+    "package and test every shipped Apple, Android, Windows, and Linux ABI",
+    "complete fuzzing, sanitizer, crash, rollback, replay, and secret-lifecycle tests",
+    "obtain independent cryptographic and implementation review"
+  ]
+}

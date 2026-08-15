@@ -772,6 +772,15 @@ final class _InitialSckaBackend implements V3SckaBackend {
   int initializeCount = 0;
 
   @override
+  String get implementationId => 'layergram-test-initial-scka/1';
+
+  @override
+  int get protocolRevision => V3SparsePqRatchet.requiredBackendProtocolRevision;
+
+  @override
+  Future<bool> selfTest() async => true;
+
+  @override
   Future<Uint8List> initializeAuthenticatedState({
     required V3SessionRole role,
     required Uint8List sessionId,
