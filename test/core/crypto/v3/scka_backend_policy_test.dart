@@ -275,9 +275,11 @@ void main() {
       'HeaderSent.Receive',
       'Ct1Received.Send',
       'Ct1Received.Receive',
+      'EkSentCt1Received.Send',
+      'EkSentCt1Received.Receive',
     ]);
     expect(transition['firstTransitionNumber'], 1);
-    expect(transition['implementedTransitionNumbers'], <int>[1, 2, 3, 4]);
+    expect(transition['implementedTransitionNumbers'], <int>[1, 2, 3, 4, 5]);
     expect(transition['deterministicGoldenVectors'], isTrue);
     expect(transition['immutableAuthenticatedPrior'], isTrue);
     expect(transition['detachedExactStateAndMessageCandidate'], isTrue);
@@ -285,6 +287,9 @@ void main() {
     expect(transition['deterministicEntropyExported'], isFalse);
     expect(transition['reexportRequiresExactCandidateReuse'], isTrue);
     expect(transition['unreliableExternalTransportAssumed'], isTrue);
+    expect(transition['zeroizingNativeEpochOutput'], isTrue);
+    expect(transition['authenticationPrecedesNextEpochSuccessor'], isTrue);
+    expect(transition['typedTerminalAuthenticationFailure'], isTrue);
     expect(transition['publicAbiConnected'], isFalse);
     expect(transition['durableJournalConnected'], isFalse);
     expect(transition['productionRegistered'], isFalse);
@@ -306,6 +311,7 @@ void main() {
     expect(effects['identityMnemonicFullByteRangeHardened'], isTrue);
     expect(effects['transitionThreeAdded'], isTrue);
     expect(effects['transitionFourAdded'], isTrue);
+    expect(effects['transitionFiveAdded'], isTrue);
     expect(effects['pubspecChanged'], isFalse);
     expect(effects['protocolV3Activated'], isFalse);
   });
@@ -519,6 +525,10 @@ void main() {
     expect(transition, contains('BraidMessageType::EncapsulationKey'));
     expect(transition, contains('receive_while_header_sent'));
     expect(transition, contains('receive_while_ct1_received'));
+    expect(transition, contains('receive_while_ek_sent_ct1_received'));
+    expect(transition, contains('derive_output_key'));
+    expect(transition, contains('successor_auth.verify_ciphertext'));
+    expect(transition, contains('BraidMessageType::None'));
     expect(
       File('specs/SCKA_TRANSITION_ENGINE.md').readAsStringSync(),
       contains('protocol v3 inactive'),

@@ -1,6 +1,6 @@
 # Layergram ML-KEM Braid transition engine revision 1
 
-Status: **initialization and transitions 1-4 implemented privately; remaining
+Status: **initialization and transitions 1-5 implemented privately; remaining
 transitions and public ABI not connected; protocol v3 inactive**
 
 This document freezes the initial bounded slice of Layergram's independent
@@ -82,8 +82,35 @@ the encoder and a later committed send emits the next distinct erasure symbol.
 symbol initializes a sorted one-symbol decoder for `ct2 || mac`, discards the
 now-acknowledged `Ek` encoder, preserves the private key and exact reconstructed
 `Ct1`, and produces `EkSentCt1Received`. Wrong types or epochs are ignored
-semantically while the accepted wrapper revision advances. Other receive and
-send state variants remain unimplemented and fail outside this private slice.
+semantically while the accepted wrapper revision advances.
+
+`EkSentCt1Received.Send` emits the canonical current-epoch no-data `BM3`
+message. It preserves the exact incomplete `ct2 || mac` decoder and advances
+only the detached Layergram state revision.
+
+`EkSentCt1Received.Receive` implements transition 5. Current-epoch `Ct2`
+symbols are retained in sorted canonical order; exact duplicates are
+idempotent and conflicting same-index symbols fail before a candidate is
+returned. Any five unique symbols reconstruct the exact 128-byte `ct2` and
+32-byte MAC. The engine then:
+
+1. reconstructs and validates the persisted ML-KEM keypair;
+2. decapsulates the exact persisted `ct1` and reconstructed `ct2`;
+3. applies revision-1 `KDF_OK` and keeps the epoch key in a native zeroizing
+   owner;
+4. derives the detached successor authenticator from that key;
+5. verifies the ciphertext MAC with the successor authenticator;
+6. only after successful authentication creates an empty header decoder and a
+   next-epoch `NoHeaderReceived` successor.
+
+The receive result binds the exact successor to the emitted epoch number and
+key. State-only extraction refuses key-emitting candidates, preventing helper
+code from silently advancing while discarding the key. A wrong MAC returns a
+typed authentication error and no successor; the future durable session
+authority must treat it as terminal for that candidate/session. Wrong message
+types or epochs preserve semantic state while advancing only the wrapper
+revision. Other receive and send variants remain unimplemented and fail
+outside this private slice.
 
 ## 2. Immutable candidate and unreliable transport contract
 
@@ -116,7 +143,10 @@ simulated restart, discarded exported copies, continuation after a lost header
 symbol, transition 2, `Ek` continuation, exact/conflicting `Ct1` duplicates,
 loss and reordering across a simulated decoder restart, `EkCt1Ack`
 continuation, transition 4, and canonical `Ct2` decoder restart. It
-does not yet connect native candidates to the existing durable send/receive
+also tests no-data send behavior, transition 5 reconstruction with loss,
+reverse ordering, exact duplicates and restart, output-key/authenticator
+agreement, next-epoch metadata, conflicting chunks, MAC failure, and revision
+and epoch exhaustion. It does not yet connect native candidates to the existing durable send/receive
 journals; that atomic composition remains activation-blocking.
 
 ## 3. Entropy and licensing boundary
@@ -126,7 +156,8 @@ The first key-generating transition calls the private `OsEntropy` boundary in
 features disabled, rejects every documented opt-in backend at compile time, and
 maps every OS-source failure to a fail-closed entropy error. Partially filled
 seed storage is zeroized before return and no candidate is exposed on failure.
-`KeysSampled.Send`, `HeaderSent.Send`, and `Ct1Received.Send` do not request new entropy.
+`KeysSampled.Send`, `HeaderSent.Send`, `Ct1Received.Send`, and transition 5 do
+not request new entropy.
 Deterministic entropy exists only as a private unit-test trait implementation
 and is not exported through the C ABI. The complete application and native
 entropy policy is frozen in `ENTROPY_SOURCES.md`.
@@ -149,12 +180,13 @@ from later symbols without new entropy, transitions 2-3, `Ek` continuation,
 `Ct1` loss/reordering/duplicate/conflict behavior, simulated decoder restart,
 `EkCt1Ack` continuation after a lost export, transition 4 with wrong-epoch
 filtering and `Ct2` decoder restart, MAC/state corruption, encoder/revision
-exhaustion, revisioned ignored inputs, and frozen deterministic digests for
-Header/`Ek` continuation and transitions 2-4.
+exhaustion, revisioned ignored inputs, no-data send, transition 5 recovery with
+loss/reordering/duplicate/restart, exact epoch-key and authenticator agreement,
+typed MAC failure, epoch exhaustion, and frozen deterministic digests for
+Header/`Ek` continuation and transitions 2-5.
 
-Activation still requires transitions 5 through 13, terminal authenticated
-reconstruction and terminal MAC-failure behavior, encoder/decoder continuation,
-epoch-key emission and authenticator ratcheting, LS3 sealing with a unique OS
+Activation still requires transitions 6 through 13, durable terminal
+MAC-failure handling, remaining encoder/decoder continuation, LS3 sealing with a unique OS
 nonce, the public C ABI and panic containment, atomic TR3/journal composition,
 cross-implementation vectors, fuzzing/sanitizers, every shipped target, and an
 independent cryptographic and implementation audit.

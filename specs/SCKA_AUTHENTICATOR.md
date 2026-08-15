@@ -1,7 +1,8 @@
 # Layergram ML-KEM Braid authenticator revision 1
 
 Status: **canonical KDF and ratcheted authenticator implemented internally;
-initialization and header MAC connected only to private transitions 1-2; public
+initialization, header MAC, output-key derivation, ratcheting, and ciphertext
+verification connected only to private transitions 1-5; public
 ABI connection not implemented; protocol v3 inactive**
 
 This document freezes Layergram's implementation-defined domain and the
@@ -15,9 +16,12 @@ linked, or embedded. This checkpoint uses the permissively licensed RustCrypto
 `hkdf`, `hmac`, and `sha2` crates and remains suitable for the public Layergram
 base that is merged into the separately distributed paid Premium application.
 
-The private initial transition slice now uses authenticator initialization,
-restore, header-MAC generation, and persisted-header verification as frozen in
-`SCKA_TRANSITION_ENGINE.md`.
+The private transition slice now uses authenticator initialization, restore,
+header-MAC generation, persisted-header verification, `KDF_OK`, detached
+ratcheting, and successor-key ciphertext verification as frozen in
+`SCKA_TRANSITION_ENGINE.md`. Transition 5 returns the derived epoch key only
+through the native zeroizing candidate owner and produces no successor on MAC
+failure.
 Remaining Braid transitions, state-envelope persistence, and every C ABI
 operation are still disconnected.
 Native self-test and every correctly shaped public operation continue to return
@@ -89,9 +93,9 @@ With RFC 5869, an absent SHA-256 salt is equivalent to the exact 32-byte zero
 salt above. The Rust implementation deliberately uses that standard `None`
 salt representation.
 
-The raw incremental ML-KEM shared secret is transient. A future transition must
-derive `output_key`, ratchet the authenticator with that same `output_key`,
-return the output only through its zeroizing owner, and persist neither the raw
+The raw incremental ML-KEM shared secret is transient. Transition 5 now
+derives `output_key`, ratchets the authenticator with that same `output_key`,
+returns the output only through its zeroizing owner, and persists neither the raw
 shared secret nor an extra copy of the derived output.
 
 ## 3. MAC definitions
