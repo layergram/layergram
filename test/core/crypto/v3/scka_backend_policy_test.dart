@@ -131,8 +131,26 @@ void main() {
     expect(envelope['maximumPayloadBytes'], 196512);
     expect(envelope['headerIsAad'], isTrue);
     expect(envelope['publicAbiConnected'], isFalse);
-    expect(envelope['stateMachinePayloadFrozen'], isFalse);
+    expect(envelope['stateMachinePayloadFrozen'], isTrue);
     expect(envelope['productionRegistered'], isFalse);
+
+    final payload =
+        receipt['layergramOwnedStateMachinePayload'] as Map<String, dynamic>;
+    expect(payload['license'], 'Apache-2.0');
+    expect(payload['thirdPartyDependenciesAdded'], isEmpty);
+    expect(payload['magic'], 'LB3');
+    expect(payload['formatVersion'], 1);
+    expect(payload['headerBytes'], 136);
+    expect(payload['minimumPayloadBytes'], 136);
+    expect(payload['maximumPayloadBytes'], 4434);
+    expect(payload['stateVariantCount'], 11);
+    expect(payload['duplicatesAndChecksOuterMetadata'], isTrue);
+    expect(payload['privateAndPublicKeyValidation'], isTrue);
+    expect(payload['canonicalEncoderDecoderProgress'], isTrue);
+    expect(payload['bestEffortSecretZeroization'], isTrue);
+    expect(payload['publicAbiConnected'], isFalse);
+    expect(payload['transitionEngineConnected'], isFalse);
+    expect(payload['productionRegistered'], isFalse);
 
     final effects = receipt['checkpointEffects'] as Map<String, dynamic>;
     expect(effects['thirdPartyCodeImported'], isFalse);
@@ -142,6 +160,7 @@ void main() {
     expect(effects['layergramOwnedErasureCodeAdded'], isTrue);
     expect(effects['incrementalMlKemBoundaryAdded'], isTrue);
     expect(effects['authenticatedStateEnvelopeBoundaryAdded'], isTrue);
+    expect(effects['canonicalStateMachinePayloadAdded'], isTrue);
     expect(effects['pubspecChanged'], isFalse);
     expect(effects['protocolV3Activated'], isFalse);
   });
@@ -234,8 +253,10 @@ void main() {
 
     expect(nativeEntry, contains('mod incremental_mlkem;'));
     expect(nativeEntry, contains('mod state_envelope;'));
+    expect(nativeEntry, contains('mod braid_state_payload;'));
     expect(nativeEntry, isNot(contains('incremental_mlkem::')));
     expect(nativeEntry, isNot(contains('state_envelope::')));
+    expect(nativeEntry, isNot(contains('braid_state_payload::')));
     expect(source, contains('validate_pk_bytes'));
     expect(source, contains('checked_seed.zeroize()'));
     expect(source, contains('part_one: EncapsulationPartOne'));
@@ -249,6 +270,18 @@ void main() {
     expect(
       File('specs/SCKA_INCREMENTAL_MLKEM.md').readAsStringSync(),
       contains('v3 inactive'),
+    );
+    final payload = File(
+      'native/layergram_scka/src/braid_state_payload.rs',
+    ).readAsStringSync();
+    expect(payload, contains('const MAGIC: &[u8; 3] = b"LB3";'));
+    expect(payload, contains('MAX_BRAID_PAYLOAD_BYTES: usize = 4_434'));
+    expect(payload, contains('pub(crate) enum BraidStateVariant'));
+    expect(payload, contains('key_pair_from_private_key'));
+    expect(payload, contains('self.encoded.zeroize()'));
+    expect(
+      File('specs/SCKA_STATE_PAYLOAD.md').readAsStringSync(),
+      contains('protocol v3 inactive'),
     );
   });
 

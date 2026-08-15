@@ -1,13 +1,14 @@
 # Layergram SCKA native ABI and state envelope v1
 
-Status: **frozen inactive scaffold, implemented internal outer state envelope,
-erasure representation, and incremental primitive boundary; no state-machine
-payload or transitions; protocol v3 inactive**
+Status: **frozen inactive scaffold, implemented internal outer envelope and
+canonical inner payload, erasure representation, and incremental primitive
+boundary; no transitions; protocol v3 inactive**
 
 This document freezes the first Layergram-owned C ABI and authenticated state
 envelope for an eventual independent implementation of ML-KEM Braid revision 1.
-The current Rust crate implements and tests the outer `LS3` envelope only behind
-an internal module, while deliberately returning `LG_SCKA_V1_ERR_NOT_READY`
+The current Rust crate implements and tests the outer `LS3` envelope and inner
+`LB3` payload behind internal modules, while deliberately returning
+`LG_SCKA_V1_ERR_NOT_READY`
 from its self-test and every correctly shaped state operation. It cannot be
 registered as a `V3SckaBackend` and does not make Layergram quantum-resistant.
 
@@ -137,23 +138,24 @@ equal the current TR3 revision and the candidate revision to equal the proposed
 TR3 revision. This prevents a valid older state export from silently rolling a
 session backward.
 
-The encrypted payload must be a bounded canonical encoding with explicit
-state-machine variant, Braid internal epoch, ratcheted authenticator roots,
-incremental ML-KEM secrets, and erasure encoder/decoder state. Its complete
-field layout is not frozen by this scaffold because the serialized incremental
-ML-KEM representation, recovery state, and secret-lifetime behavior have not
-yet been independently reviewed. A future state-payload format revision must be
-finalized before transitions can return `OK`; it cannot reinterpret an existing
-`LS3` header or weaken its bounds.
+The encrypted payload is the canonical `LB3` representation frozen in
+`SCKA_STATE_PAYLOAD.md`. It carries the exact state-machine variant, Braid
+internal epoch, ratcheted authenticator roots, incremental ML-KEM secrets, and
+minimal erasure encoder/decoder progress. Its decoder accepts at most 4,434
+bytes, duplicates and cross-checks all authenticated outer metadata, validates
+role/epoch direction, private/public ML-KEM key relationships, canonical chunk
+ordering, and state-specific progress, and wipes its owned plaintext on drop.
+Changing a field layout or the opaque incremental continuation representation
+requires a new payload-format migration decision; it cannot reinterpret an
+existing `LB3` payload or weaken `LS3` bindings.
 
 The standalone public-message erasure representation is frozen in
 `SCKA_ERASURE_CODE.md`. The version-locked incremental primitive boundary and
 its exact 2,080-byte opaque continuation state are frozen in
-`SCKA_INCREMENTAL_MLKEM.md`. Both are tested inside the Rust crate and remain
-disconnected from all ABI operations. Freezing these components does not freeze
-the complete encrypted payload fields needed to resume Braid scheduling,
-authentication, recovery, and encoder/decoder progress; those still require
-separate review.
+`SCKA_INCREMENTAL_MLKEM.md`. These components and the complete encrypted
+payload representation are tested inside the Rust crate and remain disconnected
+from all ABI operations. Braid scheduling, authentication, recovery behavior,
+and state transitions remain unimplemented and require separate review.
 
 ## 4. ABI operations
 

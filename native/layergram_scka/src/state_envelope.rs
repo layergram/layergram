@@ -60,7 +60,7 @@ pub(crate) enum StateRole {
 }
 
 impl StateRole {
-    fn decode(value: u8) -> Result<Self, StateEnvelopeError> {
+    pub(crate) fn decode(value: u8) -> Result<Self, StateEnvelopeError> {
         match value {
             1 => Ok(Self::Initiator),
             2 => Ok(Self::Responder),

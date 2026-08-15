@@ -47,6 +47,7 @@
     "implementationId": "layergram-scka-scaffold-r1-abi1",
     "runtimeStatus": "not-ready-not-registered-not-linked",
     "stateEnvelopeSpecification": "specs/SCKA_NATIVE_ABI.md",
+    "statePayloadSpecification": "specs/SCKA_STATE_PAYLOAD.md",
     "publicHeader": "native/layergram_scka/include/layergram_scka.h"
   },
   "incrementalMlKemPrimitiveCandidate": {
@@ -175,7 +176,27 @@
     "callerSuppliesFreshOsCsprngNonce": true,
     "zeroizingPlaintextOwner": true,
     "publicAbiConnected": false,
-    "stateMachinePayloadFrozen": false,
+    "stateMachinePayloadFrozen": true,
+    "productionRegistered": false,
+    "independentlyReviewed": false
+  },
+  "layergramOwnedStateMachinePayload": {
+    "implementation": "native/layergram_scka/src/braid_state_payload.rs",
+    "specification": "specs/SCKA_STATE_PAYLOAD.md",
+    "license": "Apache-2.0",
+    "thirdPartyDependenciesAdded": [],
+    "magic": "LB3",
+    "formatVersion": 1,
+    "headerBytes": 136,
+    "minimumPayloadBytes": 136,
+    "maximumPayloadBytes": 4434,
+    "stateVariantCount": 11,
+    "duplicatesAndChecksOuterMetadata": true,
+    "privateAndPublicKeyValidation": true,
+    "canonicalEncoderDecoderProgress": true,
+    "bestEffortSecretZeroization": true,
+    "publicAbiConnected": false,
+    "transitionEngineConnected": false,
     "productionRegistered": false,
     "independentlyReviewed": false
   },
@@ -202,13 +223,14 @@
     "pubspecChanged": false,
     "incrementalMlKemBoundaryAdded": true,
     "authenticatedStateEnvelopeBoundaryAdded": true,
+    "canonicalStateMachinePayloadAdded": true,
     "protocolV3Activated": false
   },
   "remainingGates": [
     "repeat locked target-specific dependency and notice review before every packaged release",
     "implement revision-1 state transitions from the public-domain specification without copying AGPL implementation code",
     "connect the already-derived SCKA state-sealing key only after the complete state machine is approved and bind native revision atomically to TR3 revision",
-    "freeze the canonical plaintext state-machine payload inside the implemented LS3 envelope after independent review of the erasure and incremental-ML-KEM representations",
+    "independently review the frozen canonical LB3 plaintext state-machine payload and its opaque incremental-continuation version binding",
     "run upstream primitive vectors plus independent cross-implementation ML-KEM Braid vectors",
     "package and test every shipped Apple, Android, Windows, and Linux ABI",
     "complete fuzzing, sanitizer, crash, rollback, replay, and secret-lifecycle tests",

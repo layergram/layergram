@@ -1,8 +1,8 @@
 # ML-KEM Braid / SCKA backend decision
 
-Status: **inactive ABI, internal outer state envelope implemented, erasure
-representation and incremental primitive boundary frozen; no state-machine
-payload or production backend; protocol v3 inactive**
+Status: **inactive ABI; outer state envelope and canonical inner payload
+implemented; erasure representation and incremental primitive boundary frozen;
+no transition engine or production backend; protocol v3 inactive**
 
 Layergram needs an ML-KEM Braid revision-1 backend to provide the Sparse
 Continuous Key Agreement input to its inactive Triple Ratchet. This component
@@ -93,8 +93,15 @@ container behind an internal module. It validates exact header fields, lengths,
 role/session/revision bindings, signed-63 counters, AAD, ciphertext, and tag,
 and returns decrypted bytes only through a zeroizing owner. The caller must
 supply a fresh OS-generated nonce; the module does not generate randomness and
-is not connected to any C ABI operation. The canonical plaintext state-machine
-payload and semantic cross-checks remain the next gate.
+is not connected to any C ABI operation. The disconnected canonical plaintext
+payload is now frozen separately in `SCKA_STATE_PAYLOAD.md`.
+
+The `LB3` codec represents all 11 revision-1 states, duplicates and
+cross-checks the authenticated `LS3` role/session/revision/epoch metadata,
+validates sender/receiver parity and ML-KEM key relationships, bounds canonical
+encoder/decoder progress, and zeroizes its owned plaintext. It does not yet
+implement any state transition, KDF, MAC, entropy call, or public-message codec,
+and it has no C ABI callsite.
 
 ## Incremental ML-KEM primitive, inactive internal adoption
 
@@ -173,9 +180,6 @@ CocoaPods, Gradle, CMake, the Windows runner, or Flutter FFI.
 
 ## Remaining security gates
 
-- freeze the canonical plaintext state-machine payload inside the implemented
-  `LS3` envelope after the erasure representation and incremental ML-KEM
-  boundary have both been independently reviewed;
 - implement revision-1 state transitions independently from the specification;
 - generate independent public vectors and compare with a separately executed
   conforming implementation without linking its code;

@@ -12,6 +12,7 @@ use libcrux_ml_kem::mlkem768::incremental::{
     decapsulate_compressed_key, encapsulate1, encapsulate2, validate_pk_bytes, Ciphertext1,
     Ciphertext2, KeyPairCompressedBytes,
 };
+use libcrux_ml_kem::mlkem768::{portable::validate_private_key_only, MlKem768PrivateKey};
 use zeroize::Zeroize;
 
 pub(crate) const KEY_GENERATION_SEED_BYTES: usize = 64;
@@ -24,6 +25,9 @@ pub(crate) const CIPHERTEXT_PART_ONE_BYTES: usize = 960;
 pub(crate) const CIPHERTEXT_PART_TWO_BYTES: usize = 128;
 pub(crate) const SHARED_SECRET_BYTES: usize = 32;
 
+const PUBLIC_KEY_VECTOR_OFFSET: usize = 1_152;
+const PUBLIC_KEY_HEADER_OFFSET: usize = 2_304;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum IncrementalMlKemError {
     InvalidLength,
@@ -33,20 +37,24 @@ pub(crate) enum IncrementalMlKemError {
 
 pub(crate) struct IncrementalKeyPair {
     private_key: [u8; PRIVATE_KEY_BYTES],
-    public_key_header: [u8; PUBLIC_KEY_HEADER_BYTES],
-    public_key_vector: [u8; PUBLIC_KEY_VECTOR_BYTES],
 }
 
 impl IncrementalKeyPair {
     pub(crate) fn public_key_header(&self) -> &[u8; PUBLIC_KEY_HEADER_BYTES] {
-        &self.public_key_header
+        self.private_key
+            [PUBLIC_KEY_HEADER_OFFSET..PUBLIC_KEY_HEADER_OFFSET + PUBLIC_KEY_HEADER_BYTES]
+            .try_into()
+            .expect("frozen ML-KEM-768 private-key layout")
     }
 
     pub(crate) fn public_key_vector(&self) -> &[u8; PUBLIC_KEY_VECTOR_BYTES] {
-        &self.public_key_vector
+        self.private_key
+            [PUBLIC_KEY_VECTOR_OFFSET..PUBLIC_KEY_VECTOR_OFFSET + PUBLIC_KEY_VECTOR_BYTES]
+            .try_into()
+            .expect("frozen ML-KEM-768 private-key layout")
     }
 
-    fn private_key(&self) -> &[u8; PRIVATE_KEY_BYTES] {
+    pub(crate) fn private_key(&self) -> &[u8; PRIVATE_KEY_BYTES] {
         &self.private_key
     }
 }
@@ -80,6 +88,14 @@ pub(crate) struct EncapsulationPartOne {
 }
 
 impl EncapsulationPartOne {
+    pub(crate) fn public_key_header(&self) -> &[u8; PUBLIC_KEY_HEADER_BYTES] {
+        &self.public_key_header
+    }
+
+    pub(crate) fn state(&self) -> &[u8; ENCAPSULATION_STATE_BYTES] {
+        &self.state
+    }
+
     pub(crate) fn ciphertext(&self) -> &[u8; CIPHERTEXT_PART_ONE_BYTES] {
         &self.ciphertext
     }
@@ -132,13 +148,32 @@ pub(crate) fn key_pair_from_seed(seed: &[u8]) -> Result<IncrementalKeyPair, Incr
     let key_pair = KeyPairCompressedBytes::from_seed(checked_seed);
     checked_seed.zeroize();
 
-    let public_key_header = *key_pair.pk1();
-    let public_key_vector = *key_pair.pk2();
     let private_key = key_pair.to_bytes();
+    Ok(IncrementalKeyPair { private_key })
+}
+
+pub(crate) fn key_pair_from_private_key(
+    private_key: &[u8],
+) -> Result<IncrementalKeyPair, IncrementalMlKemError> {
+    let checked = exact_array::<PRIVATE_KEY_BYTES>(private_key)?;
+    let typed = MlKem768PrivateKey::from(checked);
+    if !validate_private_key_only(&typed) {
+        let mut rejected: [u8; PRIVATE_KEY_BYTES] = typed.into();
+        rejected.zeroize();
+        return Err(IncrementalMlKemError::InvalidPublicKey);
+    }
+    let mut checked: [u8; PRIVATE_KEY_BYTES] = typed.into();
+    if validate_public_key(
+        &checked[PUBLIC_KEY_HEADER_OFFSET..PUBLIC_KEY_HEADER_OFFSET + PUBLIC_KEY_HEADER_BYTES],
+        &checked[PUBLIC_KEY_VECTOR_OFFSET..PUBLIC_KEY_VECTOR_OFFSET + PUBLIC_KEY_VECTOR_BYTES],
+    )
+    .is_err()
+    {
+        checked.zeroize();
+        return Err(IncrementalMlKemError::InvalidPublicKey);
+    }
     Ok(IncrementalKeyPair {
-        private_key,
-        public_key_header,
-        public_key_vector,
+        private_key: checked,
     })
 }
 
@@ -195,6 +230,18 @@ pub(crate) fn encapsulate_part_two(
     let checked_vector = exact_array_ref::<PUBLIC_KEY_VECTOR_BYTES>(public_key_vector)?;
     let ciphertext = encapsulate2(&part_one.state, checked_vector).value;
     Ok(EncapsulationPartTwo { ciphertext })
+}
+
+pub(crate) fn restore_encapsulation_part_one(
+    public_key_header: &[u8],
+    state: &[u8],
+    ciphertext: &[u8],
+) -> Result<EncapsulationPartOne, IncrementalMlKemError> {
+    Ok(EncapsulationPartOne {
+        public_key_header: exact_array::<PUBLIC_KEY_HEADER_BYTES>(public_key_header)?,
+        state: exact_array::<ENCAPSULATION_STATE_BYTES>(state)?,
+        ciphertext: exact_array::<CIPHERTEXT_PART_ONE_BYTES>(ciphertext)?,
+    })
 }
 
 pub(crate) fn decapsulate(
