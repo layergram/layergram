@@ -1,6 +1,6 @@
 # Layergram SCKA native ABI and state envelope v1
 
-Status: **frozen inactive scaffold and erasure representation; no state-machine implementation; protocol v3 inactive**
+Status: **frozen inactive scaffold, erasure representation, and incremental primitive boundary; no state-machine implementation; protocol v3 inactive**
 
 This document freezes the first Layergram-owned C ABI and authenticated state
 envelope for an eventual independent implementation of ML-KEM Braid revision 1.
@@ -8,11 +8,12 @@ The current Rust crate deliberately returns `LG_SCKA_V1_ERR_NOT_READY` from its
 self-test and every correctly shaped state operation. It cannot be registered
 as a `V3SckaBackend` and does not make Layergram quantum-resistant.
 
-The crate is Apache-2.0, has no third-party dependencies, pins Rust 1.87.0, and
-is suitable for the public repository that is merged into the separately
-distributed paid Premium application. Adding a dependency requires a new
-exact-version, checksum, feature, transitive-license, notice, and
-target-specific review.
+The crate is Apache-2.0, pins Rust 1.87.0, and is suitable for the public
+repository that is merged into the separately distributed paid Premium
+application. Its inactive incremental primitive uses exact-version permissive
+dependencies recorded in `native/layergram_scka/THIRD_PARTY_NOTICES.md` and the
+machine receipt. Every dependency change requires a new checksum, feature,
+transitive-license, notice, and target-specific review.
 
 ## 1. Stable constants and ownership
 
@@ -138,12 +139,14 @@ yet been independently reviewed. A future state-payload format revision must be
 finalized before transitions can return `OK`; it cannot reinterpret an existing
 `LS3` header or weaken its bounds.
 
-The standalone public-message erasure representation is now frozen in
-`SCKA_ERASURE_CODE.md`, implemented without dependencies, and tested inside the
-Rust crate. It remains disconnected from all ABI operations. Freezing that
-public representation does not freeze the encrypted payload fields needed to
-resume an in-progress encoder/decoder or the serialized incremental ML-KEM
-state; those still require separate review.
+The standalone public-message erasure representation is frozen in
+`SCKA_ERASURE_CODE.md`. The version-locked incremental primitive boundary and
+its exact 2,080-byte opaque continuation state are frozen in
+`SCKA_INCREMENTAL_MLKEM.md`. Both are tested inside the Rust crate and remain
+disconnected from all ABI operations. Freezing these components does not freeze
+the complete encrypted payload fields needed to resume Braid scheduling,
+authentication, recovery, and encoder/decoder progress; those still require
+separate review.
 
 ## 4. ABI operations
 

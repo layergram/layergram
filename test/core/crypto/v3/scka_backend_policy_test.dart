@@ -42,8 +42,8 @@ void main() {
     expect(scaffold['crate'], 'layergram-scka');
     expect(scaffold['license'], 'Apache-2.0');
     expect(scaffold['rustVersion'], '1.87.0');
-    expect(scaffold['cargoLockPackageCount'], 1);
-    expect(scaffold['thirdPartyDependencies'], isEmpty);
+    expect(scaffold['cargoLockPackageCount'], 85);
+    expect(scaffold['thirdPartyDependencies'], hasLength(3));
     expect(scaffold['abiVersion'], 1);
     expect(scaffold['protocolRevision'], 1);
     expect(scaffold['stateFormatVersion'], 1);
@@ -54,9 +54,12 @@ void main() {
     expect(primitive['crate'], 'libcrux-ml-kem');
     expect(primitive['version'], '0.0.10');
     expect(primitive['license'], 'Apache-2.0');
-    expect(primitive['engineeringLicenseGate'], 'pass-candidate-only');
+    expect(
+      primitive['engineeringLicenseGate'],
+      'pass-inactive-internal-adoption',
+    );
     final probe = primitive['rust187ApiProbe'] as Map<String, dynamic>;
-    expect(probe['result'], 'pass-isolated-not-adopted');
+    expect(probe['result'], 'pass-adopted-inactive-wrapper');
     expect(probe['offlineLockedRerun'], isTrue);
     expect(probe['pk1Bytes'], 64);
     expect(probe['pk2Bytes'], 1152);
@@ -64,24 +67,55 @@ void main() {
     expect(probe['ciphertext2Bytes'], 128);
     expect(probe['encapsulationStateBytes'], 2080);
     expect(probe['sharedSecretBytes'], 32);
-    final dependencyLicenses =
-        primitive['runtimeOrBuildDependencyLicenses'] as List<dynamic>;
-    for (final license in dependencyLicenses.cast<String>()) {
-      expect(license, isNot(contains('AGPL')));
-      expect(license, isNot(contains('LGPL')));
-      expect(license, isNot(matches(RegExp(r'(^|[^A])GPL'))));
+    for (final key in <String>[
+      'runtimeOrBuildDependencyLicenses',
+      'testOnlyDependencyLicenses',
+    ]) {
+      final dependencyLicenses = primitive[key] as List<dynamic>;
+      for (final license in dependencyLicenses.cast<String>()) {
+        expect(license, isNot(contains('AGPL')));
+        expect(license, isNot(contains('LGPL')));
+        expect(license, isNot(matches(RegExp(r'(^|[^A])GPL'))));
+      }
     }
+    expect(File(primitive['notices'] as String).existsSync(), isTrue);
+    expect(File(primitive['unicodeLicense'] as String).existsSync(), isTrue);
+    expect(
+      File(primitive['mitGenericArrayLicense'] as String).existsSync(),
+      isTrue,
+    );
+
+    final boundary = receipt['layergramOwnedIncrementalMlKemBoundary']
+        as Map<String, dynamic>;
+    expect(boundary['publicAbiConnected'], isFalse);
+    expect(boundary['stateMachineConnected'], isFalse);
+    expect(boundary['productionRegistered'], isFalse);
+    expect(boundary['exactLengthValidation'], isTrue);
+    expect(
+      boundary['fullPublicKeyValidationBeforeCiphertextPartTwo'],
+      isTrue,
+    );
+    expect(boundary['partOneStateBoundToPublicKey'], isTrue);
+    expect(
+      boundary['sharedSecretReleasedOnlyAfterPublicKeyValidation'],
+      isTrue,
+    );
+    expect(boundary['independentMlKemNativeKat'], isTrue);
+    expect(boundary['independentlyReviewed'], isFalse);
 
     final effects = receipt['checkpointEffects'] as Map<String, dynamic>;
     expect(effects['thirdPartyCodeImported'], isFalse);
-    expect(effects['runtimeDependencyAdded'], isFalse);
+    expect(effects['runtimeDependencyAddedToInactiveNativeCrate'], isTrue);
+    expect(effects['runtimeDependencyAddedToApplication'], isFalse);
     expect(effects['layergramOwnedScaffoldAdded'], isTrue);
     expect(effects['layergramOwnedErasureCodeAdded'], isTrue);
+    expect(effects['incrementalMlKemBoundaryAdded'], isTrue);
     expect(effects['pubspecChanged'], isFalse);
     expect(effects['protocolV3Activated'], isFalse);
   });
 
-  test('Layergram SCKA scaffold is dependency-free and not packaged', () {
+  test('Layergram SCKA dependencies are pinned, permissive, and not packaged',
+      () {
     final manifest =
         File('native/layergram_scka/Cargo.toml').readAsStringSync();
     final lock = File('native/layergram_scka/Cargo.lock').readAsStringSync();
@@ -90,13 +124,38 @@ void main() {
     ).readAsStringSync();
 
     expect(manifest, contains('license = "Apache-2.0"'));
-    expect(manifest, contains('[dependencies]\n\n[profile.release]'));
+    expect(
+      manifest,
+      contains(
+        'libcrux-ml-kem = { version = "=0.0.10", '
+        'default-features = false, features = ["incremental", "mlkem768"] }',
+      ),
+    );
+    expect(
+      manifest,
+      contains(
+        'zeroize = { version = "=1.8.1", default-features = false }',
+      ),
+    );
+    expect(
+      manifest,
+      contains('sha2 = { version = "=0.10.9", default-features = false }'),
+    );
     expect(
       RegExp(r'^\[\[package\]\]$', multiLine: true).allMatches(lock),
-      hasLength(1),
+      hasLength(85),
     );
-    expect(lock, isNot(contains('source = ')));
+    expect(lock, contains('name = "libcrux-ml-kem"'));
+    expect(lock, contains('name = "zeroize"'));
+    expect(lock, contains('name = "sha2"'));
     expect(header, contains('LG_SCKA_V1_ERR_NOT_READY = -2'));
+
+    final notices = File(
+      'native/layergram_scka/THIRD_PARTY_NOTICES.md',
+    ).readAsStringSync();
+    expect(notices, contains('libcrux-ml-kem'));
+    expect(notices, contains('Unicode-3.0'));
+    expect(notices, contains('generic-array'));
 
     for (final path in <String>[
       'pubspec.yaml',
@@ -113,6 +172,26 @@ void main() {
         reason: '$path must not package the inactive SCKA scaffold',
       );
     }
+  });
+
+  test('incremental ML-KEM module remains internal and outside the ABI', () {
+    final nativeEntry = File(
+      'native/layergram_scka/src/lib.rs',
+    ).readAsStringSync();
+    final source = File(
+      'native/layergram_scka/src/incremental_mlkem.rs',
+    ).readAsStringSync();
+
+    expect(nativeEntry, contains('mod incremental_mlkem;'));
+    expect(nativeEntry, isNot(contains('incremental_mlkem::')));
+    expect(source, contains('validate_pk_bytes'));
+    expect(source, contains('checked_seed.zeroize()'));
+    expect(source, contains('part_one: EncapsulationPartOne'));
+    expect(source, contains('pub(crate) struct EncapsulationPartTwo'));
+    expect(
+      File('specs/SCKA_INCREMENTAL_MLKEM.md').readAsStringSync(),
+      contains('v3 inactive'),
+    );
   });
 
   test('Layergram erasure code remains owned, dependency-free, and inactive',

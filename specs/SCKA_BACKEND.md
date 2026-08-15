@@ -1,6 +1,6 @@
 # ML-KEM Braid / SCKA backend decision
 
-Status: **inactive ABI and erasure representation frozen; no production backend; protocol v3 inactive**
+Status: **inactive ABI, erasure representation, and incremental primitive boundary frozen; no production backend; protocol v3 inactive**
 
 Layergram needs an ML-KEM Braid revision-1 backend to provide the Sparse
 Continuous Key Agreement input to its inactive Triple Ratchet. This component
@@ -64,9 +64,9 @@ implementation ID. None of these controls replaces cryptographic review.
 
 The Layergram-owned Rust crate under `native/layergram_scka` now freezes the
 minimal ABI and outer authenticated state envelope described in
-`SCKA_NATIVE_ABI.md`. It has no dependency and is not linked into any app. Its
-self-test and every correctly shaped state operation return `NOT_READY`, so the
-scaffold cannot satisfy the Dart admission gate or activate protocol v3.
+`SCKA_NATIVE_ABI.md`. It is not linked into any app. Its self-test and every
+correctly shaped state operation return `NOT_READY`, so the scaffold cannot
+satisfy the Dart admission gate or activate protocol v3.
 
 The same crate now contains a Layergram-owned, dependency-free systematic
 Reed-Solomon encoder/decoder for the exact revision-1 public payload classes.
@@ -75,9 +75,19 @@ chunk representation, duplicate policy, and resource limits. The module is not
 connected to the C ABI or state machine, so this progress does not change the
 backend's inactive status.
 
-## Incremental ML-KEM primitive candidate
+The exact incremental ML-KEM candidate is now adopted only behind the internal,
+non-ABI wrapper frozen in `SCKA_INCREMENTAL_MLKEM.md`. The wrapper enforces
+exact lengths and complete `pk1 + pk2` validation before the second
+encapsulation step, binds the opaque continuation state to its exact part-one
+public-key header, releases the shared secret only from the successfully
+validated completed owner, and its FIPS output matches the separately
+implemented `mlkem-native` known-answer vector. It remains unused by every
+exported SCKA operation; self-test and all shaped state operations still return
+`NOT_READY`.
 
-The only primitive selected for further prototyping is
+## Incremental ML-KEM primitive, inactive internal adoption
+
+The primitive selected for internal prototyping is
 `libcrux-ml-kem` 0.0.10 with default features disabled and only
 `incremental,mlkem768` enabled. The crate declares Apache-2.0 and has crates.io
 checksum
@@ -98,13 +108,16 @@ misuse may be insecure. The successful probe therefore establishes API and
 toolchain feasibility only; it is not production approval or cryptographic
 validation.
 
-This is a candidate approval only. The dependency-free Layergram scaffold adds
-no third-party Cargo package and is not linked into an application binary.
-Before adopting the primitive, Layergram must update the pinned Cargo.lock,
-store all required license and notice texts, verify the resolved target-specific
-graph for every release ABI, and repeat the license review. Store distribution,
-commercial use, source/notice obligations, and proprietary Premium combination
-must all remain acceptable.
+The dependency is pinned in the inactive native crate together with `zeroize`
+1.8.1. `sha2` 0.10.9 is test-only. The exact applicable dependency graph and
+notices are recorded in `native/layergram_scka/THIRD_PARTY_NOTICES.md` and the
+machine-readable receipt. The crate is still not linked into an application
+binary.
+
+Before any packaged use, Layergram must regenerate and verify the resolved
+target-specific graph for every release ABI and repeat the license/notice
+review. Store distribution, commercial use, source/notice obligations, and the
+proprietary Premium combination must all remain acceptable.
 
 ## Packaging direction
 
@@ -130,8 +143,8 @@ CocoaPods, Gradle, CMake, the Windows runner, or Flutter FFI.
 ## Remaining security gates
 
 - freeze the encrypted state-machine payload after the now-specified erasure
-  representation and the incremental ML-KEM representation have both been
-  independently reviewed;
+  representation and incremental ML-KEM boundary have both been independently
+  reviewed;
 - implement revision-1 state transitions independently from the specification;
 - generate independent public vectors and compare with a separately executed
   conforming implementation without linking its code;

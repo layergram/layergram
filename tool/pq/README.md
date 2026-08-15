@@ -22,16 +22,17 @@ uses the OS CSPRNG while excluding deterministic test hooks.
 `scka_native_candidate.json` records the separate ML-KEM Braid/SCKA backend
 decision. The official Signal SPQR implementation is explicitly rejected for
 embedding because it is AGPL-3.0-only; no code from it is imported. The receipt
-selects a specification-first Layergram-owned Apache-2.0 implementation path
-and records `libcrux-ml-kem` only as a commercially compatible incremental
-ML-KEM primitive candidate.
+selects a specification-first Layergram-owned Apache-2.0 implementation path.
+The exact commercially compatible `libcrux-ml-kem` candidate is now pinned only
+inside the inactive native crate; it is not linked into the application.
 
-`native/layergram_scka` is a dependency-free Apache-2.0 Rust scaffold. It
-freezes the inactive C ABI and `LS3` state envelope but deliberately returns
-`NOT_READY`; it is not referenced by application packaging or Dart FFI. The
-crate also contains the disconnected Layergram-owned erasure-code module
-specified by `specs/SCKA_ERASURE_CODE.md`. The state payload and actual ML-KEM
-Braid transitions remain unimplemented.
+`native/layergram_scka` is an Apache-2.0 Rust scaffold with exact pinned
+permissive dependencies and notices. It freezes the inactive C ABI and `LS3`
+state envelope but deliberately returns `NOT_READY`; it is not referenced by
+application packaging or Dart FFI. The crate contains disconnected
+Layergram-owned erasure-code and incremental-ML-KEM boundary modules specified
+by `specs/SCKA_ERASURE_CODE.md` and `specs/SCKA_INCREMENTAL_MLKEM.md`. The
+complete state payload and actual ML-KEM Braid transitions remain unimplemented.
 
 ## Reproducible checks
 

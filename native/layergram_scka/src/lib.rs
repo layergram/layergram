@@ -8,6 +8,8 @@ use core::ptr;
 
 #[allow(dead_code)]
 mod erasure;
+#[allow(dead_code)]
+mod incremental_mlkem;
 
 pub const ABI_VERSION: u32 = 1;
 pub const PROTOCOL_REVISION: u32 = 1;
