@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:bip39/bip39.dart' as bip39;
@@ -120,7 +121,21 @@ class SeedService {
 
   String generateMnemonic({int words = 24}) {
     final strength = words == 24 ? 256 : 128;
-    return bip39.generateMnemonic(strength: strength);
+    final secureRandom = math.Random.secure();
+    return bip39.generateMnemonic(
+      strength: strength,
+      // Do not use bip39 1.0.6's default callback: it calls nextInt(255),
+      // excluding byte 0xff. Supplying the bytes here preserves the complete
+      // uniform 0..255 range promised by Random.secure(). Unsupported systems
+      // throw instead of falling back to a weaker generator.
+      randomBytes: (length) {
+        final bytes = Uint8List(length);
+        for (var index = 0; index < bytes.length; index++) {
+          bytes[index] = secureRandom.nextInt(256);
+        }
+        return bytes;
+      },
+    );
   }
 
   bool validateMnemonic(String mnemonic) {

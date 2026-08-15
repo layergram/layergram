@@ -39,9 +39,9 @@ Layergram protocol domain, revision-1 KDFs, and HMAC behavior specified by
 `specs/SCKA_AUTHENTICATOR.md`. The disconnected private `BM3` codec freezes all
 seven logical public-message types, their internal Braid epoch, and exact
 24/58-byte canonical encodings as specified by
-`specs/SCKA_PUBLIC_MESSAGE.md`. The private first transition slice implements
+`specs/SCKA_PUBLIC_MESSAGE.md`. The private initial transition slice implements
 initialization, `KeysUnsampled.Send`, its operating-system entropy boundary,
-and the matching receive no-op as specified by
+the matching receive no-op, continued Header symbols, and transition 2 as specified by
 `specs/SCKA_TRANSITION_ENGINE.md`; it remains disconnected from the ABI and
 every application package.
 

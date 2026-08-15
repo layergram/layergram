@@ -7,6 +7,9 @@ license = "Apache-2.0"
 publish = false
 description = "Inactive Layergram ML-KEM Braid revision-1 native ABI scaffold"
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(getrandom_backend, values("custom", "efi_rng", "rdrand", "rndr", "linux_getrandom", "linux_raw", "windows_legacy", "unsupported", "extern_impl"))'] }
+
 [lib]
 name = "layergram_scka"
 crate-type = ["cdylib", "staticlib", "rlib"]

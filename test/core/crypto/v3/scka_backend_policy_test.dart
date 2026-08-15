@@ -149,8 +149,34 @@ void main() {
         receipt['operatingSystemEntropyPrimitive'] as Map<String, dynamic>;
     expect(entropy['crate'], 'getrandom');
     expect(entropy['version'], '0.4.3');
+    expect(entropy['specification'], 'specs/ENTROPY_SOURCES.md');
     expect(entropy['selectedLicense'], 'Apache-2.0');
     expect(entropy['defaultFeatures'], isFalse);
+    expect(entropy['defaultOperatingSystemBackendOnly'], isTrue);
+    expect(entropy['fullBufferOrError'], isTrue);
+    expect(entropy['customBackendAllowed'], isFalse);
+    expect(entropy['hardwareInstructionOnlyBackendAllowed'], isFalse);
+    expect(entropy['unsupportedBackendAllowed'], isFalse);
+    expect(entropy['rejectedOptInBackends'], <String>[
+      'custom',
+      'efi_rng',
+      'rdrand',
+      'rndr',
+      'linux_getrandom',
+      'linux_raw',
+      'windows_legacy',
+      'unsupported',
+      'extern_impl',
+    ]);
+    final platformSources = entropy['platformSources'] as Map<String, dynamic>;
+    expect(
+      platformSources['linuxAndroid'],
+      'getrandom syscall; documented older-kernel fallback waits for '
+      '/dev/random readiness before /dev/urandom',
+    );
+    expect(platformSources['windows10Plus'], 'ProcessPrng');
+    expect(platformSources['macos'], 'getentropy');
+    expect(platformSources['ios'], 'CCRandomGenerateBytes');
     expect(entropy['deterministicProductionHook'], isFalse);
     expect(entropy['publicAbiConnected'], isFalse);
     expect(entropy['applicationRuntimeConnected'], isFalse);
@@ -243,8 +269,12 @@ void main() {
       'InitBob',
       'KeysUnsampled.Send',
       'KeysUnsampled.Receive',
+      'KeysSampled.Send',
+      'KeysSampled.Receive',
     ]);
     expect(transition['firstTransitionNumber'], 1);
+    expect(transition['implementedTransitionNumbers'], <int>[1, 2]);
+    expect(transition['deterministicGoldenVectors'], isTrue);
     expect(transition['immutableAuthenticatedPrior'], isTrue);
     expect(transition['detachedExactStateAndMessageCandidate'], isTrue);
     expect(transition['osEntropyBytesPerKeyGeneration'], 64);
@@ -268,6 +298,8 @@ void main() {
     expect(effects['publicMessageCodecAdded'], isTrue);
     expect(effects['initialTransitionEngineSliceAdded'], isTrue);
     expect(effects['operatingSystemEntropyBoundaryAdded'], isTrue);
+    expect(effects['getrandomBackendOverrideGuardAdded'], isTrue);
+    expect(effects['identityMnemonicFullByteRangeHardened'], isTrue);
     expect(effects['pubspecChanged'], isFalse);
     expect(effects['protocolV3Activated'], isFalse);
   });
@@ -302,6 +334,7 @@ void main() {
         'getrandom = { version = "=0.4.3", default-features = false }',
       ),
     );
+    expect(manifest, contains('cfg(getrandom_backend'));
     expect(
       manifest,
       contains('hkdf = { version = "=0.12.4", default-features = false }'),
@@ -340,6 +373,26 @@ void main() {
     expect(lock, contains('name = "zeroize"'));
     expect(lock, contains('name = "sha2"'));
     expect(header, contains('LG_SCKA_V1_ERR_NOT_READY = -2'));
+
+    final entropySource = File(
+      'native/layergram_scka/src/entropy.rs',
+    ).readAsStringSync();
+    expect(entropySource, contains('compile_error!'));
+    for (final backend in <String>[
+      'custom',
+      'efi_rng',
+      'rdrand',
+      'rndr',
+      'linux_getrandom',
+      'linux_raw',
+      'windows_legacy',
+      'unsupported',
+      'extern_impl',
+    ]) {
+      expect(entropySource, contains('getrandom_backend = "$backend"'));
+    }
+    expect(File('specs/ENTROPY_SOURCES.md').readAsStringSync(),
+        contains('protocol v3 inactive'));
 
     final notices = File(
       'native/layergram_scka/THIRD_PARTY_NOTICES.md',
@@ -450,8 +503,10 @@ void main() {
     ).readAsStringSync();
     expect(transition, contains('pub(crate) fn initialize('));
     expect(transition, contains('pub(crate) fn send('));
+    expect(transition, contains('pub(crate) fn receive('));
     expect(transition, contains('send_with_entropy(prior, &mut OsEntropy)'));
     expect(transition, contains('BraidStateVariant::KeysSampled'));
+    expect(transition, contains('BraidStateVariant::HeaderSent'));
     expect(transition, contains('BraidMessageType::Header'));
     expect(
       File('specs/SCKA_TRANSITION_ENGINE.md').readAsStringSync(),

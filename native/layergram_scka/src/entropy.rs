@@ -7,6 +7,26 @@
 //! private to this crate so deterministic providers can exercise exact vectors
 //! without creating a caller-supplied-randomness seam in the future C ABI.
 
+// Layergram supports only getrandom's automatically selected operating-system
+// backend. In particular, never allow a build flag to silently replace it with
+// a custom provider, a CPU-instruction-only source, a legacy provider, or the
+// always-failing unsupported backend. This deliberately turns entropy-source
+// configuration drift into a compile-time failure.
+#[cfg(any(
+    getrandom_backend = "custom",
+    getrandom_backend = "efi_rng",
+    getrandom_backend = "rdrand",
+    getrandom_backend = "rndr",
+    getrandom_backend = "linux_getrandom",
+    getrandom_backend = "linux_raw",
+    getrandom_backend = "windows_legacy",
+    getrandom_backend = "unsupported",
+    getrandom_backend = "extern_impl",
+))]
+compile_error!(
+    "Layergram requires getrandom's default operating-system backend; opt-in backends are forbidden"
+);
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum EntropyError {
     Unavailable,

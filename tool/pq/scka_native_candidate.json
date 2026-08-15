@@ -214,10 +214,33 @@
     "version": "0.4.3",
     "checksum": "300e883d756b2e4ec94e02791f39b04b522276138852cfc41d9fb7e904106099",
     "repository": "https://github.com/rust-random/getrandom",
+    "specification": "specs/ENTROPY_SOURCES.md",
     "license": "MIT OR Apache-2.0",
     "selectedLicense": "Apache-2.0",
     "defaultFeatures": false,
     "rustVersion": "1.85",
+    "defaultOperatingSystemBackendOnly": true,
+    "fullBufferOrError": true,
+    "customBackendAllowed": false,
+    "hardwareInstructionOnlyBackendAllowed": false,
+    "unsupportedBackendAllowed": false,
+    "rejectedOptInBackends": [
+      "custom",
+      "efi_rng",
+      "rdrand",
+      "rndr",
+      "linux_getrandom",
+      "linux_raw",
+      "windows_legacy",
+      "unsupported",
+      "extern_impl"
+    ],
+    "platformSources": {
+      "linuxAndroid": "getrandom syscall; documented older-kernel fallback waits for /dev/random readiness before /dev/urandom",
+      "windows10Plus": "ProcessPrng",
+      "macos": "getentropy",
+      "ios": "CCRandomGenerateBytes"
+    },
     "runtimeOrBuildDependencyLicenses": [
       "cfg-if 1.0.4 — MIT OR Apache-2.0",
       "libc 0.2.189 — MIT OR Apache-2.0",
@@ -337,9 +360,16 @@
       "InitAlice",
       "InitBob",
       "KeysUnsampled.Send",
-      "KeysUnsampled.Receive"
+      "KeysUnsampled.Receive",
+      "KeysSampled.Send",
+      "KeysSampled.Receive"
     ],
     "firstTransitionNumber": 1,
+    "implementedTransitionNumbers": [
+      1,
+      2
+    ],
+    "deterministicGoldenVectors": true,
     "immutableAuthenticatedPrior": true,
     "detachedExactStateAndMessageCandidate": true,
     "osEntropyBytesPerKeyGeneration": 64,
@@ -365,11 +395,13 @@
     "publicMessageCodecAdded": true,
     "initialTransitionEngineSliceAdded": true,
     "operatingSystemEntropyBoundaryAdded": true,
+    "getrandomBackendOverrideGuardAdded": true,
+    "identityMnemonicFullByteRangeHardened": true,
     "protocolV3Activated": false
   },
   "remainingGates": [
     "repeat locked target-specific dependency and notice review before every packaged release",
-    "complete revision-1 transitions 2 through 13 around the frozen first transition, authenticator, and BM3 codec from the public-domain specification without copying AGPL implementation code",
+    "complete revision-1 transitions 3 through 13 around the frozen initial transitions, authenticator, and BM3 codec from the public-domain specification without copying AGPL implementation code",
     "connect the already-derived SCKA state-sealing key only after the complete state machine is approved and bind native revision atomically to TR3 revision",
     "independently review the frozen canonical LB3 plaintext state-machine payload, BM3 public-message codec, and opaque incremental-continuation version binding",
     "run upstream primitive vectors plus independent cross-implementation ML-KEM Braid vectors",

@@ -1,7 +1,7 @@
 # Layergram ML-KEM Braid public message revision 1
 
-Status: **canonical private codec frozen; first Header output connected only to
-private transition 1; public ABI not connected; protocol v3 inactive**
+Status: **canonical private codec frozen; Header output and Ct1 input connected
+only to private transitions 1-2; public ABI not connected; protocol v3 inactive**
 
 This document freezes Layergram's `BM3` representation of one logical public
 message from the public-domain [ML-KEM Braid revision-1
@@ -15,7 +15,7 @@ Layergram base that is merged into the separately distributed paid Premium
 application.
 
 `BM3` is currently a private Rust module. Its Header constructor is used by the
-private transition-1 slice, but it is not called by the C ABI, cannot be
+private initial-transition slice, but it is not called by the C ABI, cannot be
 packaged through Flutter, and does not change the scaffold's `NOT_READY`
 result.
 

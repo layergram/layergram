@@ -3,7 +3,7 @@
 Status: **inactive ABI; outer state envelope, canonical inner payload, and
 ratcheted authenticator implemented; erasure representation, canonical public
 message, and incremental primitive boundary frozen; private initialization and
-transition 1 implemented; no public transition engine or production backend;
+transitions 1-2 implemented; no public transition engine or production backend;
 protocol v3 inactive**
 
 Layergram needs an ML-KEM Braid revision-1 backend to provide the Sparse
@@ -113,14 +113,16 @@ seven revision-1 logical public-message types, preserves their internal Braid
 epoch, binds each data-bearing type to the exact erasure payload class, and
 accepts only canonical 24-byte or 58-byte records.
 
-The private first transition slice frozen in `SCKA_TRANSITION_ENGINE.md` now
+The private initial transition slice frozen in `SCKA_TRANSITION_ENGINE.md` now
 implements `InitAlice`, `InitBob`, `KeysUnsampled.Send`, and the
-`KeysUnsampled.Receive` no-op. It obtains its exact 64-byte ML-KEM seed from a
-private `getrandom` 0.4.3 operating-system entropy boundary, derives a detached
-`KeysSampled` successor, and returns the exact first `BM3 Header` symbol without
-mutating the prior. The result is deliberately not connected to LS3, the C ABI,
-Dart, Flutter, or the existing durable journals, and all exports still return
-`NOT_READY`.
+`KeysUnsampled.Receive` no-op, continues authenticated Header erasure symbols
+in `KeysSampled.Send`, and implements transition 2 from current-epoch `Ct1` to
+`HeaderSent`. The first send obtains its exact 64-byte ML-KEM seed from a
+private `getrandom` 0.4.3 operating-system entropy boundary; later Header
+symbols use persisted encoder progress without requesting new entropy. Every
+opt-in `getrandom` backend is rejected at compile time. The result is
+deliberately not connected to LS3, the C ABI, Dart, Flutter, or the existing
+durable journals, and all exports still return `NOT_READY`.
 
 ## Incremental ML-KEM primitive, inactive internal adoption
 
@@ -213,8 +215,8 @@ CocoaPods, Gradle, CMake, the Windows runner, or Flutter FFI.
 
 ## Remaining security gates
 
-- complete revision-1 transitions 2 through 13 independently from the
-  specification around the frozen first transition, authenticator, and
+- complete revision-1 transitions 3 through 13 independently from the
+  specification around the frozen initial transitions, authenticator, and
   public-message codecs;
 - generate independent public vectors and compare with a separately executed
   conforming implementation without linking its code;
