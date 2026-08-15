@@ -41,7 +41,7 @@ seven logical public-message types, their internal Braid epoch, and exact
 24/58-byte canonical encodings as specified by
 `specs/SCKA_PUBLIC_MESSAGE.md`. The private initial transition slice implements
 initialization, `KeysUnsampled.Send`, its operating-system entropy boundary,
-the matching receive no-op, continued Header and `Ek` symbols, and transitions 2-3 as specified by
+the matching receive no-op, continued Header/`Ek`/`EkCt1Ack` symbols, and transitions 2-4 as specified by
 `specs/SCKA_TRANSITION_ENGINE.md`; it remains disconnected from the ABI and
 every application package.
 

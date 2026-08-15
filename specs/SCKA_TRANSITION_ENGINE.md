@@ -1,6 +1,6 @@
 # Layergram ML-KEM Braid transition engine revision 1
 
-Status: **initialization and transitions 1-3 implemented privately; remaining
+Status: **initialization and transitions 1-4 implemented privately; remaining
 transitions and public ABI not connected; protocol v3 inactive**
 
 This document freezes the initial bounded slice of Layergram's independent
@@ -71,8 +71,19 @@ conflicting duplicates fail before a candidate is returned. Once any 30 unique
 symbols reconstruct the exact 960-byte `Ct1`, the detached successor becomes
 `Ct1Received` and retains the current `Ek` encoder index. Wrong types or epochs
 are ignored semantically while the accepted wrapper revision advances. Other
-receive and send state variants remain unimplemented and fail outside this
-private slice.
+canonical messages are ignored semantically while the accepted wrapper
+revision advances.
+
+`Ct1Received.Send` continues the same persisted `Ek` encoder and marks the
+canonical public message as `EkCt1Ack`. A lost exported copy does not roll back
+the encoder and a later committed send emits the next distinct erasure symbol.
+
+`Ct1Received.Receive` implements transition 4. The first current-epoch `Ct2`
+symbol initializes a sorted one-symbol decoder for `ct2 || mac`, discards the
+now-acknowledged `Ek` encoder, preserves the private key and exact reconstructed
+`Ct1`, and produces `EkSentCt1Received`. Wrong types or epochs are ignored
+semantically while the accepted wrapper revision advances. Other receive and
+send state variants remain unimplemented and fail outside this private slice.
 
 ## 2. Immutable candidate and unreliable transport contract
 
@@ -92,9 +103,10 @@ Therefore a native `Send` result means only **generated**, never **delivered**:
 - retry or re-export MUST reuse those exact stored bytes and MUST NOT rerun the
   randomized transition;
 - losing or not sending an exported copy does not authorize rollback or entropy
-  reuse; subsequent `KeysSampled.Send` or `HeaderSent.Send` operations provide
-  distinct erasure symbols from the persisted encoder and eventual
-  reconstruction succeeds once enough symbols actually reach the peer;
+  reuse; subsequent `KeysSampled.Send`, `HeaderSent.Send`, or
+  `Ct1Received.Send` operations provide distinct erasure symbols from the
+  persisted encoder and eventual reconstruction succeeds once enough symbols
+  actually reach the peer;
 - a Layergram authenticated ACK proves that the peer processed the bound
   Layergram message. It is not an acknowledgement from WhatsApp, Telegram,
   Signal, iMessage, or another carrier, and the ACK message can itself be lost.
@@ -102,7 +114,8 @@ Therefore a native `Send` result means only **generated**, never **delivered**:
 This checkpoint tests stable re-export, candidate reconstruction after a
 simulated restart, discarded exported copies, continuation after a lost header
 symbol, transition 2, `Ek` continuation, exact/conflicting `Ct1` duplicates,
-loss and reordering across a simulated decoder restart, and transition 3. It
+loss and reordering across a simulated decoder restart, `EkCt1Ack`
+continuation, transition 4, and canonical `Ct2` decoder restart. It
 does not yet connect native candidates to the existing durable send/receive
 journals; that atomic composition remains activation-blocking.
 
@@ -113,7 +126,7 @@ The first key-generating transition calls the private `OsEntropy` boundary in
 features disabled, rejects every documented opt-in backend at compile time, and
 maps every OS-source failure to a fail-closed entropy error. Partially filled
 seed storage is zeroized before return and no candidate is exposed on failure.
-`KeysSampled.Send` and `HeaderSent.Send` do not request new entropy.
+`KeysSampled.Send`, `HeaderSent.Send`, and `Ct1Received.Send` do not request new entropy.
 Deterministic entropy exists only as a private unit-test trait implementation
 and is not exported through the C ABI. The complete application and native
 entropy policy is frozen in `ENTROPY_SOURCES.md`.
@@ -134,10 +147,12 @@ output, one entropy request, error-before-entropy behavior, OS entropy, stable
 re-export, reconstruction, loss of an intermediate header symbol, recovery
 from later symbols without new entropy, transitions 2-3, `Ek` continuation,
 `Ct1` loss/reordering/duplicate/conflict behavior, simulated decoder restart,
-MAC/state corruption, encoder/revision exhaustion, revisioned ignored inputs,
-and frozen deterministic digests for Header continuation and transitions 2-3.
+`EkCt1Ack` continuation after a lost export, transition 4 with wrong-epoch
+filtering and `Ct2` decoder restart, MAC/state corruption, encoder/revision
+exhaustion, revisioned ignored inputs, and frozen deterministic digests for
+Header/`Ek` continuation and transitions 2-4.
 
-Activation still requires transitions 4 through 13, terminal authenticated
+Activation still requires transitions 5 through 13, terminal authenticated
 reconstruction and terminal MAC-failure behavior, encoder/decoder continuation,
 epoch-key emission and authenticator ratcheting, LS3 sealing with a unique OS
 nonce, the public C ABI and panic containment, atomic TR3/journal composition,
