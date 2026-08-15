@@ -1,7 +1,7 @@
 # Layergram ML-KEM Braid public message revision 1
 
 Status: **canonical private codec frozen; Header/Ek output and Ct1 input
-connected only to private transitions 1-5; public ABI not connected; protocol v3 inactive**
+connected only to private transitions 1-6; public ABI not connected; protocol v3 inactive**
 
 This document freezes Layergram's `BM3` representation of one logical public
 message from the public-domain [ML-KEM Braid revision-1

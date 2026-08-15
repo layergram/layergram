@@ -2,7 +2,7 @@
 
 Status: **canonical KDF and ratcheted authenticator implemented internally;
 initialization, header MAC, output-key derivation, ratcheting, and ciphertext
-verification connected only to private transitions 1-5; public
+verification connected only to private transitions 1-6; public
 ABI connection not implemented; protocol v3 inactive**
 
 This document freezes Layergram's implementation-defined domain and the
@@ -21,7 +21,9 @@ header-MAC generation, persisted-header verification, `KDF_OK`, detached
 ratcheting, and successor-key ciphertext verification as frozen in
 `SCKA_TRANSITION_ENGINE.md`. Transition 5 returns the derived epoch key only
 through the native zeroizing candidate owner and produces no successor on MAC
-failure.
+failure. Transition 6 verifies the reconstructed current-epoch header MAC
+before a `HeaderReceived` successor can exist and likewise returns no
+successor on authentication failure.
 Remaining Braid transitions, state-envelope persistence, and every C ABI
 operation are still disconnected.
 Native self-test and every correctly shaped public operation continue to return

@@ -277,9 +277,14 @@ void main() {
       'Ct1Received.Receive',
       'EkSentCt1Received.Send',
       'EkSentCt1Received.Receive',
+      'NoHeaderReceived.Send',
+      'NoHeaderReceived.Receive',
     ]);
     expect(transition['firstTransitionNumber'], 1);
-    expect(transition['implementedTransitionNumbers'], <int>[1, 2, 3, 4, 5]);
+    expect(
+      transition['implementedTransitionNumbers'],
+      <int>[1, 2, 3, 4, 5, 6],
+    );
     expect(transition['deterministicGoldenVectors'], isTrue);
     expect(transition['immutableAuthenticatedPrior'], isTrue);
     expect(transition['detachedExactStateAndMessageCandidate'], isTrue);
@@ -289,6 +294,10 @@ void main() {
     expect(transition['unreliableExternalTransportAssumed'], isTrue);
     expect(transition['zeroizingNativeEpochOutput'], isTrue);
     expect(transition['authenticationPrecedesNextEpochSuccessor'], isTrue);
+    expect(
+      transition['headerAuthenticationPrecedesHeaderReceivedSuccessor'],
+      isTrue,
+    );
     expect(transition['typedTerminalAuthenticationFailure'], isTrue);
     expect(transition['publicAbiConnected'], isFalse);
     expect(transition['durableJournalConnected'], isFalse);
@@ -312,6 +321,7 @@ void main() {
     expect(effects['transitionThreeAdded'], isTrue);
     expect(effects['transitionFourAdded'], isTrue);
     expect(effects['transitionFiveAdded'], isTrue);
+    expect(effects['transitionSixAdded'], isTrue);
     expect(effects['pubspecChanged'], isFalse);
     expect(effects['protocolV3Activated'], isFalse);
   });
@@ -521,13 +531,18 @@ void main() {
     expect(transition, contains('BraidStateVariant::HeaderSent'));
     expect(transition, contains('BraidStateVariant::Ct1Received'));
     expect(transition, contains('BraidStateVariant::EkSentCt1Received'));
+    expect(transition, contains('BraidStateVariant::NoHeaderReceived'));
+    expect(transition, contains('BraidStateVariant::HeaderReceived'));
     expect(transition, contains('BraidMessageType::Header'));
     expect(transition, contains('BraidMessageType::EncapsulationKey'));
     expect(transition, contains('receive_while_header_sent'));
     expect(transition, contains('receive_while_ct1_received'));
     expect(transition, contains('receive_while_ek_sent_ct1_received'));
+    expect(transition, contains('send_while_no_header_received'));
+    expect(transition, contains('receive_while_no_header_received'));
     expect(transition, contains('derive_output_key'));
     expect(transition, contains('successor_auth.verify_ciphertext'));
+    expect(transition, contains('authenticator.verify_header'));
     expect(transition, contains('BraidMessageType::None'));
     expect(
       File('specs/SCKA_TRANSITION_ENGINE.md').readAsStringSync(),

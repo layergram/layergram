@@ -3,7 +3,7 @@
 Status: **frozen inactive scaffold, implemented internal outer envelope,
 canonical inner payload, ratcheted authenticator, and canonical public-message
 codec; erasure representation and incremental primitive boundary frozen; no
-public transitions; private initialization and transitions 1-5 implemented;
+public transitions; private initialization and transitions 1-6 implemented;
 protocol v3 inactive**
 
 This document freezes the first Layergram-owned C ABI and authenticated state
@@ -11,7 +11,7 @@ envelope for an eventual independent implementation of ML-KEM Braid revision 1.
 The current Rust crate implements and tests the outer `LS3` envelope, inner
 `LB3` payload, revision-1 authenticator primitives, and canonical `BM3` public
 message behind internal modules. The private engine now implements
-initialization and transitions 1-5 as specified by `SCKA_TRANSITION_ENGINE.md`,
+initialization and transitions 1-6 as specified by `SCKA_TRANSITION_ENGINE.md`,
 while deliberately returning
 `LG_SCKA_V1_ERR_NOT_READY`
 from its self-test and every correctly shaped state operation. It cannot be

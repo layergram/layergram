@@ -1,6 +1,6 @@
 # Layergram ML-KEM Braid transition engine revision 1
 
-Status: **initialization and transitions 1-5 implemented privately; remaining
+Status: **initialization and transitions 1-6 implemented privately; remaining
 transitions and public ABI not connected; protocol v3 inactive**
 
 This document freezes the initial bounded slice of Layergram's independent
@@ -109,8 +109,24 @@ code from silently advancing while discarding the key. A wrong MAC returns a
 typed authentication error and no successor; the future durable session
 authority must treat it as terminal for that candidate/session. Wrong message
 types or epochs preserve semantic state while advancing only the wrapper
-revision. Other receive and send variants remain unimplemented and fail
-outside this private slice.
+revision.
+
+`NoHeaderReceived.Send` emits the canonical current-epoch no-data `BM3`
+message, preserves the exact incomplete `header || mac` decoder and
+authenticator, catches the sending high-water up to `epoch - 1`, and advances
+only the detached Layergram state revision.
+
+`NoHeaderReceived.Receive` implements transition 6. Current-epoch `Header`
+symbols are retained in sorted canonical order; exact duplicates are
+idempotent and conflicting same-index symbols fail before a candidate is
+returned. Any three unique symbols reconstruct the exact 64-byte `pk1` header
+and 32-byte MAC. The engine verifies that MAC with the current authenticator
+before it can create a `HeaderReceived` successor containing the
+authenticated `pk1` and an empty `pk2` decoder. A wrong MAC returns the typed
+authentication error, produces no successor, and leaves the authenticated
+prior immutable. Wrong message types or epochs preserve semantic state while
+the receive high-water catches up and the wrapper revision advances. Later
+state variants remain unimplemented and fail outside this private slice.
 
 ## 2. Immutable candidate and unreliable transport contract
 
@@ -146,8 +162,12 @@ continuation, transition 4, and canonical `Ct2` decoder restart. It
 also tests no-data send behavior, transition 5 reconstruction with loss,
 reverse ordering, exact duplicates and restart, output-key/authenticator
 agreement, next-epoch metadata, conflicting chunks, MAC failure, and revision
-and epoch exhaustion. It does not yet connect native candidates to the existing durable send/receive
-journals; that atomic composition remains activation-blocking.
+and epoch exhaustion. It additionally tests transition 6 no-data send, header
+reconstruction after loss/reordering/duplicate/restart, deterministic
+`HeaderReceived` state, conflicting chunks, header-MAC failure, high-water
+catch-up, and revision exhaustion. It does not yet connect native candidates
+to the existing durable send/receive journals; that atomic composition remains
+activation-blocking.
 
 ## 3. Entropy and licensing boundary
 
@@ -156,8 +176,8 @@ The first key-generating transition calls the private `OsEntropy` boundary in
 features disabled, rejects every documented opt-in backend at compile time, and
 maps every OS-source failure to a fail-closed entropy error. Partially filled
 seed storage is zeroized before return and no candidate is exposed on failure.
-`KeysSampled.Send`, `HeaderSent.Send`, `Ct1Received.Send`, and transition 5 do
-not request new entropy.
+`KeysSampled.Send`, `HeaderSent.Send`, `Ct1Received.Send`, transition 5,
+and transition 6 do not request new entropy.
 Deterministic entropy exists only as a private unit-test trait implementation
 and is not exported through the C ABI. The complete application and native
 entropy policy is frozen in `ENTROPY_SOURCES.md`.
@@ -183,9 +203,9 @@ filtering and `Ct2` decoder restart, MAC/state corruption, encoder/revision
 exhaustion, revisioned ignored inputs, no-data send, transition 5 recovery with
 loss/reordering/duplicate/restart, exact epoch-key and authenticator agreement,
 typed MAC failure, epoch exhaustion, and frozen deterministic digests for
-Header/`Ek` continuation and transitions 2-5.
+Header/`Ek` continuation and transitions 2-6.
 
-Activation still requires transitions 6 through 13, durable terminal
+Activation still requires transitions 7 through 13, durable terminal
 MAC-failure handling, remaining encoder/decoder continuation, LS3 sealing with a unique OS
 nonce, the public C ABI and panic containment, atomic TR3/journal composition,
 cross-implementation vectors, fuzzing/sanitizers, every shipped target, and an
