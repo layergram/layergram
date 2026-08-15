@@ -57,7 +57,7 @@ void main() {
       expect(application.content, _bytes(300, 0x31));
       expect(ratchet.sessionId, ready.frames.first.metadata.sessionId);
       expect(ratchet.pqCurrentEpoch, 0);
-      expect(journal.totalStateBytes, 492 + 720);
+      expect(journal.totalStateBytes, 492 + 752);
       application.wipeContent();
       ratchet.wipeSecrets();
     });
@@ -576,6 +576,7 @@ V3TripleRatchetState _concreteRatchetState(V3LmfFrame frame) {
     ecReceiveCounter: 0,
     ecPreviousSendingChainLength: 0,
     pqRootKey: _bytes(32, 0x61),
+    sckaStateSealKey: _bytes(32, 0x71),
     pqCurrentEpoch: 0,
     pqSendingEpoch: 0,
     pqReceivingEpoch: 0,

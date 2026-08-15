@@ -55,10 +55,12 @@ narrow Layergram-owned ABI. The implementation must:
 
 The public Dart boundary now requires a canonical diagnostic implementation
 ID, exact protocol revision `1`, and a successful backend self-test before each
-SCKA operation. Those checks reject malformed metadata, stale revisions, and a
-failed backend; the future provider registration must separately allowlist the
-exact approved implementation ID. None of these controls replaces
-cryptographic review.
+SCKA operation. It also supplies a separately derived state-sealing key and the
+exact expected TR3 revision, then rejects a candidate unless its authenticated
+state reports the immediately next revision. Those checks reject malformed
+metadata, wrong keys, stale/rolled-back revisions, and a failed backend; the
+future provider registration must separately allowlist the exact approved
+implementation ID. None of these controls replaces cryptographic review.
 
 The Layergram-owned Rust crate under `native/layergram_scka` now freezes the
 minimal ABI and outer authenticated state envelope described in
@@ -111,8 +113,6 @@ CocoaPods, Gradle, CMake, the Windows runner, or Flutter FFI.
 
 ## Remaining security gates
 
-- derive and persist the separate state-sealing key, then bind its native state
-  revision atomically to the exact outer TR3 revision;
 - freeze the encrypted state-machine payload after the erasure-code and
   incremental ML-KEM representations have been independently reviewed;
 - implement revision-1 state transitions independently from the specification;

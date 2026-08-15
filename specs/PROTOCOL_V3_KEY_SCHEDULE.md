@@ -309,12 +309,15 @@ state semantics. Future provider registration must separately allowlist the
 exact approved implementation ID.
 
 `SCKA_NATIVE_ABI.md` freezes the inactive Layergram-owned C ABI and outer `LS3`
-state envelope. Its separate 32-byte state-sealing key uses the reserved future
-label `"layergram/v3/session/scka-state-seal\0"`; the current session expansion
-and TR3 do not yet derive or persist that key. Therefore the Rust scaffold
-returns `NOT_READY`, is not registered, and is not linked into the app. Wiring
-the new key and requiring native-state revision equality with the serialized
-TR3 revision are activation gates, not optional hardening.
+state envelope. The session expansion derives a separate stable 32-byte
+state-sealing key with label `"layergram/v3/session/scka-state-seal\0"`. TR3
+format 2 persists that key beside, never inside, the opaque native state under
+the existing encrypted identity/passphrase scope. Every Dart backend call gets
+a temporary copy plus the exact expected TR3 revision; initialization must
+validate native revision 0 and every candidate must report exactly
+`expected_revision + 1` before it can enter the atomic TR3 effect. The Rust
+scaffold still returns `NOT_READY`, is not registered, and is not linked into
+the app.
 
 The public SCKA message uses a canonical `SK3` envelope:
 
@@ -592,17 +595,19 @@ representable. The stable external record ID remains
 ## 8. Canonical Triple Ratchet snapshot
 
 The journal's ratchet byte string is the exact binary `TR3` snapshot. It is a
-complete post-effect state, never a delta. The fixed header is 496 bytes:
+complete post-effect state, never a delta. Format 2 intentionally rejects the
+never-activated developer-only format 1 snapshot. The fixed header is 528
+bytes:
 
 | Offset | Bytes | Field |
 |---:|---:|---|
 | 0 | 3 | magic `TR3` |
-| 3 | 1 | format version `0x01` |
+| 3 | 1 | format version `0x02` |
 | 4 | 1 | suite `0x01` |
 | 5 | 1 | session role |
 | 6 | 1 | lifecycle: active `1`, suspended `2`, rekey-required `3`, broken `4` |
 | 7 | 1 | bit 0: remote EC DH public key present; bit 1: EC receiving chain present; all other bits zero |
-| 8 | 2 | header length `496` |
+| 8 | 2 | header length `528` |
 | 10 | 4 | exact total length |
 | 14 | 8 | monotonic snapshot revision |
 | 22 | 16 | session ID |
@@ -621,14 +626,15 @@ complete post-effect state, never a delta. The fixed header is 496 bytes:
 | 414 | 8 | EC receive counter |
 | 422 | 8 | EC previous sending-chain length |
 | 430 | 32 | PQ root key |
-| 462 | 8 | current PQ epoch |
-| 470 | 8 | PQ sending epoch |
-| 478 | 8 | PQ receiving epoch |
-| 486 | 1 | retained PQ epoch count, 1–2 |
-| 487 | 1 | retained EC skipped-key count, 0–50 |
-| 488 | 1 | retained PQ skipped-key count, 0–50 |
-| 489 | 3 | reserved zeros |
-| 492 | 4 | opaque native SCKA-state length, 1–196,608 |
+| 462 | 32 | stable SCKA state-sealing key |
+| 494 | 8 | current PQ epoch |
+| 502 | 8 | PQ sending epoch |
+| 510 | 8 | PQ receiving epoch |
+| 518 | 1 | retained PQ epoch count, 1–2 |
+| 519 | 1 | retained EC skipped-key count, 0–50 |
+| 520 | 1 | retained PQ skipped-key count, 0–50 |
+| 521 | 3 | reserved zeros |
+| 524 | 4 | opaque native SCKA-state length, 1–196,608 |
 
 The variable sections follow in this exact order:
 
@@ -636,6 +642,12 @@ The variable sections follow in this exact order:
 2. EC skipped keys, ordered by ratchet public key then counter;
 3. PQ skipped keys, ordered by epoch then counter;
 4. the opaque native SCKA-state export.
+
+The state-sealing key is stable for the session lineage. Session restore and
+every candidate transition pass the outer TR3 revision as the backend's exact
+expected native revision. A valid older native export therefore cannot be
+paired with a newer canonical TR3, and an EC-only diagnostic candidate cannot
+be committed by the durable session controller without native validation.
 
 Each PQ epoch record is 96 bytes:
 

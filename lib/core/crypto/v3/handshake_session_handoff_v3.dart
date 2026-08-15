@@ -852,6 +852,7 @@ abstract final class V3InitialSessionFactory {
     Uint8List? ackI2r;
     Uint8List? ackR2i;
     Uint8List? pqSeed;
+    Uint8List? sckaStateSealKey;
     Uint8List? nativeState;
     Uint8List? pqRoot;
     V3PqEpochState? pqEpoch;
@@ -870,11 +871,13 @@ abstract final class V3InitialSessionFactory {
       ackI2r = established.sessionKeys.initiatorToResponderAckRootKey;
       ackR2i = established.sessionKeys.responderToInitiatorAckRootKey;
       pqSeed = established.sessionKeys.pqRatchetRootKey;
+      sckaStateSealKey = established.sessionKeys.sckaStateSealKey;
       nativeState = await V3SparsePqRatchet.initialize(
         backend: backend,
         role: established.role,
         sessionId: sessionId,
         sharedSecret: pqSeed,
+        stateSealKey: sckaStateSealKey,
       );
       final initialPq = await V3PqMessageRatchet.deriveInitialEpoch(
         role: established.role,
@@ -909,6 +912,7 @@ abstract final class V3InitialSessionFactory {
         ecReceiveCounter: ec.receiveCounter,
         ecPreviousSendingChainLength: ec.previousSendingChainLength,
         pqRootKey: pqRoot,
+        sckaStateSealKey: sckaStateSealKey,
         pqCurrentEpoch: 0,
         pqSendingEpoch: 0,
         pqReceivingEpoch: 0,
@@ -924,6 +928,7 @@ abstract final class V3InitialSessionFactory {
       if (ackI2r != null) _wipe(ackI2r);
       if (ackR2i != null) _wipe(ackR2i);
       if (pqSeed != null) _wipe(pqSeed);
+      if (sckaStateSealKey != null) _wipe(sckaStateSealKey);
       if (nativeState != null) _wipe(nativeState);
       if (pqRoot != null) _wipe(pqRoot);
       pqEpoch?.wipeSecrets();

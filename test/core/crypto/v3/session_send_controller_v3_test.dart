@@ -114,6 +114,20 @@ void main() {
         result.assemblyId,
       });
       expect(restored.backend.sendCalls, backendCalls);
+      final restoredSnapshot = await restored.controller.snapshotForSession(
+        fixture.checkpoint.sessionId,
+      );
+      final initialSealKey = fixture.checkpoint.sckaStateSealKey;
+      final restoredSealKey = restoredSnapshot.sckaStateSealKey;
+      try {
+        expect(restoredSnapshot.revision, 1);
+        expect(restoredSealKey, initialSealKey);
+        await restored.backend.validateSnapshot(restoredSnapshot);
+      } finally {
+        _wipe(initialSealKey);
+        _wipe(restoredSealKey);
+        restoredSnapshot.wipeSecrets();
+      }
       expect(
         restored.store.records.values
             .where(
@@ -1493,11 +1507,12 @@ V3TripleRatchetState _snapshot({
     ecReceiveCounter: 0,
     ecPreviousSendingChainLength: 0,
     pqRootKey: pqRoot,
+    sckaStateSealKey: _bytes(32, 0xf1),
     pqCurrentEpoch: 0,
     pqSendingEpoch: 0,
     pqReceivingEpoch: 0,
     pqEpochStates: <V3PqEpochState>[pqEpoch],
-    nativeSckaState: _DeterministicEpochBackend.state(role, sessionId, 0),
+    nativeSckaState: _DeterministicEpochBackend.state(role, sessionId, 0, 0),
   );
 }
 
@@ -1513,16 +1528,26 @@ final class _DeterministicEpochBackend implements V3SckaBackend {
   @override
   Future<bool> selfTest() async => true;
 
-  static Uint8List state(V3SessionRole role, Uint8List sessionId, int epoch) {
-    return Uint8List.fromList(<int>[role.wireId, ...sessionId, epoch]);
+  static Uint8List state(
+    V3SessionRole role,
+    Uint8List sessionId,
+    int epoch,
+    int revision,
+  ) {
+    final result = Uint8List.fromList(<int>[
+      role.wireId,
+      ...sessionId,
+      epoch,
+      ...List<int>.filled(8, 0),
+    ]);
+    ByteData.sublistView(result).setUint64(18, revision, Endian.big);
+    return result;
   }
 
   Future<void> validateSnapshot(V3TripleRatchetState snapshot) =>
-      V3SparsePqRatchet.validateAuthenticatedState(
+      V3SparsePqRatchet.validateSnapshot(
         backend: this,
-        role: snapshot.role,
-        sessionId: snapshot.sessionId,
-        authenticatedState: snapshot.nativeSckaState,
+        snapshot: snapshot,
       );
 
   @override
@@ -1530,21 +1555,26 @@ final class _DeterministicEpochBackend implements V3SckaBackend {
     required V3SessionRole role,
     required Uint8List sessionId,
     required Uint8List sharedSecret,
+    required Uint8List stateSealKey,
   }) async =>
-      state(role, sessionId, 0);
+      state(role, sessionId, 0, 0);
 
   @override
   Future<void> validateAuthenticatedState({
     required V3SessionRole role,
     required Uint8List sessionId,
     required Uint8List authenticatedState,
+    required Uint8List stateSealKey,
+    required int expectedStateRevision,
   }) async {
-    if (authenticatedState.length != 18 ||
+    if (authenticatedState.length != 26 ||
         authenticatedState[0] != role.wireId ||
         !_bytesEqual(
           Uint8List.sublistView(authenticatedState, 1, 17),
           sessionId,
-        )) {
+        ) ||
+        ByteData.sublistView(authenticatedState).getUint64(18, Endian.big) !=
+            expectedStateRevision) {
       throw const FormatException('Test SCKA state binding mismatch');
     }
   }
@@ -1554,12 +1584,16 @@ final class _DeterministicEpochBackend implements V3SckaBackend {
     required V3SessionRole role,
     required Uint8List sessionId,
     required Uint8List authenticatedState,
+    required Uint8List stateSealKey,
+    required int expectedStateRevision,
   }) async {
     sendCalls++;
     final currentEpoch = authenticatedState[17];
     final outputEpoch = currentEpoch == 0 ? 1 : currentEpoch;
     return V3SckaSendCandidate(
-      nextAuthenticatedState: state(role, sessionId, outputEpoch),
+      nextAuthenticatedState:
+          state(role, sessionId, outputEpoch, expectedStateRevision + 1),
+      stateRevision: expectedStateRevision + 1,
       sendingEpoch: currentEpoch,
       nativePayload: Uint8List.fromList(<int>[outputEpoch]),
       epochSecret: currentEpoch == outputEpoch
@@ -1576,12 +1610,16 @@ final class _DeterministicEpochBackend implements V3SckaBackend {
     required V3SessionRole role,
     required Uint8List sessionId,
     required Uint8List authenticatedState,
+    required Uint8List stateSealKey,
+    required int expectedStateRevision,
     required V3SckaMessage message,
   }) async {
     final currentEpoch = authenticatedState[17];
     final outputEpoch = message.nativePayload.single;
     return V3SckaReceiveCandidate(
-      nextAuthenticatedState: state(role, sessionId, outputEpoch),
+      nextAuthenticatedState:
+          state(role, sessionId, outputEpoch, expectedStateRevision + 1),
+      stateRevision: expectedStateRevision + 1,
       receivingEpoch: message.sendingEpoch,
       epochSecret: outputEpoch == currentEpoch
           ? null

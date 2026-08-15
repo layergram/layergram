@@ -312,6 +312,7 @@ final class V3TripleRatchetState {
     required int ecReceiveCounter,
     required int ecPreviousSendingChainLength,
     required Uint8List pqRootKey,
+    required Uint8List sckaStateSealKey,
     required int pqCurrentEpoch,
     required int pqSendingEpoch,
     required int pqReceivingEpoch,
@@ -402,6 +403,7 @@ final class V3TripleRatchetState {
     Uint8List? checkedEcPublic;
     Uint8List? checkedEcRemote;
     Uint8List? checkedPqRoot;
+    Uint8List? checkedSckaStateSealKey;
     Uint8List? checkedNativeState;
     final epochs = <V3PqEpochState>[];
     final ecSkipped = <V3EcSkippedMessageKey>[];
@@ -461,6 +463,10 @@ final class V3TripleRatchetState {
               'ecRemoteDhPublicKey',
             );
       checkedPqRoot = _validatedSecret(pqRootKey, 'pqRootKey');
+      checkedSckaStateSealKey = _validatedSecret(
+        sckaStateSealKey,
+        'sckaStateSealKey',
+      );
       checkedNativeState = Uint8List.fromList(nativeSckaState);
       for (final value in pqEpochStates) {
         epochs.add(value._copy());
@@ -502,6 +508,7 @@ final class V3TripleRatchetState {
         ecReceiveCounter: ecReceiveCounter,
         ecPreviousSendingChainLength: ecPreviousSendingChainLength,
         pqRootKey: checkedPqRoot,
+        sckaStateSealKey: checkedSckaStateSealKey,
         pqCurrentEpoch: pqCurrentEpoch,
         pqSendingEpoch: pqSendingEpoch,
         pqReceivingEpoch: pqReceivingEpoch,
@@ -525,6 +532,7 @@ final class V3TripleRatchetState {
         checkedEcPublic,
         checkedEcRemote,
         checkedPqRoot,
+        checkedSckaStateSealKey,
         checkedNativeState,
       ]) {
         if (value != null) _wipeBytes(value);
@@ -562,6 +570,7 @@ final class V3TripleRatchetState {
     required this.ecReceiveCounter,
     required this.ecPreviousSendingChainLength,
     required Uint8List pqRootKey,
+    required Uint8List sckaStateSealKey,
     required this.pqCurrentEpoch,
     required this.pqSendingEpoch,
     required this.pqReceivingEpoch,
@@ -582,6 +591,7 @@ final class V3TripleRatchetState {
         _ecLocalDhPublicKey = ecLocalDhPublicKey,
         _ecRemoteDhPublicKey = ecRemoteDhPublicKey,
         _pqRootKey = pqRootKey,
+        _sckaStateSealKey = sckaStateSealKey,
         _pqEpochStates = pqEpochStates,
         _ecSkippedMessageKeys = ecSkippedMessageKeys,
         _pqSkippedMessageKeys = pqSkippedMessageKeys,
@@ -606,6 +616,7 @@ final class V3TripleRatchetState {
   final int ecReceiveCounter;
   final int ecPreviousSendingChainLength;
   final Uint8List _pqRootKey;
+  final Uint8List _sckaStateSealKey;
   final int pqCurrentEpoch;
   final int pqSendingEpoch;
   final int pqReceivingEpoch;
@@ -638,6 +649,7 @@ final class V3TripleRatchetState {
       _ecReceivingChainKey == null ? null : _secretCopy(_ecReceivingChainKey);
   Uint8List get ecLocalDhPrivateKey => _secretCopy(_ecLocalDhPrivateKey);
   Uint8List get pqRootKey => _secretCopy(_pqRootKey);
+  Uint8List get sckaStateSealKey => _secretCopy(_sckaStateSealKey);
   Uint8List get nativeSckaState => _secretCopy(_nativeSckaState);
 
   List<V3PqEpochState> get pqEpochStates {
@@ -671,6 +683,7 @@ final class V3TripleRatchetState {
     if (_ecReceivingChainKey != null) _wipeBytes(_ecReceivingChainKey);
     _wipeBytes(_ecLocalDhPrivateKey);
     _wipeBytes(_pqRootKey);
+    _wipeBytes(_sckaStateSealKey);
     _wipeBytes(_nativeSckaState);
     for (final value in _pqEpochStates) {
       value._wipe();
@@ -792,6 +805,7 @@ final class V3TripleRatchetState {
       ecReceiveCounter: ecReceiveCounter,
       ecPreviousSendingChainLength: ecPreviousSendingChainLength,
       pqRootKey: pqRootKey,
+      sckaStateSealKey: _sckaStateSealKey,
       pqCurrentEpoch: pqCurrentEpoch,
       pqSendingEpoch: pqSendingEpoch,
       pqReceivingEpoch: pqReceivingEpoch,
@@ -806,8 +820,8 @@ final class V3TripleRatchetState {
 /// Strict binary codec for [V3TripleRatchetState].
 abstract final class V3TripleRatchetStateCodec {
   static const List<int> magic = <int>[0x54, 0x52, 0x33]; // "TR3"
-  static const int formatVersion = 1;
-  static const int headerBytes = 496;
+  static const int formatVersion = 2;
+  static const int headerBytes = 528;
   static const int pqEpochRecordBytes = 96;
   static const int ecSkippedRecordBytes = 80;
   static const int pqSkippedRecordBytes = 56;
@@ -884,6 +898,7 @@ abstract final class V3TripleRatchetStateCodec {
     );
     offset += 8;
     offset = _writeBytes(result, offset, state._pqRootKey);
+    offset = _writeBytes(result, offset, state._sckaStateSealKey);
     data.setUint64(offset, state.pqCurrentEpoch, Endian.big);
     offset += 8;
     data.setUint64(offset, state.pqSendingEpoch, Endian.big);
@@ -1049,6 +1064,8 @@ abstract final class V3TripleRatchetStateCodec {
       offset += 8;
       final pqRoot = _copySensitive(encoded, offset, sensitive);
       offset += 32;
+      final sckaStateSealKey = _copySensitive(encoded, offset, sensitive);
+      offset += 32;
       final pqCurrentEpoch = data.getUint64(offset, Endian.big);
       offset += 8;
       final pqSendingEpoch = data.getUint64(offset, Endian.big);
@@ -1204,6 +1221,7 @@ abstract final class V3TripleRatchetStateCodec {
           ecReceiveCounter: ecReceiveCounter,
           ecPreviousSendingChainLength: ecPreviousLength,
           pqRootKey: pqRoot,
+          sckaStateSealKey: sckaStateSealKey,
           pqCurrentEpoch: pqCurrentEpoch,
           pqSendingEpoch: pqSendingEpoch,
           pqReceivingEpoch: pqReceivingEpoch,

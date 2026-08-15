@@ -107,6 +107,9 @@ It is not approved for activation and any candidate MUST:
   revision-zero TR3 before the initial checkpoint; restore MUST finish the
   same checkpoint/tombstone transition without rerunning handshake, SCKA, or
   ratchet-key generation, and no confirmation may be exported first;
+- derive one distinct transcript-bound SCKA state-sealing key, persist it only
+  beside the opaque native export inside encrypted TR3, and require the native
+  input/candidate revisions to equal the current/proposed atomic TR3 revisions;
 - create one non-exported identity/passphrase-scoped handoff capability and
   require the exact claimed object for initial-session registration,
   completion binding, and restore reconciliation; forged or competing direct

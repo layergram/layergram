@@ -2782,6 +2782,10 @@ final class V3SessionCommitController {
         !_secretGetterEqual(
           left.responderToInitiatorAckRootKey,
           right.responderToInitiatorAckRootKey,
+        ) ||
+        !_secretGetterEqual(
+          left.sckaStateSealKey,
+          right.sckaStateSealKey,
         )) {
       throw const V3LmfPersistenceConflictException(
         'v3 session effect changed stable session bindings',

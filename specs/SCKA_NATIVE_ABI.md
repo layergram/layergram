@@ -78,10 +78,13 @@ identity/passphrase scope as TR3. It is stable for the session lifetime and is
 not the mutable PQ root. The native AEAD additionally binds the stable session
 ID and role, so the same session key cannot authorize another role or session.
 
-The current Dart key schedule and TR3 do not yet contain this key. That missing
-wiring is intentional: the scaffold self-test remains `NOT_READY`, and provider
-registration is forbidden until the derivation, persistence, restore, wipe,
-and crash-window tests are complete.
+The Dart key schedule now derives this key, and TR3 format 2 persists it as a
+separately named secret beside the opaque native export under the encrypted
+identity/passphrase scope. The defensive Dart adapter supplies temporary copies
+of the key and exact expected TR3 revision to every backend operation, wipes
+them afterward, and rejects a candidate unless it reports the immediately next
+revision. The scaffold self-test remains `NOT_READY`; provider registration is
+still forbidden until the remaining implementation and audit gates pass.
 
 ## 3. Canonical `LS3` authenticated state export
 
@@ -192,8 +195,6 @@ The backend remains unregistrable until all of the following are complete:
 - independent state-payload format and erasure-code selection;
 - pinned permissively licensed dependencies and notices in `Cargo.lock`;
 - independent ML-KEM Braid revision-1 implementation and conformance vectors;
-- state-sealing key derivation, TR3 persistence, restore, and atomic revision
-  binding;
 - production self-tests that return `OK` only for the approved implementation;
 - per-platform production linking with an exact implementation-ID allowlist;
 - full security testing and an independent cryptographic/implementation audit.

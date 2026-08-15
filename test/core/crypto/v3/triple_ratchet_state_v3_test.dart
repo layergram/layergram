@@ -8,7 +8,8 @@ import 'package:layergram/core/crypto/v3/triple_ratchet_state_v3.dart';
 void main() {
   group('protocol v3 Triple Ratchet state codec', () {
     test('publishes bounded canonical state limits', () {
-      expect(V3TripleRatchetStateCodec.headerBytes, 496);
+      expect(V3TripleRatchetStateCodec.formatVersion, 2);
+      expect(V3TripleRatchetStateCodec.headerBytes, 528);
       expect(V3TripleRatchetStateCodec.pqEpochRecordBytes, 96);
       expect(V3TripleRatchetStateCodec.ecSkippedRecordBytes, 80);
       expect(V3TripleRatchetStateCodec.pqSkippedRecordBytes, 56);
@@ -20,10 +21,10 @@ void main() {
     test('round-trips a complete snapshot with a frozen binary digest', () {
       final state = _state();
       final encoded = V3TripleRatchetStateCodec.encode(state);
-      expect(encoded, hasLength(1032));
+      expect(encoded, hasLength(1064));
       expect(
         crypto.sha256.convert(encoded).toString(),
-        '80e1674013878a56deaee2fce71e451f956dce2415a53e254f4652ae7954bf76',
+        '466dab56457d7782cb88ac0f65ed1463601b8db9a21c9887de53b48ef785e43a',
       );
 
       final decoded = V3TripleRatchetStateCodec.decode(encoded);
@@ -41,6 +42,7 @@ void main() {
       expect(decoded.ecSkippedMessageKeys, hasLength(2));
       expect(decoded.pqSkippedMessageKeys, hasLength(1));
       expect(decoded.nativeSckaState, _bytes(128, 0x44));
+      expect(decoded.sckaStateSealKey, _bytes(32, 0xe4));
       expect(V3TripleRatchetStateCodec.encode(decoded), encoded);
 
       decoded.wipeSecrets();
@@ -117,6 +119,7 @@ void main() {
       expect(candidate.pqSendingEpoch, 8);
       expect(candidate.pqReceivingEpoch, 7);
       expect(candidate.nativeSckaState, _bytes(160, 0x45));
+      expect(candidate.sckaStateSealKey, _bytes(32, 0xe4));
       final decoded = V3TripleRatchetStateCodec.decode(
         V3TripleRatchetStateCodec.encode(candidate),
       );
@@ -189,14 +192,14 @@ void main() {
       final encoded = V3TripleRatchetStateCodec.encode(state);
       for (final changed in <Uint8List>[
         Uint8List.fromList(encoded)..[0] = 0,
-        Uint8List.fromList(encoded)..[3] = 2,
+        Uint8List.fromList(encoded)..[3] = 1,
         Uint8List.fromList(encoded)..[4] = 0xff,
         Uint8List.fromList(encoded)..[5] = 0xff,
         Uint8List.fromList(encoded)..[6] = 0xff,
         Uint8List.fromList(encoded)..[7] |= 0x80,
         Uint8List.fromList(encoded)..[9] = 0,
         Uint8List.fromList(encoded)..[13] ^= 1,
-        Uint8List.fromList(encoded)..[489] = 1,
+        Uint8List.fromList(encoded)..[521] = 1,
         Uint8List.fromList(encoded.sublist(0, encoded.length - 1)),
         Uint8List.fromList(<int>[...encoded, 0]),
       ]) {
@@ -297,6 +300,7 @@ void main() {
       expect(state.sessionId, publicSession);
       expect(() => state.ecRootKey, throwsStateError);
       expect(() => state.nativeSckaState, throwsStateError);
+      expect(() => state.sckaStateSealKey, throwsStateError);
       expect(
         () => V3TripleRatchetStateCodec.encode(state),
         throwsStateError,
@@ -327,7 +331,12 @@ void main() {
       state.wipeSecrets();
     });
 
-    test('rejects zero native state and equal directional ACK roots', () {
+    test('rejects zero native state/seal key and equal directional ACK roots',
+        () {
+      expect(
+        () => _state(sckaStateSealKey: Uint8List(32)),
+        throwsArgumentError,
+      );
       expect(
         () => _state(nativeSckaState: Uint8List(128)),
         throwsArgumentError,
@@ -351,6 +360,7 @@ V3TripleRatchetState _state({
   Uint8List? initiatorToResponderAckRootKey,
   Uint8List? responderToInitiatorAckRootKey,
   Uint8List? nativeSckaState,
+  Uint8List? sckaStateSealKey,
   bool absentReceivingChain = false,
 }) {
   final epochs = overrideEpochs ??
@@ -422,6 +432,7 @@ V3TripleRatchetState _state({
     ecReceiveCounter: absentReceivingChain ? 0 : 6,
     ecPreviousSendingChainLength: 4,
     pqRootKey: _bytes(32, 0xd2),
+    sckaStateSealKey: sckaStateSealKey ?? _bytes(32, 0xe4),
     pqCurrentEpoch: 7,
     pqSendingEpoch: 7,
     pqReceivingEpoch: 6,

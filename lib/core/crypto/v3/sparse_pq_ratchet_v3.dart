@@ -18,6 +18,7 @@ export 'hybrid_ratchet_header_v3.dart';
 
 import 'hybrid_ratchet_header_v3.dart';
 import 'key_schedule_v3.dart';
+import 'triple_ratchet_state_v3.dart';
 
 /// One epoch secret emitted by the SCKA.
 ///
@@ -62,10 +63,12 @@ final class V3SckaEpochSecret {
 final class V3SckaSendCandidate {
   factory V3SckaSendCandidate({
     required Uint8List nextAuthenticatedState,
+    required int stateRevision,
     required int sendingEpoch,
     required Uint8List nativePayload,
     V3SckaEpochSecret? epochSecret,
   }) {
+    _validateCounter(stateRevision, 'stateRevision');
     _validateCounter(sendingEpoch, 'sendingEpoch');
     final nextState = _validatedStateExport(nextAuthenticatedState);
     if (nativePayload.length > V3SckaMessageCodec.maxNativePayloadBytes) {
@@ -78,6 +81,7 @@ final class V3SckaSendCandidate {
     }
     return V3SckaSendCandidate._(
       nextAuthenticatedState: nextState,
+      stateRevision: stateRevision,
       sendingEpoch: sendingEpoch,
       nativePayload: Uint8List.fromList(nativePayload),
       epochSecret: epochSecret,
@@ -86,6 +90,7 @@ final class V3SckaSendCandidate {
 
   V3SckaSendCandidate._({
     required Uint8List nextAuthenticatedState,
+    required this.stateRevision,
     required this.sendingEpoch,
     required Uint8List nativePayload,
     required this.epochSecret,
@@ -93,6 +98,7 @@ final class V3SckaSendCandidate {
         _nativePayload = nativePayload;
 
   final Uint8List _nextAuthenticatedState;
+  final int stateRevision;
   final int sendingEpoch;
   final Uint8List _nativePayload;
   final V3SckaEpochSecret? epochSecret;
@@ -135,13 +141,16 @@ final class V3SckaSendCandidate {
 final class V3SckaReceiveCandidate {
   factory V3SckaReceiveCandidate({
     required Uint8List nextAuthenticatedState,
+    required int stateRevision,
     required int receivingEpoch,
     V3SckaEpochSecret? epochSecret,
   }) {
+    _validateCounter(stateRevision, 'stateRevision');
     _validateCounter(receivingEpoch, 'receivingEpoch');
     final nextState = _validatedStateExport(nextAuthenticatedState);
     return V3SckaReceiveCandidate._(
       nextAuthenticatedState: nextState,
+      stateRevision: stateRevision,
       receivingEpoch: receivingEpoch,
       epochSecret: epochSecret,
     );
@@ -149,11 +158,13 @@ final class V3SckaReceiveCandidate {
 
   V3SckaReceiveCandidate._({
     required Uint8List nextAuthenticatedState,
+    required this.stateRevision,
     required this.receivingEpoch,
     required this.epochSecret,
   }) : _nextAuthenticatedState = nextAuthenticatedState;
 
   final Uint8List _nextAuthenticatedState;
+  final int stateRevision;
   final int receivingEpoch;
   final V3SckaEpochSecret? epochSecret;
   bool _isClosed = false;
@@ -184,8 +195,10 @@ final class V3SckaReceiveCandidate {
 /// A conforming backend must implement the public ML-KEM Braid specification,
 /// leave every input state byte-for-byte unchanged, and return a new candidate
 /// state. Its state export must be internally versioned and authenticated to
-/// [role] and [sessionId]. Returning an opaque serialization without semantic
-/// validation or authentication does not satisfy this contract.
+/// [role], [sessionId], the separately supplied state-sealing key, and the exact
+/// expected TR3 revision. Initialization emits revision zero; send/receive emit
+/// exactly the next revision. Returning an opaque serialization without
+/// semantic validation or authentication does not satisfy this contract.
 ///
 /// No production implementation is registered yet. Therefore this interface
 /// alone does not activate or claim a post-quantum Layergram session.
@@ -211,24 +224,31 @@ abstract interface class V3SckaBackend {
     required V3SessionRole role,
     required Uint8List sessionId,
     required Uint8List sharedSecret,
+    required Uint8List stateSealKey,
   });
 
   Future<void> validateAuthenticatedState({
     required V3SessionRole role,
     required Uint8List sessionId,
     required Uint8List authenticatedState,
+    required Uint8List stateSealKey,
+    required int expectedStateRevision,
   });
 
   Future<V3SckaSendCandidate> sendCandidate({
     required V3SessionRole role,
     required Uint8List sessionId,
     required Uint8List authenticatedState,
+    required Uint8List stateSealKey,
+    required int expectedStateRevision,
   });
 
   Future<V3SckaReceiveCandidate> receiveCandidate({
     required V3SessionRole role,
     required Uint8List sessionId,
     required Uint8List authenticatedState,
+    required Uint8List stateSealKey,
+    required int expectedStateRevision,
     required V3SckaMessage message,
   });
 }
@@ -250,21 +270,29 @@ abstract final class V3SparsePqRatchet {
     required V3SessionRole role,
     required Uint8List sessionId,
     required Uint8List sharedSecret,
+    required Uint8List stateSealKey,
   }) async {
     final checkedSession = _validatedSessionId(sessionId);
     final checkedSecret = _validatedSecret(sharedSecret, 'sharedSecret');
+    final checkedStateSealKey = _validatedSecret(
+      stateSealKey,
+      'stateSealKey',
+    );
     Uint8List? backendSession;
     Uint8List? backendSecret;
+    Uint8List? backendStateSealKey;
     Uint8List? backendState;
     Uint8List? candidate;
     try {
       await _ensureBackendReady(backend);
       backendSession = Uint8List.fromList(checkedSession);
       backendSecret = Uint8List.fromList(checkedSecret);
+      backendStateSealKey = Uint8List.fromList(checkedStateSealKey);
       backendState = await backend.initializeAuthenticatedState(
         role: role,
         sessionId: backendSession,
         sharedSecret: backendSecret,
+        stateSealKey: backendStateSealKey,
       );
       candidate = _validatedStateExport(
         backendState,
@@ -274,14 +302,18 @@ abstract final class V3SparsePqRatchet {
         role: role,
         sessionId: checkedSession,
         state: candidate,
+        stateSealKey: checkedStateSealKey,
+        expectedStateRevision: 0,
       );
       final result = Uint8List.fromList(candidate);
       return result;
     } finally {
       _wipe(checkedSession);
       _wipe(checkedSecret);
+      _wipe(checkedStateSealKey);
       if (backendSession != null) _wipe(backendSession);
       if (backendSecret != null) _wipe(backendSecret);
+      if (backendStateSealKey != null) _wipe(backendStateSealKey);
       if (backendState != null) _wipe(backendState);
       if (candidate != null) _wipe(candidate);
     }
@@ -296,9 +328,16 @@ abstract final class V3SparsePqRatchet {
     required V3SessionRole role,
     required Uint8List sessionId,
     required Uint8List authenticatedState,
+    required Uint8List stateSealKey,
+    required int expectedStateRevision,
   }) async {
+    _validateCounter(expectedStateRevision, 'expectedStateRevision');
     final checkedSession = _validatedSessionId(sessionId);
     final checkedState = _validatedStateExport(authenticatedState);
+    final checkedStateSealKey = _validatedSecret(
+      stateSealKey,
+      'stateSealKey',
+    );
     try {
       await _ensureBackendReady(backend);
       await _validateBackendState(
@@ -306,10 +345,40 @@ abstract final class V3SparsePqRatchet {
         role: role,
         sessionId: checkedSession,
         state: checkedState,
+        stateSealKey: checkedStateSealKey,
+        expectedStateRevision: expectedStateRevision,
       );
     } finally {
       _wipe(checkedSession);
       _wipe(checkedState);
+      _wipe(checkedStateSealKey);
+    }
+  }
+
+  /// Validates the opaque native export against its owning canonical TR3.
+  ///
+  /// Restore paths should use this helper so the separately persisted seal key
+  /// and the outer snapshot revision cannot be omitted or substituted.
+  static Future<void> validateSnapshot({
+    required V3SckaBackend backend,
+    required V3TripleRatchetState snapshot,
+  }) async {
+    final sessionId = snapshot.sessionId;
+    final authenticatedState = snapshot.nativeSckaState;
+    final stateSealKey = snapshot.sckaStateSealKey;
+    try {
+      await validateAuthenticatedState(
+        backend: backend,
+        role: snapshot.role,
+        sessionId: sessionId,
+        authenticatedState: authenticatedState,
+        stateSealKey: stateSealKey,
+        expectedStateRevision: snapshot.revision,
+      );
+    } finally {
+      _wipe(sessionId);
+      _wipe(authenticatedState);
+      _wipe(stateSealKey);
     }
   }
 
@@ -318,11 +387,19 @@ abstract final class V3SparsePqRatchet {
     required V3SessionRole role,
     required Uint8List sessionId,
     required Uint8List authenticatedState,
+    required Uint8List stateSealKey,
+    required int expectedStateRevision,
   }) async {
+    _validateTransitionRevision(expectedStateRevision);
     final checkedSession = _validatedSessionId(sessionId);
     final checkedState = _validatedStateExport(authenticatedState);
+    final checkedStateSealKey = _validatedSecret(
+      stateSealKey,
+      'stateSealKey',
+    );
     Uint8List? backendSession;
     Uint8List? backendState;
+    Uint8List? backendStateSealKey;
     V3SckaSendCandidate? candidate;
     try {
       await _ensureBackendReady(backend);
@@ -331,14 +408,22 @@ abstract final class V3SparsePqRatchet {
         role: role,
         sessionId: checkedSession,
         state: checkedState,
+        stateSealKey: checkedStateSealKey,
+        expectedStateRevision: expectedStateRevision,
       );
       backendSession = Uint8List.fromList(checkedSession);
       backendState = Uint8List.fromList(checkedState);
+      backendStateSealKey = Uint8List.fromList(checkedStateSealKey);
       candidate = await backend.sendCandidate(
         role: role,
         sessionId: backendSession,
         authenticatedState: backendState,
+        stateSealKey: backendStateSealKey,
+        expectedStateRevision: expectedStateRevision,
       );
+      if (candidate.stateRevision != expectedStateRevision + 1) {
+        throw StateError('Layergram v3 SCKA send revision mismatch');
+      }
       final nextState = candidate.nextAuthenticatedState;
       try {
         await _validateBackendState(
@@ -346,6 +431,8 @@ abstract final class V3SparsePqRatchet {
           role: role,
           sessionId: checkedSession,
           state: nextState,
+          stateSealKey: checkedStateSealKey,
+          expectedStateRevision: candidate.stateRevision,
         );
       } finally {
         _wipe(nextState);
@@ -357,8 +444,10 @@ abstract final class V3SparsePqRatchet {
       candidate?.close();
       _wipe(checkedSession);
       _wipe(checkedState);
+      _wipe(checkedStateSealKey);
       if (backendSession != null) _wipe(backendSession);
       if (backendState != null) _wipe(backendState);
+      if (backendStateSealKey != null) _wipe(backendStateSealKey);
     }
   }
 
@@ -367,12 +456,20 @@ abstract final class V3SparsePqRatchet {
     required V3SessionRole role,
     required Uint8List sessionId,
     required Uint8List authenticatedState,
+    required Uint8List stateSealKey,
+    required int expectedStateRevision,
     required V3SckaMessage message,
   }) async {
+    _validateTransitionRevision(expectedStateRevision);
     final checkedSession = _validatedSessionId(sessionId);
     final checkedState = _validatedStateExport(authenticatedState);
+    final checkedStateSealKey = _validatedSecret(
+      stateSealKey,
+      'stateSealKey',
+    );
     Uint8List? backendSession;
     Uint8List? backendState;
+    Uint8List? backendStateSealKey;
     V3SckaReceiveCandidate? candidate;
     try {
       await _ensureBackendReady(backend);
@@ -381,15 +478,23 @@ abstract final class V3SparsePqRatchet {
         role: role,
         sessionId: checkedSession,
         state: checkedState,
+        stateSealKey: checkedStateSealKey,
+        expectedStateRevision: expectedStateRevision,
       );
       backendSession = Uint8List.fromList(checkedSession);
       backendState = Uint8List.fromList(checkedState);
+      backendStateSealKey = Uint8List.fromList(checkedStateSealKey);
       candidate = await backend.receiveCandidate(
         role: role,
         sessionId: backendSession,
         authenticatedState: backendState,
+        stateSealKey: backendStateSealKey,
+        expectedStateRevision: expectedStateRevision,
         message: message,
       );
+      if (candidate.stateRevision != expectedStateRevision + 1) {
+        throw StateError('Layergram v3 SCKA receive revision mismatch');
+      }
       if (candidate.receivingEpoch != message.sendingEpoch) {
         throw StateError('Layergram v3 SCKA backend changed receiving epoch');
       }
@@ -400,6 +505,8 @@ abstract final class V3SparsePqRatchet {
           role: role,
           sessionId: checkedSession,
           state: nextState,
+          stateSealKey: checkedStateSealKey,
+          expectedStateRevision: candidate.stateRevision,
         );
       } finally {
         _wipe(nextState);
@@ -411,8 +518,10 @@ abstract final class V3SparsePqRatchet {
       candidate?.close();
       _wipe(checkedSession);
       _wipe(checkedState);
+      _wipe(checkedStateSealKey);
       if (backendSession != null) _wipe(backendSession);
       if (backendState != null) _wipe(backendState);
+      if (backendStateSealKey != null) _wipe(backendStateSealKey);
     }
   }
 
@@ -421,18 +530,24 @@ abstract final class V3SparsePqRatchet {
     required V3SessionRole role,
     required Uint8List sessionId,
     required Uint8List state,
+    required Uint8List stateSealKey,
+    required int expectedStateRevision,
   }) async {
     final backendSession = Uint8List.fromList(sessionId);
     final backendState = Uint8List.fromList(state);
+    final backendStateSealKey = Uint8List.fromList(stateSealKey);
     try {
       await backend.validateAuthenticatedState(
         role: role,
         sessionId: backendSession,
         authenticatedState: backendState,
+        stateSealKey: backendStateSealKey,
+        expectedStateRevision: expectedStateRevision,
       );
     } finally {
       _wipe(backendSession);
       _wipe(backendState);
+      _wipe(backendStateSealKey);
     }
   }
 
@@ -506,6 +621,13 @@ Uint8List _validatedStateExport(Uint8List value) {
 void _validateCounter(int value, String name) {
   if (value < 0 || value > 0x7fffffffffffffff) {
     throw ArgumentError.value(value, name);
+  }
+}
+
+void _validateTransitionRevision(int value) {
+  _validateCounter(value, 'expectedStateRevision');
+  if (value == 0x7fffffffffffffff) {
+    throw StateError('Layergram v3 SCKA state revision is exhausted');
   }
 }
 

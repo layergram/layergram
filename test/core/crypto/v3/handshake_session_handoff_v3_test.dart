@@ -94,12 +94,23 @@ void main() {
       final responderReceiving = responderEpoch.receivingChainKey!;
       final initiatorSession = initiatorSnapshot.sessionId;
       final responderSession = responderSnapshot.sessionId;
+      final initiatorSealKey = initiatorSnapshot.sckaStateSealKey;
+      final responderSealKey = responderSnapshot.sckaStateSealKey;
       try {
         expect(initiatorSession, orderedEquals(responderSession));
         expect(initiatorSending, orderedEquals(responderReceiving));
         expect(initiatorReceiving, orderedEquals(responderSending));
         expect(initiatorSnapshot.revision, 0);
         expect(responderSnapshot.revision, 0);
+        expect(initiatorSealKey, orderedEquals(responderSealKey));
+        await V3SparsePqRatchet.validateSnapshot(
+          backend: scka,
+          snapshot: initiatorSnapshot,
+        );
+        await V3SparsePqRatchet.validateSnapshot(
+          backend: scka,
+          snapshot: responderSnapshot,
+        );
       } finally {
         initiatorSending.fillRange(0, initiatorSending.length, 0);
         initiatorReceiving.fillRange(0, initiatorReceiving.length, 0);
@@ -107,6 +118,8 @@ void main() {
         responderReceiving.fillRange(0, responderReceiving.length, 0);
         initiatorSession.fillRange(0, initiatorSession.length, 0);
         responderSession.fillRange(0, responderSession.length, 0);
+        initiatorSealKey.fillRange(0, initiatorSealKey.length, 0);
+        responderSealKey.fillRange(0, responderSealKey.length, 0);
         initiatorEpoch.wipeSecrets();
         responderEpoch.wipeSecrets();
         initiatorSnapshot.wipeSecrets();
@@ -785,6 +798,7 @@ final class _InitialSckaBackend implements V3SckaBackend {
     required V3SessionRole role,
     required Uint8List sessionId,
     required Uint8List sharedSecret,
+    required Uint8List stateSealKey,
   }) async {
     initializeCount++;
     return Uint8List.fromList(
@@ -793,6 +807,7 @@ final class _InitialSckaBackend implements V3SckaBackend {
         role.wireId,
         ...sessionId,
         ...sharedSecret,
+        ...stateSealKey,
       ]).bytes,
     );
   }
@@ -802,10 +817,13 @@ final class _InitialSckaBackend implements V3SckaBackend {
     required V3SessionRole role,
     required Uint8List sessionId,
     required Uint8List authenticatedState,
+    required Uint8List stateSealKey,
+    required int expectedStateRevision,
   }) async {
     if (sessionId.length != 16 ||
         authenticatedState.length != 32 ||
-        authenticatedState.every((byte) => byte == 0)) {
+        authenticatedState.every((byte) => byte == 0) ||
+        expectedStateRevision != 0) {
       throw StateError('invalid test SCKA state');
     }
   }
@@ -815,6 +833,8 @@ final class _InitialSckaBackend implements V3SckaBackend {
     required V3SessionRole role,
     required Uint8List sessionId,
     required Uint8List authenticatedState,
+    required Uint8List stateSealKey,
+    required int expectedStateRevision,
     required V3SckaMessage message,
   }) =>
       throw UnimplementedError();
@@ -824,6 +844,8 @@ final class _InitialSckaBackend implements V3SckaBackend {
     required V3SessionRole role,
     required Uint8List sessionId,
     required Uint8List authenticatedState,
+    required Uint8List stateSealKey,
+    required int expectedStateRevision,
   }) =>
       throw UnimplementedError();
 }

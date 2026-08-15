@@ -186,6 +186,7 @@ abstract final class V3PqMessageRatchet {
     _validateSnapshotForTransition(snapshot);
     final sessionId = snapshot.sessionId;
     final nativeState = snapshot.nativeSckaState;
+    final stateSealKey = snapshot.sckaStateSealKey;
     var priorSnapshotBinding = v3TripleRatchetPriorSnapshotBinding(snapshot);
     var root = snapshot.pqRootKey;
     var epochs = snapshot.pqEpochStates.toList(growable: true);
@@ -199,6 +200,8 @@ abstract final class V3PqMessageRatchet {
         role: snapshot.role,
         sessionId: sessionId,
         authenticatedState: nativeState,
+        stateSealKey: stateSealKey,
+        expectedStateRevision: snapshot.revision,
       );
       final incorporated = await _incorporateEpochSecret(
         role: snapshot.role,
@@ -280,6 +283,7 @@ abstract final class V3PqMessageRatchet {
       scka?.close();
       _wipe(sessionId);
       _wipe(nativeState);
+      _wipe(stateSealKey);
       _wipe(root);
       if (nextNative != null) _wipe(nextNative);
       _wipe(priorSnapshotBinding);
@@ -305,6 +309,7 @@ abstract final class V3PqMessageRatchet {
     final expiresAt = nowUnixSeconds + skippedKeyLifetimeSeconds;
     final sessionId = snapshot.sessionId;
     final nativeState = snapshot.nativeSckaState;
+    final stateSealKey = snapshot.sckaStateSealKey;
     var priorSnapshotBinding = v3TripleRatchetPriorSnapshotBinding(snapshot);
     var root = snapshot.pqRootKey;
     var epochs = snapshot.pqEpochStates.toList(growable: true);
@@ -323,6 +328,8 @@ abstract final class V3PqMessageRatchet {
         role: snapshot.role,
         sessionId: sessionId,
         authenticatedState: nativeState,
+        stateSealKey: stateSealKey,
+        expectedStateRevision: snapshot.revision,
         message: message,
       );
       final incorporated = await _incorporateEpochSecret(
@@ -482,6 +489,7 @@ abstract final class V3PqMessageRatchet {
       scka?.close();
       _wipe(sessionId);
       _wipe(nativeState);
+      _wipe(stateSealKey);
       _wipe(root);
       if (nextNative != null) _wipe(nextNative);
       _wipe(priorSnapshotBinding);

@@ -29,6 +29,10 @@ void main() {
         '62be0328e19531a0631325eb567df83b0e761b485d757117dde3f1026d941468',
       );
       expect(
+        _hex(session.sckaStateSealKey),
+        'ef038cd0150a9bf5052c10aecf464c42c5bd8e1902543bf37d05f52f45e1b81a',
+      );
+      expect(
         _hex(session.initiatorToResponderAckRootKey),
         '108ea358215118864bafef48536bd78943ed3dd479cd021c73113d544c786e52',
       );
@@ -37,6 +41,7 @@ void main() {
         '2b9d4fb5b0e80dce363b7dcf4719f77a9bd0c980669ff4fa2abafc2b153c3dca',
       );
       session.close();
+      expect(() => session.sckaStateSealKey, throwsStateError);
     });
 
     test('requires both branches and binds every transcript byte', () async {
@@ -66,6 +71,20 @@ void main() {
       );
       expect(
         changedTranscript.initiatorToResponderAckRootKey,
+        isNot(baseline.initiatorToResponderAckRootKey),
+      );
+      expect(
+        changedClassical.sckaStateSealKey,
+        isNot(baseline.sckaStateSealKey),
+      );
+      expect(changedPq.sckaStateSealKey, isNot(baseline.sckaStateSealKey));
+      expect(
+        changedTranscript.sckaStateSealKey,
+        isNot(baseline.sckaStateSealKey),
+      );
+      expect(baseline.sckaStateSealKey, isNot(baseline.pqRatchetRootKey));
+      expect(
+        baseline.sckaStateSealKey,
         isNot(baseline.initiatorToResponderAckRootKey),
       );
 

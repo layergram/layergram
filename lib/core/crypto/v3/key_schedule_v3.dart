@@ -61,7 +61,7 @@ enum V3TrafficDirection {
 /// secrets and the SHA-384 digest of its complete canonical transcript. This
 /// class deliberately does not define or weaken that handshake. It expands the
 /// already authenticated inputs into independent Double Ratchet, sparse-PQ,
-/// routing, and ACK domains.
+/// SCKA-state sealing, routing, and ACK domains.
 final class V3SessionKeyMaterial {
   V3SessionKeyMaterial._({
     required Uint8List sessionId,
@@ -70,6 +70,7 @@ final class V3SessionKeyMaterial {
     required Uint8List responderRoutingBinding,
     required Uint8List ecRatchetRootKey,
     required Uint8List pqRatchetRootKey,
+    required Uint8List sckaStateSealKey,
     required Uint8List initiatorToResponderAckRootKey,
     required Uint8List responderToInitiatorAckRootKey,
   })  : _sessionId = sessionId,
@@ -78,6 +79,7 @@ final class V3SessionKeyMaterial {
         _responderRoutingBinding = responderRoutingBinding,
         _ecRatchetRootKey = ecRatchetRootKey,
         _pqRatchetRootKey = pqRatchetRootKey,
+        _sckaStateSealKey = sckaStateSealKey,
         _initiatorToResponderAckRootKey = initiatorToResponderAckRootKey,
         _responderToInitiatorAckRootKey = responderToInitiatorAckRootKey;
 
@@ -87,6 +89,7 @@ final class V3SessionKeyMaterial {
   final Uint8List _responderRoutingBinding;
   final Uint8List _ecRatchetRootKey;
   final Uint8List _pqRatchetRootKey;
+  final Uint8List _sckaStateSealKey;
   final Uint8List _initiatorToResponderAckRootKey;
   final Uint8List _responderToInitiatorAckRootKey;
 
@@ -112,6 +115,11 @@ final class V3SessionKeyMaterial {
   Uint8List get pqRatchetRootKey {
     _ensureOpen();
     return Uint8List.fromList(_pqRatchetRootKey);
+  }
+
+  Uint8List get sckaStateSealKey {
+    _ensureOpen();
+    return Uint8List.fromList(_sckaStateSealKey);
   }
 
   Uint8List get initiatorToResponderAckRootKey {
@@ -160,6 +168,7 @@ final class V3SessionKeyMaterial {
     if (_isClosed) return;
     _wipe(_ecRatchetRootKey);
     _wipe(_pqRatchetRootKey);
+    _wipe(_sckaStateSealKey);
     _wipe(_initiatorToResponderAckRootKey);
     _wipe(_responderToInitiatorAckRootKey);
     _isClosed = true;
@@ -420,6 +429,10 @@ abstract final class V3KeySchedule {
       );
       final ecRoot = await expand(_ecRatchetRootLabel, secretBytes);
       final pqRoot = await expand(_pqRatchetRootLabel, secretBytes);
+      final sckaStateSealKey = await expand(
+        _sckaStateSealLabel,
+        secretBytes,
+      );
       final ackInitiatorToResponder = await expand(
         _ackInitiatorToResponderLabel,
         secretBytes,
@@ -436,6 +449,7 @@ abstract final class V3KeySchedule {
         responderRoutingBinding: responderBinding,
         ecRatchetRootKey: ecRoot,
         pqRatchetRootKey: pqRoot,
+        sckaStateSealKey: sckaStateSealKey,
         initiatorToResponderAckRootKey: ackInitiatorToResponder,
         responderToInitiatorAckRootKey: ackResponderToInitiator,
       );
@@ -718,6 +732,8 @@ final List<int> _ecRatchetRootLabel =
     utf8.encode('layergram/v3/session/ec-ratchet-root\u0000');
 final List<int> _pqRatchetRootLabel =
     utf8.encode('layergram/v3/session/pq-ratchet-root\u0000');
+final List<int> _sckaStateSealLabel =
+    utf8.encode('layergram/v3/session/scka-state-seal\u0000');
 final List<int> _ackInitiatorToResponderLabel =
     utf8.encode('layergram/v3/session/ack/initiator-to-responder\u0000');
 final List<int> _ackResponderToInitiatorLabel =

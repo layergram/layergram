@@ -331,6 +331,7 @@ V3TripleRatchetState _snapshot({
     ecReceiveCounter: 1,
     ecPreviousSendingChainLength: 0,
     pqRootKey: _bytes(32, 0x92),
+    sckaStateSealKey: _bytes(32, 0xb2),
     pqCurrentEpoch: currentEpoch,
     pqSendingEpoch: currentEpoch,
     pqReceivingEpoch: receivingEpoch,
