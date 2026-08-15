@@ -27,12 +27,13 @@ The exact commercially compatible `libcrux-ml-kem` candidate is now pinned only
 inside the inactive native crate; it is not linked into the application.
 
 `native/layergram_scka` is an Apache-2.0 Rust scaffold with exact pinned
-permissive dependencies and notices. It freezes the inactive C ABI and `LS3`
-state envelope but deliberately returns `NOT_READY`; it is not referenced by
-application packaging or Dart FFI. The crate contains disconnected
-Layergram-owned erasure-code and incremental-ML-KEM boundary modules specified
-by `specs/SCKA_ERASURE_CODE.md` and `specs/SCKA_INCREMENTAL_MLKEM.md`. The
-complete state payload and actual ML-KEM Braid transitions remain unimplemented.
+permissive dependencies and notices. It implements the outer `LS3` AES-256-GCM
+envelope behind an internal module but deliberately returns `NOT_READY`; it is
+not referenced by application packaging or Dart FFI. The crate also contains
+disconnected Layergram-owned erasure-code and incremental-ML-KEM boundary
+modules specified by `specs/SCKA_ERASURE_CODE.md` and
+`specs/SCKA_INCREMENTAL_MLKEM.md`. The canonical plaintext state payload and
+actual ML-KEM Braid transitions remain unimplemented.
 
 ## Reproducible checks
 

@@ -10,6 +10,23 @@ dual licensed. The complete Apache License 2.0 text is the repository root
 
 | Package | Version | Selected licensing path |
 |---|---:|---|
+| `aes-gcm` | 0.10.3 | Apache-2.0 alternative |
+| `aead` | 0.5.2 | Apache-2.0 alternative |
+| `aes` | 0.8.4 | Apache-2.0 alternative |
+| `cfg-if` | 1.0.4 | Apache-2.0 alternative |
+| `cipher` | 0.4.4 | Apache-2.0 alternative |
+| `cpufeatures` | 0.2.17 | Apache-2.0 alternative |
+| `crypto-common` | 0.1.7 | Apache-2.0 alternative |
+| `ctr` | 0.9.2 | Apache-2.0 alternative |
+| `generic-array` | 0.14.7 | MIT |
+| `ghash` | 0.5.1 | Apache-2.0 alternative |
+| `inout` | 0.1.4 | Apache-2.0 alternative |
+| `opaque-debug` | 0.3.1 | Apache-2.0 alternative |
+| `polyval` | 0.6.2 | Apache-2.0 alternative |
+| `subtle` | 2.6.1 | BSD-3-Clause |
+| `typenum` | 1.20.1 | Apache-2.0 alternative |
+| `universal-hash` | 0.5.1 | Apache-2.0 alternative |
+| `version_check` | 0.9.5 | Apache-2.0 alternative |
 | `libcrux-ml-kem` | 0.0.10 | Apache-2.0 |
 | `hax-lib` | 0.3.7 | Apache-2.0 |
 | `hax-lib-macros` | 0.3.7 | Apache-2.0 |
@@ -27,15 +44,21 @@ dual licensed. The complete Apache License 2.0 text is the repository root
 | `rand_core` | 0.10.1 | Apache-2.0 alternative |
 | `zeroize` | 1.8.1 | Apache-2.0 alternative |
 
-The test-only `sha2` 0.10.9 graph (`block-buffer`, `cfg-if`, `cpufeatures`,
-`crypto-common`, `digest`, `generic-array`, `typenum`, and `version_check`) is
-not linked into release artifacts. All packages provide an Apache-2.0 licensing
-alternative except `generic-array` 0.14.7, which is MIT licensed. Its exact MIT
-license is retained at `licenses/MIT-generic-array.txt`.
+The test-only `sha2` 0.10.9 graph additionally contributes `block-buffer` and
+`digest`; those packages and `sha2` provide an Apache-2.0 licensing alternative
+and are not linked into release artifacts. `cfg-if`, `cpufeatures`,
+`crypto-common`, `generic-array`, `typenum`, and `version_check` are also used
+by the normal/build AES-GCM graph and are therefore listed above.
+`generic-array` 0.14.7 is MIT licensed; its exact license is retained at
+`licenses/MIT-generic-array.txt`.
 
 The Unicode-3.0 notice required by `unicode-ident` is retained at
 `licenses/UNICODE-3.0.txt`. Exact package checksums are pinned in `Cargo.lock`;
 locked/offline builds are required after the dependency cache is populated.
+
+The BSD-3-Clause license required by `subtle` is retained at
+`licenses/BSD-3-Clause-subtle.txt` and must accompany source and binary
+redistribution as described by that license.
 
 This inventory must be regenerated and reviewed for every dependency, feature,
 target, or toolchain change and before the crate is packaged into any public or

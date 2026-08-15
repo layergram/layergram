@@ -1,12 +1,15 @@
 # Layergram SCKA native ABI and state envelope v1
 
-Status: **frozen inactive scaffold, erasure representation, and incremental primitive boundary; no state-machine implementation; protocol v3 inactive**
+Status: **frozen inactive scaffold, implemented internal outer state envelope,
+erasure representation, and incremental primitive boundary; no state-machine
+payload or transitions; protocol v3 inactive**
 
 This document freezes the first Layergram-owned C ABI and authenticated state
 envelope for an eventual independent implementation of ML-KEM Braid revision 1.
-The current Rust crate deliberately returns `LG_SCKA_V1_ERR_NOT_READY` from its
-self-test and every correctly shaped state operation. It cannot be registered
-as a `V3SckaBackend` and does not make Layergram quantum-resistant.
+The current Rust crate implements and tests the outer `LS3` envelope only behind
+an internal module, while deliberately returning `LG_SCKA_V1_ERR_NOT_READY`
+from its self-test and every correctly shaped state operation. It cannot be
+registered as a `V3SckaBackend` and does not make Layergram quantum-resistant.
 
 The crate is Apache-2.0, pins Rust 1.87.0, and is suitable for the public
 repository that is merged into the separately distributed paid Premium
@@ -114,9 +117,13 @@ the 16-byte authentication tag is appended after its ciphertext.
 | 80 | N | AES-256-GCM ciphertext, `1..196512` bytes |
 | 80+N | 16 | AES-256-GCM authentication tag |
 
-The nonce comes from the approved operating-system CSPRNG. A candidate must be
+The nonce comes from the approved operating-system CSPRNG. The internal
+`state_envelope` module accepts that exact caller-owned nonce, uses the full
+80-byte header as AES-256-GCM AAD, authenticates before returning a
+zeroizing plaintext owner, and enforces every fixed field and size bound. It is
+not called by the ABI and does not generate randomness. A candidate must be
 sealed once and its exact bytes persisted; retry never reseals the same logical
-revision. The implementation must reject malformed length arithmetic,
+revision. The complete implementation must reject malformed length arithmetic,
 unsupported values, non-zero reserved fields, wrong session/role, an
 authentication failure, counter exhaustion, and any mismatch between header
 and decrypted state semantics.

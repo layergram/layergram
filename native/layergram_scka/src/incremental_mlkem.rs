@@ -77,7 +77,6 @@ pub(crate) struct EncapsulationPartOne {
     public_key_header: [u8; PUBLIC_KEY_HEADER_BYTES],
     state: [u8; ENCAPSULATION_STATE_BYTES],
     ciphertext: [u8; CIPHERTEXT_PART_ONE_BYTES],
-    shared_secret: IncrementalSharedSecret,
 }
 
 impl EncapsulationPartOne {
@@ -92,18 +91,39 @@ impl Drop for EncapsulationPartOne {
     }
 }
 
+/// One-shot result of the ML-KEM Braid `Encaps1` transition.
+///
+/// Revision 1 emits the epoch secret as soon as ciphertext part one is sampled.
+/// The caller may borrow that secret only while it owns this transient result,
+/// then must consume the result into the key-bound pending completion state.
+/// The shared secret is dropped and zeroized during that conversion; it is not
+/// retained in the serializable continuation state.
+pub(crate) struct EncapsulationStarted {
+    pending: EncapsulationPartOne,
+    shared_secret: IncrementalSharedSecret,
+}
+
+impl EncapsulationStarted {
+    pub(crate) fn ciphertext(&self) -> &[u8; CIPHERTEXT_PART_ONE_BYTES] {
+        self.pending.ciphertext()
+    }
+
+    pub(crate) fn shared_secret(&self) -> &[u8; SHARED_SECRET_BYTES] {
+        self.shared_secret.as_bytes()
+    }
+
+    pub(crate) fn into_pending(self) -> EncapsulationPartOne {
+        self.pending
+    }
+}
+
 pub(crate) struct EncapsulationPartTwo {
     ciphertext: [u8; CIPHERTEXT_PART_TWO_BYTES],
-    shared_secret: IncrementalSharedSecret,
 }
 
 impl EncapsulationPartTwo {
     pub(crate) fn ciphertext(&self) -> &[u8; CIPHERTEXT_PART_TWO_BYTES] {
         &self.ciphertext
-    }
-
-    pub(crate) fn shared_secret(&self) -> &[u8; SHARED_SECRET_BYTES] {
-        self.shared_secret.as_bytes()
     }
 }
 
@@ -135,7 +155,7 @@ pub(crate) fn validate_public_key(
 pub(crate) fn encapsulate_part_one_from_seed(
     public_key_header: &[u8],
     seed: &[u8],
-) -> Result<EncapsulationPartOne, IncrementalMlKemError> {
+) -> Result<EncapsulationStarted, IncrementalMlKemError> {
     let checked_public_key_header = exact_array::<PUBLIC_KEY_HEADER_BYTES>(public_key_header)?;
     let mut checked_seed = exact_array::<ENCAPSULATION_SEED_BYTES>(seed)?;
     let mut state = [0u8; ENCAPSULATION_STATE_BYTES];
@@ -149,10 +169,12 @@ pub(crate) fn encapsulate_part_one_from_seed(
     checked_seed.zeroize();
 
     match result {
-        Ok(ciphertext) => Ok(EncapsulationPartOne {
-            public_key_header: checked_public_key_header,
-            state,
-            ciphertext: ciphertext.value,
+        Ok(ciphertext) => Ok(EncapsulationStarted {
+            pending: EncapsulationPartOne {
+                public_key_header: checked_public_key_header,
+                state,
+                ciphertext: ciphertext.value,
+            },
             shared_secret: IncrementalSharedSecret {
                 bytes: shared_secret,
             },
@@ -166,22 +188,13 @@ pub(crate) fn encapsulate_part_one_from_seed(
 }
 
 pub(crate) fn encapsulate_part_two(
-    mut part_one: EncapsulationPartOne,
+    part_one: EncapsulationPartOne,
     public_key_vector: &[u8],
 ) -> Result<EncapsulationPartTwo, IncrementalMlKemError> {
     validate_public_key(&part_one.public_key_header, public_key_vector)?;
     let checked_vector = exact_array_ref::<PUBLIC_KEY_VECTOR_BYTES>(public_key_vector)?;
     let ciphertext = encapsulate2(&part_one.state, checked_vector).value;
-    let shared_secret = core::mem::replace(
-        &mut part_one.shared_secret,
-        IncrementalSharedSecret {
-            bytes: [0u8; SHARED_SECRET_BYTES],
-        },
-    );
-    Ok(EncapsulationPartTwo {
-        ciphertext,
-        shared_secret,
-    })
+    Ok(EncapsulationPartTwo { ciphertext })
 }
 
 pub(crate) fn decapsulate(
@@ -264,8 +277,10 @@ mod tests {
             "c45a699a9efcb1a799578ce95f24b063b0b9ddc0879afdb3967fd9e1e3e8c247"
         );
 
-        let first = encapsulate_part_one_from_seed(key_pair.public_key_header(), &D).unwrap();
-        let first_ciphertext = *first.ciphertext();
+        let started = encapsulate_part_one_from_seed(key_pair.public_key_header(), &D).unwrap();
+        let first_ciphertext = *started.ciphertext();
+        assert_eq!(started.shared_secret(), &EXPECTED_SHARED_SECRET);
+        let first = started.into_pending();
         let second = encapsulate_part_two(first, key_pair.public_key_vector()).unwrap();
         let mut standard_ciphertext = [0u8; CIPHERTEXT_PART_ONE_BYTES + CIPHERTEXT_PART_TWO_BYTES];
         standard_ciphertext[..CIPHERTEXT_PART_ONE_BYTES].copy_from_slice(&first_ciphertext);
@@ -274,7 +289,6 @@ mod tests {
             hex(&Sha256::digest(standard_ciphertext)),
             "0b99b2af81971943e4ef6e6f17f42be4f3caa9fea18da0f63df1d43639a74743"
         );
-        assert_eq!(second.shared_secret(), &EXPECTED_SHARED_SECRET);
         let decapsulated = decapsulate(&key_pair, &first_ciphertext, second.ciphertext()).unwrap();
         assert_eq!(decapsulated.as_bytes(), &EXPECTED_SHARED_SECRET);
     }
@@ -286,7 +300,8 @@ mod tests {
             key_pair.public_key_header(),
             &[0xaf; ENCAPSULATION_SEED_BYTES],
         )
-        .unwrap();
+        .unwrap()
+        .into_pending();
         let mut conflicting_vector = *key_pair.public_key_vector();
         conflicting_vector[0] ^= 1;
 
@@ -308,7 +323,8 @@ mod tests {
             key_pair_a.public_key_header(),
             &[0x24; ENCAPSULATION_SEED_BYTES],
         )
-        .unwrap();
+        .unwrap()
+        .into_pending();
 
         assert!(matches!(
             encapsulate_part_two(first_a, key_pair_b.public_key_vector()),
@@ -346,7 +362,8 @@ mod tests {
             key_pair.public_key_header(),
             &[0x24; ENCAPSULATION_SEED_BYTES],
         )
-        .unwrap();
+        .unwrap()
+        .into_pending();
         assert!(matches!(
             encapsulate_part_two(
                 first,
@@ -358,7 +375,8 @@ mod tests {
             key_pair.public_key_header(),
             &[0x24; ENCAPSULATION_SEED_BYTES],
         )
-        .unwrap();
+        .unwrap()
+        .into_pending();
         assert!(matches!(
             decapsulate(
                 &key_pair,

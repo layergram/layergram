@@ -1,6 +1,8 @@
 # ML-KEM Braid / SCKA backend decision
 
-Status: **inactive ABI, erasure representation, and incremental primitive boundary frozen; no production backend; protocol v3 inactive**
+Status: **inactive ABI, internal outer state envelope implemented, erasure
+representation and incremental primitive boundary frozen; no state-machine
+payload or production backend; protocol v3 inactive**
 
 Layergram needs an ML-KEM Braid revision-1 backend to provide the Sparse
 Continuous Key Agreement input to its inactive Triple Ratchet. This component
@@ -78,12 +80,21 @@ backend's inactive status.
 The exact incremental ML-KEM candidate is now adopted only behind the internal,
 non-ABI wrapper frozen in `SCKA_INCREMENTAL_MLKEM.md`. The wrapper enforces
 exact lengths and complete `pk1 + pk2` validation before the second
-encapsulation step, binds the opaque continuation state to its exact part-one
-public-key header, releases the shared secret only from the successfully
-validated completed owner, and its FIPS output matches the separately
-implemented `mlkem-native` known-answer vector. It remains unused by every
-exported SCKA operation; self-test and all shaped state operations still return
-`NOT_READY`.
+encapsulation step, and binds the opaque continuation state to its exact
+part-one public-key header. Its transient `Encaps1` result exposes the shared
+secret once, as required by revision-1 transition 7, then consumption into the
+pending completion owner drops that raw secret. Its FIPS output matches the
+separately implemented `mlkem-native` known-answer vector. It remains unused by
+every exported SCKA operation; self-test and all shaped state operations still
+return `NOT_READY`.
+
+The same inactive crate now implements the frozen outer `LS3` AES-256-GCM
+container behind an internal module. It validates exact header fields, lengths,
+role/session/revision bindings, signed-63 counters, AAD, ciphertext, and tag,
+and returns decrypted bytes only through a zeroizing owner. The caller must
+supply a fresh OS-generated nonce; the module does not generate randomness and
+is not connected to any C ABI operation. The canonical plaintext state-machine
+payload and semantic cross-checks remain the next gate.
 
 ## Incremental ML-KEM primitive, inactive internal adoption
 
@@ -119,6 +130,26 @@ target-specific graph for every release ABI and repeat the license/notice
 review. Store distribution, commercial use, source/notice obligations, and the
 proprietary Premium combination must all remain acceptable.
 
+## Authenticated state-envelope primitive, inactive internal adoption
+
+The `LS3` implementation pins `aes-gcm` 0.10.3 with default features disabled
+and only `aes,zeroize` enabled. It also pins `aes` 0.8.4 with its `zeroize`
+feature so the software and hardware-specific AES key schedules implement
+best-effort cleanup on drop. Both crates offer an Apache-2.0 licensing path.
+
+The applicable graph adds only Apache-2.0/MIT-compatible packages plus
+`subtle` 2.6.1 under BSD-3-Clause. The exact BSD text is retained at
+`native/layergram_scka/licenses/BSD-3-Clause-subtle.txt`; the package inventory
+and checksums are recorded in `Cargo.lock`, the third-party notice, and the
+machine receipt. These terms permit paid commercial distribution when their
+notice requirements are preserved, but this remains an engineering review and
+not legal advice.
+
+The internal envelope API deliberately accepts a caller-supplied nonce rather
+than adding an RNG dependency or silently choosing an entropy source. A future
+ABI implementation must obtain a fresh nonce from the approved OS CSPRNG,
+ensure one seal per candidate revision, and persist the exact sealed bytes.
+
 ## Packaging direction
 
 The future backend remains a Layergram-owned Rust static library behind the
@@ -142,9 +173,9 @@ CocoaPods, Gradle, CMake, the Windows runner, or Flutter FFI.
 
 ## Remaining security gates
 
-- freeze the encrypted state-machine payload after the now-specified erasure
-  representation and incremental ML-KEM boundary have both been independently
-  reviewed;
+- freeze the canonical plaintext state-machine payload inside the implemented
+  `LS3` envelope after the erasure representation and incremental ML-KEM
+  boundary have both been independently reviewed;
 - implement revision-1 state transitions independently from the specification;
 - generate independent public vectors and compare with a separately executed
   conforming implementation without linking its code;

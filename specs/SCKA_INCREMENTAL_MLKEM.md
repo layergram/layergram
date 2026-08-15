@@ -64,17 +64,25 @@ Layergram's wrapper enforces exact lengths at every entry point:
    seed;
 2. receive `pk1` and create ciphertext part 1 plus continuation state from exact
    32-byte encapsulation randomness;
-3. after `pk2` arrives, validate the complete `pk1 + pk2` relationship;
-4. only after successful validation, create ciphertext part 2;
-5. decapsulate only exact 960-byte and 128-byte ciphertext parts.
+3. expose the 32-byte `Encaps1` shared secret only through a transient,
+   non-clonable owner so the Braid state machine can derive the epoch key and
+   update its authenticator at revision-1 transition 7;
+4. consume that transient result into a pending completion owner, which drops
+   and zeroizes the raw shared secret while retaining the exact `pk1` and opaque
+   continuation state;
+5. after `pk2` arrives, validate the complete `pk1 + pk2` relationship;
+6. only after successful validation, create ciphertext part 2;
+7. decapsulate only exact 960-byte and 128-byte ciphertext parts.
 
 The part-one owner retains the exact `pk1` that created its opaque continuation
 state. The part-two API accepts that owner rather than a caller-supplied raw
 state/header pair, so a continuation generated for key A cannot be combined
-with an independently valid key-B pair. It consumes the part-one owner and
-returns a distinct completed owner; only that completed type exposes the shared
-secret. Validation failure drops and zeroizes the retained state and secret
-without releasing either to the caller.
+with an independently valid key-B pair. The transient `EncapsulationStarted`
+type mirrors the public-domain Braid `Encaps1` result and exposes the raw shared
+secret exactly while transition 7 is being built. Converting it to
+`EncapsulationPartOne` drops that secret; the pending state has no secret getter
+and cannot be completed without full `pk1 + pk2` validation. A completion
+failure drops and zeroizes the retained continuation state.
 
 The wrapper intentionally does not expose a function that completes
 encapsulation without validating both public-key parts. Production randomness
@@ -85,9 +93,12 @@ current deterministic seams are internal and test-only.
 
 Layergram-owned compressed private-key, continuation-state, shared-secret, and
 temporary seed buffers are zeroized on their normal Rust lifetime/error paths.
-Both encapsulation and decapsulation return shared secrets only through a
+Both `Encaps1` and decapsulation return shared secrets only through a
 non-clonable Layergram-owned object that zeroizes its 32-byte buffer on drop;
-the wrapper never returns a bare shared-secret array to its future caller.
+the wrapper never returns a bare shared-secret array to its future caller. The
+raw `Encaps1` secret is deliberately absent from the pending continuation state,
+matching the revision-1 state machine after it derives `KDF_OK` and updates the
+ratcheted authenticator.
 This is best-effort compiler/runtime hygiene, not a guarantee that registers,
 stack copies, allocator history, crash dumps, or upstream internal temporaries
 are erased. Those remain native implementation audit and platform-hardening

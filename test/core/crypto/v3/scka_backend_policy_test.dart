@@ -42,8 +42,8 @@ void main() {
     expect(scaffold['crate'], 'layergram-scka');
     expect(scaffold['license'], 'Apache-2.0');
     expect(scaffold['rustVersion'], '1.87.0');
-    expect(scaffold['cargoLockPackageCount'], 85);
-    expect(scaffold['thirdPartyDependencies'], hasLength(3));
+    expect(scaffold['cargoLockPackageCount'], 96);
+    expect(scaffold['thirdPartyDependencies'], hasLength(5));
     expect(scaffold['abiVersion'], 1);
     expect(scaffold['protocolRevision'], 1);
     expect(scaffold['stateFormatVersion'], 1);
@@ -97,11 +97,42 @@ void main() {
     );
     expect(boundary['partOneStateBoundToPublicKey'], isTrue);
     expect(
-      boundary['sharedSecretReleasedOnlyAfterPublicKeyValidation'],
+      boundary['encaps1SecretEmissionMatchesBraidRevision1'],
       isTrue,
     );
+    expect(boundary['rawSharedSecretExcludedFromPendingState'], isTrue);
     expect(boundary['independentMlKemNativeKat'], isTrue);
     expect(boundary['independentlyReviewed'], isFalse);
+
+    final envelopePrimitive =
+        receipt['authenticatedStateEnvelopePrimitive'] as Map<String, dynamic>;
+    expect(envelopePrimitive['crate'], 'aes-gcm');
+    expect(envelopePrimitive['version'], '0.10.3');
+    expect(envelopePrimitive['selectedLicense'], 'Apache-2.0');
+    expect(envelopePrimitive['defaultFeatures'], isFalse);
+    expect(envelopePrimitive['features'], <String>['aes', 'zeroize']);
+    for (final license in (envelopePrimitive['runtimeOrBuildDependencyLicenses']
+            as List<dynamic>)
+        .cast<String>()) {
+      expect(license, isNot(contains('AGPL')));
+      expect(license, isNot(contains('LGPL')));
+      expect(license, isNot(matches(RegExp(r'(^|[^A])GPL'))));
+    }
+    expect(File(envelopePrimitive['notices'] as String).existsSync(), isTrue);
+    expect(
+        File(envelopePrimitive['bsdLicense'] as String).existsSync(), isTrue);
+
+    final envelope = receipt['layergramOwnedAuthenticatedStateEnvelope']
+        as Map<String, dynamic>;
+    expect(envelope['algorithm'], 'AES-256-GCM');
+    expect(envelope['headerBytes'], 80);
+    expect(envelope['nonceBytes'], 12);
+    expect(envelope['tagBytes'], 16);
+    expect(envelope['maximumPayloadBytes'], 196512);
+    expect(envelope['headerIsAad'], isTrue);
+    expect(envelope['publicAbiConnected'], isFalse);
+    expect(envelope['stateMachinePayloadFrozen'], isFalse);
+    expect(envelope['productionRegistered'], isFalse);
 
     final effects = receipt['checkpointEffects'] as Map<String, dynamic>;
     expect(effects['thirdPartyCodeImported'], isFalse);
@@ -110,6 +141,7 @@ void main() {
     expect(effects['layergramOwnedScaffoldAdded'], isTrue);
     expect(effects['layergramOwnedErasureCodeAdded'], isTrue);
     expect(effects['incrementalMlKemBoundaryAdded'], isTrue);
+    expect(effects['authenticatedStateEnvelopeBoundaryAdded'], isTrue);
     expect(effects['pubspecChanged'], isFalse);
     expect(effects['protocolV3Activated'], isFalse);
   });
@@ -124,6 +156,20 @@ void main() {
     ).readAsStringSync();
 
     expect(manifest, contains('license = "Apache-2.0"'));
+    expect(
+      manifest,
+      contains(
+        'aes = { version = "=0.8.4", default-features = false, '
+        'features = ["zeroize"] }',
+      ),
+    );
+    expect(
+      manifest,
+      contains(
+        'aes-gcm = { version = "=0.10.3", default-features = false, '
+        'features = ["aes", "zeroize"] }',
+      ),
+    );
     expect(
       manifest,
       contains(
@@ -143,8 +189,10 @@ void main() {
     );
     expect(
       RegExp(r'^\[\[package\]\]$', multiLine: true).allMatches(lock),
-      hasLength(85),
+      hasLength(96),
     );
+    expect(lock, contains('name = "aes-gcm"'));
+    expect(lock, contains('name = "aes"'));
     expect(lock, contains('name = "libcrux-ml-kem"'));
     expect(lock, contains('name = "zeroize"'));
     expect(lock, contains('name = "sha2"'));
@@ -156,6 +204,8 @@ void main() {
     expect(notices, contains('libcrux-ml-kem'));
     expect(notices, contains('Unicode-3.0'));
     expect(notices, contains('generic-array'));
+    expect(notices, contains('subtle'));
+    expect(notices, contains('BSD-3-Clause'));
 
     for (final path in <String>[
       'pubspec.yaml',
@@ -183,11 +233,19 @@ void main() {
     ).readAsStringSync();
 
     expect(nativeEntry, contains('mod incremental_mlkem;'));
+    expect(nativeEntry, contains('mod state_envelope;'));
     expect(nativeEntry, isNot(contains('incremental_mlkem::')));
+    expect(nativeEntry, isNot(contains('state_envelope::')));
     expect(source, contains('validate_pk_bytes'));
     expect(source, contains('checked_seed.zeroize()'));
     expect(source, contains('part_one: EncapsulationPartOne'));
+    expect(source, contains('pub(crate) struct EncapsulationStarted'));
     expect(source, contains('pub(crate) struct EncapsulationPartTwo'));
+    expect(source, contains('pub(crate) fn into_pending(self)'));
+    expect(
+      File('native/layergram_scka/src/state_envelope.rs').readAsStringSync(),
+      contains('decrypt_in_place_detached'),
+    );
     expect(
       File('specs/SCKA_INCREMENTAL_MLKEM.md').readAsStringSync(),
       contains('v3 inactive'),

@@ -12,6 +12,8 @@ name = "layergram_scka"
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
+aes = { version = "=0.8.4", default-features = false, features = ["zeroize"] }
+aes-gcm = { version = "=0.10.3", default-features = false, features = ["aes", "zeroize"] }
 libcrux-ml-kem = { version = "=0.0.10", default-features = false, features = ["incremental", "mlkem768"] }
 zeroize = { version = "=1.8.1", default-features = false }
 
