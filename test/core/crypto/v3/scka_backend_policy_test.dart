@@ -55,6 +55,15 @@ void main() {
     expect(primitive['version'], '0.0.10');
     expect(primitive['license'], 'Apache-2.0');
     expect(primitive['engineeringLicenseGate'], 'pass-candidate-only');
+    final probe = primitive['rust187ApiProbe'] as Map<String, dynamic>;
+    expect(probe['result'], 'pass-isolated-not-adopted');
+    expect(probe['offlineLockedRerun'], isTrue);
+    expect(probe['pk1Bytes'], 64);
+    expect(probe['pk2Bytes'], 1152);
+    expect(probe['ciphertext1Bytes'], 960);
+    expect(probe['ciphertext2Bytes'], 128);
+    expect(probe['encapsulationStateBytes'], 2080);
+    expect(probe['sharedSecretBytes'], 32);
     final dependencyLicenses =
         primitive['runtimeOrBuildDependencyLicenses'] as List<dynamic>;
     for (final license in dependencyLicenses.cast<String>()) {
@@ -67,6 +76,7 @@ void main() {
     expect(effects['thirdPartyCodeImported'], isFalse);
     expect(effects['runtimeDependencyAdded'], isFalse);
     expect(effects['layergramOwnedScaffoldAdded'], isTrue);
+    expect(effects['layergramOwnedErasureCodeAdded'], isTrue);
     expect(effects['pubspecChanged'], isFalse);
     expect(effects['protocolV3Activated'], isFalse);
   });
@@ -103,5 +113,41 @@ void main() {
         reason: '$path must not package the inactive SCKA scaffold',
       );
     }
+  });
+
+  test('Layergram erasure code remains owned, dependency-free, and inactive',
+      () {
+    final receipt = jsonDecode(
+      File('tool/pq/scka_native_candidate.json').readAsStringSync(),
+    ) as Map<String, dynamic>;
+    final erasure =
+        receipt['layergramOwnedErasureCode'] as Map<String, dynamic>;
+
+    expect(erasure['license'], 'Apache-2.0');
+    expect(erasure['thirdPartyDependencies'], isEmpty);
+    expect(erasure['symbolBytes'], 32);
+    expect(erasure['encodedChunkBytes'], 34);
+    expect(erasure['maximumEncodingIndex'], 65534);
+    expect(erasure['maximumSourceChunks'], 36);
+    expect(erasure['runtimeConnected'], isFalse);
+    expect(erasure['independentlyReviewed'], isFalse);
+
+    final source = File(
+      'native/layergram_scka/src/erasure.rs',
+    ).readAsStringSync();
+    expect(source, contains('const FIELD_REDUCTION: u16 = 0x100b;'));
+    expect(source, contains('MAX_ENCODING_INDEX: u16 = u16::MAX - 1'));
+    expect(source, contains('ConflictingDuplicate'));
+    expect(
+      File('specs/SCKA_ERASURE_CODE.md').readAsStringSync(),
+      contains('protocol v3 inactive'),
+    );
+
+    final nativeEntry = File(
+      'native/layergram_scka/src/lib.rs',
+    ).readAsStringSync();
+    expect(nativeEntry, contains('mod erasure;'));
+    expect(nativeEntry, isNot(contains('erasure::encode_chunks(')));
+    expect(nativeEntry, isNot(contains('erasure::decode_message(')));
   });
 }

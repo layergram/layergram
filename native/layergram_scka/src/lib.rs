@@ -6,6 +6,9 @@
 use core::ffi::c_char;
 use core::ptr;
 
+#[allow(dead_code)]
+mod erasure;
+
 pub const ABI_VERSION: u32 = 1;
 pub const PROTOCOL_REVISION: u32 = 1;
 pub const STATE_FORMAT_VERSION: u32 = 1;

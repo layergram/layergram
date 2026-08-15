@@ -29,7 +29,9 @@ ML-KEM primitive candidate.
 `native/layergram_scka` is a dependency-free Apache-2.0 Rust scaffold. It
 freezes the inactive C ABI and `LS3` state envelope but deliberately returns
 `NOT_READY`; it is not referenced by application packaging or Dart FFI. The
-state payload and actual ML-KEM Braid transitions remain unimplemented.
+crate also contains the disconnected Layergram-owned erasure-code module
+specified by `specs/SCKA_ERASURE_CODE.md`. The state payload and actual ML-KEM
+Braid transitions remain unimplemented.
 
 ## Reproducible checks
 

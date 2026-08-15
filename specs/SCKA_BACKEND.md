@@ -1,6 +1,6 @@
 # ML-KEM Braid / SCKA backend decision
 
-Status: **inactive ABI scaffold frozen; no production backend; protocol v3 inactive**
+Status: **inactive ABI and erasure representation frozen; no production backend; protocol v3 inactive**
 
 Layergram needs an ML-KEM Braid revision-1 backend to provide the Sparse
 Continuous Key Agreement input to its inactive Triple Ratchet. This component
@@ -68,6 +68,13 @@ minimal ABI and outer authenticated state envelope described in
 self-test and every correctly shaped state operation return `NOT_READY`, so the
 scaffold cannot satisfy the Dart admission gate or activate protocol v3.
 
+The same crate now contains a Layergram-owned, dependency-free systematic
+Reed-Solomon encoder/decoder for the exact revision-1 public payload classes.
+`SCKA_ERASURE_CODE.md` freezes its GF(2^16) field, generator matrix, 34-byte
+chunk representation, duplicate policy, and resource limits. The module is not
+connected to the C ABI or state machine, so this progress does not change the
+backend's inactive status.
+
 ## Incremental ML-KEM primitive candidate
 
 The only primitive selected for further prototyping is
@@ -81,6 +88,15 @@ showed only Apache-2.0, MIT, and Unicode-3.0 choices in the applicable build and
 runtime graph. No GPL, AGPL, LGPL, non-commercial, or field-of-use term appeared
 in that selected feature graph. The exact observed package list is recorded in
 the machine receipt.
+
+An isolated Rust 1.87.0 probe also compiled and executed the exact serialized
+incremental ML-KEM-768 flow with these features. It confirmed the expected
+sizes: 64-byte `pk1`, 1,152-byte public-key vector, 960-byte `ct1`, 128-byte
+`ct2`, 2,080-byte encapsulation state, and matching 32-byte shared secrets.
+Upstream explicitly labels this incremental API non-standard and warns that
+misuse may be insecure. The successful probe therefore establishes API and
+toolchain feasibility only; it is not production approval or cryptographic
+validation.
 
 This is a candidate approval only. The dependency-free Layergram scaffold adds
 no third-party Cargo package and is not linked into an application binary.
@@ -113,8 +129,9 @@ CocoaPods, Gradle, CMake, the Windows runner, or Flutter FFI.
 
 ## Remaining security gates
 
-- freeze the encrypted state-machine payload after the erasure-code and
-  incremental ML-KEM representations have been independently reviewed;
+- freeze the encrypted state-machine payload after the now-specified erasure
+  representation and the incremental ML-KEM representation have both been
+  independently reviewed;
 - implement revision-1 state transitions independently from the specification;
 - generate independent public vectors and compare with a separately executed
   conforming implementation without linking its code;

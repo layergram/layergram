@@ -56,6 +56,22 @@
       "mlkem768"
     ],
     "engineeringLicenseGate": "pass-candidate-only",
+    "rust187ApiProbe": {
+      "result": "pass-isolated-not-adopted",
+      "defaultFeatures": false,
+      "features": [
+        "incremental",
+        "mlkem768"
+      ],
+      "pk1Bytes": 64,
+      "pk2Bytes": 1152,
+      "ciphertext1Bytes": 960,
+      "ciphertext2Bytes": 128,
+      "encapsulationStateBytes": 2080,
+      "sharedSecretBytes": 32,
+      "offlineLockedRerun": true
+    },
+    "upstreamApiWarning": "The incremental API is explicitly documented upstream as non-standard and potentially insecure if misused; successful compilation is not production or cryptographic approval.",
     "runtimeOrBuildDependencyLicenses": [
       "hax-lib 0.3.7 — Apache-2.0",
       "hax-lib-macros 0.3.7 — Apache-2.0",
@@ -73,10 +89,25 @@
       "rand_core 0.10.1 — MIT OR Apache-2.0"
     ]
   },
+  "layergramOwnedErasureCode": {
+    "implementation": "native/layergram_scka/src/erasure.rs",
+    "specification": "specs/SCKA_ERASURE_CODE.md",
+    "license": "Apache-2.0",
+    "thirdPartyDependencies": [],
+    "field": "GF(2^16), RFC 5510 polynomial x^16+x^12+x^3+x+1",
+    "systematicGenerator": "inverse(Vkk)*V",
+    "symbolBytes": 32,
+    "encodedChunkBytes": 34,
+    "maximumEncodingIndex": 65534,
+    "maximumSourceChunks": 36,
+    "runtimeConnected": false,
+    "independentlyReviewed": false
+  },
   "checkpointEffects": {
     "thirdPartyCodeImported": false,
     "runtimeDependencyAdded": false,
     "layergramOwnedScaffoldAdded": true,
+    "layergramOwnedErasureCodeAdded": true,
     "pubspecChanged": false,
     "protocolV3Activated": false
   },
@@ -84,7 +115,7 @@
     "verify every resolved Cargo package license, checksum, notice, and source obligation",
     "implement revision-1 state transitions from the public-domain specification without copying AGPL implementation code",
     "derive and persist the separate SCKA state-sealing key and bind native revision atomically to TR3 revision",
-    "freeze the encrypted state-machine payload after independent encoder and incremental-ML-KEM review",
+    "freeze the encrypted state-machine payload after independent review of the erasure representation and incremental-ML-KEM representation",
     "run upstream primitive vectors plus independent cross-implementation ML-KEM Braid vectors",
     "package and test every shipped Apple, Android, Windows, and Linux ABI",
     "complete fuzzing, sanitizer, crash, rollback, replay, and secret-lifecycle tests",

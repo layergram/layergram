@@ -1,6 +1,6 @@
 # Layergram SCKA native ABI and state envelope v1
 
-Status: **frozen inactive scaffold; no cryptographic implementation; protocol v3 inactive**
+Status: **frozen inactive scaffold and erasure representation; no state-machine implementation; protocol v3 inactive**
 
 This document freezes the first Layergram-owned C ABI and authenticated state
 envelope for an eventual independent implementation of ML-KEM Braid revision 1.
@@ -132,11 +132,18 @@ session backward.
 The encrypted payload must be a bounded canonical encoding with explicit
 state-machine variant, Braid internal epoch, ratcheted authenticator roots,
 incremental ML-KEM secrets, and erasure encoder/decoder state. Its complete
-field layout is not frozen by this scaffold because doing so before selecting
-and independently reviewing the encoder and incremental ML-KEM representation
-would create false compatibility. A future state-payload format revision must
-be finalized before transitions can return `OK`; it cannot reinterpret an
-existing `LS3` header or weaken its bounds.
+field layout is not frozen by this scaffold because the serialized incremental
+ML-KEM representation, recovery state, and secret-lifetime behavior have not
+yet been independently reviewed. A future state-payload format revision must be
+finalized before transitions can return `OK`; it cannot reinterpret an existing
+`LS3` header or weaken its bounds.
+
+The standalone public-message erasure representation is now frozen in
+`SCKA_ERASURE_CODE.md`, implemented without dependencies, and tested inside the
+Rust crate. It remains disconnected from all ABI operations. Freezing that
+public representation does not freeze the encrypted payload fields needed to
+resume an in-progress encoder/decoder or the serialized incremental ML-KEM
+state; those still require separate review.
 
 ## 4. ABI operations
 
@@ -192,7 +199,8 @@ macOS success never substitutes for iOS evidence.
 
 The backend remains unregistrable until all of the following are complete:
 
-- independent state-payload format and erasure-code selection;
+- independent review of the frozen erasure representation and a complete
+  state-payload format;
 - pinned permissively licensed dependencies and notices in `Cargo.lock`;
 - independent ML-KEM Braid revision-1 implementation and conformance vectors;
 - production self-tests that return `OK` only for the approved implementation;
