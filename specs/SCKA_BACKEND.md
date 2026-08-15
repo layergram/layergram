@@ -3,7 +3,7 @@
 Status: **inactive ABI; outer state envelope, canonical inner payload, and
 ratcheted authenticator implemented; erasure representation, canonical public
 message, and incremental primitive boundary frozen; private initialization and
-transitions 1-7 implemented; no public transition engine or production backend;
+transitions 1-8 implemented; no public transition engine or production backend;
 protocol v3 inactive**
 
 Layergram needs an ML-KEM Braid revision-1 backend to provide the Sparse
@@ -134,7 +134,13 @@ authenticated `pk1` and an empty `pk2` decoder. `HeaderReceived.Send`
 implements transition 7: it obtains one fresh 32-byte encapsulation seed,
 runs `Encaps1`, derives the zeroizing epoch key, ratchets the authenticator,
 emits Ct1 symbol zero, and creates the exact pending `Ct1Sampled` candidate.
-`HeaderReceived.Receive` is the revision-1 semantic no-op. The first send
+`HeaderReceived.Receive` is the revision-1 semantic no-op. `Ct1Sampled.Send`
+continues exact Ct1 symbols from persisted progress. `Ct1Sampled.Receive`
+retains incomplete `pk2` symbols canonically and implements transition 8 when
+`EkCt1Ack` arrives before completion: it discards the acknowledged Ct1 encoder
+and creates `Ct1Acknowledged` with the exact pending continuation and partial
+decoder. Completion branches remain fail-closed until transitions 9 and 10.
+The first send
 obtains its exact 64-byte ML-KEM key-generation seed from a private
 `getrandom` 0.4.3 operating-system entropy boundary; transition 7 obtains a
 separate 32-byte seed from the same boundary, while continued Header and `Ek`
@@ -234,7 +240,7 @@ CocoaPods, Gradle, CMake, the Windows runner, or Flutter FFI.
 
 ## Remaining security gates
 
-- complete revision-1 transitions 8 through 13 independently from the
+- complete revision-1 transitions 9 through 13 independently from the
   specification around the frozen initial transitions, authenticator, and
   public-message codecs;
 - generate independent public vectors and compare with a separately executed

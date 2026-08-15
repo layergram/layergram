@@ -281,11 +281,13 @@ void main() {
       'NoHeaderReceived.Receive',
       'HeaderReceived.Send',
       'HeaderReceived.Receive',
+      'Ct1Sampled.Send',
+      'Ct1Sampled.Receive',
     ]);
     expect(transition['firstTransitionNumber'], 1);
     expect(
       transition['implementedTransitionNumbers'],
-      <int>[1, 2, 3, 4, 5, 6, 7],
+      <int>[1, 2, 3, 4, 5, 6, 7, 8],
     );
     expect(transition['deterministicGoldenVectors'], isTrue);
     expect(transition['immutableAuthenticatedPrior'], isTrue);
@@ -303,6 +305,11 @@ void main() {
     );
     expect(transition['transitionSevenOutputBoundToSendCandidate'], isTrue);
     expect(transition['rawEncapsulationSharedSecretSerialized'], isFalse);
+    expect(transition['transitionEightDropsAcknowledgedCt1Encoder'], isTrue);
+    expect(
+      transition['ct1SampledCompletionFailClosedUntilTransitionsNineTen'],
+      isTrue,
+    );
     expect(transition['typedTerminalAuthenticationFailure'], isTrue);
     expect(transition['publicAbiConnected'], isFalse);
     expect(transition['durableJournalConnected'], isFalse);
@@ -328,6 +335,7 @@ void main() {
     expect(effects['transitionFiveAdded'], isTrue);
     expect(effects['transitionSixAdded'], isTrue);
     expect(effects['transitionSevenAdded'], isTrue);
+    expect(effects['transitionEightAdded'], isTrue);
     expect(effects['pubspecChanged'], isFalse);
     expect(effects['protocolV3Activated'], isFalse);
   });
@@ -539,7 +547,11 @@ void main() {
     expect(transition, contains('BraidStateVariant::EkSentCt1Received'));
     expect(transition, contains('BraidStateVariant::NoHeaderReceived'));
     expect(transition, contains('BraidStateVariant::HeaderReceived'));
+    expect(transition, contains('BraidStateVariant::Ct1Sampled'));
+    expect(transition, contains('BraidStateVariant::Ct1Acknowledged'));
     expect(transition, contains('send_while_header_received_with_entropy'));
+    expect(transition, contains('send_while_ct1_sampled'));
+    expect(transition, contains('receive_while_ct1_sampled'));
     expect(transition, contains('encapsulate_part_one_from_seed'));
     expect(transition, contains('BraidMessageType::Header'));
     expect(transition, contains('BraidMessageType::EncapsulationKey'));

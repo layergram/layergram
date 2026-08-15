@@ -1,6 +1,6 @@
 # Layergram ML-KEM Braid transition engine revision 1
 
-Status: **initialization and transitions 1-7 implemented privately; remaining
+Status: **initialization and transitions 1-8 implemented privately; remaining
 transitions and public ABI not connected; protocol v3 inactive**
 
 This document freezes the initial bounded slice of Layergram's independent
@@ -146,8 +146,25 @@ The random seed and raw shared secret are never serialized. Entropy failure or
 any later construction failure exposes no candidate and leaves the prior
 immutable. `HeaderReceived.Receive` is the revision-1 semantic no-op: it
 preserves the header, authenticator, and high-water values while advancing only
-the detached Layergram wrapper revision. Later state variants remain
-unimplemented and fail outside this private slice.
+the detached Layergram wrapper revision.
+
+`Ct1Sampled.Send` emits the next canonical current-epoch `Ct1` symbol from the
+persisted ciphertext and encoder index. It preserves the exact incomplete
+`pk2` decoder, requests no new entropy, emits no second epoch key, and advances
+only the detached encoder index and Layergram state revision.
+
+`Ct1Sampled.Receive` now implements its incomplete-decoder behavior and
+transition 8. Current-epoch `Ek` and `EkCt1Ack` symbols are retained in
+canonical sorted order; exact duplicates are idempotent and conflicting
+same-index symbols fail before a candidate exists. While `pk2` is incomplete,
+a plain `Ek` remains in `Ct1Sampled`. An `EkCt1Ack` proves that the peer has
+reconstructed `Ct1`, discards the no-longer-needed `Ct1` encoder index, and
+creates `Ct1Acknowledged` with the exact pending ML-KEM continuation and
+partial decoder. The authenticator and already-emitted epoch key do not change.
+A symbol that would complete `pk2` returns the typed
+`TransitionUnavailable` error with no candidate until transitions 9 and 10 are
+implemented; it is never misinterpreted as transition 8. Later state variants
+remain outside this private slice.
 
 ## 2. Immutable candidate and unreliable transport contract
 
@@ -167,10 +184,10 @@ Therefore a native `Send` result means only **generated**, never **delivered**:
 - retry or re-export MUST reuse those exact stored bytes and MUST NOT rerun the
   randomized transition;
 - losing or not sending an exported copy does not authorize rollback or entropy
-  reuse; subsequent `KeysSampled.Send`, `HeaderSent.Send`, or
-  `Ct1Received.Send` operations provide distinct erasure symbols from the
-  persisted encoder and eventual reconstruction succeeds once enough symbols
-  actually reach the peer;
+  reuse; subsequent `KeysSampled.Send`, `HeaderSent.Send`,
+  `Ct1Received.Send`, or `Ct1Sampled.Send` operations provide distinct erasure
+  symbols from persisted encoder progress and eventual reconstruction succeeds
+  once enough symbols actually reach the peer;
 - a Layergram authenticated ACK proves that the peer processed the bound
   Layergram message. It is not an acknowledgement from WhatsApp, Telegram,
   Signal, iMessage, or another carrier, and the ACK message can itself be lost.
@@ -190,7 +207,12 @@ catch-up, and revision exhaustion. Transition 7 additionally freezes the exact
 32-byte entropy request, Ct1 symbol zero, pending-state layout, native epoch-key
 and successor-authenticator agreement, deterministic successor digest,
 semantic receive no-op, entropy failure, revision exhaustion, and production OS
-entropy path. It does not yet connect native candidates
+entropy path. Transition 8 additionally freezes continued `Ct1` output,
+stable re-export, exact pending-continuation preservation, sorted and
+idempotent `pk2` progress, conflicting-duplicate rejection, the precise
+`Ct1Acknowledged` layout and deterministic digest, completion fail-closed until
+transitions 9/10, encoder/revision exhaustion, and canonical reconstruction
+after restart. It does not yet connect native candidates
 to the existing durable send/receive journals; that atomic composition remains
 activation-blocking.
 
@@ -206,8 +228,8 @@ The first transition requests exactly 64 bytes for ML-KEM key generation;
 transition 7 requests exactly 32 distinct bytes for encapsulation. A lost or
 unexported transition-7 candidate must be retried from its durable exact bytes,
 never recomputed with reused or replacement entropy. `KeysSampled.Send`,
-`HeaderSent.Send`, `Ct1Received.Send`, transition 5, and transition 6 do not
-request new entropy.
+`HeaderSent.Send`, `Ct1Received.Send`, `Ct1Sampled.Send`, transitions 5, 6,
+and 8 do not request new entropy.
 Deterministic entropy exists only as a private unit-test trait implementation
 and is not exported through the C ABI. The complete application and native
 entropy policy is frozen in `ENTROPY_SOURCES.md`.
@@ -233,11 +255,13 @@ filtering and `Ct2` decoder restart, MAC/state corruption, encoder/revision
 exhaustion, revisioned ignored inputs, no-data send, transition 5 recovery with
 loss/reordering/duplicate/restart, exact epoch-key and authenticator agreement,
 typed MAC failure, epoch exhaustion, transition-7 Ct1/output/authenticator
-agreement and failure paths, and frozen deterministic digests for Header/`Ek`
-continuation and transitions 2-7.
+agreement and failure paths, transition-8 loss/reordering/duplicate/conflict
+and completion-gate behavior, and frozen deterministic digests for Header/`Ek`
+continuation and transitions 2-8.
 
-Activation still requires transitions 8 through 13, durable terminal
-MAC-failure handling, remaining encoder/decoder continuation, LS3 sealing with a unique OS
-nonce, the public C ABI and panic containment, atomic TR3/journal composition,
-cross-implementation vectors, fuzzing/sanitizers, every shipped target, and an
-independent cryptographic and implementation audit.
+Activation still requires transitions 9 through 13, durable terminal
+MAC-failure and transition-unavailable handling, remaining encoder/decoder
+completion, LS3 sealing with a unique OS nonce, the public C ABI and panic
+containment, atomic TR3/journal composition, cross-implementation vectors,
+fuzzing/sanitizers, every shipped target, and an independent cryptographic and
+implementation audit.
