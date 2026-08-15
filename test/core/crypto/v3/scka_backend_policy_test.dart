@@ -287,7 +287,7 @@ void main() {
     expect(transition['firstTransitionNumber'], 1);
     expect(
       transition['implementedTransitionNumbers'],
-      <int>[1, 2, 3, 4, 5, 6, 7, 8],
+      <int>[1, 2, 3, 4, 5, 6, 7, 8, 9],
     );
     expect(transition['deterministicGoldenVectors'], isTrue);
     expect(transition['immutableAuthenticatedPrior'], isTrue);
@@ -307,7 +307,21 @@ void main() {
     expect(transition['rawEncapsulationSharedSecretSerialized'], isFalse);
     expect(transition['transitionEightDropsAcknowledgedCt1Encoder'], isTrue);
     expect(
-      transition['ct1SampledCompletionFailClosedUntilTransitionsNineTen'],
+      transition['transitionNineCompletesEncapsulation'],
+      isTrue,
+    );
+    expect(
+      transition['transitionNineFullPublicKeyIntegrityBeforeSuccessor'],
+      isTrue,
+    );
+    expect(
+      transition['transitionNineAuthenticatesCiphertextBeforeCt2State'],
+      isTrue,
+    );
+    expect(transition['transitionNineRequestsEntropy'], isFalse);
+    expect(transition['transitionNineEmitsEpochKey'], isFalse);
+    expect(
+      transition['ct1SampledPlainCompletionFailClosedUntilTransitionTen'],
       isTrue,
     );
     expect(transition['typedTerminalAuthenticationFailure'], isTrue);
@@ -336,6 +350,7 @@ void main() {
     expect(effects['transitionSixAdded'], isTrue);
     expect(effects['transitionSevenAdded'], isTrue);
     expect(effects['transitionEightAdded'], isTrue);
+    expect(effects['transitionNineAdded'], isTrue);
     expect(effects['pubspecChanged'], isFalse);
     expect(effects['protocolV3Activated'], isFalse);
   });
@@ -549,10 +564,13 @@ void main() {
     expect(transition, contains('BraidStateVariant::HeaderReceived'));
     expect(transition, contains('BraidStateVariant::Ct1Sampled'));
     expect(transition, contains('BraidStateVariant::Ct1Acknowledged'));
+    expect(transition, contains('BraidStateVariant::Ct2Sampled'));
     expect(transition, contains('send_while_header_received_with_entropy'));
     expect(transition, contains('send_while_ct1_sampled'));
     expect(transition, contains('receive_while_ct1_sampled'));
     expect(transition, contains('encapsulate_part_one_from_seed'));
+    expect(transition, contains('restore_encapsulation_part_one'));
+    expect(transition, contains('encapsulate_part_two'));
     expect(transition, contains('BraidMessageType::Header'));
     expect(transition, contains('BraidMessageType::EncapsulationKey'));
     expect(transition, contains('receive_while_header_sent'));
@@ -563,6 +581,7 @@ void main() {
     expect(transition, contains('derive_output_key'));
     expect(transition, contains('successor_auth.verify_ciphertext'));
     expect(transition, contains('authenticator.verify_header'));
+    expect(transition, contains('authenticator.mac_ciphertext'));
     expect(transition, contains('BraidMessageType::None'));
     expect(
       File('specs/SCKA_TRANSITION_ENGINE.md').readAsStringSync(),

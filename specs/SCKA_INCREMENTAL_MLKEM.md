@@ -1,7 +1,8 @@
 # Layergram incremental ML-KEM-768 boundary revision 1
 
-Status: **internal primitive adopted; key generation, keypair restoration, and
-public-vector access and decapsulation connected only to private transitions 1-5; not connected to the native ABI;
+Status: **internal primitive adopted; key generation, keypair restoration,
+public-vector access, decapsulation, and two-part encapsulation connected only
+to private transitions 1-9; not connected to the native ABI;
 protocol v3 inactive**
 
 This document freezes the Layergram-owned boundary around the incremental
@@ -14,7 +15,10 @@ state before continuing Header symbols or accepting transition 2, and derives
 `Ek` erasure symbols from that validated keypair during transitions 3-4. The
 same private engine now uses exact-length decapsulation during transition 5;
 the resulting raw shared secret remains in a zeroizing native owner and is
-immediately consumed by `KDF_OK` and the ratcheted authenticator. The
+immediately consumed by `KDF_OK` and the ratcheted authenticator. Transition 7
+starts two-part encapsulation and serializes only the secret-free pending
+continuation; transition 9 first validates the complete public key and only
+then completes `Encaps2`. The
 module is still not called by `lg_scka_v1_self_test`,
 `lg_scka_v1_initialize`, `lg_scka_v1_send`, `lg_scka_v1_receive`, or
 `lg_scka_v1_state_validate`. The native backend therefore remains `NOT_READY`,
@@ -115,9 +119,9 @@ gates.
 ## 5. Verification and activation boundary
 
 Tests freeze all sizes, exact-length rejection, full public-key validation
-before part 2, malformed-key rejection, shared-secret agreement, and exact
-public-key/ciphertext SHA-256 values from the existing independent
-`mlkem-native` FIPS vector.
+before part 2, malformed-key rejection, shared-secret agreement, transition-9
+completion through the restored pending owner, and exact public-key/ciphertext
+SHA-256 values from the existing independent `mlkem-native` FIPS vector.
 
 This checkpoint does not implement Braid epochs, erasure scheduling, MACs,
 authenticated state payloads, recovery, rollback protection, or OS entropy. It

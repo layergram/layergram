@@ -44,7 +44,9 @@ initialization, `KeysUnsampled.Send`, its operating-system entropy boundary,
 the matching receive no-op, continued Header/`Ek`/`EkCt1Ack` symbols, no-data
 output while receiving `Ct2` or an authenticated Header, transition-7 Ct1
 sampling with a native epoch key, continued Ct1 output, transition-8
-acknowledgement with incomplete public-key reconstruction, and transitions 2-8 as specified by
+acknowledgement with incomplete public-key reconstruction, transition-9
+public-key validation plus authenticated `Ct2Sampled` construction, and
+transitions 2-9 as specified by
 `specs/SCKA_TRANSITION_ENGINE.md`; it remains disconnected from the ABI and
 every application package.
 

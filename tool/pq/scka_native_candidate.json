@@ -385,7 +385,8 @@
       5,
       6,
       7,
-      8
+      8,
+      9
     ],
     "deterministicGoldenVectors": true,
     "immutableAuthenticatedPrior": true,
@@ -401,7 +402,12 @@
     "transitionSevenOutputBoundToSendCandidate": true,
     "rawEncapsulationSharedSecretSerialized": false,
     "transitionEightDropsAcknowledgedCt1Encoder": true,
-    "ct1SampledCompletionFailClosedUntilTransitionsNineTen": true,
+    "transitionNineCompletesEncapsulation": true,
+    "transitionNineFullPublicKeyIntegrityBeforeSuccessor": true,
+    "transitionNineAuthenticatesCiphertextBeforeCt2State": true,
+    "transitionNineRequestsEntropy": false,
+    "transitionNineEmitsEpochKey": false,
+    "ct1SampledPlainCompletionFailClosedUntilTransitionTen": true,
     "typedTerminalAuthenticationFailure": true,
     "publicAbiConnected": false,
     "durableJournalConnected": false,
@@ -430,11 +436,12 @@
     "transitionSixAdded": true,
     "transitionSevenAdded": true,
     "transitionEightAdded": true,
+    "transitionNineAdded": true,
     "protocolV3Activated": false
   },
   "remainingGates": [
     "repeat locked target-specific dependency and notice review before every packaged release",
-    "complete revision-1 transitions 9 through 13 around the frozen initial transitions, authenticator, and BM3 codec from the public-domain specification without copying AGPL implementation code",
+    "complete revision-1 transitions 10 through 13 around the frozen initial transitions, authenticator, and BM3 codec from the public-domain specification without copying AGPL implementation code",
     "connect the already-derived SCKA state-sealing key only after the complete state machine is approved and bind native revision atomically to TR3 revision",
     "independently review the frozen canonical LB3 plaintext state-machine payload, BM3 public-message codec, and opaque incremental-continuation version binding",
     "run upstream primitive vectors plus independent cross-implementation ML-KEM Braid vectors",

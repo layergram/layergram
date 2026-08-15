@@ -8,7 +8,7 @@
 //! (`HeaderSent.Receive`), transition 4 (`Ct1Received.Receive`), transition 5
 //! (`EkSentCt1Received.Receive`), transition 6
 //! (`NoHeaderReceived.Receive`), transition 7 (`HeaderReceived.Send`),
-//! transition 8 (`Ct1Sampled.Receive`), and the corresponding same-state
+//! transitions 8-9 (`Ct1Sampled.Receive`), and the corresponding same-state
 //! send/receive behavior from the public-domain specification. It does not
 //! mutate the authenticated prior.
 //! A send result is an owned candidate containing the exact successor and BM3
@@ -31,10 +31,11 @@ use crate::erasure::{
     ENCODED_CHUNK_BYTES, MAX_ENCODING_INDEX,
 };
 use crate::incremental_mlkem::{
-    decapsulate, encapsulate_part_one_from_seed, key_pair_from_private_key, key_pair_from_seed,
-    IncrementalMlKemError, CIPHERTEXT_PART_ONE_BYTES, CIPHERTEXT_PART_TWO_BYTES,
-    ENCAPSULATION_SEED_BYTES, ENCAPSULATION_STATE_BYTES, KEY_GENERATION_SEED_BYTES,
-    PRIVATE_KEY_BYTES, PUBLIC_KEY_HEADER_BYTES,
+    decapsulate, encapsulate_part_one_from_seed, encapsulate_part_two, key_pair_from_private_key,
+    key_pair_from_seed, restore_encapsulation_part_one, IncrementalMlKemError,
+    CIPHERTEXT_PART_ONE_BYTES, CIPHERTEXT_PART_TWO_BYTES, ENCAPSULATION_SEED_BYTES,
+    ENCAPSULATION_STATE_BYTES, KEY_GENERATION_SEED_BYTES, PRIVATE_KEY_BYTES,
+    PUBLIC_KEY_HEADER_BYTES, PUBLIC_KEY_VECTOR_BYTES,
 };
 use crate::state_envelope::{StateEnvelopeError, StateMetadata, StateRole};
 use crate::{MAX_COUNTER, SESSION_ID_BYTES};
@@ -65,6 +66,7 @@ pub(crate) enum BraidTransitionError {
     EncoderExhausted,
     Entropy,
     Authentication,
+    KeyIntegrity,
     Primitive,
     Encoding,
     TransitionUnavailable,
@@ -1354,15 +1356,16 @@ fn send_while_ct1_sampled(
     })
 }
 
-/// Implements the incomplete-decoder branches of `Ct1Sampled.Receive`,
-/// including revision-1 transition 8.
+/// Implements the `Ct1Sampled.Receive` branches through revision-1 transition
+/// 9.
 ///
 /// Current-epoch `Ek` and `EkCt1Ack` symbols are stored in canonical sorted
 /// order. Plain `Ek` remains in `Ct1Sampled`; `EkCt1Ack` proves the peer has
 /// reconstructed `ct1`, drops the no-longer-needed encoder index, and advances
-/// to `Ct1Acknowledged`. A symbol that would complete `ek_vector` is rejected
-/// without a candidate until transitions 9 and 10 are implemented, so this
-/// inactive slice cannot silently apply the wrong successor semantics.
+/// to `Ct1Acknowledged`. If that acknowledgement also completes `ek_vector`,
+/// the full public key is verified, `Encaps2` completes the ciphertext, and an
+/// authenticated `Ct2Sampled` encoder is created. Plain `Ek` completion remains
+/// rejected without a candidate until transition 10 is implemented.
 fn receive_while_ct1_sampled(
     prior: &BraidStatePayload,
     message: &BraidPublicMessage,
@@ -1418,7 +1421,59 @@ fn receive_while_ct1_sampled(
         Err(position) => chunks.insert(position, incoming.clone()),
     }
     if chunks.len() == ErasureMessageKind::MlKem768PublicKeyVector.source_chunks() {
-        return Err(BraidTransitionError::TransitionUnavailable);
+        if !acknowledges_ct1 {
+            return Err(BraidTransitionError::TransitionUnavailable);
+        }
+        let mut public_key_vector =
+            decode_message(ErasureMessageKind::MlKem768PublicKeyVector, &chunks)?;
+        if public_key_vector.len() != PUBLIC_KEY_VECTOR_BYTES {
+            public_key_vector.zeroize();
+            return Err(BraidTransitionError::Encoding);
+        }
+        let result = (|| {
+            let pending = restore_encapsulation_part_one(
+                &prior.body()[..PUBLIC_KEY_HEADER_BYTES],
+                &prior.body()[PUBLIC_KEY_HEADER_BYTES..CT1_SAMPLED_CIPHERTEXT_OFFSET],
+                &prior.body()[CT1_SAMPLED_CIPHERTEXT_OFFSET..CT1_SAMPLED_NEXT_INDEX_OFFSET],
+            )?;
+            let part_two = encapsulate_part_two(pending, &public_key_vector).map_err(|error| {
+                if error == IncrementalMlKemError::InvalidPublicKey {
+                    BraidTransitionError::KeyIntegrity
+                } else {
+                    BraidTransitionError::Primitive
+                }
+            })?;
+            let authenticator =
+                BraidAuthenticator::restore(prior.auth_root_key(), prior.auth_mac_key())?;
+            let ciphertext_part_one =
+                &prior.body()[CT1_SAMPLED_CIPHERTEXT_OFFSET..CT1_SAMPLED_NEXT_INDEX_OFFSET];
+            let ciphertext_mac = authenticator.mac_ciphertext(
+                prior.epoch(),
+                ciphertext_part_one,
+                part_two.ciphertext(),
+            )?;
+
+            let mut body = Vec::with_capacity(CT2_WITH_MAC_BYTES + 2);
+            body.extend_from_slice(part_two.ciphertext());
+            body.extend_from_slice(&ciphertext_mac);
+            body.extend_from_slice(&0_u16.to_be_bytes());
+            let successor = braid_state_payload::encode(
+                successor_metadata,
+                prior.epoch(),
+                BraidStateVariant::Ct2Sampled,
+                authenticator.root_key(),
+                authenticator.mac_key(),
+                &body,
+            );
+            body.zeroize();
+            Ok(BraidReceiveCandidate {
+                successor: successor?,
+                receiving_epoch: prior.epoch() - 1,
+                output: None,
+            })
+        })();
+        public_key_vector.zeroize();
+        return result;
     }
 
     let successor_variant = if acknowledges_ct1 {
@@ -2738,7 +2793,160 @@ mod tests {
     }
 
     #[test]
-    fn ct1_sampled_conflicts_completion_and_exhaustion_fail_before_candidate() {
+    fn transition_nine_completes_authenticated_ciphertext_after_loss_duplicate_and_restart() {
+        let key_pair = key_pair_from_seed(&[0x62; KEY_GENERATION_SEED_BYTES]).unwrap();
+        let chunks = encode_chunks(
+            ErasureMessageKind::MlKem768PublicKeyVector,
+            key_pair.public_key_vector(),
+            &(0_u16..36).collect::<Vec<_>>(),
+        )
+        .unwrap();
+        let mut state = ct1_sampled_epoch_two_state();
+        for (position, chunk) in chunks[..35].iter().rev().enumerate() {
+            let message = BraidPublicMessage::with_chunk(
+                state.epoch(),
+                BraidMessageType::EncapsulationKey,
+                chunk.clone(),
+            )
+            .unwrap();
+            state = receive(&state, &message)
+                .unwrap()
+                .into_state_only_successor()
+                .unwrap();
+            if position == 17 {
+                state = braid_state_payload::decode(state.metadata(), state.encoded()).unwrap();
+            }
+        }
+
+        let duplicate = BraidPublicMessage::with_chunk(
+            state.epoch(),
+            BraidMessageType::EncapsulationKey,
+            chunks[7].clone(),
+        )
+        .unwrap();
+        state = receive(&state, &duplicate)
+            .unwrap()
+            .into_state_only_successor()
+            .unwrap();
+        assert_eq!(
+            decode_stored_chunks(state.body(), CT1_SAMPLED_DECODER_OFFSET)
+                .unwrap()
+                .len(),
+            35
+        );
+
+        let before_completion = state.encoded().to_vec();
+        let expected_revision = state.metadata().state_revision() + 1;
+        let completing_ack = BraidPublicMessage::with_chunk(
+            state.epoch(),
+            BraidMessageType::EncapsulationKeyAndCiphertext1Ack,
+            chunks[35].clone(),
+        )
+        .unwrap();
+        let completed = receive(&state, &completing_ack).unwrap();
+
+        assert_eq!(state.encoded(), before_completion);
+        assert!(completed.output().is_none());
+        assert_eq!(completed.receiving_epoch(), 1);
+        assert_eq!(
+            completed.successor().variant(),
+            BraidStateVariant::Ct2Sampled
+        );
+        assert_eq!(
+            completed.successor().metadata().state_revision(),
+            expected_revision
+        );
+        assert_eq!(completed.successor().epoch(), state.epoch());
+        assert_eq!(completed.successor().auth_root_key(), state.auth_root_key());
+        assert_eq!(completed.successor().auth_mac_key(), state.auth_mac_key());
+        assert_eq!(
+            read_u16(completed.successor().body(), CT2_WITH_MAC_BYTES).unwrap(),
+            0
+        );
+
+        let started = encapsulate_part_one_from_seed(
+            key_pair.public_key_header(),
+            &[0x37; ENCAPSULATION_SEED_BYTES],
+        )
+        .unwrap();
+        assert_eq!(
+            started.ciphertext(),
+            &state.body()[CT1_SAMPLED_CIPHERTEXT_OFFSET..CT1_SAMPLED_NEXT_INDEX_OFFSET]
+        );
+        let expected_part_two =
+            encapsulate_part_two(started.into_pending(), key_pair.public_key_vector()).unwrap();
+        assert_eq!(
+            &completed.successor().body()[..CIPHERTEXT_PART_TWO_BYTES],
+            expected_part_two.ciphertext()
+        );
+        let authenticator =
+            BraidAuthenticator::restore(state.auth_root_key(), state.auth_mac_key()).unwrap();
+        let expected_mac = authenticator
+            .mac_ciphertext(
+                state.epoch(),
+                &state.body()[CT1_SAMPLED_CIPHERTEXT_OFFSET..CT1_SAMPLED_NEXT_INDEX_OFFSET],
+                expected_part_two.ciphertext(),
+            )
+            .unwrap();
+        assert_eq!(
+            &completed.successor().body()[CIPHERTEXT_PART_TWO_BYTES..CT2_WITH_MAC_BYTES],
+            &expected_mac
+        );
+        assert_eq!(
+            hex(&Sha256::digest(completed.successor().encoded())),
+            "ef3718923192a596aef46d8e488f1b004bbdd2a49ce3e412fec1e2597c323f4c"
+        );
+
+        let restored = braid_state_payload::decode(
+            completed.successor().metadata(),
+            completed.successor().encoded(),
+        )
+        .unwrap();
+        assert_eq!(restored.encoded(), completed.successor().encoded());
+        assert_eq!(
+            send(completed.successor()).err(),
+            Some(BraidTransitionError::InvalidState)
+        );
+    }
+
+    #[test]
+    fn transition_nine_rejects_public_key_integrity_failure_before_candidate() {
+        let conflicting_key = key_pair_from_seed(&[0x63; KEY_GENERATION_SEED_BYTES]).unwrap();
+        let chunks = encode_chunks(
+            ErasureMessageKind::MlKem768PublicKeyVector,
+            conflicting_key.public_key_vector(),
+            &(0_u16..36).collect::<Vec<_>>(),
+        )
+        .unwrap();
+        let mut state = ct1_sampled_epoch_two_state();
+        for chunk in &chunks[..35] {
+            let message = BraidPublicMessage::with_chunk(
+                state.epoch(),
+                BraidMessageType::EncapsulationKey,
+                chunk.clone(),
+            )
+            .unwrap();
+            state = receive(&state, &message)
+                .unwrap()
+                .into_state_only_successor()
+                .unwrap();
+        }
+        let before_completion = state.encoded().to_vec();
+        let completing_ack = BraidPublicMessage::with_chunk(
+            state.epoch(),
+            BraidMessageType::EncapsulationKeyAndCiphertext1Ack,
+            chunks[35].clone(),
+        )
+        .unwrap();
+        assert_eq!(
+            receive(&state, &completing_ack).err(),
+            Some(BraidTransitionError::KeyIntegrity)
+        );
+        assert_eq!(state.encoded(), before_completion);
+    }
+
+    #[test]
+    fn ct1_sampled_conflicts_plain_completion_and_exhaustion_fail_before_candidate() {
         let initial = ct1_sampled_epoch_two_state();
         let key_pair = key_pair_from_seed(&[0x62; KEY_GENERATION_SEED_BYTES]).unwrap();
         let first_chunk = encode_chunks(
@@ -2794,14 +3002,14 @@ mod tests {
                 .unwrap();
         }
         let before_completion = almost_complete.encoded().to_vec();
-        let completing_ack = BraidPublicMessage::with_chunk(
+        let completing_plain = BraidPublicMessage::with_chunk(
             almost_complete.epoch(),
-            BraidMessageType::EncapsulationKeyAndCiphertext1Ack,
+            BraidMessageType::EncapsulationKey,
             all_chunks[35].clone(),
         )
         .unwrap();
         assert_eq!(
-            receive(&almost_complete, &completing_ack).err(),
+            receive(&almost_complete, &completing_plain).err(),
             Some(BraidTransitionError::TransitionUnavailable)
         );
         assert_eq!(almost_complete.encoded(), before_completion);
