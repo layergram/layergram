@@ -2,7 +2,7 @@
 
 Status: **internal primitive adopted; key generation, keypair restoration,
 public-vector access, validation, decapsulation, and two-part encapsulation
-connected only to private transitions 1-11; not connected to the native ABI;
+connected only to private transitions 1-12; not connected to the native ABI;
 protocol v3 inactive**
 
 This document freezes the Layergram-owned boundary around the incremental
@@ -23,7 +23,9 @@ validation before persisting `pk2` beside the still-pending encapsulation and
 `ct1` encoder; it deliberately does not call `Encaps2` until the peer later
 acknowledges `ct1`. The transition-11 path performs that deferred full-key
 validation again before it restores the pending continuation and calls
-`Encaps2`; no candidate survives a key-integrity or primitive failure. The
+`Encaps2`; transition 12 applies that same fail-closed sequence to the complete
+key already stored by transition 10 when its delayed `ct1` acknowledgement
+arrives. No candidate survives a key-integrity or primitive failure. The
 module is still not called by `lg_scka_v1_self_test`,
 `lg_scka_v1_initialize`, `lg_scka_v1_send`, `lg_scka_v1_receive`, or
 `lg_scka_v1_state_validate`. The native backend therefore remains `NOT_READY`,

@@ -1,6 +1,6 @@
 # Layergram ML-KEM Braid transition engine revision 1
 
-Status: **initialization and transitions 1-11 implemented privately; remaining
+Status: **initialization and transitions 1-12 implemented privately; remaining
 transitions and public ABI not connected; protocol v3 inactive**
 
 This document freezes the initial bounded slice of Layergram's independent
@@ -199,10 +199,7 @@ the persisted ciphertext and encoder index. Lost or unexported results reuse
 the exact detached candidate; a later committed send advances from stored
 progress without regenerating ciphertext or entropy.
 `EkReceivedCt1Sampled.Receive` treats unrelated or wrong-epoch canonical input
-as a semantic no-op while recording the wrapper revision. A current-epoch
-`EkCt1Ack` remains fail-closed with typed `TransitionUnavailable` until
-transition 12 completes `Encaps2` and authenticates `ct1 || ct2`. Later state
-transitions remain outside this private slice.
+as a semantic no-op while recording the wrapper revision.
 
 `Ct1Acknowledged.Send` emits the canonical current-epoch no-data `BM3`
 message, reports `sending_epoch = epoch - 1`, and preserves the exact pending
@@ -226,6 +223,25 @@ set reconstructs the exact 1,152-byte vector, the engine:
 Transition 11 requests no entropy, emits no second epoch key, preserves the
 authenticated prior, and returns no candidate after public-key integrity,
 encapsulation, authentication, encoding, or revision failure.
+
+`EkReceivedCt1Sampled.Receive` implements transition 12. A current-epoch
+`EkCt1Ack` means the peer has reconstructed the already-persisted exact `ct1`;
+the acknowledgement's canonical erasure chunk does not replace the complete
+`pk2` already stored by transition 10. The engine:
+
+1. validates the complete persisted `pk1 || pk2` relationship again before
+   consuming the pending continuation;
+2. restores the exact persisted `Encaps1` continuation and runs `Encaps2`;
+3. authenticates the exact persisted `ct1 || ct2` under the already-ratcheted
+   current authenticator;
+4. creates `Ct2Sampled` with exact `ct2 || mac` and next encoder index zero.
+
+Transition 12 requests no entropy, emits no second epoch key, preserves the
+authenticated prior, and returns no candidate after public-key integrity,
+encapsulation, authentication, encoding, or revision failure. A persisted
+`Ct1` encoder may have advanced across generated but lost carrier messages;
+the transition still consumes the same canonical ciphertext after restart.
+Later state transitions remain outside this private slice.
 
 ## 2. Immutable candidate and unreliable transport contract
 
@@ -281,13 +297,18 @@ behavior, and loss/reordering/duplicate/restart recovery. Transition 10
 additionally freezes full-key integrity before the
 `EkReceivedCt1Sampled` successor, exact preservation of the pending
 encapsulation and `ct1` encoder, continued deterministic `Ct1` output, stable
-re-export, semantic no-op input, typed transition-12 gate, encoder/revision
+re-export, semantic no-op input, delayed-acknowledgement handoff, encoder/revision
 exhaustion, no-output/no-entropy behavior, and loss/reordering/duplicate/restart
 recovery. Transition 11 additionally freezes canonical no-data sending,
 current-epoch `EkCt1Ack` filtering, sorted and idempotent decoder progress,
 restart after partial reconstruction, full-key validation before `Encaps2`,
 exact `ct1 || ct2` authentication, deterministic `Ct2Sampled` output,
 conflicting-duplicate rejection, integrity failure, and revision exhaustion.
+Transition 12 additionally freezes wrong-epoch and unrelated-message no-op
+behavior, persisted-encoder progress across a lost carrier export, restart
+before acknowledgement, complete-key revalidation before `Encaps2`, exact
+`ct1 || ct2` authentication, deterministic `Ct2Sampled` output, and revision
+exhaustion.
 This private slice does not yet connect native candidates to the
 existing durable send/receive journals; that atomic composition remains
 activation-blocking.
@@ -306,7 +327,7 @@ unexported transition-7 candidate must be retried from its durable exact bytes,
 never recomputed with reused or replacement entropy. `KeysSampled.Send`,
 `HeaderSent.Send`, `Ct1Received.Send`, `Ct1Sampled.Send`,
 `EkReceivedCt1Sampled.Send`, `Ct1Acknowledged.Send`, transitions 5, 6, 8, 9,
-10, and 11 do not request new entropy.
+10, 11, and 12 do not request new entropy.
 Deterministic entropy exists only as a private unit-test trait implementation
 and is not exported through the C ABI. The complete application and native
 entropy policy is frozen in `ENTROPY_SOURCES.md`.
@@ -336,13 +357,15 @@ agreement and failure paths, transition-8 loss/reordering/duplicate/conflict
 behavior, transition-9 full-key validation, `Encaps2`, ciphertext MAC,
 `Ct2Sampled` state, and loss/duplicate/restart behavior, transition-10
 full-key validation, `EkReceivedCt1Sampled` preservation and continued `Ct1`
-output, transition-12 fail-closed acknowledgement handling, transition-11
+output, transition-11
 loss/duplicate/restart recovery, full-key validation, `Encaps2`, exact
-ciphertext MAC and `Ct2Sampled` state, and frozen deterministic digests for
-Header/`Ek` continuation and transitions 2-11.
+ciphertext MAC and `Ct2Sampled` state, transition-12 lost-export/restart
+recovery, semantic no-op filtering, full-key revalidation, exact ciphertext
+MAC and deterministic `Ct2Sampled` state, and frozen deterministic digests for
+Header/`Ek` continuation and transitions 2-12.
 
-Activation still requires transitions 12 through 13, durable terminal
-MAC-failure and transition-unavailable handling, remaining encoder/decoder
+Activation still requires transition 13, durable terminal MAC-failure
+handling, remaining encoder/decoder
 completion, LS3 sealing with a unique OS nonce, the public C ABI and panic
 containment, atomic TR3/journal composition, cross-implementation vectors,
 fuzzing/sanitizers, every shipped target, and an independent cryptographic and

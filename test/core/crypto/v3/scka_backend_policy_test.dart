@@ -295,7 +295,7 @@ void main() {
     expect(transition['firstTransitionNumber'], 1);
     expect(
       transition['implementedTransitionNumbers'],
-      <int>[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+      <int>[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
     );
     expect(transition['deterministicGoldenVectors'], isTrue);
     expect(transition['immutableAuthenticatedPrior'], isTrue);
@@ -357,7 +357,25 @@ void main() {
     expect(transition['transitionElevenRequestsEntropy'], isFalse);
     expect(transition['transitionElevenEmitsEpochKey'], isFalse);
     expect(
-      transition['ekReceivedCt1SampledAckFailClosedUntilTransitionTwelve'],
+      transition['transitionTwelveCompletesEncapsulation'],
+      isTrue,
+    );
+    expect(
+      transition['transitionTwelveFullPublicKeyIntegrityBeforeSuccessor'],
+      isTrue,
+    );
+    expect(
+      transition['transitionTwelveAuthenticatesCiphertextBeforeCt2State'],
+      isTrue,
+    );
+    expect(
+      transition['transitionTwelvePreservesPersistedCt1AcrossLostExports'],
+      isTrue,
+    );
+    expect(transition['transitionTwelveRequestsEntropy'], isFalse);
+    expect(transition['transitionTwelveEmitsEpochKey'], isFalse);
+    expect(
+      transition['ekReceivedCt1SampledAckImplementedByTransitionTwelve'],
       isTrue,
     );
     expect(transition['typedTerminalAuthenticationFailure'], isTrue);
@@ -390,6 +408,7 @@ void main() {
     expect(effects['transitionNineAdded'], isTrue);
     expect(effects['transitionTenAdded'], isTrue);
     expect(effects['transitionElevenAdded'], isTrue);
+    expect(effects['transitionTwelveAdded'], isTrue);
     expect(effects['pubspecChanged'], isFalse);
     expect(effects['protocolV3Activated'], isFalse);
 
@@ -398,7 +417,7 @@ void main() {
     expect(remainingGates, hasLength(8));
     expect(
       remainingGates.any(
-        (gate) => gate.contains('transitions 12 through 13'),
+        (gate) => gate.contains('transition 13'),
       ),
       isTrue,
     );

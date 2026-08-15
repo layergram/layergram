@@ -1,7 +1,7 @@
 # Layergram ML-KEM Braid public message revision 1
 
 Status: **canonical private codec frozen; Header/Ek/Ct1 output and
-Header/Ek/EkCt1Ack/Ct1 input connected only to private transitions 1-11;
+Header/Ek/EkCt1Ack/Ct1 input connected only to private transitions 1-12;
 public ABI not connected; protocol v3 inactive**
 
 This document freezes Layergram's `BM3` representation of one logical public
@@ -23,7 +23,10 @@ private `Ct2Sampled` or `EkReceivedCt1Sampled` state. Transition 11 continues
 the canonical `EkCt1Ack` decoder from `Ct1Acknowledged` and creates
 `Ct2Sampled` only after complete public-key validation and ciphertext
 authentication, but the codec is not called by the C ABI, cannot be packaged
-through Flutter, and does not
+through Flutter. Transition 12 consumes a current-epoch canonical `EkCt1Ack`
+after transition 10 has already stored the validated complete key; it completes
+and authenticates the ciphertext without replacing that stored key. The codec
+is not called by the C ABI and does not
 change the scaffold's `NOT_READY` result.
 
 ## 1. Logical message and epoch ownership

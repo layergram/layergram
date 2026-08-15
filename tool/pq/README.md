@@ -53,9 +53,10 @@ public-key validation plus authenticated `Ct2Sampled` construction, and
 transition-10 validated `EkReceivedCt1Sampled` construction with continued
 persisted Ct1 output, and transition-11 `Ct1Acknowledged` completion with
 full-key validation, deterministic `Encaps2`, and exact ciphertext
-authentication, and transitions 2-11 as specified by
-`specs/SCKA_TRANSITION_ENGINE.md`; it remains disconnected from the ABI and
-every application package.
+authentication, and transitions 2-12 as specified by
+`specs/SCKA_TRANSITION_ENGINE.md`, including transition-12 completion from the
+validated `EkReceivedCt1Sampled` state after a delayed or lost Ct1 carrier
+export; it remains disconnected from the ABI and every application package.
 
 ## Reproducible checks
 
