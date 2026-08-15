@@ -401,6 +401,15 @@ session ID, and deterministic checkpoint digest, deletes HP3, and finally
 deletes the preparation. No confirmation is returned before this sequence
 completes.
 
+The identity/passphrase persistence scope creates one initial-handoff
+capability and does not expose it. The handshake, session, and handoff
+controllers retain that exact object and compare it by identity. The handoff
+coordinator claims both child-controller gates before restoring its own
+journal. Consequently, direct or concurrently queued completion/initial-TR3
+registration with an absent or newly constructed capability fails before
+state validation, cryptography, or persistence. This is an ownership boundary,
+not a cryptographic secret or wire field.
+
 The preparation journal is bounded to 64 logical records, 128 physical
 records, 16 MiB retained, and the existing 256 KiB TR3 maximum. Restore
 validates canonical records, reconstructs the exact prepared snapshot, resumes
@@ -412,9 +421,10 @@ or preparation-delete outcomes fail stopped until a fresh scope restore. For
 an initiator, the tombstone retains the exact confirmation without retaining
 HP3 secrets.
 
-This remains inactive bootstrap infrastructure: the production SCKA backend,
-contact/device policy, transport wrapper, and application projection are still
-activation gates.
+This remains inactive bootstrap infrastructure: the production scope factory
+must preserve the unexposed capability topology, and the production SCKA
+backend, contact/device policy, transport wrapper, and application projection
+are still activation gates.
 
 ## 10. Manual transport sizing
 

@@ -19,6 +19,7 @@ import 'dart:typed_data';
 import 'committed_record_materializer_v3.dart';
 import 'committed_record_v3.dart';
 import 'ec_double_ratchet_v3.dart';
+import 'initial_session_handoff_authority_v3.dart';
 import 'key_schedule_v3.dart';
 import 'lmf_v3.dart';
 import 'lmf_v3_atomic_commit.dart';
@@ -179,6 +180,7 @@ final class V3SessionCommitController {
     V3CommittedRecordMaterializer? committedRecordMaterializer,
     V3SessionCheckpointRepository? checkpointRepository,
     V3SessionRetirementJournal? retirementJournal,
+    V3InitialSessionHandoffAuthority? initialHandoffAuthority,
     this.snapshotValidator,
     this.maxSessions = 4096,
   })  : _journal = journal,
@@ -186,7 +188,8 @@ final class V3SessionCommitController {
         _outbox = outbox,
         _committedRecordMaterializer = committedRecordMaterializer,
         _checkpointRepository = checkpointRepository,
-        _retirementJournal = retirementJournal {
+        _retirementJournal = retirementJournal,
+        _initialHandoffAuthority = initialHandoffAuthority {
     if (maxSessions <= 0) {
       throw ArgumentError.value(maxSessions, 'maxSessions');
     }
@@ -214,6 +217,7 @@ final class V3SessionCommitController {
   final V3CommittedRecordMaterializer? _committedRecordMaterializer;
   final V3SessionCheckpointRepository? _checkpointRepository;
   final V3SessionRetirementJournal? _retirementJournal;
+  final V3InitialSessionHandoffAuthority? _initialHandoffAuthority;
   final V3SessionSnapshotValidator? snapshotValidator;
   final int maxSessions;
 
@@ -230,6 +234,7 @@ final class V3SessionCommitController {
   V3CommittedRecordMaterializerAuthority? _materializerAuthority;
   V3SessionCheckpointAuthority? _checkpointAuthority;
   V3SessionRetirementAuthority? _retirementAuthority;
+  bool _initialHandoffAuthorityClaimed = false;
   bool _restored = false;
   bool _closed = false;
   bool _recoveryRequired = false;
@@ -238,6 +243,23 @@ final class V3SessionCommitController {
   bool get isRestored => _restored && !requiresRecovery && !_closed;
   bool get requiresRecovery =>
       _recoveryRequired || (_retirementJournal?.requiresRecovery ?? false);
+
+  /// Transfers revision-zero registration and handoff reconciliation to the
+  /// sole HP3 -> TR3 coordinator for this encrypted scope.
+  Future<void> claimInitialHandoffAuthority(
+    V3InitialSessionHandoffAuthority authority,
+  ) {
+    return _serialized(() async {
+      _ensureReady();
+      _ensureConfiguredInitialHandoffAuthority(authority);
+      if (_initialHandoffAuthorityClaimed) {
+        throw StateError(
+          'Layergram v3 session handoff authority was already claimed',
+        );
+      }
+      _initialHandoffAuthorityClaimed = true;
+    });
+  }
 
   Future<V3SessionCommitRestoreResult> restore({
     required Iterable<V3TripleRatchetState> checkpoints,
@@ -752,10 +774,12 @@ final class V3SessionCommitController {
   /// snapshot is idempotent; a same-session fork fails closed.
   Future<V3InitialSessionRegistration> registerInitialSession({
     required V3TripleRatchetState snapshot,
+    required V3InitialSessionHandoffAuthority authority,
     DateTime? persistedAt,
   }) {
     return _serialized(() async {
       _ensureReady();
+      _ensureClaimedInitialHandoffAuthority(authority);
       final repository = _checkpointRepository;
       if (repository == null) {
         throw StateError(
@@ -852,10 +876,12 @@ final class V3SessionCommitController {
   /// Recomputes the deterministic revision-zero checkpoint digest for a
   /// prepared handoff without changing durable state.
   Future<String> initialCheckpointDigestFor(
-    V3TripleRatchetState snapshot,
-  ) {
+    V3TripleRatchetState snapshot, {
+    required V3InitialSessionHandoffAuthority authority,
+  }) {
     return _serialized(() async {
       _ensureReady();
+      _ensureClaimedInitialHandoffAuthority(authority);
       final repository = _checkpointRepository;
       if (repository == null) {
         throw StateError(
@@ -872,10 +898,12 @@ final class V3SessionCommitController {
   /// Confirms the currently registered durable session belongs to the stable
   /// lineage of an exact prepared revision-zero snapshot.
   Future<void> verifySessionExtendsInitial(
-    V3TripleRatchetState initialSnapshot,
-  ) {
+    V3TripleRatchetState initialSnapshot, {
+    required V3InitialSessionHandoffAuthority authority,
+  }) {
     return _serialized(() async {
       _ensureReady();
+      _ensureClaimedInitialHandoffAuthority(authority);
       if (initialSnapshot.lifecycle != V3RatchetLifecycle.active ||
           initialSnapshot.revision != 0) {
         throw const FormatException(
@@ -912,9 +940,11 @@ final class V3SessionCommitController {
   Future<void> verifyCommittedHandoffSession({
     required String sessionKey,
     required String initialCheckpointDigest,
+    required V3InitialSessionHandoffAuthority authority,
   }) {
     return _serialized(() async {
       _ensureReady();
+      _ensureClaimedInitialHandoffAuthority(authority);
       Uint8List? sessionId;
       Uint8List? digest;
       V3TripleRatchetState? durableSnapshot;
@@ -974,9 +1004,12 @@ final class V3SessionCommitController {
 
   /// Prevents direct session use after a higher-level initial handoff crossed
   /// a durable boundary but did not complete in this process instance.
-  Future<void> markInitialHandoffRecoveryRequired() {
+  Future<void> markInitialHandoffRecoveryRequired({
+    required V3InitialSessionHandoffAuthority authority,
+  }) {
     return _serialized(() async {
       _ensureOpen();
+      _ensureConfiguredInitialHandoffAuthority(authority);
       _recoveryRequired = true;
     });
   }
@@ -2835,6 +2868,25 @@ final class V3SessionCommitController {
     if (_recoveryRequired) {
       throw StateError(
         'Layergram v3 session controller must be reconstructed and restored',
+      );
+    }
+  }
+
+  void _ensureConfiguredInitialHandoffAuthority(
+    V3InitialSessionHandoffAuthority authority,
+  ) {
+    if (!identical(_initialHandoffAuthority, authority)) {
+      throw StateError('Layergram v3 initial handoff authority is invalid');
+    }
+  }
+
+  void _ensureClaimedInitialHandoffAuthority(
+    V3InitialSessionHandoffAuthority authority,
+  ) {
+    _ensureConfiguredInitialHandoffAuthority(authority);
+    if (!_initialHandoffAuthorityClaimed) {
+      throw StateError(
+        'Layergram v3 initial handoff authority was not claimed',
       );
     }
   }

@@ -20,6 +20,7 @@ import '../../storage/aux_record_repository.dart';
 import 'committed_record_materializer_v3.dart';
 import 'handshake_persistence_v3.dart';
 import 'handshake_session_handoff_v3.dart';
+import 'initial_session_handoff_authority_v3.dart';
 import 'lmf_v3_atomic_commit.dart';
 import 'lmf_v3_outbox.dart';
 import 'lmf_v3_persistence.dart';
@@ -131,9 +132,11 @@ final class V3SessionPersistenceScope {
         auxStorageKey: ownedKey,
       );
       final store = V3LmfAuxRecordStore(repository);
+      final initialHandoffAuthority = V3InitialSessionHandoffAuthority();
       final inbox = V3LmfDurableInbox(store: store);
       final handshakes = V3HandshakePersistenceController(
         repository: V3HandshakePendingRepository(store: store),
+        initialHandoffAuthority: initialHandoffAuthority,
       );
       final controller = V3SessionCommitController(
         journal: V3LmfAtomicCommitJournal(store: store, inbox: inbox),
@@ -146,6 +149,7 @@ final class V3SessionPersistenceScope {
           maxSessions: maxSessions,
         ),
         retirementJournal: V3SessionRetirementJournal(store: store),
+        initialHandoffAuthority: initialHandoffAuthority,
         snapshotValidator: snapshotValidator,
         maxSessions: maxSessions,
       );
@@ -153,6 +157,7 @@ final class V3SessionPersistenceScope {
         repository: V3HandshakeHandoffRepository(store: store),
         handshakes: handshakes,
         sessions: controller,
+        initialHandoffAuthority: initialHandoffAuthority,
       );
       return V3SessionPersistenceScope._(
         repository: repository,

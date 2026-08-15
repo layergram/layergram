@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:layergram/core/crypto/seed_service.dart';
 import 'package:layergram/core/crypto/v3/handshake_persistence_v3.dart';
+import 'package:layergram/core/crypto/v3/initial_session_handoff_authority_v3.dart';
 import 'package:layergram/core/crypto/v3/local_identity_v3.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3_persistence.dart';
 import 'package:layergram/core/crypto/v3/ml_kem_768.dart';
@@ -182,8 +183,13 @@ void main() {
     test('completion tombstone suppresses HP3 and retains exact confirmation',
         () async {
       final store = _FaultStore();
-      final controller = _controller(store);
+      final authority = V3InitialSessionHandoffAuthority();
+      final controller = _controller(
+        store,
+        initialHandoffAuthority: authority,
+      );
       await controller.restore();
+      await controller.claimInitialHandoffAuthority(authority);
       final outbound = await controller.createOffer(
         localIdentity: alice,
         localDevice: aliceDevice,
@@ -213,9 +219,23 @@ void main() {
           handshakeId: outbound.handshakeId,
           expectedStateDigest: outbound.stateDigest,
           confirmation: result.confirmation,
+          sessionId: sessionId,
+          checkpointDigest: _id(_bytes(32, 0x91)),
+          completedAt: DateTime.utc(2026, 8, 14, 21),
+          authority: V3InitialSessionHandoffAuthority(),
+        ),
+        throwsStateError,
+      );
+      expect(await controller.pendingOutbound(), hasLength(1));
+      await expectLater(
+        controller.markHandoffCommitted(
+          handshakeId: outbound.handshakeId,
+          expectedStateDigest: outbound.stateDigest,
+          confirmation: result.confirmation,
           sessionId: Uint8List(16),
           checkpointDigest: _id(_bytes(32, 0x91)),
           completedAt: DateTime.utc(2026, 8, 14, 21),
+          authority: authority,
         ),
         throwsFormatException,
       );
@@ -228,6 +248,7 @@ void main() {
         sessionId: sessionId,
         checkpointDigest: _id(_bytes(32, 0x91)),
         completedAt: DateTime.utc(2026, 8, 14, 21),
+        authority: authority,
       );
 
       expect(completion.terminalRecord, orderedEquals(confirmationBytes));
@@ -259,8 +280,13 @@ void main() {
     test('ambiguous completion write restores the tombstone without HP3',
         () async {
       final store = _FaultStore();
-      final controller = _controller(store);
+      final authority = V3InitialSessionHandoffAuthority();
+      final controller = _controller(
+        store,
+        initialHandoffAuthority: authority,
+      );
       await controller.restore();
+      await controller.claimInitialHandoffAuthority(authority);
       final outbound = await controller.createOffer(
         localIdentity: alice,
         localDevice: aliceDevice,
@@ -294,6 +320,7 @@ void main() {
           sessionId: sessionId,
           checkpointDigest: _id(_bytes(32, 0xb1)),
           completedAt: DateTime.utc(2026, 8, 14, 23),
+          authority: authority,
         ),
         throwsStateError,
       );
@@ -319,8 +346,13 @@ void main() {
     test('ambiguous pending delete recovers from the durable tombstone',
         () async {
       final store = _FaultStore();
-      final controller = _controller(store);
+      final authority = V3InitialSessionHandoffAuthority();
+      final controller = _controller(
+        store,
+        initialHandoffAuthority: authority,
+      );
       await controller.restore();
+      await controller.claimInitialHandoffAuthority(authority);
       final outbound = await controller.createOffer(
         localIdentity: alice,
         localDevice: aliceDevice,
@@ -353,6 +385,7 @@ void main() {
           sessionId: sessionId,
           checkpointDigest: _id(_bytes(32, 0xa1)),
           completedAt: DateTime.utc(2026, 8, 14, 22),
+          authority: authority,
         ),
         throwsStateError,
       );
@@ -500,9 +533,13 @@ void main() {
   });
 }
 
-V3HandshakePersistenceController _controller(V3LmfRecordStore store) =>
+V3HandshakePersistenceController _controller(
+  V3LmfRecordStore store, {
+  V3InitialSessionHandoffAuthority? initialHandoffAuthority,
+}) =>
     V3HandshakePersistenceController(
       repository: V3HandshakePendingRepository(store: store),
+      initialHandoffAuthority: initialHandoffAuthority,
     );
 
 final class _FaultStore implements V3LmfRecordStore {

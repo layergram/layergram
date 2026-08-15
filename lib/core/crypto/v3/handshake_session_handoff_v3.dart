@@ -20,6 +20,7 @@ import 'package:crypto/crypto.dart' as crypto;
 
 import 'ec_double_ratchet_v3.dart';
 import 'handshake_persistence_v3.dart';
+import 'initial_session_handoff_authority_v3.dart';
 import 'key_schedule_v3.dart';
 import 'lmf_v3_persistence.dart';
 import 'local_identity_v3.dart';
@@ -443,13 +444,16 @@ final class V3HandshakeSessionHandoffController {
     required V3HandshakeHandoffRepository repository,
     required V3HandshakePersistenceController handshakes,
     required V3SessionCommitController sessions,
+    required V3InitialSessionHandoffAuthority initialHandoffAuthority,
   })  : _repository = repository,
         _handshakes = handshakes,
-        _sessions = sessions;
+        _sessions = sessions,
+        _initialHandoffAuthority = initialHandoffAuthority;
 
   final V3HandshakeHandoffRepository _repository;
   final V3HandshakePersistenceController _handshakes;
   final V3SessionCommitController _sessions;
+  final V3InitialSessionHandoffAuthority _initialHandoffAuthority;
   Future<void> _operationTail = Future<void>.value();
   V3HandshakeHandoffAuthority? _authority;
   bool _restored = false;
@@ -474,6 +478,12 @@ final class V3HandshakeSessionHandoffController {
         );
       }
       try {
+        await _handshakes.claimInitialHandoffAuthority(
+          _initialHandoffAuthority,
+        );
+        await _sessions.claimInitialHandoffAuthority(
+          _initialHandoffAuthority,
+        );
         _authority = await _repository.claimCoordinatorAuthority();
         final restored = await _repository.restore(authority: _authority);
         _restored = true;
@@ -481,10 +491,13 @@ final class V3HandshakeSessionHandoffController {
         for (final prepared in restored.prepared) {
           recovered.add(await _commitPrepared(prepared, recovered: true));
         }
-        for (final completion in await _handshakes.committedHandoffs()) {
+        for (final completion in await _handshakes.committedHandoffs(
+          authority: _initialHandoffAuthority,
+        )) {
           await _sessions.verifyCommittedHandoffSession(
             sessionKey: completion.sessionId,
             initialCheckpointDigest: completion.checkpointDigest,
+            authority: _initialHandoffAuthority,
           );
         }
         return V3HandshakeSessionHandoffRestoreResult(
@@ -512,7 +525,10 @@ final class V3HandshakeSessionHandoffController {
   }) {
     return _serialized(() async {
       _ensureReady();
-      final completed = await _handshakes.committedHandoffForId(handshakeId);
+      final completed = await _handshakes.committedHandoffForId(
+        handshakeId,
+        authority: _initialHandoffAuthority,
+      );
       if (completed != null) {
         final confirmation = V3HandshakeCodec.decodeConfirmation(
           completed.confirmationRecord,
@@ -534,6 +550,7 @@ final class V3HandshakeSessionHandoffController {
         await _sessions.verifyCommittedHandoffSession(
           sessionKey: completed.sessionId,
           initialCheckpointDigest: completed.checkpointDigest,
+          authority: _initialHandoffAuthority,
         );
         return _resultFromCompletion(completed, recovered: true);
       }
@@ -608,7 +625,10 @@ final class V3HandshakeSessionHandoffController {
   }) {
     return _serialized(() async {
       _ensureReady();
-      final completed = await _handshakes.committedHandoffForId(handshakeId);
+      final completed = await _handshakes.committedHandoffForId(
+        handshakeId,
+        authority: _initialHandoffAuthority,
+      );
       if (completed != null) {
         final encoded = V3HandshakeCodec.encodeConfirmation(confirmation);
         try {
@@ -625,6 +645,7 @@ final class V3HandshakeSessionHandoffController {
         await _sessions.verifyCommittedHandoffSession(
           sessionKey: completed.sessionId,
           initialCheckpointDigest: completed.checkpointDigest,
+          authority: _initialHandoffAuthority,
         );
         return _resultFromCompletion(completed, recovered: true);
       }
@@ -696,11 +717,16 @@ final class V3HandshakeSessionHandoffController {
     final confirmationBytes = prepared.confirmationRecord;
     final sessionId = snapshot.sessionId;
     try {
-      final completion =
-          await _handshakes.committedHandoffForId(prepared.handshakeId);
+      final completion = await _handshakes.committedHandoffForId(
+        prepared.handshakeId,
+        authority: _initialHandoffAuthority,
+      );
       late final String checkpointDigest;
       if (completion != null) {
-        checkpointDigest = await _sessions.initialCheckpointDigestFor(snapshot);
+        checkpointDigest = await _sessions.initialCheckpointDigestFor(
+          snapshot,
+          authority: _initialHandoffAuthority,
+        );
         if (completion.role != prepared.role ||
             completion.pendingStateDigest != prepared.pendingStateDigest ||
             completion.sessionId != prepared.sessionId ||
@@ -713,10 +739,14 @@ final class V3HandshakeSessionHandoffController {
             'v3 completion does not match its prepared handoff',
           );
         }
-        await _sessions.verifySessionExtendsInitial(snapshot);
+        await _sessions.verifySessionExtendsInitial(
+          snapshot,
+          authority: _initialHandoffAuthority,
+        );
       } else {
         final registration = await _sessions.registerInitialSession(
           snapshot: snapshot,
+          authority: _initialHandoffAuthority,
           persistedAt: prepared.preparedAt,
         );
         if (registration.sessionKey != prepared.sessionId) {
@@ -732,6 +762,7 @@ final class V3HandshakeSessionHandoffController {
           sessionId: sessionId,
           checkpointDigest: checkpointDigest,
           completedAt: completedAt ?? prepared.preparedAt,
+          authority: _initialHandoffAuthority,
         );
       }
       await _repository.deleteCommitted(
@@ -767,8 +798,12 @@ final class V3HandshakeSessionHandoffController {
   }
 
   Future<void> _failStopDependencies() async {
-    await _handshakes.markInitialHandoffRecoveryRequired();
-    await _sessions.markInitialHandoffRecoveryRequired();
+    await _handshakes.markInitialHandoffRecoveryRequired(
+      authority: _initialHandoffAuthority,
+    );
+    await _sessions.markInitialHandoffRecoveryRequired(
+      authority: _initialHandoffAuthority,
+    );
   }
 
   Future<T> _serialized<T>(Future<T> Function() operation) {

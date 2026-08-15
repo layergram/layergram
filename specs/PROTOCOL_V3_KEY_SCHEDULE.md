@@ -77,7 +77,9 @@ This checkpoint provides:
 - an encrypted, bounded initial-session preparation journal that commits the
   exact confirmation and revision-zero TR3 before checkpoint materialization,
   resumes every ambiguous boundary without rerunning cryptography, validates
-  the deterministic checkpoint digest, and retires HP3 before collection;
+  the deterministic checkpoint digest, retires HP3 before collection, and
+  uses one unexposed scope-created identity capability to reject direct or
+  competing child-controller registration/completion calls;
 - frozen local Normal/Maximum retention horizons plus a non-destructive,
   explainable eligibility check for future replay/completion-proof retirement;
 - an encrypted, bounded, fail-stop `v3_session_retirement_v1` journal whose
@@ -833,8 +835,9 @@ Before this schedule can carry user messages, Layergram still requires:
   export/import behind the frozen boundary;
 - independent review and production wiring of the inactive crash-consistent
   send/receive coordinator, including the reviewed native-state validator;
-- production wiring that keeps the implemented initial-session handoff as the
-  sole authority and supplies its reviewed native SCKA validator/backend;
+- production wiring that preserves the implemented scope-owned initial-session
+  capability topology and supplies its reviewed native SCKA
+  validator/backend;
 - active message/UI repository projection from the idempotent durable AR3
   source;
 - full packaging, crash, migration, multi-device, passphrase, Maximum-mode,

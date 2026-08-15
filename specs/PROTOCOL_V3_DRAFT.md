@@ -191,6 +191,8 @@ transition/state validator and trusted candidate construction. A complete send
 and receive persistence authority, deferred continuation-key resolution,
 checkpointing, replay retirement, pending-handshake persistence, and the exact
 prepare/checkpoint/tombstone initial-TR3 handoff exist only behind the inactive
-v3 boundary. Controller-level device policy, a reviewed production SCKA
-backend, active projection, resend/progress UX, real cross-app loss tests, and
-erasure coding remain activation gates.
+v3 boundary. Its initial registration/completion API is now protected by one
+unexposed scope-created identity capability, including concurrent forged-claim
+rejection. Controller-level device policy, a reviewed production SCKA backend,
+active projection, resend/progress UX, real cross-app loss tests, and erasure
+coding remain activation gates.

@@ -18,6 +18,7 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as crypto;
 
+import 'initial_session_handoff_authority_v3.dart';
 import 'key_schedule_v3.dart';
 import 'lmf_v3_persistence.dart';
 import 'local_identity_v3.dart';
@@ -960,11 +961,15 @@ final class V3DurableHandshakeOutbound {
 final class V3HandshakePersistenceController {
   V3HandshakePersistenceController({
     required V3HandshakePendingRepository repository,
-  }) : _repository = repository;
+    V3InitialSessionHandoffAuthority? initialHandoffAuthority,
+  })  : _repository = repository,
+        _initialHandoffAuthority = initialHandoffAuthority;
 
   final V3HandshakePendingRepository _repository;
+  final V3InitialSessionHandoffAuthority? _initialHandoffAuthority;
   Future<void> _operationTail = Future<void>.value();
   V3HandshakePersistenceAuthority? _authority;
+  bool _initialHandoffAuthorityClaimed = false;
   bool _restored = false;
   bool _closed = false;
   bool _recoveryRequired = false;
@@ -973,6 +978,23 @@ final class V3HandshakePersistenceController {
       _recoveryRequired || _repository.requiresRecovery;
 
   bool get isRestored => _restored && !requiresRecovery && !_closed;
+
+  /// Transfers the initial-session subset of this controller to the sole
+  /// handoff coordinator. A forged capability is rejected without mutation.
+  Future<void> claimInitialHandoffAuthority(
+    V3InitialSessionHandoffAuthority authority,
+  ) {
+    return _serialized(() async {
+      _ensureReady();
+      _ensureConfiguredInitialHandoffAuthority(authority);
+      if (_initialHandoffAuthorityClaimed) {
+        throw StateError(
+          'Layergram v3 handshake handoff authority was already claimed',
+        );
+      }
+      _initialHandoffAuthorityClaimed = true;
+    });
+  }
 
   Future<V3HandshakeControllerRestoreResult> restore() {
     return _serialized(() async {
@@ -1050,10 +1072,12 @@ final class V3HandshakePersistenceController {
   /// Returns a detached binding used only by the crash-recovery handoff
   /// coordinator to validate and collect an already committed preparation.
   Future<V3CommittedHandshakeHandoff?> committedHandoffForId(
-    String handshakeId,
-  ) {
+    String handshakeId, {
+    required V3InitialSessionHandoffAuthority authority,
+  }) {
     return _serialized(() async {
       _ensureReady();
+      _ensureClaimedInitialHandoffAuthority(authority);
       final completion = _repository.completionForId(
         handshakeId,
         authority: _authority,
@@ -1071,9 +1095,12 @@ final class V3HandshakePersistenceController {
   }
 
   /// Returns detached bindings for restore-time checkpoint reconciliation.
-  Future<List<V3CommittedHandshakeHandoff>> committedHandoffs() {
+  Future<List<V3CommittedHandshakeHandoff>> committedHandoffs({
+    required V3InitialSessionHandoffAuthority authority,
+  }) {
     return _serialized(() async {
       _ensureReady();
+      _ensureClaimedInitialHandoffAuthority(authority);
       return _repository
           .completions(authority: _authority)
           .map(
@@ -1092,9 +1119,12 @@ final class V3HandshakePersistenceController {
 
   /// Fails stopped if a higher-level initial-session handoff has crossed a
   /// durable boundary but cannot finish in the current process instance.
-  Future<void> markInitialHandoffRecoveryRequired() {
+  Future<void> markInitialHandoffRecoveryRequired({
+    required V3InitialSessionHandoffAuthority authority,
+  }) {
     return _serialized(() async {
       _ensureOpen();
+      _ensureConfiguredInitialHandoffAuthority(authority);
       _recoveryRequired = true;
     });
   }
@@ -1268,9 +1298,11 @@ final class V3HandshakePersistenceController {
     required Uint8List sessionId,
     required String checkpointDigest,
     required DateTime completedAt,
+    required V3InitialSessionHandoffAuthority authority,
   }) {
     return _serialized(() async {
       _ensureReady();
+      _ensureClaimedInitialHandoffAuthority(authority);
       return _repository.markHandoffCommitted(
         handshakeId: handshakeId,
         expectedStateDigest: expectedStateDigest,
@@ -1315,6 +1347,25 @@ final class V3HandshakePersistenceController {
     if (!_restored || requiresRecovery) {
       throw StateError(
         'Layergram v3 handshake controller requires fresh restore',
+      );
+    }
+  }
+
+  void _ensureConfiguredInitialHandoffAuthority(
+    V3InitialSessionHandoffAuthority authority,
+  ) {
+    if (!identical(_initialHandoffAuthority, authority)) {
+      throw StateError('Layergram v3 initial handoff authority is invalid');
+    }
+  }
+
+  void _ensureClaimedInitialHandoffAuthority(
+    V3InitialSessionHandoffAuthority authority,
+  ) {
+    _ensureConfiguredInitialHandoffAuthority(authority);
+    if (!_initialHandoffAuthorityClaimed) {
+      throw StateError(
+        'Layergram v3 initial handoff authority was not claimed',
       );
     }
   }

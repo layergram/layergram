@@ -107,6 +107,10 @@ It is not approved for activation and any candidate MUST:
   revision-zero TR3 before the initial checkpoint; restore MUST finish the
   same checkpoint/tombstone transition without rerunning handshake, SCKA, or
   ratchet-key generation, and no confirmation may be exported first;
+- create one non-exported identity/passphrase-scoped handoff capability and
+  require the exact claimed object for initial-session registration,
+  completion binding, and restore reconciliation; forged or competing direct
+  calls MUST fail before any durable mutation;
 
 The proposed KEM-based proof of possession is a research candidate, not an
 approved primitive. It MUST NOT be enabled until an external cryptographic

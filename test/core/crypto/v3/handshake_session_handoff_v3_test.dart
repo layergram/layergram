@@ -7,6 +7,7 @@ import 'package:layergram/core/crypto/seed_service.dart';
 import 'package:layergram/core/crypto/v3/committed_record_materializer_v3.dart';
 import 'package:layergram/core/crypto/v3/handshake_persistence_v3.dart';
 import 'package:layergram/core/crypto/v3/handshake_session_handoff_v3.dart';
+import 'package:layergram/core/crypto/v3/initial_session_handoff_authority_v3.dart';
 import 'package:layergram/core/crypto/v3/key_schedule_v3.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3_atomic_commit.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3_persistence.dart';
@@ -112,6 +113,81 @@ void main() {
         responderSnapshot.wipeSecrets();
         initiator.established.close();
         responderEstablished.close();
+      }
+    });
+
+    test('forged capability loses the claim race and cannot register TR3',
+        () async {
+      final store = _FaultStore();
+      final harness = _Harness(store);
+      await harness.restoreDependencies();
+      final forged = V3InitialSessionHandoffAuthority();
+      final forgedHandshakeClaim =
+          harness.handshakes.claimInitialHandoffAuthority(forged);
+      final forgedSessionClaim =
+          harness.sessions.claimInitialHandoffAuthority(forged);
+      final properRestore = harness.handoffs.restore();
+      await expectLater(forgedHandshakeClaim, throwsStateError);
+      await expectLater(forgedSessionClaim, throwsStateError);
+      await properRestore;
+      await expectLater(
+        harness.handshakes.claimInitialHandoffAuthority(
+          harness.initialHandoffAuthority,
+        ),
+        throwsStateError,
+      );
+      await expectLater(
+        harness.sessions.claimInitialHandoffAuthority(
+          harness.initialHandoffAuthority,
+        ),
+        throwsStateError,
+      );
+
+      final offer = await V3HybridHandshake.createOffer(
+        localIdentity: alice,
+        localDevice: aliceDevice,
+        remoteIdentity: bob.publicIdentity,
+        mode: V3HandshakeMode.normal,
+      );
+      final responder = await V3HybridHandshake.createReply(
+        localIdentity: bob,
+        localDevice: bobDevice,
+        initiatorIdentity: alice.publicIdentity,
+        offer: offer.offer,
+        expectedMode: V3HandshakeMode.normal,
+      );
+      final accepted = await V3HybridHandshake.acceptReply(
+        pending: offer,
+        localIdentity: alice,
+        localDevice: aliceDevice,
+        responderIdentity: bob.publicIdentity,
+        reply: responder.reply,
+      );
+      final snapshot = await V3InitialSessionFactory.initialize(
+        established: accepted.established,
+        backend: scka,
+      );
+      try {
+        await expectLater(
+          harness.sessions.registerInitialSession(
+            snapshot: snapshot,
+            authority: forged,
+          ),
+          throwsStateError,
+        );
+        expect(harness.sessions.sessionCount, 0);
+        expect(
+          store.records.values.where(
+            (value) =>
+                value['kind'] == V3SessionCheckpointRepository.recordKind,
+          ),
+          isEmpty,
+        );
+      } finally {
+        snapshot.wipeSecrets();
+        accepted.established.close();
+        responder.close();
+        await harness.close();
       }
     });
 
@@ -572,34 +648,43 @@ final class _Harness {
     this.store, {
     V3HandshakeHandoffRepository? handoffRepository,
   }) {
+    initialHandoffAuthority = V3InitialSessionHandoffAuthority();
     inbox = V3LmfDurableInbox(store: store);
     handshakes = V3HandshakePersistenceController(
       repository: V3HandshakePendingRepository(store: store),
+      initialHandoffAuthority: initialHandoffAuthority,
     );
     sessions = V3SessionCommitController(
       journal: V3LmfAtomicCommitJournal(store: store, inbox: inbox),
       committedRecordMaterializer: V3CommittedRecordMaterializer(store: store),
       checkpointRepository: V3SessionCheckpointRepository(store: store),
+      initialHandoffAuthority: initialHandoffAuthority,
     );
     handoffs = V3HandshakeSessionHandoffController(
       repository:
           handoffRepository ?? V3HandshakeHandoffRepository(store: store),
       handshakes: handshakes,
       sessions: sessions,
+      initialHandoffAuthority: initialHandoffAuthority,
     );
   }
 
   final _FaultStore store;
+  late final V3InitialSessionHandoffAuthority initialHandoffAuthority;
   late final V3LmfDurableInbox inbox;
   late final V3HandshakePersistenceController handshakes;
   late final V3SessionCommitController sessions;
   late final V3HandshakeSessionHandoffController handoffs;
 
   Future<V3HandshakeSessionHandoffRestoreResult> restore() async {
+    await restoreDependencies();
+    return handoffs.restore();
+  }
+
+  Future<void> restoreDependencies() async {
     await inbox.restore(keyResolver: (_) => null);
     await handshakes.restore();
     await sessions.restore(checkpoints: const []);
-    return handoffs.restore();
   }
 
   Future<void> close() async {
