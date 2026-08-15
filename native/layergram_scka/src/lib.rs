@@ -13,6 +13,10 @@ mod braid_message;
 #[allow(dead_code)]
 mod braid_state_payload;
 #[allow(dead_code)]
+mod braid_transition;
+#[allow(dead_code)]
+mod entropy;
+#[allow(dead_code)]
 mod erasure;
 #[allow(dead_code)]
 mod incremental_mlkem;

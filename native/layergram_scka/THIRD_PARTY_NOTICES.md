@@ -21,6 +21,7 @@ dual licensed. The complete Apache License 2.0 text is the repository root
 | `ctr` | 0.9.2 | Apache-2.0 alternative |
 | `digest` | 0.10.7 | Apache-2.0 alternative |
 | `generic-array` | 0.14.7 | MIT |
+| `getrandom` | 0.4.3 | Apache-2.0 alternative |
 | `ghash` | 0.5.1 | Apache-2.0 alternative |
 | `hkdf` | 0.12.4 | Apache-2.0 alternative |
 | `hmac` | 0.12.1 | Apache-2.0 alternative |
@@ -46,6 +47,7 @@ dual licensed. The complete Apache License 2.0 text is the repository root
 | `libc` | 0.2.189 | Apache-2.0 alternative |
 | `rand` | 0.10.2 | Apache-2.0 alternative |
 | `rand_core` | 0.10.1 | Apache-2.0 alternative |
+| `r-efi` | 6.0.0 | Apache-2.0 alternative |
 | `sha2` | 0.10.9 | Apache-2.0 alternative |
 | `zeroize` | 1.8.1 | Apache-2.0 alternative |
 
@@ -57,6 +59,11 @@ licensing alternative. `cfg-if`, `cpufeatures`, `crypto-common`,
 normal/build paths and are listed once above.
 `generic-array` 0.14.7 is MIT licensed; its exact license is retained at
 `licenses/MIT-generic-array.txt`.
+
+The first private transition slice promotes `getrandom` 0.4.3 to a direct
+normal dependency for operating-system entropy. Layergram selects its
+Apache-2.0 alternative and the Apache-2.0 alternatives offered by its
+applicable `cfg-if`, `libc`, `rand_core`, and target-specific `r-efi` graph.
 
 The Unicode-3.0 notice required by `unicode-ident` is retained at
 `licenses/UNICODE-3.0.txt`. Exact package checksums are pinned in `Cargo.lock`;

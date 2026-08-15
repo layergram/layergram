@@ -5,8 +5,9 @@
 //!
 //! This Layergram-owned `BM3` representation carries the exact logical
 //! `epoch`, `type`, and optional erasure chunk from the public-domain
-//! specification. It is private to the native crate and remains disconnected
-//! from the state machine and C ABI.
+//! specification. It is private to the native crate; the first Header message
+//! is now produced by the private transition-1 slice, while the C ABI remains
+//! disconnected.
 
 use crate::erasure::{EncodedChunk, ErasureMessageKind, ENCODED_CHUNK_BYTES};
 use crate::{MAX_COUNTER, MAX_MESSAGE_BYTES};

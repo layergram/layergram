@@ -3,10 +3,10 @@
 
 //! Inactive, Layergram-owned boundary around incremental ML-KEM-768.
 //!
-//! This module deliberately exposes no C ABI and is not used by the SCKA
-//! state machine or its self-test. It freezes the exact primitive sizes and
-//! misuse-resistant call order needed by ML-KEM Braid revision 1 while the
-//! complete backend remains `NOT_READY`.
+//! This module deliberately exposes no C ABI. Its key-generation entry point is
+//! used only by the private transition-1 slice; encapsulation, decapsulation,
+//! and every exported operation remain disconnected while the complete backend
+//! stays `NOT_READY`.
 
 use libcrux_ml_kem::mlkem768::incremental::{
     decapsulate_compressed_key, encapsulate1, encapsulate2, validate_pk_bytes, Ciphertext1,

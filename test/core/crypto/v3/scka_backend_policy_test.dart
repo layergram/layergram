@@ -43,7 +43,7 @@ void main() {
     expect(scaffold['license'], 'Apache-2.0');
     expect(scaffold['rustVersion'], '1.87.0');
     expect(scaffold['cargoLockPackageCount'], 98);
-    expect(scaffold['thirdPartyDependencies'], hasLength(7));
+    expect(scaffold['thirdPartyDependencies'], hasLength(8));
     expect(scaffold['abiVersion'], 1);
     expect(scaffold['protocolRevision'], 1);
     expect(scaffold['stateFormatVersion'], 1);
@@ -88,7 +88,7 @@ void main() {
     final boundary = receipt['layergramOwnedIncrementalMlKemBoundary']
         as Map<String, dynamic>;
     expect(boundary['publicAbiConnected'], isFalse);
-    expect(boundary['stateMachineConnected'], isFalse);
+    expect(boundary['stateMachineConnected'], isTrue);
     expect(boundary['productionRegistered'], isFalse);
     expect(boundary['exactLengthValidation'], isTrue);
     expect(
@@ -145,6 +145,23 @@ void main() {
       isTrue,
     );
 
+    final entropy =
+        receipt['operatingSystemEntropyPrimitive'] as Map<String, dynamic>;
+    expect(entropy['crate'], 'getrandom');
+    expect(entropy['version'], '0.4.3');
+    expect(entropy['selectedLicense'], 'Apache-2.0');
+    expect(entropy['defaultFeatures'], isFalse);
+    expect(entropy['deterministicProductionHook'], isFalse);
+    expect(entropy['publicAbiConnected'], isFalse);
+    expect(entropy['applicationRuntimeConnected'], isFalse);
+    for (final license
+        in (entropy['runtimeOrBuildDependencyLicenses'] as List<dynamic>)
+            .cast<String>()) {
+      expect(license, isNot(contains('AGPL')));
+      expect(license, isNot(matches(RegExp(r'(^|[^A])GPL'))));
+    }
+    expect(File(entropy['notices'] as String).existsSync(), isTrue);
+
     final envelope = receipt['layergramOwnedAuthenticatedStateEnvelope']
         as Map<String, dynamic>;
     expect(envelope['algorithm'], 'AES-256-GCM');
@@ -172,7 +189,7 @@ void main() {
     expect(payload['canonicalEncoderDecoderProgress'], isTrue);
     expect(payload['bestEffortSecretZeroization'], isTrue);
     expect(payload['publicAbiConnected'], isFalse);
-    expect(payload['transitionEngineConnected'], isFalse);
+    expect(payload['transitionEngineConnected'], isTrue);
     expect(payload['productionRegistered'], isFalse);
 
     final authenticator =
@@ -194,7 +211,7 @@ void main() {
     expect(authenticator['zeroizingOutputKeyOwner'], isTrue);
     expect(authenticator['independentGoldenVectors'], isTrue);
     expect(authenticator['publicAbiConnected'], isFalse);
-    expect(authenticator['transitionEngineConnected'], isFalse);
+    expect(authenticator['transitionEngineConnected'], isTrue);
     expect(authenticator['productionRegistered'], isFalse);
 
     final publicMessage =
@@ -215,8 +232,28 @@ void main() {
     expect(publicMessage['canonicalReencodeCheck'], isTrue);
     expect(publicMessage['independentGoldenVectors'], isTrue);
     expect(publicMessage['publicAbiConnected'], isFalse);
-    expect(publicMessage['transitionEngineConnected'], isFalse);
+    expect(publicMessage['transitionEngineConnected'], isTrue);
     expect(publicMessage['productionRegistered'], isFalse);
+
+    final transition =
+        receipt['layergramOwnedTransitionEngine'] as Map<String, dynamic>;
+    expect(transition['license'], 'Apache-2.0');
+    expect(transition['implementedFunctions'], <String>[
+      'InitAlice',
+      'InitBob',
+      'KeysUnsampled.Send',
+      'KeysUnsampled.Receive',
+    ]);
+    expect(transition['firstTransitionNumber'], 1);
+    expect(transition['immutableAuthenticatedPrior'], isTrue);
+    expect(transition['detachedExactStateAndMessageCandidate'], isTrue);
+    expect(transition['osEntropyBytesPerKeyGeneration'], 64);
+    expect(transition['deterministicEntropyExported'], isFalse);
+    expect(transition['reexportRequiresExactCandidateReuse'], isTrue);
+    expect(transition['unreliableExternalTransportAssumed'], isTrue);
+    expect(transition['publicAbiConnected'], isFalse);
+    expect(transition['durableJournalConnected'], isFalse);
+    expect(transition['productionRegistered'], isFalse);
 
     final effects = receipt['checkpointEffects'] as Map<String, dynamic>;
     expect(effects['thirdPartyCodeImported'], isFalse);
@@ -229,6 +266,8 @@ void main() {
     expect(effects['canonicalStateMachinePayloadAdded'], isTrue);
     expect(effects['ratchetedAuthenticatorAdded'], isTrue);
     expect(effects['publicMessageCodecAdded'], isTrue);
+    expect(effects['initialTransitionEngineSliceAdded'], isTrue);
+    expect(effects['operatingSystemEntropyBoundaryAdded'], isTrue);
     expect(effects['pubspecChanged'], isFalse);
     expect(effects['protocolV3Activated'], isFalse);
   });
@@ -255,6 +294,12 @@ void main() {
       contains(
         'aes-gcm = { version = "=0.10.3", default-features = false, '
         'features = ["aes", "zeroize"] }',
+      ),
+    );
+    expect(
+      manifest,
+      contains(
+        'getrandom = { version = "=0.4.3", default-features = false }',
       ),
     );
     expect(
@@ -288,6 +333,7 @@ void main() {
     );
     expect(lock, contains('name = "aes-gcm"'));
     expect(lock, contains('name = "aes"'));
+    expect(lock, contains('name = "getrandom"'));
     expect(lock, contains('name = "hkdf"'));
     expect(lock, contains('name = "hmac"'));
     expect(lock, contains('name = "libcrux-ml-kem"'));
@@ -301,6 +347,8 @@ void main() {
     expect(notices, contains('libcrux-ml-kem'));
     expect(notices, contains('hkdf'));
     expect(notices, contains('hmac'));
+    expect(notices, contains('getrandom'));
+    expect(notices, contains('r-efi'));
     expect(notices, contains('sha2'));
     expect(notices, contains('Unicode-3.0'));
     expect(notices, contains('generic-array'));
@@ -337,11 +385,15 @@ void main() {
     expect(nativeEntry, contains('mod braid_authenticator;'));
     expect(nativeEntry, contains('mod braid_message;'));
     expect(nativeEntry, contains('mod braid_state_payload;'));
+    expect(nativeEntry, contains('mod braid_transition;'));
+    expect(nativeEntry, contains('mod entropy;'));
     expect(nativeEntry, isNot(contains('incremental_mlkem::')));
     expect(nativeEntry, isNot(contains('state_envelope::')));
     expect(nativeEntry, isNot(contains('braid_authenticator::')));
     expect(nativeEntry, isNot(contains('braid_message::')));
     expect(nativeEntry, isNot(contains('braid_state_payload::')));
+    expect(nativeEntry, isNot(contains('braid_transition::')));
+    expect(nativeEntry, isNot(contains('entropy::')));
     expect(source, contains('validate_pk_bytes'));
     expect(source, contains('checked_seed.zeroize()'));
     expect(source, contains('part_one: EncapsulationPartOne'));
@@ -391,6 +443,18 @@ void main() {
     expect(publicMessage, contains('BraidMessageType::Ciphertext1Ack'));
     expect(
       File('specs/SCKA_PUBLIC_MESSAGE.md').readAsStringSync(),
+      contains('protocol v3 inactive'),
+    );
+    final transition = File(
+      'native/layergram_scka/src/braid_transition.rs',
+    ).readAsStringSync();
+    expect(transition, contains('pub(crate) fn initialize('));
+    expect(transition, contains('pub(crate) fn send('));
+    expect(transition, contains('send_with_entropy(prior, &mut OsEntropy)'));
+    expect(transition, contains('BraidStateVariant::KeysSampled'));
+    expect(transition, contains('BraidMessageType::Header'));
+    expect(
+      File('specs/SCKA_TRANSITION_ENGINE.md').readAsStringSync(),
       contains('protocol v3 inactive'),
     );
   });

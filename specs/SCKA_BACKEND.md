@@ -2,8 +2,9 @@
 
 Status: **inactive ABI; outer state envelope, canonical inner payload, and
 ratcheted authenticator implemented; erasure representation, canonical public
-message, and incremental primitive boundary frozen; no transition engine or
-production backend; protocol v3 inactive**
+message, and incremental primitive boundary frozen; private initialization and
+transition 1 implemented; no public transition engine or production backend;
+protocol v3 inactive**
 
 Layergram needs an ML-KEM Braid revision-1 backend to provide the Sparse
 Continuous Key Agreement input to its inactive Triple Ratchet. This component
@@ -110,9 +111,16 @@ authenticator successors, and zeroizing epoch-key ownership.
 The disconnected `BM3` codec frozen in `SCKA_PUBLIC_MESSAGE.md` represents all
 seven revision-1 logical public-message types, preserves their internal Braid
 epoch, binds each data-bearing type to the exact erasure payload class, and
-accepts only canonical 24-byte or 58-byte records. Neither private module yet
-implements a state transition or entropy call, and neither has a C ABI
-callsite.
+accepts only canonical 24-byte or 58-byte records.
+
+The private first transition slice frozen in `SCKA_TRANSITION_ENGINE.md` now
+implements `InitAlice`, `InitBob`, `KeysUnsampled.Send`, and the
+`KeysUnsampled.Receive` no-op. It obtains its exact 64-byte ML-KEM seed from a
+private `getrandom` 0.4.3 operating-system entropy boundary, derives a detached
+`KeysSampled` successor, and returns the exact first `BM3 Header` symbol without
+mutating the prior. The result is deliberately not connected to LS3, the C ABI,
+Dart, Flutter, or the existing durable journals, and all exports still return
+`NOT_READY`.
 
 ## Incremental ML-KEM primitive, inactive internal adoption
 
@@ -162,10 +170,12 @@ machine receipt. These terms permit paid commercial distribution when their
 notice requirements are preserved, but this remains an engineering review and
 not legal advice.
 
-The internal envelope API deliberately accepts a caller-supplied nonce rather
-than adding an RNG dependency or silently choosing an entropy source. A future
-ABI implementation must obtain a fresh nonce from the approved OS CSPRNG,
-ensure one seal per candidate revision, and persist the exact sealed bytes.
+The internal envelope API still accepts a caller-supplied nonce. The private
+transition layer now has an approved `getrandom` operating-system entropy
+boundary for ML-KEM seed generation, but LS3 nonce allocation is not yet
+connected. A future ABI implementation must obtain a separate fresh nonce from
+that boundary, ensure one seal per candidate revision, and persist the exact
+sealed bytes.
 
 ## Ratcheted-authenticator primitives, inactive internal adoption
 
@@ -203,8 +213,9 @@ CocoaPods, Gradle, CMake, the Windows runner, or Flutter FFI.
 
 ## Remaining security gates
 
-- complete revision-1 state transitions independently from the specification
-  around the frozen authenticator and public-message codecs;
+- complete revision-1 transitions 2 through 13 independently from the
+  specification around the frozen first transition, authenticator, and
+  public-message codecs;
 - generate independent public vectors and compare with a separately executed
   conforming implementation without linking its code;
 - verify erasure-code behavior, epoch uniqueness, output-key agreement,

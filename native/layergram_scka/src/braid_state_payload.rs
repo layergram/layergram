@@ -135,6 +135,22 @@ impl BraidStatePayload {
         &self.encoded
     }
 
+    pub(crate) fn auth_root_key(&self) -> &[u8; AUTH_KEY_BYTES] {
+        self.encoded[AUTH_ROOT_OFFSET..AUTH_MAC_OFFSET]
+            .try_into()
+            .expect("canonical LB3 authenticator root")
+    }
+
+    pub(crate) fn auth_mac_key(&self) -> &[u8; AUTH_KEY_BYTES] {
+        self.encoded[AUTH_MAC_OFFSET..BODY_LENGTH_OFFSET]
+            .try_into()
+            .expect("canonical LB3 authenticator MAC key")
+    }
+
+    pub(crate) fn body(&self) -> &[u8] {
+        &self.encoded[PAYLOAD_HEADER_BYTES..]
+    }
+
     fn wipe(&mut self) {
         self.encoded.zeroize();
     }

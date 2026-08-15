@@ -37,6 +37,7 @@
     "thirdPartyDependencies": [
       "aes =0.8.4 (normal, zeroizing AES key schedule)",
       "aes-gcm =0.10.3 (normal, inactive internal LS3 envelope)",
+      "getrandom =0.4.3 (normal, inactive private OS entropy boundary)",
       "hkdf =0.12.4 (normal, inactive ratcheted authenticator)",
       "hmac =0.12.1 (normal, inactive ratcheted authenticator)",
       "libcrux-ml-kem =0.0.10 (normal, inactive internal module)",
@@ -118,7 +119,7 @@
     "implementation": "native/layergram_scka/src/incremental_mlkem.rs",
     "specification": "specs/SCKA_INCREMENTAL_MLKEM.md",
     "publicAbiConnected": false,
-    "stateMachineConnected": false,
+    "stateMachineConnected": true,
     "productionRegistered": false,
     "exactLengthValidation": true,
     "fullPublicKeyValidationBeforeCiphertextPartTwo": true,
@@ -208,6 +209,27 @@
     "notices": "native/layergram_scka/THIRD_PARTY_NOTICES.md",
     "bsdLicense": "native/layergram_scka/licenses/BSD-3-Clause-subtle.txt"
   },
+  "operatingSystemEntropyPrimitive": {
+    "crate": "getrandom",
+    "version": "0.4.3",
+    "checksum": "300e883d756b2e4ec94e02791f39b04b522276138852cfc41d9fb7e904106099",
+    "repository": "https://github.com/rust-random/getrandom",
+    "license": "MIT OR Apache-2.0",
+    "selectedLicense": "Apache-2.0",
+    "defaultFeatures": false,
+    "rustVersion": "1.85",
+    "runtimeOrBuildDependencyLicenses": [
+      "cfg-if 1.0.4 — MIT OR Apache-2.0",
+      "libc 0.2.189 — MIT OR Apache-2.0",
+      "r-efi 6.0.0 — Apache-2.0 selected licensing path",
+      "rand_core 0.10.1 — MIT OR Apache-2.0"
+    ],
+    "deterministicProductionHook": false,
+    "publicAbiConnected": false,
+    "applicationRuntimeConnected": false,
+    "engineeringLicenseGate": "pass-inactive-internal-adoption",
+    "notices": "native/layergram_scka/THIRD_PARTY_NOTICES.md"
+  },
   "layergramOwnedAuthenticatedStateEnvelope": {
     "implementation": "native/layergram_scka/src/state_envelope.rs",
     "specification": "specs/SCKA_NATIVE_ABI.md",
@@ -242,7 +264,7 @@
     "canonicalEncoderDecoderProgress": true,
     "bestEffortSecretZeroization": true,
     "publicAbiConnected": false,
-    "transitionEngineConnected": false,
+    "transitionEngineConnected": true,
     "productionRegistered": false,
     "independentlyReviewed": false
   },
@@ -263,7 +285,7 @@
     "zeroizingOutputKeyOwner": true,
     "independentGoldenVectors": true,
     "publicAbiConnected": false,
-    "transitionEngineConnected": false,
+    "transitionEngineConnected": true,
     "productionRegistered": false,
     "independentlyReviewed": false
   },
@@ -286,7 +308,7 @@
     "canonicalReencodeCheck": true,
     "independentGoldenVectors": true,
     "publicAbiConnected": false,
-    "transitionEngineConnected": false,
+    "transitionEngineConnected": true,
     "productionRegistered": false,
     "independentlyReviewed": false
   },
@@ -302,6 +324,31 @@
     "maximumEncodingIndex": 65534,
     "maximumSourceChunks": 36,
     "runtimeConnected": false,
+    "privateTransitionEngineConnected": true,
+    "independentlyReviewed": false
+  },
+  "layergramOwnedTransitionEngine": {
+    "implementation": "native/layergram_scka/src/braid_transition.rs",
+    "entropyImplementation": "native/layergram_scka/src/entropy.rs",
+    "specification": "specs/SCKA_TRANSITION_ENGINE.md",
+    "license": "Apache-2.0",
+    "sourceRule": "independent-implementation-from-public-domain-specification",
+    "implementedFunctions": [
+      "InitAlice",
+      "InitBob",
+      "KeysUnsampled.Send",
+      "KeysUnsampled.Receive"
+    ],
+    "firstTransitionNumber": 1,
+    "immutableAuthenticatedPrior": true,
+    "detachedExactStateAndMessageCandidate": true,
+    "osEntropyBytesPerKeyGeneration": 64,
+    "deterministicEntropyExported": false,
+    "reexportRequiresExactCandidateReuse": true,
+    "unreliableExternalTransportAssumed": true,
+    "publicAbiConnected": false,
+    "durableJournalConnected": false,
+    "productionRegistered": false,
     "independentlyReviewed": false
   },
   "checkpointEffects": {
@@ -316,11 +363,13 @@
     "canonicalStateMachinePayloadAdded": true,
     "ratchetedAuthenticatorAdded": true,
     "publicMessageCodecAdded": true,
+    "initialTransitionEngineSliceAdded": true,
+    "operatingSystemEntropyBoundaryAdded": true,
     "protocolV3Activated": false
   },
   "remainingGates": [
     "repeat locked target-specific dependency and notice review before every packaged release",
-    "complete revision-1 state transitions around the frozen authenticator and BM3 public-message codec from the public-domain specification without copying AGPL implementation code",
+    "complete revision-1 transitions 2 through 13 around the frozen first transition, authenticator, and BM3 codec from the public-domain specification without copying AGPL implementation code",
     "connect the already-derived SCKA state-sealing key only after the complete state machine is approved and bind native revision atomically to TR3 revision",
     "independently review the frozen canonical LB3 plaintext state-machine payload, BM3 public-message codec, and opaque incremental-continuation version binding",
     "run upstream primitive vectors plus independent cross-implementation ML-KEM Braid vectors",

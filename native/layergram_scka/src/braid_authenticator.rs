@@ -6,7 +6,8 @@
 //! This module freezes Layergram's implementation-defined protocol domain and
 //! the exact `KDF_AUTH`, `KDF_OK`, header-MAC, and ciphertext-MAC operations
 //! from the public-domain ML-KEM Braid specification. It is private to the
-//! native crate and remains disconnected from the state machine and C ABI.
+//! native crate; initialization and header authentication are now used by the
+//! private transition-1 slice, while the C ABI remains disconnected.
 
 use hkdf::Hkdf;
 use hmac::{Hmac, Mac};

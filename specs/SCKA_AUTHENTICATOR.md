@@ -1,8 +1,8 @@
 # Layergram ML-KEM Braid authenticator revision 1
 
 Status: **canonical KDF and ratcheted authenticator implemented internally;
-state transitions and public ABI connection not implemented;
-protocol v3 inactive**
+initialization and header MAC connected only to private transition 1; public
+ABI connection not implemented; protocol v3 inactive**
 
 This document freezes Layergram's implementation-defined domain and the
 ratcheted-authenticator primitives required by the public-domain [ML-KEM Braid
@@ -15,10 +15,10 @@ linked, or embedded. This checkpoint uses the permissively licensed RustCrypto
 `hkdf`, `hmac`, and `sha2` crates and remains suitable for the public Layergram
 base that is merged into the separately distributed paid Premium application.
 
-This checkpoint does not implement Braid `Send`, `Receive`, randomness,
-state-envelope persistence, or any C ABI operation. The canonical
-public-message codec is frozen separately in `SCKA_PUBLIC_MESSAGE.md` but is
-not connected to these primitives.
+The private first transition slice now uses authenticator initialization,
+restore, and header-MAC generation as frozen in `SCKA_TRANSITION_ENGINE.md`.
+Remaining Braid transitions, state-envelope persistence, and every C ABI
+operation are still disconnected.
 Native self-test and every correctly shaped public operation continue to return
 `NOT_READY`.
 
