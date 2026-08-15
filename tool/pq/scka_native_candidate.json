@@ -362,12 +362,15 @@
       "KeysUnsampled.Send",
       "KeysUnsampled.Receive",
       "KeysSampled.Send",
-      "KeysSampled.Receive"
+      "KeysSampled.Receive",
+      "HeaderSent.Send",
+      "HeaderSent.Receive"
     ],
     "firstTransitionNumber": 1,
     "implementedTransitionNumbers": [
       1,
-      2
+      2,
+      3
     ],
     "deterministicGoldenVectors": true,
     "immutableAuthenticatedPrior": true,
@@ -397,11 +400,12 @@
     "operatingSystemEntropyBoundaryAdded": true,
     "getrandomBackendOverrideGuardAdded": true,
     "identityMnemonicFullByteRangeHardened": true,
+    "transitionThreeAdded": true,
     "protocolV3Activated": false
   },
   "remainingGates": [
     "repeat locked target-specific dependency and notice review before every packaged release",
-    "complete revision-1 transitions 3 through 13 around the frozen initial transitions, authenticator, and BM3 codec from the public-domain specification without copying AGPL implementation code",
+    "complete revision-1 transitions 4 through 13 around the frozen initial transitions, authenticator, and BM3 codec from the public-domain specification without copying AGPL implementation code",
     "connect the already-derived SCKA state-sealing key only after the complete state machine is approved and bind native revision atomically to TR3 revision",
     "independently review the frozen canonical LB3 plaintext state-machine payload, BM3 public-message codec, and opaque incremental-continuation version binding",
     "run upstream primitive vectors plus independent cross-implementation ML-KEM Braid vectors",

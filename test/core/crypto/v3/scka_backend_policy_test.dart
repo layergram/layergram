@@ -271,9 +271,11 @@ void main() {
       'KeysUnsampled.Receive',
       'KeysSampled.Send',
       'KeysSampled.Receive',
+      'HeaderSent.Send',
+      'HeaderSent.Receive',
     ]);
     expect(transition['firstTransitionNumber'], 1);
-    expect(transition['implementedTransitionNumbers'], <int>[1, 2]);
+    expect(transition['implementedTransitionNumbers'], <int>[1, 2, 3]);
     expect(transition['deterministicGoldenVectors'], isTrue);
     expect(transition['immutableAuthenticatedPrior'], isTrue);
     expect(transition['detachedExactStateAndMessageCandidate'], isTrue);
@@ -300,6 +302,7 @@ void main() {
     expect(effects['operatingSystemEntropyBoundaryAdded'], isTrue);
     expect(effects['getrandomBackendOverrideGuardAdded'], isTrue);
     expect(effects['identityMnemonicFullByteRangeHardened'], isTrue);
+    expect(effects['transitionThreeAdded'], isTrue);
     expect(effects['pubspecChanged'], isFalse);
     expect(effects['protocolV3Activated'], isFalse);
   });
@@ -507,7 +510,10 @@ void main() {
     expect(transition, contains('send_with_entropy(prior, &mut OsEntropy)'));
     expect(transition, contains('BraidStateVariant::KeysSampled'));
     expect(transition, contains('BraidStateVariant::HeaderSent'));
+    expect(transition, contains('BraidStateVariant::Ct1Received'));
     expect(transition, contains('BraidMessageType::Header'));
+    expect(transition, contains('BraidMessageType::EncapsulationKey'));
+    expect(transition, contains('receive_while_header_sent'));
     expect(
       File('specs/SCKA_TRANSITION_ENGINE.md').readAsStringSync(),
       contains('protocol v3 inactive'),

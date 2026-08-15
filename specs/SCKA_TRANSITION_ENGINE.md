@@ -1,6 +1,6 @@
 # Layergram ML-KEM Braid transition engine revision 1
 
-Status: **initialization and transitions 1-2 implemented privately; remaining
+Status: **initialization and transitions 1-3 implemented privately; remaining
 transitions and public ABI not connected; protocol v3 inactive**
 
 This document freezes the initial bounded slice of Layergram's independent
@@ -58,8 +58,21 @@ the current internal Braid epoch creates a detached `HeaderSent` successor,
 preserving the private key, initializing the `Ek` encoder at index zero, and
 initializing the `Ct1` decoder with the exact received symbol. Other canonical
 messages or epochs are ignored semantically while the accepted operation still
-advances the Layergram state revision. Other receive and send state variants
-remain unimplemented and fail outside this private slice.
+advances the Layergram state revision.
+
+`HeaderSent.Send` emits the next canonical `Ek` erasure symbol from the
+public-key vector embedded in the validated private key and the persisted
+encoder index. It preserves the exact partial `Ct1` decoder and advances only
+the detached encoder index and Layergram state revision.
+
+`HeaderSent.Receive` implements transition 3. Current-epoch `Ct1` symbols are
+retained in canonical sorted order; exact duplicates are idempotent and
+conflicting duplicates fail before a candidate is returned. Once any 30 unique
+symbols reconstruct the exact 960-byte `Ct1`, the detached successor becomes
+`Ct1Received` and retains the current `Ek` encoder index. Wrong types or epochs
+are ignored semantically while the accepted wrapper revision advances. Other
+receive and send state variants remain unimplemented and fail outside this
+private slice.
 
 ## 2. Immutable candidate and unreliable transport contract
 
@@ -79,19 +92,19 @@ Therefore a native `Send` result means only **generated**, never **delivered**:
 - retry or re-export MUST reuse those exact stored bytes and MUST NOT rerun the
   randomized transition;
 - losing or not sending an exported copy does not authorize rollback or entropy
-  reuse; subsequent `KeysSampled.Send` operations provide distinct erasure
-  symbols from the persisted encoder and eventual reconstruction succeeds once
-  enough symbols actually reach the peer;
+  reuse; subsequent `KeysSampled.Send` or `HeaderSent.Send` operations provide
+  distinct erasure symbols from the persisted encoder and eventual
+  reconstruction succeeds once enough symbols actually reach the peer;
 - a Layergram authenticated ACK proves that the peer processed the bound
   Layergram message. It is not an acknowledgement from WhatsApp, Telegram,
   Signal, iMessage, or another carrier, and the ACK message can itself be lost.
 
 This checkpoint tests stable re-export, candidate reconstruction after a
 simulated restart, discarded exported copies, continuation after a lost header
-symbol, erasure recovery from later symbols, transition 2, and
-duplicate/reordered no-op receives. It does not yet connect native candidates
-to the existing durable send/receive journals; that atomic composition remains
-activation-blocking.
+symbol, transition 2, `Ek` continuation, exact/conflicting `Ct1` duplicates,
+loss and reordering across a simulated decoder restart, and transition 3. It
+does not yet connect native candidates to the existing durable send/receive
+journals; that atomic composition remains activation-blocking.
 
 ## 3. Entropy and licensing boundary
 
@@ -100,10 +113,10 @@ The first key-generating transition calls the private `OsEntropy` boundary in
 features disabled, rejects every documented opt-in backend at compile time, and
 maps every OS-source failure to a fail-closed entropy error. Partially filled
 seed storage is zeroized before return and no candidate is exposed on failure.
-`KeysSampled.Send` does not request new entropy. Deterministic entropy exists
-only as a private unit-test trait implementation and is not exported through
-the C ABI. The complete application and native entropy policy is frozen in
-`ENTROPY_SOURCES.md`.
+`KeysSampled.Send` and `HeaderSent.Send` do not request new entropy.
+Deterministic entropy exists only as a private unit-test trait implementation
+and is not exported through the C ABI. The complete application and native
+entropy policy is frozen in `ENTROPY_SOURCES.md`.
 
 `getrandom` is available under MIT or Apache-2.0; Layergram selects its
 Apache-2.0 path. Its applicable `cfg-if`, `libc`, `r-efi`, and `rand_core`
@@ -119,12 +132,12 @@ Unit tests cover both roles, revision-zero invariants, the independent FIPS
 ML-KEM key-generation vector, detached transition semantics, exact symbol-zero
 output, one entropy request, error-before-entropy behavior, OS entropy, stable
 re-export, reconstruction, loss of an intermediate header symbol, recovery
-from later symbols without new entropy, transition 2, MAC/state corruption,
-encoder/revision exhaustion, revisioned ignored duplicates/reordering, and
-frozen deterministic digests for the second Header symbol and transition-2
-successor.
+from later symbols without new entropy, transitions 2-3, `Ek` continuation,
+`Ct1` loss/reordering/duplicate/conflict behavior, simulated decoder restart,
+MAC/state corruption, encoder/revision exhaustion, revisioned ignored inputs,
+and frozen deterministic digests for Header continuation and transitions 2-3.
 
-Activation still requires transitions 3 through 13, authenticated receive
+Activation still requires transitions 4 through 13, terminal authenticated
 reconstruction and terminal MAC-failure behavior, encoder/decoder continuation,
 epoch-key emission and authenticator ratcheting, LS3 sealing with a unique OS
 nonce, the public C ABI and panic containment, atomic TR3/journal composition,

@@ -3,7 +3,7 @@
 Status: **inactive ABI; outer state envelope, canonical inner payload, and
 ratcheted authenticator implemented; erasure representation, canonical public
 message, and incremental primitive boundary frozen; private initialization and
-transitions 1-2 implemented; no public transition engine or production backend;
+transitions 1-3 implemented; no public transition engine or production backend;
 protocol v3 inactive**
 
 Layergram needs an ML-KEM Braid revision-1 backend to provide the Sparse
@@ -116,11 +116,13 @@ accepts only canonical 24-byte or 58-byte records.
 The private initial transition slice frozen in `SCKA_TRANSITION_ENGINE.md` now
 implements `InitAlice`, `InitBob`, `KeysUnsampled.Send`, and the
 `KeysUnsampled.Receive` no-op, continues authenticated Header erasure symbols
-in `KeysSampled.Send`, and implements transition 2 from current-epoch `Ct1` to
-`HeaderSent`. The first send obtains its exact 64-byte ML-KEM seed from a
-private `getrandom` 0.4.3 operating-system entropy boundary; later Header
-symbols use persisted encoder progress without requesting new entropy. Every
-opt-in `getrandom` backend is rejected at compile time. The result is
+in `KeysSampled.Send`, implements transition 2 from current-epoch `Ct1` to
+`HeaderSent`, emits persisted `Ek` symbols in `HeaderSent.Send`, and implements
+transition 3 after any sufficient unique `Ct1` set reconstructs the exact
+ciphertext part. The first send obtains its exact 64-byte ML-KEM seed from a
+private `getrandom` 0.4.3 operating-system entropy boundary; later Header and
+`Ek` symbols use persisted encoder progress without requesting new entropy.
+Every opt-in `getrandom` backend is rejected at compile time. The result is
 deliberately not connected to LS3, the C ABI, Dart, Flutter, or the existing
 durable journals, and all exports still return `NOT_READY`.
 
@@ -215,7 +217,7 @@ CocoaPods, Gradle, CMake, the Windows runner, or Flutter FFI.
 
 ## Remaining security gates
 
-- complete revision-1 transitions 3 through 13 independently from the
+- complete revision-1 transitions 4 through 13 independently from the
   specification around the frozen initial transitions, authenticator, and
   public-message codecs;
 - generate independent public vectors and compare with a separately executed

@@ -1,7 +1,7 @@
 # Layergram incremental ML-KEM-768 boundary revision 1
 
-Status: **internal primitive adopted; key generation and keypair restoration
-connected only to private transitions 1-2; not connected to the native ABI;
+Status: **internal primitive adopted; key generation, keypair restoration, and
+public-vector access connected only to private transitions 1-3; not connected to the native ABI;
 protocol v3 inactive**
 
 This document freezes the Layergram-owned boundary around the incremental
@@ -9,9 +9,10 @@ ML-KEM-768 primitive needed by ML-KEM Braid revision 1. The implementation is
 `native/layergram_scka/src/incremental_mlkem.rs`.
 
 The private initial-transition slice calls deterministic key generation with
-an OS-supplied seed and reconstructs the exact keypair from persisted private
-state before continuing Header symbols or accepting transition 2. The module
-is still not called by `lg_scka_v1_self_test`,
+an OS-supplied seed, reconstructs the exact keypair from persisted private
+state before continuing Header symbols or accepting transition 2, and derives
+`Ek` erasure symbols from that validated keypair during transition 3. The
+module is still not called by `lg_scka_v1_self_test`,
 `lg_scka_v1_initialize`, `lg_scka_v1_send`, `lg_scka_v1_receive`, or
 `lg_scka_v1_state_validate`. The native backend therefore remains `NOT_READY`,
 unregistered, unlinked, and unavailable to production code.
