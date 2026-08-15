@@ -3,7 +3,7 @@
 Status: **inactive ABI; outer state envelope, canonical inner payload, and
 ratcheted authenticator implemented; erasure representation, canonical public
 message, and incremental primitive boundary frozen; private initialization and
-transitions 1-10 implemented; no public transition engine or production backend;
+transitions 1-11 implemented; no public transition engine or production backend;
 protocol v3 inactive**
 
 Layergram needs an ML-KEM Braid revision-1 backend to provide the Sparse
@@ -148,7 +148,12 @@ key and creates `EkReceivedCt1Sampled` while preserving the pending
 encapsulation, exact `ct1`, and persisted `ct1` encoder until acknowledgement.
 That state continues deterministic `Ct1` output without entropy or a second
 epoch-key output. Its completing acknowledgement remains fail-closed until
-transition 11.
+transition 12. `Ct1Acknowledged.Send` emits the canonical no-data record while
+preserving the pending continuation and partial decoder. Transition 11 is
+`Ct1Acknowledged.Receive`: it reconstructs and validates the complete public
+key from current-epoch `EkCt1Ack` symbols, completes `Encaps2`, authenticates
+the exact persisted `ct1 || ct2`, and only then creates `Ct2Sampled`. It
+requests no entropy and emits no second epoch key.
 The first send
 obtains its exact 64-byte ML-KEM key-generation seed from a private
 `getrandom` 0.4.3 operating-system entropy boundary; transition 7 obtains a
@@ -249,7 +254,7 @@ CocoaPods, Gradle, CMake, the Windows runner, or Flutter FFI.
 
 ## Remaining security gates
 
-- complete revision-1 transitions 11 through 13 independently from the
+- complete revision-1 transitions 12 through 13 independently from the
   specification around the frozen initial transitions, authenticator, and
   public-message codecs;
 - generate independent public vectors and compare with a separately executed

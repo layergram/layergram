@@ -51,7 +51,9 @@ sampling with a native epoch key, continued Ct1 output, transition-8
 acknowledgement with incomplete public-key reconstruction, transition-9
 public-key validation plus authenticated `Ct2Sampled` construction, and
 transition-10 validated `EkReceivedCt1Sampled` construction with continued
-persisted Ct1 output, and transitions 2-10 as specified by
+persisted Ct1 output, and transition-11 `Ct1Acknowledged` completion with
+full-key validation, deterministic `Encaps2`, and exact ciphertext
+authentication, and transitions 2-11 as specified by
 `specs/SCKA_TRANSITION_ENGINE.md`; it remains disconnected from the ABI and
 every application package.
 

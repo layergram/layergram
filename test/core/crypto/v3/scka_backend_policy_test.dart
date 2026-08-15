@@ -287,13 +287,15 @@ void main() {
       'HeaderReceived.Receive',
       'Ct1Sampled.Send',
       'Ct1Sampled.Receive',
+      'Ct1Acknowledged.Send',
+      'Ct1Acknowledged.Receive',
       'EkReceivedCt1Sampled.Send',
       'EkReceivedCt1Sampled.Receive',
     ]);
     expect(transition['firstTransitionNumber'], 1);
     expect(
       transition['implementedTransitionNumbers'],
-      <int>[1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      <int>[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
     );
     expect(transition['deterministicGoldenVectors'], isTrue);
     expect(transition['immutableAuthenticatedPrior'], isTrue);
@@ -341,7 +343,21 @@ void main() {
       isTrue,
     );
     expect(
-      transition['ekReceivedCt1SampledAckFailClosedUntilTransitionEleven'],
+      transition['transitionElevenCompletesEncapsulation'],
+      isTrue,
+    );
+    expect(
+      transition['transitionElevenFullPublicKeyIntegrityBeforeSuccessor'],
+      isTrue,
+    );
+    expect(
+      transition['transitionElevenAuthenticatesCiphertextBeforeCt2State'],
+      isTrue,
+    );
+    expect(transition['transitionElevenRequestsEntropy'], isFalse);
+    expect(transition['transitionElevenEmitsEpochKey'], isFalse);
+    expect(
+      transition['ekReceivedCt1SampledAckFailClosedUntilTransitionTwelve'],
       isTrue,
     );
     expect(transition['typedTerminalAuthenticationFailure'], isTrue);
@@ -373,6 +389,7 @@ void main() {
     expect(effects['transitionEightAdded'], isTrue);
     expect(effects['transitionNineAdded'], isTrue);
     expect(effects['transitionTenAdded'], isTrue);
+    expect(effects['transitionElevenAdded'], isTrue);
     expect(effects['pubspecChanged'], isFalse);
     expect(effects['protocolV3Activated'], isFalse);
 
@@ -381,7 +398,7 @@ void main() {
     expect(remainingGates, hasLength(8));
     expect(
       remainingGates.any(
-        (gate) => gate.contains('transitions 11 through 13'),
+        (gate) => gate.contains('transitions 12 through 13'),
       ),
       isTrue,
     );
