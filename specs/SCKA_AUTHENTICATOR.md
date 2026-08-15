@@ -16,7 +16,9 @@ linked, or embedded. This checkpoint uses the permissively licensed RustCrypto
 base that is merged into the separately distributed paid Premium application.
 
 This checkpoint does not implement Braid `Send`, `Receive`, randomness,
-public-message encoding, state-envelope persistence, or any C ABI operation.
+state-envelope persistence, or any C ABI operation. The canonical
+public-message codec is frozen separately in `SCKA_PUBLIC_MESSAGE.md` but is
+not connected to these primitives.
 Native self-test and every correctly shaped public operation continue to return
 `NOT_READY`.
 
@@ -153,8 +155,9 @@ bounds, detached successor semantics, restore length checks, and explicit wipe
 paths.
 
 Activation still requires the complete revision-1 transition engine, approved
-OS entropy, canonical authenticated public-message codec, LS3/LB3 composition,
-atomic LS3/TR3 revision binding, independent cross-implementation vectors,
+OS entropy, integration and review of the canonical `BM3` codec, authenticated
+reconstruction, LS3/LB3 composition, atomic LS3/TR3 revision binding,
+independent cross-implementation vectors,
 fuzzing and sanitizers, panic containment, crash/restart/rollback/concurrency
 tests, packaged physical-device traversal, and independent cryptographic and
 implementation review.

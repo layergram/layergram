@@ -14,8 +14,9 @@ embedded. The codec introduces no dependency and is suitable for the public
 Layergram base that is merged into the separately distributed paid Premium
 application.
 
-This checkpoint does not implement `Send`, `Receive`, the ratcheted
-authenticator KDF/MAC, entropy acquisition, or any C ABI operation. Native
+This checkpoint does not implement `Send`, `Receive`, entropy acquisition, or
+any C ABI operation. The ratcheted authenticator and canonical public-message
+codec are frozen separately but remain disconnected. Native
 self-test and all correctly shaped public operations continue to return
 `NOT_READY`.
 
@@ -179,7 +180,8 @@ and the explicit wipe path.
 
 Activation still requires the complete revision-1 transition engine,
 integration and review of the ratcheted authenticator and KDF frozen in
-`SCKA_AUTHENTICATOR.md`, approved OS entropy, authenticated
-public-message codec, cross-implementation vectors, fuzzing and sanitizers,
+`SCKA_AUTHENTICATOR.md` and the public-message codec frozen in
+`SCKA_PUBLIC_MESSAGE.md`, approved OS entropy, authenticated reconstruction,
+cross-implementation vectors, fuzzing and sanitizers,
 panic containment, crash/restart/rollback/concurrency tests, packaged physical
 device traversal, and independent cryptographic and implementation review.

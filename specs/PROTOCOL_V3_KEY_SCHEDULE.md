@@ -333,9 +333,15 @@ The public SCKA message uses a canonical `SK3` envelope:
 | 24 | N | canonical backend SCKA public message, 0–512 bytes |
 
 The epoch and counter are limited to `0..2^63-1`. The backend message is public
-and may be empty for an SCKA no-op, but it is length-bounded before copying.
-The native backend remains responsible for semantic parsing and for the SCKA's
-own message authentication before its transition can be accepted.
+and the generic inactive Dart boundary permits an empty SCKA no-op so test
+doubles and future revisions remain representable; it is length-bounded before
+copying. The admitted ML-KEM Braid revision-1 backend instead MUST emit and
+accept one canonical non-empty `BM3` record: 24 bytes for `None`/`Ct1Ack` or 58
+bytes for a data-bearing type, as frozen in `SCKA_PUBLIC_MESSAGE.md`. `BM3`
+preserves the internal Braid message epoch, which is distinct from this `SK3`
+sending-epoch high-water field. The native backend remains responsible for
+semantic parsing, complete erasure reconstruction, and the SCKA's own message
+authentication before its transition can be accepted.
 
 The standalone hybrid container is:
 

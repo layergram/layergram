@@ -1,15 +1,16 @@
 # Layergram SCKA native ABI and state envelope v1
 
 Status: **frozen inactive scaffold, implemented internal outer envelope,
-canonical inner payload, and ratcheted authenticator; erasure representation
-and incremental primitive boundary frozen; no transitions; protocol v3
-inactive**
+canonical inner payload, ratcheted authenticator, and canonical public-message
+codec; erasure representation and incremental primitive boundary frozen; no
+transitions; protocol v3 inactive**
 
 This document freezes the first Layergram-owned C ABI and authenticated state
 envelope for an eventual independent implementation of ML-KEM Braid revision 1.
 The current Rust crate implements and tests the outer `LS3` envelope, inner
-`LB3` payload, and revision-1 authenticator primitives behind internal modules,
-while deliberately returning `LG_SCKA_V1_ERR_NOT_READY`
+`LB3` payload, revision-1 authenticator primitives, and canonical `BM3` public
+message behind internal modules, while deliberately returning
+`LG_SCKA_V1_ERR_NOT_READY`
 from its self-test and every correctly shaped state operation. It cannot be
 registered as a `V3SckaBackend` and does not make Layergram quantum-resistant.
 
@@ -157,12 +158,16 @@ and zeroizing output-key owners but remains disconnected from payload parsing,
 state transitions, and the C ABI.
 
 The standalone public-message erasure representation is frozen in
-`SCKA_ERASURE_CODE.md`. The version-locked incremental primitive boundary and
+`SCKA_ERASURE_CODE.md`; the canonical logical message that carries one such
+chunk is frozen in `SCKA_PUBLIC_MESSAGE.md`. A `BM3` record is exactly 24 bytes
+for `None`/`Ct1Ack` or 58 bytes for a chunk-bearing type, and always preserves
+the non-zero internal Braid epoch. The version-locked incremental primitive boundary and
 its exact 2,080-byte opaque continuation state are frozen in
 `SCKA_INCREMENTAL_MLKEM.md`. These components and the complete encrypted
 payload representation are tested inside the Rust crate and remain disconnected
-from all ABI operations. Braid scheduling, authentication, recovery behavior,
-and state transitions remain unimplemented and require separate review.
+from all ABI operations. Braid scheduling, authenticated reconstruction,
+recovery behavior, and state transitions remain unimplemented and require
+separate review.
 
 ## 4. ABI operations
 
@@ -175,6 +180,11 @@ produces revision-zero state. It emits no public message or epoch secret.
 `lg_scka_v1_send` produces a new state, one `0..512` byte canonical Braid
 message, the high-water sending epoch, and at most one `(epoch, 32-byte secret)`
 output. It must not accept or choose the Layergram PQ message counter.
+
+For the admitted revision-1 implementation, a non-empty result is one exact
+24-byte or 58-byte `BM3` record. An empty native message remains representable
+by the generic frozen ABI but is not a canonical revision-1 `BM3` message and
+MUST NOT be emitted or accepted by that implementation.
 
 `lg_scka_v1_receive` consumes one `0..512` byte native Braid message and
 produces a new state, the matching receiving epoch, and at most one epoch

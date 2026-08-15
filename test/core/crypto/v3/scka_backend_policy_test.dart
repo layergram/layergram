@@ -197,6 +197,27 @@ void main() {
     expect(authenticator['transitionEngineConnected'], isFalse);
     expect(authenticator['productionRegistered'], isFalse);
 
+    final publicMessage =
+        receipt['layergramOwnedPublicMessageCodec'] as Map<String, dynamic>;
+    expect(publicMessage['license'], 'Apache-2.0');
+    expect(publicMessage['thirdPartyDependenciesAdded'], isEmpty);
+    expect(publicMessage['magic'], 'BM3');
+    expect(publicMessage['formatVersion'], 1);
+    expect(publicMessage['protocolRevision'], 1);
+    expect(publicMessage['headerBytes'], 24);
+    expect(publicMessage['noDataMessageBytes'], 24);
+    expect(publicMessage['dataMessageBytes'], 58);
+    expect(publicMessage['messageTypeCount'], 7);
+    expect(publicMessage['encodedChunkBytes'], 34);
+    expect(publicMessage['signed63Epochs'], isTrue);
+    expect(publicMessage['typeBindsPayloadClass'], isTrue);
+    expect(publicMessage['emptyRevisionOneMessageAccepted'], isFalse);
+    expect(publicMessage['canonicalReencodeCheck'], isTrue);
+    expect(publicMessage['independentGoldenVectors'], isTrue);
+    expect(publicMessage['publicAbiConnected'], isFalse);
+    expect(publicMessage['transitionEngineConnected'], isFalse);
+    expect(publicMessage['productionRegistered'], isFalse);
+
     final effects = receipt['checkpointEffects'] as Map<String, dynamic>;
     expect(effects['thirdPartyCodeImported'], isFalse);
     expect(effects['runtimeDependencyAddedToInactiveNativeCrate'], isTrue);
@@ -207,6 +228,7 @@ void main() {
     expect(effects['authenticatedStateEnvelopeBoundaryAdded'], isTrue);
     expect(effects['canonicalStateMachinePayloadAdded'], isTrue);
     expect(effects['ratchetedAuthenticatorAdded'], isTrue);
+    expect(effects['publicMessageCodecAdded'], isTrue);
     expect(effects['pubspecChanged'], isFalse);
     expect(effects['protocolV3Activated'], isFalse);
   });
@@ -313,10 +335,12 @@ void main() {
     expect(nativeEntry, contains('mod incremental_mlkem;'));
     expect(nativeEntry, contains('mod state_envelope;'));
     expect(nativeEntry, contains('mod braid_authenticator;'));
+    expect(nativeEntry, contains('mod braid_message;'));
     expect(nativeEntry, contains('mod braid_state_payload;'));
     expect(nativeEntry, isNot(contains('incremental_mlkem::')));
     expect(nativeEntry, isNot(contains('state_envelope::')));
     expect(nativeEntry, isNot(contains('braid_authenticator::')));
+    expect(nativeEntry, isNot(contains('braid_message::')));
     expect(nativeEntry, isNot(contains('braid_state_payload::')));
     expect(source, contains('validate_pk_bytes'));
     expect(source, contains('checked_seed.zeroize()'));
@@ -356,6 +380,17 @@ void main() {
     expect(authenticator, contains('self.root_key.zeroize()'));
     expect(
       File('specs/SCKA_AUTHENTICATOR.md').readAsStringSync(),
+      contains('protocol v3 inactive'),
+    );
+    final publicMessage = File(
+      'native/layergram_scka/src/braid_message.rs',
+    ).readAsStringSync();
+    expect(publicMessage, contains('const MAGIC: &[u8; 3] = b"BM3";'));
+    expect(publicMessage, contains('pub(crate) enum BraidMessageType'));
+    expect(publicMessage, contains('decoded.encode().as_slice() != encoded'));
+    expect(publicMessage, contains('BraidMessageType::Ciphertext1Ack'));
+    expect(
+      File('specs/SCKA_PUBLIC_MESSAGE.md').readAsStringSync(),
       contains('protocol v3 inactive'),
     );
   });

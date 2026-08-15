@@ -36,7 +36,10 @@ modules specified by `specs/SCKA_ERASURE_CODE.md` and
 canonical plaintext representation for all 11 revision-1 states as specified
 by `specs/SCKA_STATE_PAYLOAD.md`. The private authenticator module freezes the
 Layergram protocol domain, revision-1 KDFs, and HMAC behavior specified by
-`specs/SCKA_AUTHENTICATOR.md`. Actual ML-KEM Braid transitions remain
+`specs/SCKA_AUTHENTICATOR.md`. The disconnected private `BM3` codec freezes all
+seven logical public-message types, their internal Braid epoch, and exact
+24/58-byte canonical encodings as specified by
+`specs/SCKA_PUBLIC_MESSAGE.md`. Actual ML-KEM Braid transitions remain
 unimplemented.
 
 ## Reproducible checks

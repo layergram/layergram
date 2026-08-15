@@ -9,6 +9,8 @@ use core::ptr;
 #[allow(dead_code)]
 mod braid_authenticator;
 #[allow(dead_code)]
+mod braid_message;
+#[allow(dead_code)]
 mod braid_state_payload;
 #[allow(dead_code)]
 mod erasure;

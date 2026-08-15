@@ -1,9 +1,9 @@
 # ML-KEM Braid / SCKA backend decision
 
 Status: **inactive ABI; outer state envelope, canonical inner payload, and
-ratcheted authenticator implemented; erasure representation and incremental
-primitive boundary frozen; no transition engine or production backend;
-protocol v3 inactive**
+ratcheted authenticator implemented; erasure representation, canonical public
+message, and incremental primitive boundary frozen; no transition engine or
+production backend; protocol v3 inactive**
 
 Layergram needs an ML-KEM Braid revision-1 backend to provide the Sparse
 Continuous Key Agreement input to its inactive Triple Ratchet. This component
@@ -105,9 +105,14 @@ encoder/decoder progress, and zeroizes its owned plaintext.
 The private module frozen in `SCKA_AUTHENTICATOR.md` now implements the exact
 Layergram revision-1 protocol domain, `KDF_AUTH`, `KDF_OK`, full-length
 HMAC-SHA-256 header/ciphertext tags, constant-time verification, detached
-authenticator successors, and zeroizing epoch-key ownership. It does not yet
-implement any state transition, entropy call, or public-message codec, and it
-has no C ABI callsite.
+authenticator successors, and zeroizing epoch-key ownership.
+
+The disconnected `BM3` codec frozen in `SCKA_PUBLIC_MESSAGE.md` represents all
+seven revision-1 logical public-message types, preserves their internal Braid
+epoch, binds each data-bearing type to the exact erasure payload class, and
+accepts only canonical 24-byte or 58-byte records. Neither private module yet
+implements a state transition or entropy call, and neither has a C ABI
+callsite.
 
 ## Incremental ML-KEM primitive, inactive internal adoption
 
@@ -199,7 +204,7 @@ CocoaPods, Gradle, CMake, the Windows runner, or Flutter FFI.
 ## Remaining security gates
 
 - complete revision-1 state transitions independently from the specification
-  around the frozen authenticator primitives;
+  around the frozen authenticator and public-message codecs;
 - generate independent public vectors and compare with a separately executed
   conforming implementation without linking its code;
 - verify erasure-code behavior, epoch uniqueness, output-key agreement,
