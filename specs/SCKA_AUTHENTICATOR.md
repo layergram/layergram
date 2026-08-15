@@ -2,7 +2,7 @@
 
 Status: **canonical KDF and ratcheted authenticator implemented internally;
 initialization, header MAC, output-key derivation, ratcheting, and ciphertext
-generation/verification connected only to private transitions 1-9; public
+generation/verification connected only to private transitions 1-10; public
 ABI connection not implemented; protocol v3 inactive**
 
 This document freezes Layergram's implementation-defined domain and the
@@ -28,6 +28,10 @@ fresh `Encaps1` shared secret, binds the zeroizing epoch key to the exact send
 candidate, and ratchets the authenticator before `Ct1Sampled` can exist.
 Transition 9 uses that already-ratcheted authenticator to generate the exact
 `ct1 || ct2` MAC before `Ct2Sampled` can exist; it does not ratchet again.
+Transition 10 preserves the same already-ratcheted authenticator while moving
+the fully validated public key into `EkReceivedCt1Sampled`; it neither derives
+nor emits another key and does not compute the ciphertext MAC before the
+missing `ct1` acknowledgement arrives.
 Remaining Braid transitions, state-envelope persistence, and every C ABI
 operation are still disconnected.
 Native self-test and every correctly shaped public operation continue to return

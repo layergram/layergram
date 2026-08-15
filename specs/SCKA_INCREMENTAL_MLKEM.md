@@ -1,8 +1,8 @@
 # Layergram incremental ML-KEM-768 boundary revision 1
 
 Status: **internal primitive adopted; key generation, keypair restoration,
-public-vector access, decapsulation, and two-part encapsulation connected only
-to private transitions 1-9; not connected to the native ABI;
+public-vector access, validation, decapsulation, and two-part encapsulation
+connected only to private transitions 1-10; not connected to the native ABI;
 protocol v3 inactive**
 
 This document freezes the Layergram-owned boundary around the incremental
@@ -18,7 +18,10 @@ the resulting raw shared secret remains in a zeroizing native owner and is
 immediately consumed by `KDF_OK` and the ratcheted authenticator. Transition 7
 starts two-part encapsulation and serializes only the secret-free pending
 continuation; transition 9 first validates the complete public key and only
-then completes `Encaps2`. The
+then completes `Encaps2`. Transition 10 applies that same complete public-key
+validation before persisting `pk2` beside the still-pending encapsulation and
+`ct1` encoder; it deliberately does not call `Encaps2` until the peer later
+acknowledges `ct1`. The
 module is still not called by `lg_scka_v1_self_test`,
 `lg_scka_v1_initialize`, `lg_scka_v1_send`, `lg_scka_v1_receive`, or
 `lg_scka_v1_state_validate`. The native backend therefore remains `NOT_READY`,

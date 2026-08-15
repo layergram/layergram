@@ -30,23 +30,28 @@ inside the inactive native crate; it is not linked into the application.
 permissive dependencies and notices. It implements the outer `LS3` AES-256-GCM
 envelope behind an internal module but deliberately returns `NOT_READY`; it is
 not referenced by application packaging or Dart FFI. The crate also contains
-disconnected Layergram-owned erasure-code and incremental-ML-KEM boundary
-modules specified by `specs/SCKA_ERASURE_CODE.md` and
-`specs/SCKA_INCREMENTAL_MLKEM.md`. Its disconnected `LB3` codec freezes the
-canonical plaintext representation for all 11 revision-1 states as specified
-by `specs/SCKA_STATE_PAYLOAD.md`. The private authenticator module freezes the
-Layergram protocol domain, revision-1 KDFs, and HMAC behavior specified by
-`specs/SCKA_AUTHENTICATOR.md`. The disconnected private `BM3` codec freezes all
-seven logical public-message types, their internal Braid epoch, and exact
-24/58-byte canonical encodings as specified by
-`specs/SCKA_PUBLIC_MESSAGE.md`. The private initial transition slice implements
+Layergram-owned erasure-code and incremental-ML-KEM boundary modules specified
+by `specs/SCKA_ERASURE_CODE.md` and `specs/SCKA_INCREMENTAL_MLKEM.md`. Its
+private transition engine uses both modules while they remain disconnected
+from the public ABI and application packaging. The private `LB3` codec freezes
+the canonical plaintext representation for all 11 revision-1 states as
+specified by `specs/SCKA_STATE_PAYLOAD.md`, and the transition engine persists
+its candidates through that representation. The private authenticator module
+freezes the Layergram protocol domain, revision-1 KDFs, and HMAC behavior
+specified by `specs/SCKA_AUTHENTICATOR.md` and is used by authenticated private
+state transitions. The private `BM3` codec freezes all seven logical
+public-message types, their internal Braid epoch, and exact 24/58-byte canonical
+encodings as specified by `specs/SCKA_PUBLIC_MESSAGE.md`; it is likewise used by
+the private transition engine but excluded from the public ABI and application
+packaging. The private initial transition slice implements
 initialization, `KeysUnsampled.Send`, its operating-system entropy boundary,
 the matching receive no-op, continued Header/`Ek`/`EkCt1Ack` symbols, no-data
 output while receiving `Ct2` or an authenticated Header, transition-7 Ct1
 sampling with a native epoch key, continued Ct1 output, transition-8
 acknowledgement with incomplete public-key reconstruction, transition-9
 public-key validation plus authenticated `Ct2Sampled` construction, and
-transitions 2-9 as specified by
+transition-10 validated `EkReceivedCt1Sampled` construction with continued
+persisted Ct1 output, and transitions 2-10 as specified by
 `specs/SCKA_TRANSITION_ENGINE.md`; it remains disconnected from the ABI and
 every application package.
 

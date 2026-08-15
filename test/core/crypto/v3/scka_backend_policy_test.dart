@@ -199,6 +199,7 @@ void main() {
     expect(envelope['publicAbiConnected'], isFalse);
     expect(envelope['stateMachinePayloadFrozen'], isTrue);
     expect(envelope['productionRegistered'], isFalse);
+    expect(envelope['independentlyReviewed'], isFalse);
 
     final payload =
         receipt['layergramOwnedStateMachinePayload'] as Map<String, dynamic>;
@@ -217,6 +218,7 @@ void main() {
     expect(payload['publicAbiConnected'], isFalse);
     expect(payload['transitionEngineConnected'], isTrue);
     expect(payload['productionRegistered'], isFalse);
+    expect(payload['independentlyReviewed'], isFalse);
 
     final authenticator =
         receipt['layergramOwnedRatchetedAuthenticator'] as Map<String, dynamic>;
@@ -239,6 +241,7 @@ void main() {
     expect(authenticator['publicAbiConnected'], isFalse);
     expect(authenticator['transitionEngineConnected'], isTrue);
     expect(authenticator['productionRegistered'], isFalse);
+    expect(authenticator['independentlyReviewed'], isFalse);
 
     final publicMessage =
         receipt['layergramOwnedPublicMessageCodec'] as Map<String, dynamic>;
@@ -260,6 +263,7 @@ void main() {
     expect(publicMessage['publicAbiConnected'], isFalse);
     expect(publicMessage['transitionEngineConnected'], isTrue);
     expect(publicMessage['productionRegistered'], isFalse);
+    expect(publicMessage['independentlyReviewed'], isFalse);
 
     final transition =
         receipt['layergramOwnedTransitionEngine'] as Map<String, dynamic>;
@@ -283,11 +287,13 @@ void main() {
       'HeaderReceived.Receive',
       'Ct1Sampled.Send',
       'Ct1Sampled.Receive',
+      'EkReceivedCt1Sampled.Send',
+      'EkReceivedCt1Sampled.Receive',
     ]);
     expect(transition['firstTransitionNumber'], 1);
     expect(
       transition['implementedTransitionNumbers'],
-      <int>[1, 2, 3, 4, 5, 6, 7, 8, 9],
+      <int>[1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
     );
     expect(transition['deterministicGoldenVectors'], isTrue);
     expect(transition['immutableAuthenticatedPrior'], isTrue);
@@ -321,13 +327,28 @@ void main() {
     expect(transition['transitionNineRequestsEntropy'], isFalse);
     expect(transition['transitionNineEmitsEpochKey'], isFalse);
     expect(
-      transition['ct1SampledPlainCompletionFailClosedUntilTransitionTen'],
+      transition['transitionTenFullPublicKeyIntegrityBeforeSuccessor'],
+      isTrue,
+    );
+    expect(
+      transition['transitionTenPreservesCt1EncoderUntilAcknowledged'],
+      isTrue,
+    );
+    expect(transition['transitionTenRequestsEntropy'], isFalse);
+    expect(transition['transitionTenEmitsEpochKey'], isFalse);
+    expect(
+      transition['ct1SampledPlainCompletionImplementedByTransitionTen'],
+      isTrue,
+    );
+    expect(
+      transition['ekReceivedCt1SampledAckFailClosedUntilTransitionEleven'],
       isTrue,
     );
     expect(transition['typedTerminalAuthenticationFailure'], isTrue);
     expect(transition['publicAbiConnected'], isFalse);
     expect(transition['durableJournalConnected'], isFalse);
     expect(transition['productionRegistered'], isFalse);
+    expect(transition['independentlyReviewed'], isFalse);
 
     final effects = receipt['checkpointEffects'] as Map<String, dynamic>;
     expect(effects['thirdPartyCodeImported'], isFalse);
@@ -351,8 +372,33 @@ void main() {
     expect(effects['transitionSevenAdded'], isTrue);
     expect(effects['transitionEightAdded'], isTrue);
     expect(effects['transitionNineAdded'], isTrue);
+    expect(effects['transitionTenAdded'], isTrue);
     expect(effects['pubspecChanged'], isFalse);
     expect(effects['protocolV3Activated'], isFalse);
+
+    final remainingGates =
+        (receipt['remainingGates'] as List<dynamic>).cast<String>();
+    expect(remainingGates, hasLength(8));
+    expect(
+      remainingGates.any(
+        (gate) => gate.contains('transitions 11 through 13'),
+      ),
+      isTrue,
+    );
+    expect(
+      remainingGates.any(
+        (gate) => gate
+            .contains('every shipped Apple, Android, Windows, and Linux ABI'),
+      ),
+      isTrue,
+    );
+    expect(
+      remainingGates.any(
+        (gate) => gate
+            .contains('independent cryptographic and implementation review'),
+      ),
+      isTrue,
+    );
   });
 
   test('Layergram SCKA dependencies are pinned, permissive, and not packaged',
@@ -563,14 +609,18 @@ void main() {
     expect(transition, contains('BraidStateVariant::NoHeaderReceived'));
     expect(transition, contains('BraidStateVariant::HeaderReceived'));
     expect(transition, contains('BraidStateVariant::Ct1Sampled'));
+    expect(transition, contains('BraidStateVariant::EkReceivedCt1Sampled'));
     expect(transition, contains('BraidStateVariant::Ct1Acknowledged'));
     expect(transition, contains('BraidStateVariant::Ct2Sampled'));
     expect(transition, contains('send_while_header_received_with_entropy'));
     expect(transition, contains('send_while_ct1_sampled'));
     expect(transition, contains('receive_while_ct1_sampled'));
+    expect(transition, contains('send_while_ek_received_ct1_sampled'));
+    expect(transition, contains('receive_while_ek_received_ct1_sampled'));
     expect(transition, contains('encapsulate_part_one_from_seed'));
     expect(transition, contains('restore_encapsulation_part_one'));
     expect(transition, contains('encapsulate_part_two'));
+    expect(transition, contains('validate_public_key'));
     expect(transition, contains('BraidMessageType::Header'));
     expect(transition, contains('BraidMessageType::EncapsulationKey'));
     expect(transition, contains('receive_while_header_sent'));

@@ -3,7 +3,7 @@
 Status: **frozen inactive scaffold, implemented internal outer envelope,
 canonical inner payload, ratcheted authenticator, and canonical public-message
 codec; erasure representation and incremental primitive boundary frozen; no
-public transitions; private initialization and transitions 1-9 implemented;
+public transitions; private initialization and transitions 1-10 implemented;
 protocol v3 inactive**
 
 This document freezes the first Layergram-owned C ABI and authenticated state
@@ -11,7 +11,7 @@ envelope for an eventual independent implementation of ML-KEM Braid revision 1.
 The current Rust crate implements and tests the outer `LS3` envelope, inner
 `LB3` payload, revision-1 authenticator primitives, and canonical `BM3` public
 message behind internal modules. The private engine now implements
-initialization and transitions 1-9 as specified by `SCKA_TRANSITION_ENGINE.md`,
+initialization and transitions 1-10 as specified by `SCKA_TRANSITION_ENGINE.md`,
 while deliberately returning
 `LG_SCKA_V1_ERR_NOT_READY`
 from its self-test and every correctly shaped state operation. It cannot be
@@ -160,8 +160,8 @@ existing `LB3` payload or weaken `LS3` bindings.
 The root and MAC keys stored inside `LB3` are interpreted only through the
 exact `KDF_AUTH`, `KDF_OK`, and HMAC domains frozen in
 `SCKA_AUTHENTICATOR.md`. The implementation derives immutable successor state
-and zeroizing output-key owners but remains disconnected from payload parsing,
-state transitions, and the C ABI.
+and zeroizing output-key owners. It is used by the private transition engine
+but remains disconnected from the public C ABI and application packaging.
 
 The standalone public-message erasure representation is frozen in
 `SCKA_ERASURE_CODE.md`; the canonical logical message that carries one such
@@ -172,7 +172,7 @@ its exact 2,080-byte opaque continuation state are frozen in
 `SCKA_INCREMENTAL_MLKEM.md`. These components and the complete encrypted
 payload representation are tested inside the Rust crate and remain disconnected
 from all ABI operations. Braid scheduling, authenticated reconstruction,
-remaining scheduling, recovery behavior, and transitions 10-13 remain
+remaining scheduling, recovery behavior, and transitions 11-13 remain
 unimplemented and require separate review.
 
 ## 4. ABI operations

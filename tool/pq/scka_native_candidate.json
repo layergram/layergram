@@ -374,7 +374,9 @@
       "HeaderReceived.Send",
       "HeaderReceived.Receive",
       "Ct1Sampled.Send",
-      "Ct1Sampled.Receive"
+      "Ct1Sampled.Receive",
+      "EkReceivedCt1Sampled.Send",
+      "EkReceivedCt1Sampled.Receive"
     ],
     "firstTransitionNumber": 1,
     "implementedTransitionNumbers": [
@@ -386,7 +388,8 @@
       6,
       7,
       8,
-      9
+      9,
+      10
     ],
     "deterministicGoldenVectors": true,
     "immutableAuthenticatedPrior": true,
@@ -407,7 +410,12 @@
     "transitionNineAuthenticatesCiphertextBeforeCt2State": true,
     "transitionNineRequestsEntropy": false,
     "transitionNineEmitsEpochKey": false,
-    "ct1SampledPlainCompletionFailClosedUntilTransitionTen": true,
+    "transitionTenFullPublicKeyIntegrityBeforeSuccessor": true,
+    "transitionTenPreservesCt1EncoderUntilAcknowledged": true,
+    "transitionTenRequestsEntropy": false,
+    "transitionTenEmitsEpochKey": false,
+    "ct1SampledPlainCompletionImplementedByTransitionTen": true,
+    "ekReceivedCt1SampledAckFailClosedUntilTransitionEleven": true,
     "typedTerminalAuthenticationFailure": true,
     "publicAbiConnected": false,
     "durableJournalConnected": false,
@@ -437,11 +445,12 @@
     "transitionSevenAdded": true,
     "transitionEightAdded": true,
     "transitionNineAdded": true,
+    "transitionTenAdded": true,
     "protocolV3Activated": false
   },
   "remainingGates": [
     "repeat locked target-specific dependency and notice review before every packaged release",
-    "complete revision-1 transitions 10 through 13 around the frozen initial transitions, authenticator, and BM3 codec from the public-domain specification without copying AGPL implementation code",
+    "complete revision-1 transitions 11 through 13 around the frozen initial transitions, authenticator, and BM3 codec from the public-domain specification without copying AGPL implementation code",
     "connect the already-derived SCKA state-sealing key only after the complete state machine is approved and bind native revision atomically to TR3 revision",
     "independently review the frozen canonical LB3 plaintext state-machine payload, BM3 public-message codec, and opaque incremental-continuation version binding",
     "run upstream primitive vectors plus independent cross-implementation ML-KEM Braid vectors",

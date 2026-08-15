@@ -3,7 +3,7 @@
 Status: **inactive ABI; outer state envelope, canonical inner payload, and
 ratcheted authenticator implemented; erasure representation, canonical public
 message, and incremental primitive boundary frozen; private initialization and
-transitions 1-9 implemented; no public transition engine or production backend;
+transitions 1-10 implemented; no public transition engine or production backend;
 protocol v3 inactive**
 
 Layergram needs an ML-KEM Braid revision-1 backend to provide the Sparse
@@ -75,8 +75,9 @@ satisfy the Dart admission gate or activate protocol v3.
 The same crate now contains a Layergram-owned, dependency-free systematic
 Reed-Solomon encoder/decoder for the exact revision-1 public payload classes.
 `SCKA_ERASURE_CODE.md` freezes its GF(2^16) field, generator matrix, 34-byte
-chunk representation, duplicate policy, and resource limits. The module is not
-connected to the C ABI or state machine, so this progress does not change the
+chunk representation, duplicate policy, and resource limits. The private
+transition engine uses this module, but it remains disconnected from the
+public C ABI and application packaging, so this progress does not change the
 backend's inactive status.
 
 The exact incremental ML-KEM candidate is now adopted only behind the internal,
@@ -142,7 +143,12 @@ and creates `Ct1Acknowledged` with the exact pending continuation and partial
 decoder. Transition 9 handles completing `EkCt1Ack`: it validates the full
 public key, completes `Encaps2`, authenticates exact `ct1 || ct2`, and creates
 the initial `Ct2Sampled` encoder without entropy or a second epoch-key output.
-The plain completion branch remains fail-closed until transition 10.
+Transition 10 handles completing plain `Ek`: it validates the same full public
+key and creates `EkReceivedCt1Sampled` while preserving the pending
+encapsulation, exact `ct1`, and persisted `ct1` encoder until acknowledgement.
+That state continues deterministic `Ct1` output without entropy or a second
+epoch-key output. Its completing acknowledgement remains fail-closed until
+transition 11.
 The first send
 obtains its exact 64-byte ML-KEM key-generation seed from a private
 `getrandom` 0.4.3 operating-system entropy boundary; transition 7 obtains a
@@ -243,7 +249,7 @@ CocoaPods, Gradle, CMake, the Windows runner, or Flutter FFI.
 
 ## Remaining security gates
 
-- complete revision-1 transitions 10 through 13 independently from the
+- complete revision-1 transitions 11 through 13 independently from the
   specification around the frozen initial transitions, authenticator, and
   public-message codecs;
 - generate independent public vectors and compare with a separately executed
