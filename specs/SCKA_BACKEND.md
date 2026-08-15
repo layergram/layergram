@@ -3,7 +3,7 @@
 Status: **inactive ABI; outer state envelope, canonical inner payload, and
 ratcheted authenticator implemented; erasure representation, canonical public
 message, and incremental primitive boundary frozen; private initialization and
-transitions 1-6 implemented; no public transition engine or production backend;
+transitions 1-7 implemented; no public transition engine or production backend;
 protocol v3 inactive**
 
 Layergram needs an ML-KEM Braid revision-1 backend to provide the Sparse
@@ -130,10 +130,15 @@ MAC with that successor authenticator, and only then advances to the next-epoch
 no-data record and catches up the send high-water. `NoHeaderReceived.Receive`
 implements transition 6: it reconstructs `header || mac`, verifies the
 current-epoch header MAC, and only then creates `HeaderReceived` with the
-authenticated `pk1` and an empty `pk2` decoder. The first send obtains its
-exact 64-byte ML-KEM seed from a private `getrandom` 0.4.3 operating-system
-entropy boundary; later Header and `Ek` symbols use persisted encoder
-progress without requesting new entropy.
+authenticated `pk1` and an empty `pk2` decoder. `HeaderReceived.Send`
+implements transition 7: it obtains one fresh 32-byte encapsulation seed,
+runs `Encaps1`, derives the zeroizing epoch key, ratchets the authenticator,
+emits Ct1 symbol zero, and creates the exact pending `Ct1Sampled` candidate.
+`HeaderReceived.Receive` is the revision-1 semantic no-op. The first send
+obtains its exact 64-byte ML-KEM key-generation seed from a private
+`getrandom` 0.4.3 operating-system entropy boundary; transition 7 obtains a
+separate 32-byte seed from the same boundary, while continued Header and `Ek`
+symbols use persisted encoder progress without requesting new entropy.
 Every opt-in `getrandom` backend is rejected at compile time. The result is
 deliberately not connected to LS3, the C ABI, Dart, Flutter, or the existing
 durable journals, and all exports still return `NOT_READY`.
@@ -229,7 +234,7 @@ CocoaPods, Gradle, CMake, the Windows runner, or Flutter FFI.
 
 ## Remaining security gates
 
-- complete revision-1 transitions 7 through 13 independently from the
+- complete revision-1 transitions 8 through 13 independently from the
   specification around the frozen initial transitions, authenticator, and
   public-message codecs;
 - generate independent public vectors and compare with a separately executed

@@ -279,16 +279,19 @@ void main() {
       'EkSentCt1Received.Receive',
       'NoHeaderReceived.Send',
       'NoHeaderReceived.Receive',
+      'HeaderReceived.Send',
+      'HeaderReceived.Receive',
     ]);
     expect(transition['firstTransitionNumber'], 1);
     expect(
       transition['implementedTransitionNumbers'],
-      <int>[1, 2, 3, 4, 5, 6],
+      <int>[1, 2, 3, 4, 5, 6, 7],
     );
     expect(transition['deterministicGoldenVectors'], isTrue);
     expect(transition['immutableAuthenticatedPrior'], isTrue);
     expect(transition['detachedExactStateAndMessageCandidate'], isTrue);
     expect(transition['osEntropyBytesPerKeyGeneration'], 64);
+    expect(transition['osEntropyBytesPerEncapsulation'], 32);
     expect(transition['deterministicEntropyExported'], isFalse);
     expect(transition['reexportRequiresExactCandidateReuse'], isTrue);
     expect(transition['unreliableExternalTransportAssumed'], isTrue);
@@ -298,6 +301,8 @@ void main() {
       transition['headerAuthenticationPrecedesHeaderReceivedSuccessor'],
       isTrue,
     );
+    expect(transition['transitionSevenOutputBoundToSendCandidate'], isTrue);
+    expect(transition['rawEncapsulationSharedSecretSerialized'], isFalse);
     expect(transition['typedTerminalAuthenticationFailure'], isTrue);
     expect(transition['publicAbiConnected'], isFalse);
     expect(transition['durableJournalConnected'], isFalse);
@@ -322,6 +327,7 @@ void main() {
     expect(effects['transitionFourAdded'], isTrue);
     expect(effects['transitionFiveAdded'], isTrue);
     expect(effects['transitionSixAdded'], isTrue);
+    expect(effects['transitionSevenAdded'], isTrue);
     expect(effects['pubspecChanged'], isFalse);
     expect(effects['protocolV3Activated'], isFalse);
   });
@@ -533,6 +539,8 @@ void main() {
     expect(transition, contains('BraidStateVariant::EkSentCt1Received'));
     expect(transition, contains('BraidStateVariant::NoHeaderReceived'));
     expect(transition, contains('BraidStateVariant::HeaderReceived'));
+    expect(transition, contains('send_while_header_received_with_entropy'));
+    expect(transition, contains('encapsulate_part_one_from_seed'));
     expect(transition, contains('BraidMessageType::Header'));
     expect(transition, contains('BraidMessageType::EncapsulationKey'));
     expect(transition, contains('receive_while_header_sent'));

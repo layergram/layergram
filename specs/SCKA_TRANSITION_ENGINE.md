@@ -1,6 +1,6 @@
 # Layergram ML-KEM Braid transition engine revision 1
 
-Status: **initialization and transitions 1-6 implemented privately; remaining
+Status: **initialization and transitions 1-7 implemented privately; remaining
 transitions and public ABI not connected; protocol v3 inactive**
 
 This document freezes the initial bounded slice of Layergram's independent
@@ -125,8 +125,29 @@ before it can create a `HeaderReceived` successor containing the
 authenticated `pk1` and an empty `pk2` decoder. A wrong MAC returns the typed
 authentication error, produces no successor, and leaves the authenticated
 prior immutable. Wrong message types or epochs preserve semantic state while
-the receive high-water catches up and the wrapper revision advances. Later
-state variants remain unimplemented and fail outside this private slice.
+the receive high-water catches up and the wrapper revision advances.
+
+`HeaderReceived.Send` implements transition 7:
+
+1. it rejects exhausted revision state before requesting entropy;
+2. it obtains exactly 32 fresh bytes from the operating-system CSPRNG;
+3. it runs incremental ML-KEM `Encaps1` against the authenticated header;
+4. it applies revision-1 `KDF_OK` to the raw shared secret and immediately
+   consumes the encapsulation result into a pending owner that contains no raw
+   shared secret;
+5. it ratchets the authenticator with the zeroizing epoch key;
+6. it erasure-encodes Ct1, emits canonical symbol zero in an exact `BM3 Ct1`
+   record, and creates `Ct1Sampled` with pending ML-KEM continuation, next Ct1
+   encoder index one, and the still-empty `pk2` decoder;
+7. it returns the exact state, message, epoch number, and native zeroizing key
+   as one detached candidate.
+
+The random seed and raw shared secret are never serialized. Entropy failure or
+any later construction failure exposes no candidate and leaves the prior
+immutable. `HeaderReceived.Receive` is the revision-1 semantic no-op: it
+preserves the header, authenticator, and high-water values while advancing only
+the detached Layergram wrapper revision. Later state variants remain
+unimplemented and fail outside this private slice.
 
 ## 2. Immutable candidate and unreliable transport contract
 
@@ -137,12 +158,12 @@ sent or may be dropped, delayed, duplicated, or reordered.
 Therefore a native `Send` result means only **generated**, never **delivered**:
 
 - the authenticated prior remains immutable during derivation;
-- one result owns the exact successor and exact BM3 record and implements
-  neither `Clone` nor `Debug`;
+- one result owns the exact successor, exact BM3 record, and any emitted native
+  epoch key and implements neither `Clone` nor `Debug`;
 - the future per-session durable coordinator MUST seal the plaintext successor
-  as exact `LS3`, then commit that sealed state and the exact outbound
-  record/outbox entry atomically before any share sheet, copy, link, or
-  steganographic export becomes visible;
+  as exact `LS3`, then commit that sealed state, any transition-7 epoch key,
+  and the exact outbound record/outbox entry atomically before any share sheet,
+  copy, link, or steganographic export becomes visible;
 - retry or re-export MUST reuse those exact stored bytes and MUST NOT rerun the
   randomized transition;
 - losing or not sending an exported copy does not authorize rollback or entropy
@@ -165,19 +186,28 @@ agreement, next-epoch metadata, conflicting chunks, MAC failure, and revision
 and epoch exhaustion. It additionally tests transition 6 no-data send, header
 reconstruction after loss/reordering/duplicate/restart, deterministic
 `HeaderReceived` state, conflicting chunks, header-MAC failure, high-water
-catch-up, and revision exhaustion. It does not yet connect native candidates
+catch-up, and revision exhaustion. Transition 7 additionally freezes the exact
+32-byte entropy request, Ct1 symbol zero, pending-state layout, native epoch-key
+and successor-authenticator agreement, deterministic successor digest,
+semantic receive no-op, entropy failure, revision exhaustion, and production OS
+entropy path. It does not yet connect native candidates
 to the existing durable send/receive journals; that atomic composition remains
 activation-blocking.
 
 ## 3. Entropy and licensing boundary
 
-The first key-generating transition calls the private `OsEntropy` boundary in
+The first key-generating transition and transition 7 call the private
+`OsEntropy` boundary in
 `native/layergram_scka/src/entropy.rs`. It pins `getrandom` 0.4.3 with default
 features disabled, rejects every documented opt-in backend at compile time, and
 maps every OS-source failure to a fail-closed entropy error. Partially filled
 seed storage is zeroized before return and no candidate is exposed on failure.
-`KeysSampled.Send`, `HeaderSent.Send`, `Ct1Received.Send`, transition 5,
-and transition 6 do not request new entropy.
+The first transition requests exactly 64 bytes for ML-KEM key generation;
+transition 7 requests exactly 32 distinct bytes for encapsulation. A lost or
+unexported transition-7 candidate must be retried from its durable exact bytes,
+never recomputed with reused or replacement entropy. `KeysSampled.Send`,
+`HeaderSent.Send`, `Ct1Received.Send`, transition 5, and transition 6 do not
+request new entropy.
 Deterministic entropy exists only as a private unit-test trait implementation
 and is not exported through the C ABI. The complete application and native
 entropy policy is frozen in `ENTROPY_SOURCES.md`.
@@ -202,10 +232,11 @@ from later symbols without new entropy, transitions 2-3, `Ek` continuation,
 filtering and `Ct2` decoder restart, MAC/state corruption, encoder/revision
 exhaustion, revisioned ignored inputs, no-data send, transition 5 recovery with
 loss/reordering/duplicate/restart, exact epoch-key and authenticator agreement,
-typed MAC failure, epoch exhaustion, and frozen deterministic digests for
-Header/`Ek` continuation and transitions 2-6.
+typed MAC failure, epoch exhaustion, transition-7 Ct1/output/authenticator
+agreement and failure paths, and frozen deterministic digests for Header/`Ek`
+continuation and transitions 2-7.
 
-Activation still requires transitions 7 through 13, durable terminal
+Activation still requires transitions 8 through 13, durable terminal
 MAC-failure handling, remaining encoder/decoder continuation, LS3 sealing with a unique OS
 nonce, the public C ABI and panic containment, atomic TR3/journal composition,
 cross-implementation vectors, fuzzing/sanitizers, every shipped target, and an
