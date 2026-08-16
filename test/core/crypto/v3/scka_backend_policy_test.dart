@@ -291,11 +291,13 @@ void main() {
       'Ct1Acknowledged.Receive',
       'EkReceivedCt1Sampled.Send',
       'EkReceivedCt1Sampled.Receive',
+      'Ct2Sampled.Send',
+      'Ct2Sampled.Receive',
     ]);
     expect(transition['firstTransitionNumber'], 1);
     expect(
       transition['implementedTransitionNumbers'],
-      <int>[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+      <int>[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
     );
     expect(transition['deterministicGoldenVectors'], isTrue);
     expect(transition['immutableAuthenticatedPrior'], isTrue);
@@ -378,6 +380,16 @@ void main() {
       transition['ekReceivedCt1SampledAckImplementedByTransitionTwelve'],
       isTrue,
     );
+    expect(
+      transition['transitionThirteenContinuesCt2AcrossLostExports'],
+      isTrue,
+    );
+    expect(transition['transitionThirteenOnlyImmediateNextEpoch'], isTrue);
+    expect(transition['transitionThirteenSwitchesRoles'], isTrue);
+    expect(transition['transitionThirteenPreservesAuthenticator'], isTrue);
+    expect(transition['transitionThirteenRequestsEntropy'], isFalse);
+    expect(transition['transitionThirteenEmitsEpochKey'], isFalse);
+    expect(transition['revisionOneTransitionGraphComplete'], isTrue);
     expect(transition['typedTerminalAuthenticationFailure'], isTrue);
     expect(transition['publicAbiConnected'], isFalse);
     expect(transition['durableJournalConnected'], isFalse);
@@ -409,18 +421,15 @@ void main() {
     expect(effects['transitionTenAdded'], isTrue);
     expect(effects['transitionElevenAdded'], isTrue);
     expect(effects['transitionTwelveAdded'], isTrue);
+    expect(effects['transitionThirteenAdded'], isTrue);
     expect(effects['pubspecChanged'], isFalse);
     expect(effects['protocolV3Activated'], isFalse);
 
     final remainingGates =
         (receipt['remainingGates'] as List<dynamic>).cast<String>();
-    expect(remainingGates, hasLength(8));
+    expect(remainingGates, hasLength(7));
     expect(
-      remainingGates.any(
-        (gate) => gate.contains('transition 13'),
-      ),
-      isTrue,
-    );
+        remainingGates.any((gate) => gate.contains('transition 13')), isFalse);
     expect(
       remainingGates.any(
         (gate) => gate
@@ -653,6 +662,8 @@ void main() {
     expect(transition, contains('receive_while_ct1_sampled'));
     expect(transition, contains('send_while_ek_received_ct1_sampled'));
     expect(transition, contains('receive_while_ek_received_ct1_sampled'));
+    expect(transition, contains('send_while_ct2_sampled'));
+    expect(transition, contains('receive_while_ct2_sampled'));
     expect(transition, contains('encapsulate_part_one_from_seed'));
     expect(transition, contains('restore_encapsulation_part_one'));
     expect(transition, contains('encapsulate_part_two'));

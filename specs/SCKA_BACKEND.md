@@ -3,7 +3,7 @@
 Status: **inactive ABI; outer state envelope, canonical inner payload, and
 ratcheted authenticator implemented; erasure representation, canonical public
 message, and incremental primitive boundary frozen; private initialization and
-transitions 1-12 implemented; no public transition engine or production backend;
+transitions 1-13 implemented; no public transition engine or production backend;
 protocol v3 inactive**
 
 Layergram needs an ML-KEM Braid revision-1 backend to provide the Sparse
@@ -158,7 +158,11 @@ revalidates the already-complete public key, restores the exact pending
 `Encaps1` state, completes `Encaps2`, authenticates persisted `ct1 || ct2`,
 and creates the same canonical `Ct2Sampled` shape. It requests no entropy,
 emits no second epoch key, and unrelated or wrong-epoch input remains a
-semantic no-op. The first send
+semantic no-op. `Ct2Sampled.Send` continues the exact authenticated `ct2`
+encoder across dropped carrier exports and restart. Transition 13 accepts only
+the immediately following Braid epoch, preserves the already-ratcheted
+authenticator, switches roles to `KeysUnsampled`, and emits neither entropy nor
+an epoch key. Earlier or later canonical epochs are semantic no-ops. The first send
 obtains its exact 64-byte ML-KEM key-generation seed from a private
 `getrandom` 0.4.3 operating-system entropy boundary; transition 7 obtains a
 separate 32-byte seed from the same boundary, while continued Header and `Ek`
@@ -258,9 +262,8 @@ CocoaPods, Gradle, CMake, the Windows runner, or Flutter FFI.
 
 ## Remaining security gates
 
-- complete revision-1 transition 13 independently from the
-  specification around the frozen initial transitions, authenticator, and
-  public-message codecs;
+- independently review the now-complete private revision-1 transition engine
+  together with its frozen authenticator, payload, and public-message codecs;
 - generate independent public vectors and compare with a separately executed
   conforming implementation without linking its code;
 - verify erasure-code behavior, epoch uniqueness, output-key agreement,

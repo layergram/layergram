@@ -53,10 +53,13 @@ public-key validation plus authenticated `Ct2Sampled` construction, and
 transition-10 validated `EkReceivedCt1Sampled` construction with continued
 persisted Ct1 output, and transition-11 `Ct1Acknowledged` completion with
 full-key validation, deterministic `Encaps2`, and exact ciphertext
-authentication, and transitions 2-12 as specified by
+authentication, and transitions 2-13 as specified by
 `specs/SCKA_TRANSITION_ENGINE.md`, including transition-12 completion from the
 validated `EkReceivedCt1Sampled` state after a delayed or lost Ct1 carrier
-export; it remains disconnected from the ABI and every application package.
+export. Transition 13 now continues exact authenticated Ct2 symbols across
+loss/restart and switches roles only on the immediately following authenticated
+Braid epoch. All revision-1 transitions 1-13 are implemented privately, while
+the engine remains disconnected from the ABI and every application package.
 
 ## Reproducible checks
 

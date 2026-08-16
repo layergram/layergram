@@ -378,7 +378,9 @@
       "Ct1Acknowledged.Send",
       "Ct1Acknowledged.Receive",
       "EkReceivedCt1Sampled.Send",
-      "EkReceivedCt1Sampled.Receive"
+      "EkReceivedCt1Sampled.Receive",
+      "Ct2Sampled.Send",
+      "Ct2Sampled.Receive"
     ],
     "firstTransitionNumber": 1,
     "implementedTransitionNumbers": [
@@ -393,7 +395,8 @@
       9,
       10,
       11,
-      12
+      12,
+      13
     ],
     "deterministicGoldenVectors": true,
     "immutableAuthenticatedPrior": true,
@@ -431,6 +434,13 @@
     "transitionTwelveRequestsEntropy": false,
     "transitionTwelveEmitsEpochKey": false,
     "ekReceivedCt1SampledAckImplementedByTransitionTwelve": true,
+    "transitionThirteenContinuesCt2AcrossLostExports": true,
+    "transitionThirteenOnlyImmediateNextEpoch": true,
+    "transitionThirteenSwitchesRoles": true,
+    "transitionThirteenPreservesAuthenticator": true,
+    "transitionThirteenRequestsEntropy": false,
+    "transitionThirteenEmitsEpochKey": false,
+    "revisionOneTransitionGraphComplete": true,
     "typedTerminalAuthenticationFailure": true,
     "publicAbiConnected": false,
     "durableJournalConnected": false,
@@ -463,11 +473,11 @@
     "transitionTenAdded": true,
     "transitionElevenAdded": true,
     "transitionTwelveAdded": true,
+    "transitionThirteenAdded": true,
     "protocolV3Activated": false
   },
   "remainingGates": [
     "repeat locked target-specific dependency and notice review before every packaged release",
-    "complete revision-1 transition 13 around the frozen initial transitions, authenticator, and BM3 codec from the public-domain specification without copying AGPL implementation code",
     "connect the already-derived SCKA state-sealing key only after the complete state machine is approved and bind native revision atomically to TR3 revision",
     "independently review the frozen canonical LB3 plaintext state-machine payload, BM3 public-message codec, and opaque incremental-continuation version binding",
     "run upstream primitive vectors plus independent cross-implementation ML-KEM Braid vectors",

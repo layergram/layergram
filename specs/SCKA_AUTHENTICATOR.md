@@ -2,7 +2,8 @@
 
 Status: **canonical KDF and ratcheted authenticator implemented internally;
 initialization, header MAC, output-key derivation, ratcheting, and ciphertext
-generation/verification connected only to private transitions 1-12; public
+generation/verification connected only to the private transition engine, whose
+revision-1 transitions 1-13 are implemented; public
 ABI connection not implemented; protocol v3 inactive**
 
 This document freezes Layergram's implementation-defined domain and the
@@ -37,8 +38,10 @@ and newly completed `ct2` before `Ct2Sampled` can exist; it does not ratchet
 again or emit another key.
 Transition 12 performs the same exact ciphertext MAC after revalidating the
 complete key stored by transition 10; it also neither ratchets nor emits a key.
-Remaining Braid transitions, state-envelope persistence, and every C ABI
-operation are still disconnected.
+Transition 13 preserves that already-ratcheted authenticator unchanged while
+switching roles at the immediately following epoch; it neither derives nor
+emits another key. State-envelope persistence and every C ABI operation remain
+disconnected.
 Native self-test and every correctly shaped public operation continue to return
 `NOT_READY`.
 
@@ -174,9 +177,9 @@ success/failure behavior, domain separation, exact input sizes, signed-63 epoch
 bounds, detached successor semantics, restore length checks, and explicit wipe
 paths.
 
-Activation still requires the complete revision-1 transition engine, approved
-OS entropy, integration and review of the canonical `BM3` codec, authenticated
-reconstruction, LS3/LB3 composition, atomic LS3/TR3 revision binding,
+Activation still requires approval of the complete private revision-1 engine,
+integration and review of the canonical `BM3` codec, authenticated outer
+framing and reconstruction, LS3/LB3 composition, atomic LS3/TR3 revision binding,
 independent cross-implementation vectors,
 fuzzing and sanitizers, panic containment, crash/restart/rollback/concurrency
 tests, packaged physical-device traversal, and independent cryptographic and

@@ -1,7 +1,8 @@
 # Layergram ML-KEM Braid transition engine revision 1
 
-Status: **initialization and transitions 1-12 implemented privately; remaining
-transitions and public ABI not connected; protocol v3 inactive**
+Status: **initialization and all revision-1 transitions 1-13 implemented
+privately; public ABI and durable coordinator not connected;
+protocol v3 inactive**
 
 This document freezes the initial bounded slice of Layergram's independent
 Apache-2.0 implementation of the public-domain [ML-KEM Braid revision-1
@@ -241,7 +242,28 @@ authenticated prior, and returns no candidate after public-key integrity,
 encapsulation, authentication, encoding, or revision failure. A persisted
 `Ct1` encoder may have advanced across generated but lost carrier messages;
 the transition still consumes the same canonical ciphertext after restart.
-Later state transitions remain outside this private slice.
+
+`Ct2Sampled.Send` continues exact current-epoch `Ct2` symbols from the
+persisted authenticated `ct2 || mac` bytes and encoder index. Lost or
+unexported results reuse the exact detached candidate; a later committed send
+advances to another erasure index without rerandomization, entropy, or key
+output.
+
+`Ct2Sampled.Receive` implements transition 13. Inputs from the current, older,
+or more-than-one-ahead epoch are semantic no-ops recorded by a detached
+revision increment. Any canonical message from exactly `epoch + 1`, once
+authenticated by Layergram's future outer framing, demonstrates that the peer
+advanced after reconstructing `ct2`. The engine then:
+
+1. increments the internal Braid epoch without wraparound;
+2. switches the stable participant into the opposite key-sender role by
+   creating an empty `KeysUnsampled` successor;
+3. advances only the receiving high-water to the completed epoch;
+4. preserves the already-ratcheted authenticator and immutable prior.
+
+Transition 13 requests no entropy, emits no epoch key, and accepts no epoch
+gap. This completes the private revision-1 transition graph, not the product
+integration or activation work.
 
 ## 2. Immutable candidate and unreliable transport contract
 
@@ -265,7 +287,8 @@ Therefore a native `Send` result means only **generated**, never **delivered**:
   `Ct1Received.Send`, `Ct1Sampled.Send`, or
   `EkReceivedCt1Sampled.Send` operations provide distinct erasure
   symbols from persisted encoder progress and eventual reconstruction succeeds
-  once enough symbols actually reach the peer;
+  once enough symbols actually reach the peer; `Ct2Sampled.Send` follows the
+  same rule for authenticated `ct2 || mac` symbols;
 - a Layergram authenticated ACK proves that the peer processed the bound
   Layergram message. It is not an acknowledgement from WhatsApp, Telegram,
   Signal, iMessage, or another carrier, and the ACK message can itself be lost.
@@ -309,6 +332,11 @@ behavior, persisted-encoder progress across a lost carrier export, restart
 before acknowledgement, complete-key revalidation before `Encaps2`, exact
 `ct1 || ct2` authentication, deterministic `Ct2Sampled` output, and revision
 exhaustion.
+Transition 13 additionally freezes exact `Ct2` output, stable re-export,
+recovery after a lost symbol and restart, exact immediate-next-epoch matching,
+current and skipped-future no-ops, role switching, authenticator preservation,
+deterministic `KeysUnsampled` output, encoder/revision exhaustion, and maximum
+epoch no-wrap behavior.
 This private slice does not yet connect native candidates to the
 existing durable send/receive journals; that atomic composition remains
 activation-blocking.
@@ -326,8 +354,8 @@ transition 7 requests exactly 32 distinct bytes for encapsulation. A lost or
 unexported transition-7 candidate must be retried from its durable exact bytes,
 never recomputed with reused or replacement entropy. `KeysSampled.Send`,
 `HeaderSent.Send`, `Ct1Received.Send`, `Ct1Sampled.Send`,
-`EkReceivedCt1Sampled.Send`, `Ct1Acknowledged.Send`, transitions 5, 6, 8, 9,
-10, 11, and 12 do not request new entropy.
+`EkReceivedCt1Sampled.Send`, `Ct1Acknowledged.Send`, `Ct2Sampled.Send`,
+transitions 5, 6, 8, 9, 10, 11, 12, and 13 do not request new entropy.
 Deterministic entropy exists only as a private unit-test trait implementation
 and is not exported through the C ABI. The complete application and native
 entropy policy is frozen in `ENTROPY_SOURCES.md`.
@@ -362,11 +390,14 @@ loss/duplicate/restart recovery, full-key validation, `Encaps2`, exact
 ciphertext MAC and `Ct2Sampled` state, transition-12 lost-export/restart
 recovery, semantic no-op filtering, full-key revalidation, exact ciphertext
 MAC and deterministic `Ct2Sampled` state, and frozen deterministic digests for
-Header/`Ek` continuation and transitions 2-12.
+Header/`Ek` continuation and transitions 2-13. Transition-13 tests additionally
+cover exact `Ct2` re-export, loss, restart, erasure recovery, immediate-next-
+epoch filtering, role/high-water advance, authenticator preservation, encoder
+and revision exhaustion, and maximum-epoch no-wrap behavior.
 
-Activation still requires transition 13, durable terminal MAC-failure
-handling, remaining encoder/decoder
-completion, LS3 sealing with a unique OS nonce, the public C ABI and panic
+Activation still requires durable terminal MAC-failure handling, integration
+of the complete private encoder/decoder state machine, LS3 sealing with a
+unique OS nonce, the public C ABI and panic
 containment, atomic TR3/journal composition, cross-implementation vectors,
 fuzzing/sanitizers, every shipped target, and an independent cryptographic and
 implementation audit.

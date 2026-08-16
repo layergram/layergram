@@ -2,7 +2,8 @@
 
 Status: **internal primitive adopted; key generation, keypair restoration,
 public-vector access, validation, decapsulation, and two-part encapsulation
-connected only to private transitions 1-12; not connected to the native ABI;
+connected only to the private engine, whose transitions 1-13 are implemented;
+not connected to the native ABI;
 protocol v3 inactive**
 
 This document freezes the Layergram-owned boundary around the incremental
@@ -25,7 +26,9 @@ acknowledges `ct1`. The transition-11 path performs that deferred full-key
 validation again before it restores the pending continuation and calls
 `Encaps2`; transition 12 applies that same fail-closed sequence to the complete
 key already stored by transition 10 when its delayed `ct1` acknowledgement
-arrives. No candidate survives a key-integrity or primitive failure. The
+arrives. Transition 13 invokes no ML-KEM primitive: it only continues exact
+persisted `ct2` output or advances roles after an authenticated next-epoch
+message. No candidate survives a key-integrity or primitive failure. The
 module is still not called by `lg_scka_v1_self_test`,
 `lg_scka_v1_initialize`, `lg_scka_v1_send`, `lg_scka_v1_receive`, or
 `lg_scka_v1_state_validate`. The native backend therefore remains `NOT_READY`,
@@ -130,8 +133,9 @@ before part 2, malformed-key rejection, shared-secret agreement, transition-9
 completion through the restored pending owner, and exact public-key/ciphertext
 SHA-256 values from the existing independent `mlkem-native` FIPS vector.
 
-This checkpoint does not implement Braid epochs, erasure scheduling, MACs,
-authenticated state payloads, recovery, rollback protection, or OS entropy. It
-does not make Layergram quantum-resistant. Activation still requires the full
-state machine, cross-implementation Braid vectors, fuzzing/sanitizers, packaged
+This primitive boundary alone does not provide Braid epochs, erasure
+scheduling, MACs, authenticated state payloads, recovery, rollback protection,
+or OS entropy. It does not make Layergram quantum-resistant. Activation still
+requires integration and independent review of the complete private state
+machine, cross-implementation Braid vectors, fuzzing/sanitizers, packaged
 physical-device tests, and independent cryptographic review.
