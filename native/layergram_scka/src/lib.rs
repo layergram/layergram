@@ -7,6 +7,8 @@ use core::ffi::c_char;
 use core::ptr;
 
 #[allow(dead_code)]
+mod authenticated_braid;
+#[allow(dead_code)]
 mod braid_authenticator;
 #[allow(dead_code)]
 mod braid_message;

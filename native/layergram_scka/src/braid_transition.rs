@@ -248,15 +248,25 @@ pub(crate) fn initialize(
 
 /// Production state-machine send entry point for the implemented slice.
 pub(crate) fn send(prior: &BraidStatePayload) -> Result<BraidSendCandidate, BraidTransitionError> {
+    send_with_entropy_source(prior, &mut OsEntropy)
+}
+
+/// Crate-private deterministic seam used by the authenticated state
+/// composition and exact-vector tests. Production callers still enter through
+/// [`send`], which supplies only the approved operating-system entropy source.
+pub(crate) fn send_with_entropy_source(
+    prior: &BraidStatePayload,
+    entropy: &mut impl EntropySource,
+) -> Result<BraidSendCandidate, BraidTransitionError> {
     match prior.variant() {
-        BraidStateVariant::KeysUnsampled => send_with_entropy(prior, &mut OsEntropy),
+        BraidStateVariant::KeysUnsampled => send_with_entropy(prior, entropy),
         BraidStateVariant::KeysSampled => send_while_keys_sampled(prior),
         BraidStateVariant::HeaderSent => send_while_header_sent(prior),
         BraidStateVariant::Ct1Received => send_while_ct1_received(prior),
         BraidStateVariant::EkSentCt1Received => send_while_ek_sent_ct1_received(prior),
         BraidStateVariant::NoHeaderReceived => send_while_no_header_received(prior),
         BraidStateVariant::HeaderReceived => {
-            send_while_header_received_with_entropy(prior, &mut OsEntropy)
+            send_while_header_received_with_entropy(prior, entropy)
         }
         BraidStateVariant::Ct1Sampled => send_while_ct1_sampled(prior),
         BraidStateVariant::EkReceivedCt1Sampled => send_while_ek_received_ct1_sampled(prior),

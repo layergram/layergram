@@ -1,8 +1,8 @@
 # Layergram ML-KEM Braid transition engine revision 1
 
-Status: **initialization and all revision-1 transitions 1-13 implemented
-privately; public ABI and durable coordinator not connected;
-protocol v3 inactive**
+Status: **initialization and all revision-1 transitions 1-13 plus private
+authenticated LS3/LB3/BM3 composition implemented; public ABI and durable
+coordinator not connected; protocol v3 inactive**
 
 This document freezes the initial bounded slice of Layergram's independent
 Apache-2.0 implementation of the public-domain [ML-KEM Braid revision-1
@@ -276,10 +276,12 @@ Therefore a native `Send` result means only **generated**, never **delivered**:
 - the authenticated prior remains immutable during derivation;
 - one result owns the exact successor, exact BM3 record, and any emitted native
   epoch key and implements neither `Clone` nor `Debug`;
-- the future per-session durable coordinator MUST seal the plaintext successor
-  as exact `LS3`, then commit that sealed state, any transition-7 epoch key,
-  and the exact outbound record/outbox entry atomically before any share sheet,
-  copy, link, or steganographic export becomes visible;
+- the private authenticated composition seals the plaintext successor once as
+  exact `LS3` with the injective `"LN3" || role || revision` nonce;
+- the future per-session durable coordinator MUST commit that exact sealed
+  state, any emitted epoch key, and the exact outbound record/outbox entry
+  atomically before any share sheet, copy, link, or steganographic export
+  becomes visible;
 - retry or re-export MUST reuse those exact stored bytes and MUST NOT rerun the
   randomized transition;
 - losing or not sending an exported copy does not authorize rollback or entropy
@@ -337,9 +339,11 @@ recovery after a lost symbol and restart, exact immediate-next-epoch matching,
 current and skipped-future no-ops, role switching, authenticator preservation,
 deterministic `KeysUnsampled` output, encoder/revision exhaustion, and maximum
 epoch no-wrap behavior.
-This private slice does not yet connect native candidates to the
-existing durable send/receive journals; that atomic composition remains
-activation-blocking.
+`SCKA_AUTHENTICATED_COMPOSITION.md` freezes the private LS3/LB3/BM3 boundary,
+including exact sealed-candidate re-export, semantic inner validation, fresh
+role-and-revision state nonces, and a sealed two-party epoch-key agreement test. It does not yet
+connect native candidates to the existing durable send/receive journals; that
+atomic LS3/TR3/outbox composition remains activation-blocking.
 
 ## 3. Entropy and licensing boundary
 
@@ -395,9 +399,9 @@ cover exact `Ct2` re-export, loss, restart, erasure recovery, immediate-next-
 epoch filtering, role/high-water advance, authenticator preservation, encoder
 and revision exhaustion, and maximum-epoch no-wrap behavior.
 
-Activation still requires durable terminal MAC-failure handling, integration
-of the complete private encoder/decoder state machine, LS3 sealing with a
-unique OS nonce, the public C ABI and panic
-containment, atomic TR3/journal composition, cross-implementation vectors,
+Activation still requires durable terminal MAC-failure handling, a serialized
+authority that prevents divergent recomputation under one role/revision nonce,
+the public C ABI and panic containment, atomic TR3/journal composition,
+cross-implementation vectors,
 fuzzing/sanitizers, every shipped target, and an independent cryptographic and
 implementation audit.

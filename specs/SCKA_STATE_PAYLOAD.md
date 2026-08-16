@@ -33,7 +33,8 @@ The duplication is deliberate. A future transition must:
 1. authenticate and open `LS3`;
 2. decode `LB3` against the metadata returned by that exact open operation;
 3. build one immutable candidate state;
-4. seal that candidate once with a fresh OS-CSPRNG nonce; and
+4. seal that candidate once with the injective
+   `"LN3" || role_u8 || state_revision_u64_be` nonce; and
 5. atomically commit it with the matching TR3 revision and application effect.
 
 Parsing raw `LB3` bytes without the authenticated outer envelope provides no

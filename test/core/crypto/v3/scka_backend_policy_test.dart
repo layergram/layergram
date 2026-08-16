@@ -196,7 +196,11 @@ void main() {
     expect(envelope['tagBytes'], 16);
     expect(envelope['maximumPayloadBytes'], 196512);
     expect(envelope['headerIsAad'], isTrue);
+    expect(envelope['callerSuppliesExactNonce'], isTrue);
+    expect(envelope['compositionEnforcesDeterministicNonceUniqueness'], isTrue);
+    expect(envelope.containsKey('callerSuppliesFreshOsCsprngNonce'), isFalse);
     expect(envelope['publicAbiConnected'], isFalse);
+    expect(envelope['privateAuthenticatedCompositionConnected'], isTrue);
     expect(envelope['stateMachinePayloadFrozen'], isTrue);
     expect(envelope['productionRegistered'], isFalse);
     expect(envelope['independentlyReviewed'], isFalse);
@@ -217,6 +221,7 @@ void main() {
     expect(payload['bestEffortSecretZeroization'], isTrue);
     expect(payload['publicAbiConnected'], isFalse);
     expect(payload['transitionEngineConnected'], isTrue);
+    expect(payload['authenticatedCompositionConnected'], isTrue);
     expect(payload['productionRegistered'], isFalse);
     expect(payload['independentlyReviewed'], isFalse);
 
@@ -262,6 +267,7 @@ void main() {
     expect(publicMessage['independentGoldenVectors'], isTrue);
     expect(publicMessage['publicAbiConnected'], isFalse);
     expect(publicMessage['transitionEngineConnected'], isTrue);
+    expect(publicMessage['authenticatedCompositionConnected'], isTrue);
     expect(publicMessage['productionRegistered'], isFalse);
     expect(publicMessage['independentlyReviewed'], isFalse);
 
@@ -392,9 +398,39 @@ void main() {
     expect(transition['revisionOneTransitionGraphComplete'], isTrue);
     expect(transition['typedTerminalAuthenticationFailure'], isTrue);
     expect(transition['publicAbiConnected'], isFalse);
+    expect(transition['authenticatedCompositionConnected'], isTrue);
     expect(transition['durableJournalConnected'], isFalse);
     expect(transition['productionRegistered'], isFalse);
     expect(transition['independentlyReviewed'], isFalse);
+
+    final composition = receipt['layergramOwnedAuthenticatedComposition']
+        as Map<String, dynamic>;
+    expect(composition['license'], 'Apache-2.0');
+    expect(composition['thirdPartyDependenciesAdded'], isEmpty);
+    expect(composition['ls3OpenAndSealConnected'], isTrue);
+    expect(composition['lb3SemanticValidationConnected'], isTrue);
+    expect(composition['bm3CanonicalDispatchConnected'], isTrue);
+    expect(composition['completeTransitionGraphConnected'], isTrue);
+    expect(composition['stableRoleSessionBinding'], isTrue);
+    expect(composition['exactRevisionPlusOneBinding'], isTrue);
+    expect(composition['deterministicStateNonce'], isTrue);
+    expect(composition['stateNonceDomain'], 'LN3');
+    expect(composition['stateNonceBindsRoleAndRevision'], isTrue);
+    expect(composition['stateNonceUsesRandomness'], isFalse);
+    expect(composition.containsKey('freshOsStateNonce'), isFalse);
+    expect(composition['exactCandidatePersistenceRequiredBeforeNextTransition'],
+        isTrue);
+    expect(composition['immutableExactCandidate'], isTrue);
+    expect(composition['candidateCloneOrDebug'], isFalse);
+    expect(composition['epochDomainsKeptDistinct'], isTrue);
+    expect(composition['entropyFailureExposesCandidate'], isFalse);
+    expect(composition['twoParticipantSealedStateTest'], isTrue);
+    expect(composition['outerLmfDispatchConnected'], isFalse);
+    expect(composition['durableJournalConnected'], isFalse);
+    expect(composition['publicAbiConnected'], isFalse);
+    expect(composition['applicationRuntimeConnected'], isFalse);
+    expect(composition['productionRegistered'], isFalse);
+    expect(composition['independentlyReviewed'], isFalse);
 
     final effects = receipt['checkpointEffects'] as Map<String, dynamic>;
     expect(effects['thirdPartyCodeImported'], isFalse);
@@ -422,6 +458,7 @@ void main() {
     expect(effects['transitionElevenAdded'], isTrue);
     expect(effects['transitionTwelveAdded'], isTrue);
     expect(effects['transitionThirteenAdded'], isTrue);
+    expect(effects['authenticatedCompositionAdded'], isTrue);
     expect(effects['pubspecChanged'], isFalse);
     expect(effects['protocolV3Activated'], isFalse);
 
@@ -581,6 +618,7 @@ void main() {
     expect(nativeEntry, contains('mod braid_message;'));
     expect(nativeEntry, contains('mod braid_state_payload;'));
     expect(nativeEntry, contains('mod braid_transition;'));
+    expect(nativeEntry, contains('mod authenticated_braid;'));
     expect(nativeEntry, contains('mod entropy;'));
     expect(nativeEntry, isNot(contains('incremental_mlkem::')));
     expect(nativeEntry, isNot(contains('state_envelope::')));
@@ -588,6 +626,7 @@ void main() {
     expect(nativeEntry, isNot(contains('braid_message::')));
     expect(nativeEntry, isNot(contains('braid_state_payload::')));
     expect(nativeEntry, isNot(contains('braid_transition::')));
+    expect(nativeEntry, isNot(contains('authenticated_braid::')));
     expect(nativeEntry, isNot(contains('entropy::')));
     expect(source, contains('validate_pk_bytes'));
     expect(source, contains('checked_seed.zeroize()'));
@@ -646,7 +685,8 @@ void main() {
     expect(transition, contains('pub(crate) fn initialize('));
     expect(transition, contains('pub(crate) fn send('));
     expect(transition, contains('pub(crate) fn receive('));
-    expect(transition, contains('send_with_entropy(prior, &mut OsEntropy)'));
+    expect(transition,
+        contains('send_with_entropy_source(prior, &mut OsEntropy)'));
     expect(transition, contains('BraidStateVariant::KeysSampled'));
     expect(transition, contains('BraidStateVariant::HeaderSent'));
     expect(transition, contains('BraidStateVariant::Ct1Received'));
@@ -680,6 +720,23 @@ void main() {
     expect(transition, contains('authenticator.verify_header'));
     expect(transition, contains('authenticator.mac_ciphertext'));
     expect(transition, contains('BraidMessageType::None'));
+    final composition = File(
+      'native/layergram_scka/src/authenticated_braid.rs',
+    ).readAsStringSync();
+    expect(composition, contains('state_envelope::open'));
+    expect(composition, contains('braid_state_payload::decode'));
+    expect(composition, contains('BraidPublicMessage::decode'));
+    expect(composition, contains('braid_transition::send_with_entropy_source'));
+    expect(composition, contains('braid_transition::receive'));
+    expect(composition, contains('nonce[..3].copy_from_slice(b"LN3")'));
+    expect(composition, contains('nonce[3] = metadata.role() as u8'));
+    expect(composition, contains('metadata.state_revision().to_be_bytes()'));
+    expect(composition, isNot(contains('entropy.fill(&mut nonce)')));
+    expect(composition, contains('validate_successor'));
+    expect(
+      File('specs/SCKA_AUTHENTICATED_COMPOSITION.md').readAsStringSync(),
+      contains('Protocol v3 remains inactive'),
+    );
     expect(
       File('specs/SCKA_TRANSITION_ENGINE.md').readAsStringSync(),
       contains('protocol v3 inactive'),

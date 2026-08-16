@@ -6,9 +6,10 @@
 //! This module freezes and enforces the outer AES-256-GCM container described
 //! in `specs/SCKA_NATIVE_ABI.md`. It deliberately does not define the inner
 //! ML-KEM Braid state-machine payload and is not connected to the public C ABI.
-//! Callers must supply a fresh 96-bit nonce from an approved OS CSPRNG, persist
-//! the returned bytes exactly once, and semantically validate the decrypted
-//! payload before accepting it as a candidate transition.
+//! Callers must supply an exact 96-bit nonce under their own uniqueness policy,
+//! persist the returned bytes exactly once, and semantically validate the
+//! decrypted payload before accepting it as a candidate transition. The private
+//! authenticated composition uses an injective role-and-revision nonce.
 
 use aes_gcm::aead::{AeadInPlace, KeyInit};
 use aes_gcm::{Aes256Gcm, Nonce, Tag};

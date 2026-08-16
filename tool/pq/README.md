@@ -60,6 +60,12 @@ export. Transition 13 now continues exact authenticated Ct2 symbols across
 loss/restart and switches roles only on the immediately following authenticated
 Braid epoch. All revision-1 transitions 1-13 are implemented privately, while
 the engine remains disconnected from the ABI and every application package.
+The private composition specified by
+`specs/SCKA_AUTHENTICATED_COMPOSITION.md` now opens and semantically validates
+exact LS3/LB3 state, dispatches canonical BM3, checks revision-plus-one
+successors, derives injective role-and-revision state nonces, and returns immutable exact sealed
+candidates. It is still not callable through C, Dart, Flutter, or a packaged
+binary, and it is not connected to the durable session journals.
 
 ## Reproducible checks
 

@@ -91,13 +91,14 @@ separately implemented `mlkem-native` known-answer vector. It remains unused by
 every exported SCKA operation; self-test and all shaped state operations still
 return `NOT_READY`.
 
-The same inactive crate now implements the frozen outer `LS3` AES-256-GCM
-container behind an internal module. It validates exact header fields, lengths,
+The same inactive crate implements the frozen outer `LS3` AES-256-GCM container
+behind an internal module. It validates exact header fields, lengths,
 role/session/revision bindings, signed-63 counters, AAD, ciphertext, and tag,
-and returns decrypted bytes only through a zeroizing owner. The caller must
-supply a fresh OS-generated nonce; the module does not generate randomness and
-is not connected to any C ABI operation. The disconnected canonical plaintext
-payload is now frozen separately in `SCKA_STATE_PAYLOAD.md`.
+and returns decrypted bytes only through a zeroizing owner. The lower-level
+envelope still accepts an exact caller-supplied nonce. The private composition
+specified by `SCKA_AUTHENTICATED_COMPOSITION.md` derives an injective
+`"LN3" || role || revision` nonce and connects LS3 to canonical LB3/BM3
+transitions without connecting any C ABI operation.
 
 The `LB3` codec represents all 11 revision-1 states, duplicates and
 cross-checks the authenticated `LS3` role/session/revision/epoch metadata,
@@ -167,9 +168,12 @@ obtains its exact 64-byte ML-KEM key-generation seed from a private
 `getrandom` 0.4.3 operating-system entropy boundary; transition 7 obtains a
 separate 32-byte seed from the same boundary, while continued Header and `Ek`
 symbols use persisted encoder progress without requesting new entropy.
-Every opt-in `getrandom` backend is rejected at compile time. The result is
-deliberately not connected to LS3, the C ABI, Dart, Flutter, or the existing
-durable journals, and all exports still return `NOT_READY`.
+Every opt-in `getrandom` backend is rejected at compile time. The complete
+transition engine is now connected privately to LS3, LB3, BM3, and OS
+transition entropy by `authenticated_braid.rs`; LS3 state nonces are derived
+deterministically from role and revision. It remains deliberately
+disconnected from the C ABI, Dart, Flutter, and the existing durable journals,
+and all exports still return `NOT_READY`.
 
 ## Incremental ML-KEM primitive, inactive internal adoption
 
@@ -220,11 +224,12 @@ notice requirements are preserved, but this remains an engineering review and
 not legal advice.
 
 The internal envelope API still accepts a caller-supplied nonce. The private
-transition layer now has an approved `getrandom` operating-system entropy
-boundary for ML-KEM seed generation, but LS3 nonce allocation is not yet
-connected. A future ABI implementation must obtain a separate fresh nonce from
-that boundary, ensure one seal per candidate revision, and persist the exact
-sealed bytes.
+composition now derives an injective 96-bit nonce as
+`"LN3" || role_u8 || state_revision_u64_be`; the shared state key therefore has
+disjoint initiator/responder nonce spaces and no random-collision budget. The
+future durable authority must still ensure one seal per logical role/revision,
+persist the exact candidate before advancing, and re-export those bytes without
+rerunning a randomized transition.
 
 ## Ratcheted-authenticator primitives, inactive internal adoption
 

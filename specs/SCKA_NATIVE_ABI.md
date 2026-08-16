@@ -1,18 +1,20 @@
 # Layergram SCKA native ABI and state envelope v1
 
-Status: **frozen inactive scaffold, implemented internal outer envelope,
-canonical inner payload, ratcheted authenticator, and canonical public-message
-codec; erasure representation and incremental primitive boundary frozen; no
-public transitions; private initialization and transitions 1-13 implemented;
-protocol v3 inactive**
+Status: **frozen inactive scaffold; private authenticated LS3/LB3/BM3
+composition and transitions 1-13 implemented; public ABI, durable coordinator,
+and protocol v3 activation disconnected**
 
 This document freezes the first Layergram-owned C ABI and authenticated state
 envelope for an eventual independent implementation of ML-KEM Braid revision 1.
 The current Rust crate implements and tests the outer `LS3` envelope, inner
 `LB3` payload, revision-1 authenticator primitives, and canonical `BM3` public
-message behind internal modules. The private engine now implements
-initialization and transitions 1-13 as specified by `SCKA_TRANSITION_ENGINE.md`,
-while deliberately returning
+message behind internal modules. The private engine implements initialization
+and transitions 1-13 as specified by `SCKA_TRANSITION_ENGINE.md`; the private
+composition in `SCKA_AUTHENTICATED_COMPOSITION.md` now authenticates and
+semantically validates LS3/LB3, dispatches canonical BM3, seals each detached
+successor once with an injective role-and-revision nonce, and preserves exact
+candidate bytes. The
+crate still deliberately returns
 `LG_SCKA_V1_ERR_NOT_READY`
 from its self-test and every correctly shaped state operation. It cannot be
 registered as a `V3SckaBackend` and does not make Layergram quantum-resistant.
@@ -121,17 +123,20 @@ the 16-byte authentication tag is appended after its ciphertext.
 | 36 | 8 | native state revision |
 | 44 | 8 | sending-epoch high-water value |
 | 52 | 8 | receiving-epoch high-water value |
-| 60 | 12 | fresh state-sealing nonce |
+| 60 | 12 | state-sealing nonce |
 | 72 | 8 | reserved zeros |
 | 80 | N | AES-256-GCM ciphertext, `1..196512` bytes |
 | 80+N | 16 | AES-256-GCM authentication tag |
 
-The nonce comes from the approved operating-system CSPRNG. The internal
-`state_envelope` module accepts that exact caller-owned nonce, uses the full
-80-byte header as AES-256-GCM AAD, authenticates before returning a
-zeroizing plaintext owner, and enforces every fixed field and size bound. It is
-not called by the ABI and does not generate randomness. A candidate must be
-sealed once and its exact bytes persisted; retry never reseals the same logical
+The private composition derives the nonce as the exact 12 bytes
+`"LN3" || role_u8 || state_revision_u64_be`. Both roles share the state-sealing
+key, so the role byte creates disjoint nonce spaces and the signed-63 revision
+is injective within each space. The lower-level `state_envelope` module accepts
+that exact caller-owned nonce, uses the full 80-byte header as AES-256-GCM AAD,
+authenticates before returning a zeroizing plaintext owner, and enforces every
+fixed field and size bound. It is not called by the ABI and does not generate
+randomness. A candidate must be sealed once and its exact bytes persisted;
+retry never reseals the same logical
 revision. The complete implementation must reject malformed length arithmetic,
 unsupported values, non-zero reserved fields, wrong session/role, an
 authentication failure, counter exhaustion, and any mismatch between header
@@ -170,10 +175,12 @@ for `None`/`Ct1Ack` or 58 bytes for a chunk-bearing type, and always preserves
 the non-zero internal Braid epoch. The version-locked incremental primitive boundary and
 its exact 2,080-byte opaque continuation state are frozen in
 `SCKA_INCREMENTAL_MLKEM.md`. These components and the complete encrypted
-payload representation are tested inside the Rust crate and remain disconnected
-from all ABI operations. The complete private Braid scheduling path now exists,
-including transition 13, but authenticated outer framing, durable recovery,
-public ABI composition, packaging, and independent review remain unimplemented.
+payload representation are tested inside the Rust crate. The private composition
+now joins them as specified by `SCKA_AUTHENTICATED_COMPOSITION.md`, including
+transition 13, exact revision-plus-one checks, and one injective LS3 nonce per
+role/revision. It remains disconnected from all ABI operations. Authenticated outer
+LMF/HR3 dispatch, durable LS3/TR3/outbox recovery, public ABI composition,
+packaging, and independent review remain unimplemented.
 
 ## 4. ABI operations
 
