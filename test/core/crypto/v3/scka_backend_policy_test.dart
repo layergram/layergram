@@ -63,6 +63,7 @@ void main() {
       'macosUniversalSignedScope': true,
       'linuxX64PackagedScope': true,
       'windowsX64OnWindowsArm64PackagedScope': true,
+      'iosIphone14ProMaxDevelopmentSignedScope': true,
       'macosArm64AddressSanitizer': true,
       'linuxX64AddressSanitizer': true,
     });
@@ -73,7 +74,7 @@ void main() {
       'androidArmv7PackagedInApk': true,
       'androidX64PackagedInApk': true,
       'androidPhysicalRuntime': false,
-      'iosPhysicalRuntime': false,
+      'iosPhysicalRuntime': true,
     });
     expect(
       scaffold['runtimeStatus'],
@@ -492,6 +493,7 @@ void main() {
     );
     expect(composition['candidateMacosLocalSignatureValidated'], isTrue);
     expect(composition['candidateIosSimulatorScopeRuntimeValidated'], isTrue);
+    expect(composition['candidateIosPhysicalScopeRuntimeValidated'], isTrue);
     expect(composition['candidateAndroidExactApkAbiValidated'], isTrue);
     expect(composition['candidateLinuxScopeRuntimeValidated'], isTrue);
     expect(composition['candidateWindowsScopeRuntimeValidated'], isTrue);
@@ -550,6 +552,7 @@ void main() {
     expect(effects['candidateAbiMemoryRangeHardeningAdded'], isTrue);
     expect(effects['candidateDeterministicHostileCorpusAdded'], isTrue);
     expect(effects['candidateAddressSanitizerCheckpointAdded'], isTrue);
+    expect(effects['candidateIosPhysicalScopeSmokeAdded'], isTrue);
     expect(effects['pubspecChanged'], isFalse);
     expect(effects['protocolV3Activated'], isFalse);
 
@@ -574,6 +577,12 @@ void main() {
     expect(
       remainingGates.any(
         (gate) => gate.contains('keep the default ABI NOT_READY'),
+      ),
+      isTrue,
+    );
+    expect(
+      remainingGates.any(
+        (gate) => gate.contains('physical Android runtime'),
       ),
       isTrue,
     );
@@ -740,6 +749,7 @@ void main() {
       'tool/pq/build_scka_packaged_apple.sh',
       'tool/pq/test_scka_packaged_apple.sh',
       'tool/pq/test_scka_packaged_ios.sh',
+      'tool/pq/test_scka_packaged_ios_physical.sh',
       'tool/pq/test_scka_packaged_android.sh',
       'tool/pq/test_scka_packaged_linux.sh',
       'tool/pq/test_scka_packaged_windows.ps1',

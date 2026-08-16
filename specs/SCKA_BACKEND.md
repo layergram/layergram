@@ -306,7 +306,7 @@ than production project registration.
 - retain the bounded deterministic hostile corpus and macOS/Linux
   AddressSanitizer checkpoint, then extend it with continuous coverage-guided
   fuzzing, static analysis, crash/resource campaigns, signed distribution/store
-  packaging, and physical-device tests;
+  packaging, and the remaining Android physical-device test;
 - obtain independent cryptographic and implementation review.
 
 Until all gates pass, no provider may register this backend and Layergram must

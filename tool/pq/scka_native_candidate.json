@@ -58,6 +58,7 @@
       "macosUniversalSignedScope": true,
       "linuxX64PackagedScope": true,
       "windowsX64OnWindowsArm64PackagedScope": true,
+      "iosIphone14ProMaxDevelopmentSignedScope": true,
       "macosArm64AddressSanitizer": true,
       "linuxX64AddressSanitizer": true
     },
@@ -68,7 +69,7 @@
       "androidArmv7PackagedInApk": true,
       "androidX64PackagedInApk": true,
       "androidPhysicalRuntime": false,
-      "iosPhysicalRuntime": false
+      "iosPhysicalRuntime": true
     },
     "runtimeStatus": "candidate-packaged-not-registered-not-active",
     "stateEnvelopeSpecification": "specs/SCKA_NATIVE_ABI.md",
@@ -515,6 +516,7 @@
     "candidatePackagedRawBackendApplicationBootstrap": false,
     "candidateMacosLocalSignatureValidated": true,
     "candidateIosSimulatorScopeRuntimeValidated": true,
+    "candidateIosPhysicalScopeRuntimeValidated": true,
     "candidateAndroidExactApkAbiValidated": true,
     "candidateLinuxScopeRuntimeValidated": true,
     "candidateWindowsScopeRuntimeValidated": true,
@@ -574,14 +576,15 @@
     "candidateAbiMemoryRangeHardeningAdded": true,
     "candidateDeterministicHostileCorpusAdded": true,
     "candidateAddressSanitizerCheckpointAdded": true,
+    "candidateIosPhysicalScopeSmokeAdded": true,
     "protocolV3Activated": false
   },
   "remainingGates": [
     "repeat locked target-specific dependency and notice review before every packaged release",
-    "promote the candidate bridge only after production archive signing, notarization or store-package verification, physical iOS and Android runtime, and registration review; keep the default ABI NOT_READY until then",
+    "promote the candidate bridge only after production archive signing, notarization or store-package verification, physical Android runtime, and registration review; keep the default ABI NOT_READY until then",
     "independently review the frozen canonical LB3 plaintext state-machine payload, BM3 public-message codec, and opaque incremental-continuation version binding",
     "run upstream primitive vectors plus independent cross-implementation ML-KEM Braid vectors",
-    "test signed installable artifacts for every shipped architecture; current iOS device and Android evidence is packaged but not physical-runtime evidence",
+    "test signed installable artifacts for every shipped architecture; iOS has development-signed physical runtime evidence, while Android remains packaged but not physical-runtime evidence",
     "extend the bounded hostile corpus and macOS/Linux AddressSanitizer checkpoint with continuous coverage-guided fuzzing plus crash, rollback, replay, concurrency, resource, and secret-lifecycle campaigns",
     "obtain independent cryptographic and implementation review"
   ]

@@ -143,9 +143,22 @@ Set `LAYERGRAM_SCKA_MACOS_SIGN_IDENTITY` to a local signing identity to verify
 the generated macOS app with hardened runtime. This is not archive,
 notarization, or store-distribution evidence. The iOS script executes the x64
 simulator smoke when a compatible simulator is booted and also compiles the
-device ARM64 candidate without signing. Android physical-device and iOS
-physical-device execution remain separate gates. Linux retains RELRO/BIND_NOW;
-Windows uses an executable-relative absolute DLL path. All generated native
+device ARM64 candidate without signing. A separate opt-in physical-iOS gate
+builds a development-signed Release runner, verifies the exact ABI, executes
+the packaged scope on a paired device, and removes the test app:
+
+```sh
+LAYERGRAM_SCKA_IOS_PHYSICAL_DEVICE_ID=<device-udid> \
+  tool/pq/test_scka_packaged_ios_physical.sh
+```
+
+The physical script fails before building if `app.layergram.app` is already
+installed, so it cannot replace a real Layergram installation or its data. It
+requires an unlocked signing keychain and an existing development profile that
+contains the selected device. Its development signature is device-runtime
+evidence, not App Store distribution approval. Android physical-device
+execution remains a separate gate. Linux retains RELRO/BIND_NOW; Windows uses
+an executable-relative absolute DLL path. All generated native
 artifacts live below ignored `.dart_tool` or Flutter build directories and are
 not committed. Android additionally requires the explicit
 `layergramSckaCandidatePackage` Gradle property set by its verification script,
