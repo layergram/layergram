@@ -1,7 +1,8 @@
 # Layergram authenticated SCKA composition v1
 
-Status: **implemented privately; public ABI, durable session authority,
-application packaging, and protocol v3 activation remain disconnected**
+Status: **implemented privately; the inactive Dart durable scope pins one
+admitted backend, while the Rust composition, public ABI, application
+packaging, and protocol v3 activation remain disconnected**
 
 This document freezes the internal composition implemented by
 `native/layergram_scka/src/authenticated_braid.rs`. It joins the already frozen
@@ -111,9 +112,17 @@ persist the exact candidate before another transition can observe that prior
 revision. Retry re-exports those exact bytes and never invokes the transition
 again.
 
-The current Dart v3 journals already model exact-byte outbox recovery, but this
-private Rust composition is not connected to them. Atomic LS3/TR3/outbox
-revision binding and authenticated dispatch remain activation gates.
+The inactive Dart v3 persistence scope now admits one backend before opening
+storage and pins that exact instance across checkpoint restore validation,
+initial HP3-to-TR3 handoff, durable send, and its scope-owned receive resolver.
+A different per-call backend is rejected before SCKA transition work or a
+durable write. The controller still commits the resulting opaque native state
+inside the exact TR3/outbox or TR3/application effect.
+
+This is an authority-side integration seam, not a connection to the private
+Rust composition: the native ABI still returns `NOT_READY`, is unregistered,
+and is not packaged. Authenticated outer dispatch through the real application
+and the native ABI connection remain activation gates.
 
 ## 7. Verification and commercial boundary
 

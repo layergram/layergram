@@ -26,8 +26,10 @@ import 'lmf_v3_outbox.dart';
 import 'lmf_v3_persistence.dart';
 import 'session_checkpoint_v3.dart';
 import 'session_commit_controller_v3.dart';
+import 'session_ratchet_key_resolver_v3.dart';
 import 'session_send_journal_v3.dart';
 import 'session_retirement_journal_v3.dart';
+import 'sparse_pq_ratchet_v3.dart';
 import 'triple_ratchet_state_v3.dart';
 
 /// Result of restoring one complete encrypted protocol-v3 persistence scope.
@@ -74,9 +76,11 @@ final class V3SessionPersistenceRestoreResult {
 /// operations have drained. The caller remains responsible for closing this
 /// object before an identity/passphrase context is expelled.
 ///
-/// This is storage wiring only. It does not register a provider, select a
-/// native SCKA backend, import v3 into the active identity path, or enable v3
-/// messaging in production.
+/// Opening the scope admits and pins exactly one caller-selected SCKA backend
+/// across restore validation, initial handoff, durable send, and its owned
+/// receive resolver. It does not register that provider, connect the inactive
+/// Rust ABI, import v3 into the active identity path, or enable v3 messaging in
+/// production.
 final class V3SessionPersistenceScope {
   V3SessionPersistenceScope._({
     required AuxRecordRepository repository,
@@ -85,6 +89,7 @@ final class V3SessionPersistenceScope {
     required this.handshakes,
     required this.controller,
     required this.handoffs,
+    required this.ratchetKeyResolver,
   })  : _repository = repository,
         _ownedAuxStorageKey = ownedAuxStorageKey;
 
@@ -98,6 +103,7 @@ final class V3SessionPersistenceScope {
   static Future<V3SessionPersistenceScope> open({
     required String scopeToken,
     required SecretKey auxStorageKey,
+    required V3SckaBackend sckaBackend,
     V3SessionSnapshotValidator? snapshotValidator,
     int maxSessions = 4096,
   }) async {
@@ -108,6 +114,7 @@ final class V3SessionPersistenceScope {
         'must be the canonical 16-character base64url identity token',
       );
     }
+    await V3SparsePqRatchet.ensureBackendReady(sckaBackend);
 
     final extractedKey = await auxStorageKey.extract();
     late final SecretKeyData ownedKey;
@@ -150,6 +157,7 @@ final class V3SessionPersistenceScope {
         ),
         retirementJournal: V3SessionRetirementJournal(store: store),
         initialHandoffAuthority: initialHandoffAuthority,
+        sckaBackend: sckaBackend,
         snapshotValidator: snapshotValidator,
         maxSessions: maxSessions,
       );
@@ -158,6 +166,11 @@ final class V3SessionPersistenceScope {
         handshakes: handshakes,
         sessions: controller,
         initialHandoffAuthority: initialHandoffAuthority,
+        sckaBackend: sckaBackend,
+      );
+      final ratchetKeyResolver = V3SessionRatchetKeyResolver(
+        backend: sckaBackend,
+        snapshotProvider: controller.snapshotForSession,
       );
       return V3SessionPersistenceScope._(
         repository: repository,
@@ -166,6 +179,7 @@ final class V3SessionPersistenceScope {
         handshakes: handshakes,
         controller: controller,
         handoffs: handoffs,
+        ratchetKeyResolver: ratchetKeyResolver,
       );
     } catch (_) {
       ownedKey.destroy();
@@ -209,6 +223,12 @@ final class V3SessionPersistenceScope {
   /// Sole serialized path from authenticated HP3 state to an initial durable
   /// TR3 checkpoint and completion tombstone.
   final V3HandshakeSessionHandoffController handoffs;
+
+  /// Scope-owned receive-candidate resolver for this pinned backend.
+  ///
+  /// Its candidate is still non-authoritative until [controller] commits the
+  /// authenticated delivery and matching TR3 revision.
+  final V3SessionRatchetKeyResolver ratchetKeyResolver;
 
   Future<void> _operationTail = Future<void>.value();
   bool _restoreStarted = false;
@@ -280,22 +300,26 @@ final class V3SessionPersistenceScope {
       if (_closed) return;
       _closed = true;
       try {
-        await handoffs.close();
+        await ratchetKeyResolver.close();
       } finally {
         try {
-          await handshakes.close();
+          await handoffs.close();
         } finally {
           try {
-            await controller.close();
+            await handshakes.close();
           } finally {
             try {
-              await inbox.close();
+              await controller.close();
             } finally {
-              _repository.setActiveContext(
-                scopeToken: null,
-                auxStorageKey: null,
-              );
-              _ownedAuxStorageKey.destroy();
+              try {
+                await inbox.close();
+              } finally {
+                _repository.setActiveContext(
+                  scopeToken: null,
+                  auxStorageKey: null,
+                );
+                _ownedAuxStorageKey.destroy();
+              }
             }
           }
         }

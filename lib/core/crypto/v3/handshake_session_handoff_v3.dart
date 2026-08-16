@@ -445,15 +445,18 @@ final class V3HandshakeSessionHandoffController {
     required V3HandshakePersistenceController handshakes,
     required V3SessionCommitController sessions,
     required V3InitialSessionHandoffAuthority initialHandoffAuthority,
+    V3SckaBackend? sckaBackend,
   })  : _repository = repository,
         _handshakes = handshakes,
         _sessions = sessions,
-        _initialHandoffAuthority = initialHandoffAuthority;
+        _initialHandoffAuthority = initialHandoffAuthority,
+        _sckaBackend = sckaBackend;
 
   final V3HandshakeHandoffRepository _repository;
   final V3HandshakePersistenceController _handshakes;
   final V3SessionCommitController _sessions;
   final V3InitialSessionHandoffAuthority _initialHandoffAuthority;
+  final V3SckaBackend? _sckaBackend;
   Future<void> _operationTail = Future<void>.value();
   V3HandshakeHandoffAuthority? _authority;
   bool _restored = false;
@@ -519,7 +522,7 @@ final class V3HandshakeSessionHandoffController {
     required V3LocalDeviceHandle localDevice,
     required V3PublicIdentity responderIdentity,
     required V3HandshakeReply reply,
-    required V3SckaBackend backend,
+    V3SckaBackend? backend,
     DateTime? preparedAt,
     DateTime? completedAt,
   }) {
@@ -571,6 +574,7 @@ final class V3HandshakeSessionHandoffController {
       V3InitiatorHandshakeResult? accepted;
       V3TripleRatchetState? snapshot;
       try {
+        final selectedBackend = _resolveSckaBackend(backend);
         pending = await _handshakes.resumeInitiator(handshakeId);
         accepted = await V3HybridHandshake.acceptReply(
           pending: pending,
@@ -581,7 +585,7 @@ final class V3HandshakeSessionHandoffController {
         );
         snapshot = await V3InitialSessionFactory.initialize(
           established: accepted.established,
-          backend: backend,
+          backend: selectedBackend,
         );
         final prepared = await _repository.persist(
           handshakeId: handshakeId,
@@ -619,7 +623,7 @@ final class V3HandshakeSessionHandoffController {
     required V3PublicIdentity initiatorIdentity,
     required V3PublicIdentity responderIdentity,
     required V3HandshakeConfirmation confirmation,
-    required V3SckaBackend backend,
+    V3SckaBackend? backend,
     DateTime? preparedAt,
     DateTime? completedAt,
   }) {
@@ -666,6 +670,7 @@ final class V3HandshakeSessionHandoffController {
       V3HandshakeEstablishedMaterial? established;
       V3TripleRatchetState? snapshot;
       try {
+        final selectedBackend = _resolveSckaBackend(backend);
         pending = await _handshakes.resumeResponder(handshakeId);
         established = await V3HybridHandshake.acceptConfirmation(
           pending: pending,
@@ -675,7 +680,7 @@ final class V3HandshakeSessionHandoffController {
         );
         snapshot = await V3InitialSessionFactory.initialize(
           established: established,
-          backend: backend,
+          backend: selectedBackend,
         );
         final prepared = await _repository.persist(
           handshakeId: handshakeId,
@@ -795,6 +800,22 @@ final class V3HandshakeSessionHandoffController {
       _closed = true;
       await _repository.close(authority: _authority);
     });
+  }
+
+  V3SckaBackend _resolveSckaBackend(V3SckaBackend? requested) {
+    final pinned = _sckaBackend;
+    if (pinned != null) {
+      if (requested != null && !identical(requested, pinned)) {
+        throw StateError(
+          'Layergram v3 handoff scope rejected a different SCKA backend',
+        );
+      }
+      return pinned;
+    }
+    if (requested == null) {
+      throw StateError('Layergram v3 SCKA backend is not configured');
+    }
+    return requested;
   }
 
   Future<void> _failStopDependencies() async {

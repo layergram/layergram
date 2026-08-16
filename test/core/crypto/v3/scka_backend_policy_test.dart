@@ -435,6 +435,13 @@ void main() {
     expect(composition['epochDomainsKeptDistinct'], isTrue);
     expect(composition['entropyFailureExposesCandidate'], isFalse);
     expect(composition['twoParticipantSealedStateTest'], isTrue);
+    expect(composition['dartRuntimeBackendPinned'], isTrue);
+    expect(composition['dartRestoreUsesPinnedBackend'], isTrue);
+    expect(composition['dartHandoffSendResolverSharePinnedBackend'], isTrue);
+    expect(
+      composition['divergentPerCallBackendRejectedBeforeTransition'],
+      isTrue,
+    );
     expect(composition['outerLmfDispatchConnected'], isFalse);
     expect(composition['durableJournalConnected'], isFalse);
     expect(composition['publicAbiConnected'], isFalse);
@@ -457,6 +464,7 @@ void main() {
     expect(effects['operatingSystemEntropyBoundaryAdded'], isTrue);
     expect(effects['getrandomBackendOverrideGuardAdded'], isTrue);
     expect(effects['identityMnemonicFullByteRangeHardened'], isTrue);
+    expect(effects['dartScopedBackendPinningAdded'], isTrue);
     expect(effects['transitionThreeAdded'], isTrue);
     expect(effects['transitionFourAdded'], isTrue);
     expect(effects['transitionFiveAdded'], isTrue);
@@ -755,6 +763,26 @@ void main() {
       File('specs/SCKA_TRANSITION_ENGINE.md').readAsStringSync(),
       contains('protocol v3 inactive'),
     );
+  });
+
+  test('inactive durable scope pins one admitted SCKA backend', () {
+    final scope = File(
+      'lib/core/crypto/v3/session_persistence_scope_v3.dart',
+    ).readAsStringSync();
+    final admission = scope.indexOf(
+      'await V3SparsePqRatchet.ensureBackendReady(sckaBackend);',
+    );
+    final storageOpen = scope.indexOf('final repository = AuxRecordRepository');
+
+    expect(admission, greaterThanOrEqualTo(0));
+    expect(storageOpen, greaterThan(admission));
+    expect(
+      'sckaBackend: sckaBackend'.allMatches(scope).length,
+      greaterThanOrEqualTo(2),
+    );
+    expect(scope, contains('backend: sckaBackend'));
+    expect(scope,
+        contains('final V3SessionRatchetKeyResolver ratchetKeyResolver'));
   });
 
   test('Layergram erasure code remains owned, dependency-free, and inactive',

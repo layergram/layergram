@@ -31,7 +31,6 @@ void main() {
         sessionId: fixture.checkpoint.sessionId,
         expectedRevision: 0,
         plaintext: plaintext,
-        backend: fixture.backend,
         persistedAt: DateTime.utc(2026, 8, 14),
       );
 
@@ -66,6 +65,31 @@ void main() {
 
       current.wipeSecrets();
       _wipe(plaintext);
+      await fixture.close();
+    });
+
+    test('pinned scope backend rejects a different per-call backend', () async {
+      final fixture = await _SendFixture.create();
+      final divergent = _DeterministicEpochBackend();
+
+      await expectLater(
+        fixture.controller.sendMessage(
+          sessionId: fixture.checkpoint.sessionId,
+          expectedRevision: 0,
+          plaintext: _bytes(64, 0x4a),
+          backend: divergent,
+        ),
+        throwsStateError,
+      );
+
+      expect(fixture.backend.sendCalls, 0);
+      expect(divergent.sendCalls, 0);
+      final current = await fixture.controller.snapshotForSession(
+        fixture.checkpoint.sessionId,
+      );
+      expect(current.revision, 0);
+      current.wipeSecrets();
+      expect(fixture.store.records, isEmpty);
       await fixture.close();
     });
 
@@ -641,7 +665,7 @@ void main() {
             V3CommittedRecordMaterializer(store: fixture.store),
         checkpointRepository:
             V3SessionCheckpointRepository(store: fixture.store),
-        snapshotValidator: fixture.backend.validateSnapshot,
+        sckaBackend: fixture.backend,
       );
       try {
         await expectLater(
@@ -1119,7 +1143,7 @@ void main() {
         ),
         sendJournal: sendJournal,
         outbox: outbox,
-        snapshotValidator: fixture.backend.validateSnapshot,
+        sckaBackend: fixture.backend,
       );
       await expectLater(
         controller.restore(
@@ -1226,7 +1250,7 @@ final class _SendFixture {
       retirementJournal: retirementState
           ? V3SessionRetirementJournal(store: actualStore)
           : null,
-      snapshotValidator: actualBackend.validateSnapshot,
+      sckaBackend: actualBackend,
     );
     final restored = await controller.restore(
       checkpoints: <V3TripleRatchetState>[actualCheckpoint],

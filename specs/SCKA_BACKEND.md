@@ -66,6 +66,14 @@ metadata, wrong keys, stale/rolled-back revisions, and a failed backend; the
 future provider registration must separately allowlist the exact approved
 implementation ID. None of these controls replaces cryptographic review.
 
+The inactive encrypted session scope additionally requires one backend at
+open, admits it before touching storage, and pins that exact object across
+checkpoint restore, initial-session handoff, durable send, and its owned
+receive resolver. Low-level crypto tests may still construct unbound
+controllers directly, but the scope intended for eventual application wiring
+rejects a different per-call backend before transition or persistence. This
+does not register the Rust scaffold or make its `NOT_READY` ABI callable.
+
 The Layergram-owned Rust crate under `native/layergram_scka` now freezes the
 minimal ABI and outer authenticated state envelope described in
 `SCKA_NATIVE_ABI.md`. It is not linked into any app. Its self-test and every
@@ -171,9 +179,10 @@ symbols use persisted encoder progress without requesting new entropy.
 Every opt-in `getrandom` backend is rejected at compile time. The complete
 transition engine is now connected privately to LS3, LB3, BM3, and OS
 transition entropy by `authenticated_braid.rs`; LS3 state nonces are derived
-deterministically from role and revision. It remains deliberately
-disconnected from the C ABI, Dart, Flutter, and the existing durable journals,
-and all exports still return `NOT_READY`.
+deterministically from role and revision. It remains deliberately disconnected
+from the C ABI and Flutter packaging. The Dart durable scope now freezes the
+backend-selection seam, but it cannot select this private Rust implementation
+because all exported operations still return `NOT_READY`.
 
 ## Incremental ML-KEM primitive, inactive internal adoption
 

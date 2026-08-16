@@ -308,6 +308,13 @@ implementation ID, exact revision `1`, and self-test before invoking native
 state semantics. Future provider registration must separately allowlist the
 exact approved implementation ID.
 
+The inactive encrypted session scope MUST pin one admitted backend instance
+for its lifetime. Checkpoint restore, HP3-to-TR3 handoff, durable send, and the
+scope-owned receive resolver use that same instance; a divergent per-call
+backend fails before SCKA transition work or a durable write. This process-local
+binding is not encoded on the wire and does not replace the future signed build
+allowlist or packaged native implementation check.
+
 `SCKA_NATIVE_ABI.md` freezes the inactive Layergram-owned C ABI and outer `LS3`
 state envelope. The session expansion derives a separate stable 32-byte
 state-sealing key with label `"layergram/v3/session/scka-state-seal\0"`. TR3

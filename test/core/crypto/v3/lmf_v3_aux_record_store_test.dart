@@ -9,7 +9,6 @@ import 'package:layergram/core/crypto/aux_record_cipher.dart';
 import 'package:layergram/core/crypto/v3/committed_record_materializer_v3.dart';
 import 'package:layergram/core/crypto/v3/committed_record_v3.dart';
 import 'package:layergram/core/crypto/v3/ec_double_ratchet_v3.dart';
-import 'package:layergram/core/crypto/v3/hybrid_ratchet_header_v3.dart';
 import 'package:layergram/core/crypto/v3/key_schedule_v3.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3_atomic_commit.dart';
@@ -18,6 +17,7 @@ import 'package:layergram/core/crypto/v3/lmf_v3_persistence.dart';
 import 'package:layergram/core/crypto/v3/session_checkpoint_v3.dart';
 import 'package:layergram/core/crypto/v3/session_persistence_scope_v3.dart';
 import 'package:layergram/core/crypto/v3/session_retirement_journal_v3.dart';
+import 'package:layergram/core/crypto/v3/sparse_pq_ratchet_v3.dart';
 import 'package:layergram/core/crypto/v3/triple_ratchet_state_v3.dart';
 import 'package:layergram/core/storage/aux_record_repository.dart';
 import 'package:layergram/core/storage/local_database.dart';
@@ -26,6 +26,7 @@ void main() {
   late Directory temporaryDirectory;
   late Box<Map> box;
   late SecretKey auxiliaryKey;
+  final scopeBackend = _ScopeSckaBackend();
   final messageKey = SecretKeyData(_bytes(32, 0x11));
 
   setUpAll(() async {
@@ -327,9 +328,11 @@ void main() {
       () async {
     final frames = await _frames(messageKey);
     final checkpoint = _checkpointSnapshot();
+    final validationCallsBefore = scopeBackend.validationCalls;
     final first = await V3SessionPersistenceScope.open(
       scopeToken: 'v3-runtime-scope',
       auxStorageKey: auxiliaryKey,
+      sckaBackend: scopeBackend,
     );
     final firstRestore = await first.restore(
       checkpoints: <V3TripleRatchetState>[checkpoint],
@@ -341,6 +344,7 @@ void main() {
     expect(firstRestore.sessions.sessionRevisions.values, <int>[1]);
     expect(firstRestore.sessions.checkpointCount, 1);
     expect(firstRestore.sessions.retirementPlanCount, 0);
+    expect(scopeBackend.validationCalls, greaterThan(validationCallsBefore));
 
     for (final frame in frames.reversed) {
       expect(
@@ -366,6 +370,7 @@ void main() {
     final isolated = await V3SessionPersistenceScope.open(
       scopeToken: 'other-v3-scope12',
       auxStorageKey: auxiliaryKey,
+      sckaBackend: scopeBackend,
     );
     final isolatedRestore = await isolated.restore(
       checkpoints: const <V3TripleRatchetState>[],
@@ -384,6 +389,7 @@ void main() {
     final wrongContext = await V3SessionPersistenceScope.open(
       scopeToken: 'v3-runtime-scope',
       auxStorageKey: wrongContextKey,
+      sckaBackend: scopeBackend,
     );
     final wrongRestore = await wrongContext.restore(
       checkpoints: const <V3TripleRatchetState>[],
@@ -399,6 +405,7 @@ void main() {
     final restored = await V3SessionPersistenceScope.open(
       scopeToken: 'v3-runtime-scope',
       auxStorageKey: auxiliaryKey,
+      sckaBackend: scopeBackend,
     );
     final restoredState = await restored.restore(
       checkpoints: const <V3TripleRatchetState>[],
@@ -439,6 +446,7 @@ void main() {
     final scope = await V3SessionPersistenceScope.open(
       scopeToken: 'detached-key-001',
       auxStorageKey: callerKey,
+      sckaBackend: scopeBackend,
     );
     callerKey.destroy();
 
@@ -468,6 +476,7 @@ void main() {
       V3SessionPersistenceScope.open(
         scopeToken: 'a|x',
         auxStorageKey: shortKey,
+        sckaBackend: scopeBackend,
       ),
       throwsArgumentError,
     );
@@ -475,11 +484,88 @@ void main() {
       V3SessionPersistenceScope.open(
         scopeToken: 'invalid-key-0001',
         auxStorageKey: shortKey,
+        sckaBackend: scopeBackend,
       ),
       throwsArgumentError,
     );
     expect(await shortKey.extractBytes(), orderedEquals(_bytes(31, 0x71)));
   });
+
+  test('scope rejects a backend that fails admission before storage opens',
+      () async {
+    final rejected = _ScopeSckaBackend(selfTestResult: false);
+    await expectLater(
+      V3SessionPersistenceScope.open(
+        scopeToken: 'backend-gate-001',
+        auxStorageKey: auxiliaryKey,
+        sckaBackend: rejected,
+      ),
+      throwsStateError,
+    );
+    expect(rejected.selfTestCalls, 1);
+    expect(box.values, isEmpty);
+  });
+}
+
+final class _ScopeSckaBackend implements V3SckaBackend {
+  _ScopeSckaBackend({this.selfTestResult = true});
+
+  final bool selfTestResult;
+  int selfTestCalls = 0;
+  int validationCalls = 0;
+
+  @override
+  String get implementationId => 'layergram-test-scope-scka/1';
+
+  @override
+  int get protocolRevision => V3SparsePqRatchet.requiredBackendProtocolRevision;
+
+  @override
+  Future<bool> selfTest() async {
+    selfTestCalls++;
+    return selfTestResult;
+  }
+
+  @override
+  Future<void> validateAuthenticatedState({
+    required V3SessionRole role,
+    required Uint8List sessionId,
+    required Uint8List authenticatedState,
+    required Uint8List stateSealKey,
+    required int expectedStateRevision,
+  }) async {
+    validationCalls++;
+  }
+
+  @override
+  Future<Uint8List> initializeAuthenticatedState({
+    required V3SessionRole role,
+    required Uint8List sessionId,
+    required Uint8List sharedSecret,
+    required Uint8List stateSealKey,
+  }) =>
+      throw UnsupportedError('scope storage test backend');
+
+  @override
+  Future<V3SckaSendCandidate> sendCandidate({
+    required V3SessionRole role,
+    required Uint8List sessionId,
+    required Uint8List authenticatedState,
+    required Uint8List stateSealKey,
+    required int expectedStateRevision,
+  }) =>
+      throw UnsupportedError('scope storage test backend');
+
+  @override
+  Future<V3SckaReceiveCandidate> receiveCandidate({
+    required V3SessionRole role,
+    required Uint8List sessionId,
+    required Uint8List authenticatedState,
+    required Uint8List stateSealKey,
+    required int expectedStateRevision,
+    required V3SckaMessage message,
+  }) =>
+      throw UnsupportedError('scope storage test backend');
 }
 
 AuxRecordRepository _repository(SecretKey key, String scope) {

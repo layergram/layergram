@@ -265,6 +265,13 @@ abstract final class V3SparsePqRatchet {
   static const int requiredBackendProtocolRevision = 1;
   static const int maxBackendImplementationIdBytes = 96;
 
+  /// Admits one backend before an encrypted runtime scope pins it.
+  ///
+  /// This verifies build identity, protocol revision, and immutable primitive
+  /// self-tests only. It does not register the backend or activate protocol v3.
+  static Future<void> ensureBackendReady(V3SckaBackend backend) =>
+      _ensureBackendReady(backend);
+
   static Future<Uint8List> initialize({
     required V3SckaBackend backend,
     required V3SessionRole role,

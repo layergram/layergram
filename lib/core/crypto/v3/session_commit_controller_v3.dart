@@ -169,12 +169,15 @@ final class V3SessionCompactionResult {
 /// lifecycle, reconciles every prepared/replaced/final stage, and deletes only
 /// an exact compact proof followed by its finalized plan. Any interrupted
 /// boundary is resumed on restore before the session is exposed.
-/// Hybrid handshake/session creation, native SCKA semantics, projection into
-/// the real chat repository and independently reviewed replay-window expiry
-/// remain activation gates.
+/// When [sckaBackend] is supplied, the controller also pins that exact backend
+/// instance for restore validation and every durable send; a different
+/// per-call backend is rejected before a transition. Hybrid handshake/session
+/// creation, the inactive native ABI, projection into the real chat repository
+/// and independently reviewed replay-window expiry remain activation gates.
 final class V3SessionCommitController {
   V3SessionCommitController({
     required V3LmfAtomicCommitJournal journal,
+    V3SckaBackend? sckaBackend,
     V3SessionSendJournal? sendJournal,
     V3LmfDurableOutbox? outbox,
     V3CommittedRecordMaterializer? committedRecordMaterializer,
@@ -184,6 +187,7 @@ final class V3SessionCommitController {
     this.snapshotValidator,
     this.maxSessions = 4096,
   })  : _journal = journal,
+        _sckaBackend = sckaBackend,
         _sendJournal = sendJournal,
         _outbox = outbox,
         _committedRecordMaterializer = committedRecordMaterializer,
@@ -212,6 +216,7 @@ final class V3SessionCommitController {
   }
 
   final V3LmfAtomicCommitJournal _journal;
+  final V3SckaBackend? _sckaBackend;
   final V3SessionSendJournal? _sendJournal;
   final V3LmfDurableOutbox? _outbox;
   final V3CommittedRecordMaterializer? _committedRecordMaterializer;
@@ -1024,7 +1029,7 @@ final class V3SessionCommitController {
     required Uint8List sessionId,
     required int expectedRevision,
     required Uint8List plaintext,
-    required V3SckaBackend backend,
+    V3SckaBackend? backend,
     V3LmfFrameKind kind = V3LmfFrameKind.application,
     int expiresAtUnixSeconds = 0,
     DateTime? persistedAt,
@@ -1054,6 +1059,7 @@ final class V3SessionCommitController {
       if (current.revision != expectedRevision) {
         throw StateError('Layergram v3 session revision conflict');
       }
+      final selectedBackend = _resolveSckaBackend(backend);
 
       final localPlaintext = Uint8List.fromList(plaintext);
       V3TripleRatchetTransition? transition;
@@ -1067,7 +1073,7 @@ final class V3SessionCommitController {
       try {
         transition = await V3TripleRatchetEngine.send(
           snapshot: current,
-          backend: backend,
+          backend: selectedBackend,
           kind: kind,
           expiresAtUnixSeconds: expiresAtUnixSeconds,
         );
@@ -2748,6 +2754,13 @@ final class V3SessionCommitController {
   Future<void> _validateSnapshot(V3TripleRatchetState snapshot) async {
     final ec = await V3EcDoubleRatchet.restore(snapshot);
     ec.close();
+    final sckaBackend = _sckaBackend;
+    if (sckaBackend != null) {
+      await V3SparsePqRatchet.validateSnapshot(
+        backend: sckaBackend,
+        snapshot: snapshot,
+      );
+    }
     final validator = snapshotValidator;
     if (validator == null) return;
     final detached = _copySnapshot(snapshot);
@@ -2756,6 +2769,22 @@ final class V3SessionCommitController {
     } finally {
       detached.wipeSecrets();
     }
+  }
+
+  V3SckaBackend _resolveSckaBackend(V3SckaBackend? requested) {
+    final pinned = _sckaBackend;
+    if (pinned != null) {
+      if (requested != null && !identical(requested, pinned)) {
+        throw StateError(
+          'Layergram v3 session scope rejected a different SCKA backend',
+        );
+      }
+      return pinned;
+    }
+    if (requested == null) {
+      throw StateError('Layergram v3 SCKA backend is not configured');
+    }
+    return requested;
   }
 
   void _validateStableSession(

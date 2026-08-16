@@ -132,7 +132,7 @@ void main() {
     test('forged capability loses the claim race and cannot register TR3',
         () async {
       final store = _FaultStore();
-      final harness = _Harness(store);
+      final harness = _Harness(store, sckaBackend: scka);
       await harness.restoreDependencies();
       final forged = V3InitialSessionHandoffAuthority();
       final forgedHandshakeClaim =
@@ -207,7 +207,7 @@ void main() {
     test('commits initiator TR3 before retiring HP3 or returning confirmation',
         () async {
       final store = _FaultStore();
-      final harness = _Harness(store);
+      final harness = _Harness(store, sckaBackend: scka);
       await harness.restore();
       final exchange = await _initiatorExchange(
         harness: harness,
@@ -224,7 +224,6 @@ void main() {
         localDevice: aliceDevice,
         responderIdentity: bob.publicIdentity,
         reply: exchange.responder.reply,
-        backend: scka,
         preparedAt: DateTime.utc(2026, 8, 15, 1),
         completedAt: DateTime.utc(2026, 8, 15, 1, 1),
       );
@@ -252,6 +251,47 @@ void main() {
       expect(session.role, V3SessionRole.initiator);
       session.wipeSecrets();
 
+      exchange.responder.close();
+      await harness.close();
+    });
+
+    test('pinned handoff backend rejects a divergent backend before crypto',
+        () async {
+      final store = _FaultStore();
+      final pinned = _InitialSckaBackend();
+      final divergent = _InitialSckaBackend();
+      final harness = _Harness(store, sckaBackend: pinned);
+      await harness.restore();
+      final exchange = await _initiatorExchange(
+        harness: harness,
+        alice: alice,
+        aliceDevice: aliceDevice,
+        bob: bob,
+        bobDevice: bobDevice,
+      );
+
+      await expectLater(
+        harness.handoffs.completeInitiator(
+          handshakeId: exchange.outbound.handshakeId,
+          expectedStateDigest: exchange.outbound.stateDigest,
+          localIdentity: alice,
+          localDevice: aliceDevice,
+          responderIdentity: bob.publicIdentity,
+          reply: exchange.responder.reply,
+          backend: divergent,
+        ),
+        throwsStateError,
+      );
+
+      expect(pinned.initializeCount, 0);
+      expect(divergent.initializeCount, 0);
+      expect(harness.sessions.sessionCount, 0);
+      expect(
+        store.records.values.where(
+          (value) => value['kind'] == V3HandshakeHandoffRepository.recordKind,
+        ),
+        isEmpty,
+      );
       exchange.responder.close();
       await harness.close();
     });
@@ -660,6 +700,7 @@ final class _Harness {
   _Harness(
     this.store, {
     V3HandshakeHandoffRepository? handoffRepository,
+    V3SckaBackend? sckaBackend,
   }) {
     initialHandoffAuthority = V3InitialSessionHandoffAuthority();
     inbox = V3LmfDurableInbox(store: store);
@@ -669,6 +710,7 @@ final class _Harness {
     );
     sessions = V3SessionCommitController(
       journal: V3LmfAtomicCommitJournal(store: store, inbox: inbox),
+      sckaBackend: sckaBackend,
       committedRecordMaterializer: V3CommittedRecordMaterializer(store: store),
       checkpointRepository: V3SessionCheckpointRepository(store: store),
       initialHandoffAuthority: initialHandoffAuthority,
@@ -679,6 +721,7 @@ final class _Harness {
       handshakes: handshakes,
       sessions: sessions,
       initialHandoffAuthority: initialHandoffAuthority,
+      sckaBackend: sckaBackend,
     );
   }
 
