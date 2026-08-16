@@ -26,10 +26,6 @@ import 'sparse_pq_ratchet_v3.dart';
 import 'triple_ratchet_engine_v3.dart';
 import 'triple_ratchet_state_v3.dart';
 
-typedef V3SessionSnapshotProvider = Future<V3TripleRatchetState> Function(
-  Uint8List sessionId,
-);
-
 /// Resolves exact receive keys without committing a Triple Ratchet candidate.
 ///
 /// Only one candidate per session may be pending. Competing fragment-zero
@@ -39,11 +35,11 @@ typedef V3SessionSnapshotProvider = Future<V3TripleRatchetState> Function(
 final class V3SessionRatchetKeyResolver {
   V3SessionRatchetKeyResolver({
     required V3SckaBackend backend,
-    required V3SessionSnapshotProvider snapshotProvider,
+    required V3SessionCommitController controller,
     this.skippedKeyLifetimeSeconds =
         V3RetentionPolicy.normalSkippedKeyLifetimeSeconds,
   })  : _backend = backend,
-        _snapshotProvider = snapshotProvider {
+        _controller = controller {
     if (skippedKeyLifetimeSeconds <= 0) {
       throw ArgumentError.value(
         skippedKeyLifetimeSeconds,
@@ -53,7 +49,7 @@ final class V3SessionRatchetKeyResolver {
   }
 
   final V3SckaBackend _backend;
-  final V3SessionSnapshotProvider _snapshotProvider;
+  final V3SessionCommitController _controller;
   final int skippedKeyLifetimeSeconds;
   final Map<String, _PendingCandidate> _pendingBySession =
       <String, _PendingCandidate>{};
@@ -85,7 +81,7 @@ final class V3SessionRatchetKeyResolver {
         return null;
       }
 
-      final snapshot = await _snapshotProvider(sessionId);
+      final snapshot = await _controller.snapshotForSession(sessionId);
       V3TripleRatchetTransition? transition;
       try {
         transition = await V3TripleRatchetEngine.receiveFirstFragment(
@@ -130,7 +126,6 @@ final class V3SessionRatchetKeyResolver {
   /// Atomically binds the authenticated candidate to its exact AR3/TR3 effect.
   Future<V3SessionCommitResult> commitDelivery({
     required V3LmfDurableDelivery delivery,
-    required V3SessionCommitController controller,
     DateTime? persistedAt,
   }) {
     return _serialized(() async {
@@ -139,7 +134,7 @@ final class V3SessionRatchetKeyResolver {
       final transition = removed.pending.transition;
       final expectedRevision = transition.nextSnapshot.revision - 1;
       try {
-        final result = await controller.commitDelivery(
+        final result = await _controller.commitDelivery(
           delivery: delivery,
           expectedRevision: expectedRevision,
           persistedAt: persistedAt,
@@ -165,14 +160,14 @@ final class V3SessionRatchetKeyResolver {
         transition.close();
         return result;
       } catch (_) {
-        if (controller.requiresRecovery) {
+        if (_controller.requiresRecovery) {
           transition.close();
         } else {
           V3TripleRatchetState? current;
           var canRetry = false;
           final sessionId = delivery.frames.first.metadata.sessionId;
           try {
-            current = await controller.snapshotForSession(sessionId);
+            current = await _controller.snapshotForSession(sessionId);
             canRetry = current.revision == expectedRevision &&
                 !_pendingBySession.containsKey(removed.sessionKey);
           } catch (_) {

@@ -314,6 +314,20 @@ class V3LmfDurableInbox {
 
   int get readyDeliveryCount => _ready.length;
 
+  /// Returns the durable replay result before a higher-level resolver spends
+  /// work or creates a non-authoritative ratchet candidate for this frame.
+  Future<V3LmfDeferredInboxOutcome?> committedReplayFor(V3LmfFrame frame) {
+    return _serialized(() async {
+      _ensureReady();
+      final committed = _committed[V3LmfFrameCodec.assemblyId(frame)];
+      if (committed == null) return null;
+      return V3LmfDeferredInboxOutcome(
+        status: V3LmfInboxStatus.committedReplay,
+        acknowledgement: committed.acknowledgement,
+      );
+    });
+  }
+
   /// Makes higher-level digest binding mandatory for this inbox lifetime.
   ///
   /// The inactive atomic journal calls this during restore. It prevents an
@@ -629,14 +643,22 @@ class V3LmfDurableInbox {
   /// Retries frames retained while their passphrase/session key was unavailable.
   Future<V3LmfInboxRestoreResult> resumeDeferred({
     required V3LmfFrameKeyResolver keyResolver,
+    String? onlyAssemblyId,
     V3LmfFrameAuthenticationFailureHandler? onAuthenticationFailure,
   }) {
     return _serialized(() async {
       _ensureReady();
       var deferred = 0;
       final deliveries = <V3LmfDurableDelivery>[];
-      final pending = _recordsByDigest.values.toList(growable: false);
+      final pending = _recordsByDigest.values.toList(growable: false)
+        ..sort((left, right) {
+          final time = left.receivedAt.compareTo(right.receivedAt);
+          return time != 0 ? time : left.storageId.compareTo(right.storageId);
+        });
       for (final persisted in pending) {
+        if (onlyAssemblyId != null && persisted.assemblyId != onlyAssemblyId) {
+          continue;
+        }
         if (_acceptedByAssemblyIndex.containsKey(
           _assemblyIndexKey(
             persisted.assemblyId,

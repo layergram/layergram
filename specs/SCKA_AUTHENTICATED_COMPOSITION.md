@@ -1,8 +1,9 @@
 # Layergram authenticated SCKA composition v1
 
 Status: **implemented privately; the inactive Dart durable scope pins one
-admitted backend, while the Rust composition, public ABI, application
-packaging, and protocol v3 activation remain disconnected**
+admitted backend and owns its complete receive dispatch, while the Rust
+composition, public ABI, application packaging, and protocol v3 activation
+remain disconnected**
 
 This document freezes the internal composition implemented by
 `native/layergram_scka/src/authenticated_braid.rs`. It joins the already frozen
@@ -119,6 +120,20 @@ A different per-call backend is rejected before SCKA transition work or a
 durable write. The controller still commits the resulting opaque native state
 inside the exact TR3/outbox or TR3/application effect.
 
+The same scope now hides its inbox, resolver, and durable controller, constructs
+the resolver with that exact controller once, and owns frame receive, deferred replay,
+authentication-failure cleanup, and delivery commit. Continuations received
+before fragment zero remain sealed and durable. When fragment zero later
+arrives, the scope derives one non-authoritative ratchet candidate, persists
+and authenticates the frame, resumes only continuations for that exact
+assembly, and can commit only through the resolver/controller pair it created.
+It never consumes another session's completed delivery notification during
+that automatic retry; the explicit all-assembly resume returns every delivery
+it completes. A caller cannot inject a different resolver,
+authentication-failure handler, or commit controller into this scope path.
+Scope-owned wrappers preserve durable send, exact re-export, ACK processing,
+compaction, and retention operations without exposing the controller itself.
+
 This is an authority-side integration seam, not a connection to the private
 Rust composition: the native ABI still returns `NOT_READY`, is unregistered,
 and is not packaged. Authenticated outer dispatch through the real application
@@ -131,6 +146,13 @@ payload tampering, canonical BM3 rejection, exact candidate re-export,
 restart validation, deterministic role-and-revision nonce separation,
 transition-entropy failure before candidate exposure, and a two-party run
 through sealed states that reaches matching epoch outputs.
+
+Dart real-Aux tests additionally cover continuation-before-fragment-zero,
+process restart, scope-owned candidate derivation, exact plaintext recovery,
+atomic AR3/TR3 commit, replay cleanup, and a second restart at the committed
+ratchet revision without caller-supplied resolver or controller objects. A
+two-session regression proves automatic fragment-zero replay cannot consume an
+unrelated ready delivery and that explicit replay returns it separately.
 
 This checkpoint pins RustCrypto `aes-gcm-siv` 0.11.1 and `aes` 0.8.4 with its
 `zeroize` feature under their Apache-2.0 licensing alternatives. The crate and

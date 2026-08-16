@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 
@@ -21,9 +22,12 @@ import 'committed_record_materializer_v3.dart';
 import 'handshake_persistence_v3.dart';
 import 'handshake_session_handoff_v3.dart';
 import 'initial_session_handoff_authority_v3.dart';
+import 'lmf_v3.dart';
 import 'lmf_v3_atomic_commit.dart';
+import 'lmf_v3_acknowledgement.dart';
 import 'lmf_v3_outbox.dart';
 import 'lmf_v3_persistence.dart';
+import 'retention_policy_v3.dart';
 import 'session_checkpoint_v3.dart';
 import 'session_commit_controller_v3.dart';
 import 'session_ratchet_key_resolver_v3.dart';
@@ -61,6 +65,26 @@ final class V3SessionPersistenceRestoreResult {
   final V3HandshakeSessionHandoffRestoreResult handoffs;
 }
 
+/// One scope-owned inbound transport result.
+///
+/// A null acknowledgement means the exact sealed frame was retained because
+/// fragment zero (and therefore its ratchet candidate) is not available yet.
+/// A complete delivery is still candidate-only until [V3SessionPersistenceScope]
+/// commits it through the pinned resolver/controller pair.
+final class V3SessionInboundFrameResult {
+  const V3SessionInboundFrameResult({
+    required this.status,
+    required this.acknowledgement,
+    required this.delivery,
+  });
+
+  final V3LmfInboxStatus status;
+  final V3LmfAcknowledgement? acknowledgement;
+  final V3LmfDurableDelivery? delivery;
+
+  bool get isComplete => status == V3LmfInboxStatus.complete;
+}
+
 /// Inactive, scope-pinned owner of the complete protocol-v3 durable runtime.
 ///
 /// The active v2 application uses a mutable singleton [AuxRecordRepository]. A
@@ -85,13 +109,16 @@ final class V3SessionPersistenceScope {
   V3SessionPersistenceScope._({
     required AuxRecordRepository repository,
     required SecretKeyData ownedAuxStorageKey,
-    required this.inbox,
+    required V3LmfDurableInbox inbox,
     required this.handshakes,
-    required this.controller,
+    required V3SessionCommitController controller,
     required this.handoffs,
-    required this.ratchetKeyResolver,
+    required V3SessionRatchetKeyResolver ratchetKeyResolver,
   })  : _repository = repository,
-        _ownedAuxStorageKey = ownedAuxStorageKey;
+        _ownedAuxStorageKey = ownedAuxStorageKey,
+        _inbox = inbox,
+        _controller = controller,
+        _ratchetKeyResolver = ratchetKeyResolver;
 
   /// Opens a dedicated view of the real encrypted Aux/Hive storage.
   ///
@@ -170,7 +197,7 @@ final class V3SessionPersistenceScope {
       );
       final ratchetKeyResolver = V3SessionRatchetKeyResolver(
         backend: sckaBackend,
-        snapshotProvider: controller.snapshotForSession,
+        controller: controller,
       );
       return V3SessionPersistenceScope._(
         repository: repository,
@@ -207,28 +234,28 @@ final class V3SessionPersistenceScope {
   final AuxRecordRepository _repository;
   final SecretKeyData _ownedAuxStorageKey;
 
-  /// Persist-first sealed receive boundary for the pinned scope.
-  ///
-  /// The journals and backing store intentionally remain private. The future
-  /// active transport may feed canonical frames here, but every application or
-  /// ratchet commit must go through [controller].
-  final V3LmfDurableInbox inbox;
+  /// Persist-first sealed receive boundary, hidden behind the scope-owned
+  /// resolver/controller composition.
+  final V3LmfDurableInbox _inbox;
 
   /// Sole authority for pending hybrid-handshake persistence and exact resend.
   final V3HandshakePersistenceController handshakes;
 
   /// Sole authority for durable session transitions and outgoing exports.
-  final V3SessionCommitController controller;
+  /// It remains hidden so receive candidates cannot be committed around the
+  /// scope-owned resolver/controller binding.
+  final V3SessionCommitController _controller;
 
   /// Sole serialized path from authenticated HP3 state to an initial durable
   /// TR3 checkpoint and completion tombstone.
   final V3HandshakeSessionHandoffController handoffs;
 
-  /// Scope-owned receive-candidate resolver for this pinned backend.
-  ///
-  /// Its candidate is still non-authoritative until [controller] commits the
-  /// authenticated delivery and matching TR3 revision.
-  final V3SessionRatchetKeyResolver ratchetKeyResolver;
+  /// Scope-owned receive-candidate resolver for this pinned backend and
+  /// controller. It is deliberately not exposed to callers.
+  final V3SessionRatchetKeyResolver _ratchetKeyResolver;
+
+  int get pendingReceiveCandidateCount =>
+      _ratchetKeyResolver.pendingCandidateCount;
 
   Future<void> _operationTail = Future<void>.value();
   bool _restoreStarted = false;
@@ -240,7 +267,7 @@ final class V3SessionPersistenceScope {
   bool get requiresRecovery =>
       _recoveryRequired ||
       handshakes.requiresRecovery ||
-      controller.requiresRecovery ||
+      _controller.requiresRecovery ||
       handoffs.requiresRecovery;
 
   /// Restores sealed transport records and pending HP3 first, then durable TR3
@@ -260,9 +287,9 @@ final class V3SessionPersistenceScope {
       }
       _restoreStarted = true;
       try {
-        final inboxResult = await inbox.restore(keyResolver: (_) => null);
+        final inboxResult = await _inbox.restore(keyResolver: (_) => null);
         final handshakeResult = await handshakes.restore();
-        final sessionResult = await controller.restore(
+        final sessionResult = await _controller.restore(
           checkpoints: checkpoints,
         );
         final handoffResult = await handoffs.restore();
@@ -280,16 +307,202 @@ final class V3SessionPersistenceScope {
     });
   }
 
-  /// Resolves sealed frames only after the durable session truth is restored.
-  Future<V3LmfInboxRestoreResult> resumeDeferred({
-    required V3LmfFrameKeyResolver keyResolver,
-    V3LmfFrameAuthenticationFailureHandler? onAuthenticationFailure,
+  /// Receives one canonical sealed frame through the pinned session resolver.
+  ///
+  /// Continuations that arrive before fragment zero are retained exactly and
+  /// reported as deferred. A first fragment derives only an in-memory
+  /// candidate; [_inbox] persists the exact frame before AEAD authentication
+  /// or plaintext reassembly. Authentication failure removes both the sealed
+  /// candidate frame and its non-authoritative ratchet transition.
+  Future<V3SessionInboundFrameResult> receiveFrame({
+    required V3LmfFrame frame,
+    DateTime? receivedAt,
+    int? nowUnixSeconds,
   }) {
     return _serialized(() async {
       _ensureReady();
-      return inbox.resumeDeferred(
-        keyResolver: keyResolver,
-        onAuthenticationFailure: onAuthenticationFailure,
+      final replay = await _inbox.committedReplayFor(frame);
+      if (replay != null) {
+        return V3SessionInboundFrameResult(
+          status: replay.status,
+          acknowledgement: replay.acknowledgement,
+          delivery: null,
+        );
+      }
+      final key = await _ratchetKeyResolver.resolve(
+        frame,
+        nowUnixSeconds: nowUnixSeconds,
+      );
+      if (key == null) {
+        final deferred = await _inbox.persistDeferred(
+          frame: frame,
+          receivedAt: receivedAt,
+        );
+        return V3SessionInboundFrameResult(
+          status: deferred.status,
+          acknowledgement: deferred.acknowledgement,
+          delivery: deferred.delivery,
+        );
+      }
+      final accepted = await _inbox.receive(
+        frame: frame,
+        secretKey: key,
+        receivedAt: receivedAt,
+        onAuthenticationFailure:
+            _ratchetKeyResolver.discardUnauthenticatedFirstFragment,
+      );
+      if (accepted.status == V3LmfInboxStatus.committedReplay) {
+        await _ratchetKeyResolver.discardUnauthenticatedFirstFragment(frame);
+      }
+      var delivery = accepted.delivery;
+      var acknowledgement = accepted.acknowledgement;
+      var status = accepted.status;
+      if (delivery == null && frame.fragmentIndex == 0) {
+        final assemblyId = V3LmfFrameCodec.assemblyId(frame);
+        final resumed = await _inbox.resumeDeferred(
+          onlyAssemblyId: assemblyId,
+          keyResolver: (candidate) => _ratchetKeyResolver.resolve(
+            candidate,
+            nowUnixSeconds: nowUnixSeconds,
+          ),
+          onAuthenticationFailure:
+              _ratchetKeyResolver.discardUnauthenticatedFirstFragment,
+        );
+        for (final candidate in resumed.deliveries) {
+          if (candidate.assemblyId == assemblyId) {
+            delivery = candidate;
+            acknowledgement = candidate.completeAcknowledgement;
+            status = V3LmfInboxStatus.complete;
+            break;
+          }
+        }
+      }
+      return V3SessionInboundFrameResult(
+        status: status,
+        acknowledgement: acknowledgement,
+        delivery: delivery,
+      );
+    });
+  }
+
+  /// Resolves sealed frames only after the durable session truth is restored.
+  ///
+  /// The caller cannot substitute a key resolver or authentication-failure
+  /// handler: both belong to this scope's pinned backend and controller.
+  Future<V3LmfInboxRestoreResult> resumeDeferred({
+    int? nowUnixSeconds,
+  }) {
+    return _serialized(() async {
+      _ensureReady();
+      return _inbox.resumeDeferred(
+        keyResolver: (frame) => _ratchetKeyResolver.resolve(
+          frame,
+          nowUnixSeconds: nowUnixSeconds,
+        ),
+        onAuthenticationFailure:
+            _ratchetKeyResolver.discardUnauthenticatedFirstFragment,
+      );
+    });
+  }
+
+  /// Atomically commits one complete authenticated delivery through the exact
+  /// resolver/controller pair created by [open].
+  Future<V3SessionCommitResult> commitDelivery({
+    required V3LmfDurableDelivery delivery,
+    DateTime? persistedAt,
+  }) {
+    return _serialized(() async {
+      _ensureReady();
+      return _ratchetKeyResolver.commitDelivery(
+        delivery: delivery,
+        persistedAt: persistedAt,
+      );
+    });
+  }
+
+  /// Commits one outgoing transition through the same pinned backend and
+  /// durable controller used by receive and restore.
+  Future<V3SessionSendResult> sendMessage({
+    required Uint8List sessionId,
+    required int expectedRevision,
+    required Uint8List plaintext,
+    V3LmfFrameKind kind = V3LmfFrameKind.application,
+    int expiresAtUnixSeconds = 0,
+    DateTime? persistedAt,
+  }) {
+    return _serialized(() async {
+      _ensureReady();
+      return _controller.sendMessage(
+        sessionId: sessionId,
+        expectedRevision: expectedRevision,
+        plaintext: plaintext,
+        kind: kind,
+        expiresAtUnixSeconds: expiresAtUnixSeconds,
+        persistedAt: persistedAt,
+      );
+    });
+  }
+
+  Future<List<V3LmfFrame>> pendingSendFrames(String assemblyId) {
+    return _serialized(() async {
+      _ensureReady();
+      return _controller.pendingSendFrames(assemblyId);
+    });
+  }
+
+  Future<V3LmfOutboxEntry> markSendExported({
+    required String assemblyId,
+    required Set<int> fragmentIndexes,
+    DateTime? exportedAt,
+  }) {
+    return _serialized(() async {
+      _ensureReady();
+      return _controller.markSendExported(
+        assemblyId: assemblyId,
+        fragmentIndexes: fragmentIndexes,
+        exportedAt: exportedAt,
+      );
+    });
+  }
+
+  Future<V3LmfOutboxAckStatus> applySendAcknowledgement({
+    required V3LmfFrame acknowledgementFrame,
+    DateTime? receivedAt,
+  }) {
+    return _serialized(() async {
+      _ensureReady();
+      return _controller.applySendAcknowledgement(
+        acknowledgementFrame: acknowledgementFrame,
+        receivedAt: receivedAt,
+      );
+    });
+  }
+
+  Future<V3TripleRatchetState> snapshotForSession(Uint8List sessionId) {
+    return _serialized(() async {
+      _ensureReady();
+      return _controller.snapshotForSession(sessionId);
+    });
+  }
+
+  Future<V3SessionCompactionResult> compactSession(Uint8List sessionId) {
+    return _serialized(() async {
+      _ensureReady();
+      return _controller.compactSession(sessionId);
+    });
+  }
+
+  Future<V3SessionReceiptRetirementResult> replaceEligibleCheckpointReceipt({
+    required String assemblyId,
+    required V3RetentionPolicy policy,
+    required DateTime now,
+  }) {
+    return _serialized(() async {
+      _ensureReady();
+      return _controller.replaceEligibleCheckpointReceipt(
+        assemblyId: assemblyId,
+        policy: policy,
+        now: now,
       );
     });
   }
@@ -300,7 +513,7 @@ final class V3SessionPersistenceScope {
       if (_closed) return;
       _closed = true;
       try {
-        await ratchetKeyResolver.close();
+        await _ratchetKeyResolver.close();
       } finally {
         try {
           await handoffs.close();
@@ -309,10 +522,10 @@ final class V3SessionPersistenceScope {
             await handshakes.close();
           } finally {
             try {
-              await controller.close();
+              await _controller.close();
             } finally {
               try {
-                await inbox.close();
+                await _inbox.close();
               } finally {
                 _repository.setActiveContext(
                   scopeToken: null,

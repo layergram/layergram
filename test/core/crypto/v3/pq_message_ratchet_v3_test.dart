@@ -419,7 +419,7 @@ void main() {
       await controller.restore(checkpoints: <V3TripleRatchetState>[pair.bob]);
       final resolver = V3SessionRatchetKeyResolver(
         backend: backend,
-        snapshotProvider: controller.snapshotForSession,
+        controller: controller,
         skippedKeyLifetimeSeconds: 100,
       );
       Uint8List? deliveredPlaintext;
@@ -446,7 +446,6 @@ void main() {
         expect(deliveredPlaintext, orderedEquals(plaintext));
         final committed = await resolver.commitDelivery(
           delivery: delivery,
-          controller: controller,
         );
         expect(committed.ratchetRevision, 1);
         final committedSnapshot =
@@ -512,7 +511,7 @@ void main() {
       await controller.restore(checkpoints: <V3TripleRatchetState>[pair.bob]);
       final resolver = V3SessionRatchetKeyResolver(
         backend: backend,
-        snapshotProvider: controller.snapshotForSession,
+        controller: controller,
         skippedKeyLifetimeSeconds: 100,
       );
       try {
@@ -602,12 +601,12 @@ void main() {
       await controller.restore(checkpoints: <V3TripleRatchetState>[pair.bob]);
       final firstResolver = V3SessionRatchetKeyResolver(
         backend: backend,
-        snapshotProvider: controller.snapshotForSession,
+        controller: controller,
         skippedKeyLifetimeSeconds: 100,
       );
       final staleResolver = V3SessionRatchetKeyResolver(
         backend: backend,
-        snapshotProvider: controller.snapshotForSession,
+        controller: controller,
         skippedKeyLifetimeSeconds: 100,
       );
       try {
@@ -630,14 +629,12 @@ void main() {
         final delivery = received.delivery!;
         final committed = await firstResolver.commitDelivery(
           delivery: delivery,
-          controller: controller,
         );
         expect(committed.ratchetRevision, 1);
 
         await expectLater(
           staleResolver.commitDelivery(
             delivery: delivery,
-            controller: controller,
           ),
           throwsStateError,
         );

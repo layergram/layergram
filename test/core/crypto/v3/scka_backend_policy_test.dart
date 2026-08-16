@@ -442,6 +442,15 @@ void main() {
       composition['divergentPerCallBackendRejectedBeforeTransition'],
       isTrue,
     );
+    expect(composition['dartScopeOwnedOuterDispatch'], isTrue);
+    expect(composition['dartScopeResolverControllerPinned'], isTrue);
+    expect(
+      composition['dartScopeDirectInboxResolverControllerHidden'],
+      isTrue,
+    );
+    expect(composition['dartScopeRestartReceiveCommitTest'], isTrue);
+    expect(composition['dartAutomaticResumeAssemblyScoped'], isTrue);
+    expect(composition['dartCrossSessionDeferredIsolationTest'], isTrue);
     expect(composition['outerLmfDispatchConnected'], isFalse);
     expect(composition['durableJournalConnected'], isFalse);
     expect(composition['publicAbiConnected'], isFalse);
@@ -453,6 +462,7 @@ void main() {
     expect(effects['thirdPartyCodeImported'], isFalse);
     expect(effects['runtimeDependencyAddedToInactiveNativeCrate'], isTrue);
     expect(effects['runtimeDependencyAddedToApplication'], isFalse);
+    expect(effects['dartScopeOwnedReceiveDispatchAdded'], isTrue);
     expect(effects['layergramOwnedScaffoldAdded'], isTrue);
     expect(effects['layergramOwnedErasureCodeAdded'], isTrue);
     expect(effects['incrementalMlKemBoundaryAdded'], isTrue);
@@ -782,7 +792,26 @@ void main() {
     );
     expect(scope, contains('backend: sckaBackend'));
     expect(scope,
-        contains('final V3SessionRatchetKeyResolver ratchetKeyResolver'));
+        contains('final V3SessionRatchetKeyResolver _ratchetKeyResolver'));
+    expect(scope, contains('controller: controller'));
+    expect(scope, contains('Future<V3SessionInboundFrameResult> receiveFrame'));
+    expect(scope, contains('Future<V3LmfInboxRestoreResult> resumeDeferred'));
+    expect(scope, contains('onlyAssemblyId: assemblyId'));
+    expect(scope, contains('Future<V3SessionCommitResult> commitDelivery'));
+    expect(
+        scope, isNot(contains('required V3LmfFrameKeyResolver keyResolver')));
+    expect(scope, isNot(contains('final V3LmfDurableInbox inbox;')));
+    expect(
+        scope, isNot(contains('final V3SessionCommitController controller;')));
+
+    final resolver = File(
+      'lib/core/crypto/v3/session_ratchet_key_resolver_v3.dart',
+    ).readAsStringSync();
+    expect(
+      'required V3SessionCommitController controller'.allMatches(resolver),
+      hasLength(1),
+    );
+    expect(resolver, isNot(contains('V3SessionSnapshotProvider')));
   });
 
   test('Layergram erasure code remains owned, dependency-free, and inactive',

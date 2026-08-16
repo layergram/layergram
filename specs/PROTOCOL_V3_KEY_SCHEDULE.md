@@ -315,6 +315,18 @@ backend fails before SCKA transition work or a durable write. This process-local
 binding is not encoded on the wire and does not replace the future signed build
 allowlist or packaged native implementation check.
 
+The scope-owned receive path MUST also pin that resolver to the exact durable
+controller at construction. The scope, not an external transport caller,
+resolves frame keys, handles AEAD candidate rejection, resumes sealed
+continuations after fragment zero, and commits the exact authenticated
+delivery. The scope API accepts neither a caller-selected resolver nor a
+caller-selected commit controller. Continuations may still arrive first and
+remain durably sealed across restart; they do not advance TR3 until fragment
+zero authenticates and the complete delivery commits atomically. Automatic
+resume after one fragment zero is restricted to that exact assembly so another
+session's ready delivery cannot be consumed without notification; the explicit
+all-assembly resume returns every delivery it completes.
+
 `SCKA_NATIVE_ABI.md` freezes the inactive Layergram-owned C ABI and outer `LS3`
 state envelope. The session expansion derives a separate stable 32-byte
 state-sealing key with label `"layergram/v3/session/scka-state-seal\0"`. TR3
@@ -875,8 +887,8 @@ Before this schedule can carry user messages, Layergram still requires:
 - independent review and production wiring of the inactive crash-consistent
   send/receive coordinator, including the reviewed native-state validator;
 - production wiring that preserves the implemented scope-owned initial-session
-  capability topology and supplies its reviewed native SCKA
-  validator/backend;
+  and receive-dispatch capability topology and supplies its reviewed native
+  SCKA validator/backend;
 - active message/UI repository projection from the idempotent durable AR3
   source;
 - full packaging, crash, migration, multi-device, passphrase, Maximum-mode,

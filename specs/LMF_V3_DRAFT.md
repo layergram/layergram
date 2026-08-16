@@ -217,6 +217,11 @@ It then resumes deferred records and verifies every deterministic nonce and HR3
 binding. If AEAD rejects a deferred fragment zero, the inbox notifies the
 resolver so its uncommitted session candidate is wiped; a continuation failure
 does not discard a candidate whose authenticated fragment zero remains valid.
+Automatic resume triggered by one newly authenticated fragment zero is scoped
+to that exact assembly. It MUST NOT authenticate or complete another session's
+deferred assembly without returning that other delivery to the caller. An
+explicit maintenance resume may scan all assemblies, but it returns every newly
+completed delivery.
 No plaintext or ratchet transition is committed before the complete set
 authenticates and the atomic effect is durable.
 
@@ -382,9 +387,14 @@ could redirect later writes into another identity context.
 Restore first indexes every sealed inbox record with no frame key, restores
 pending handshakes, restores the controller's durable TR3 truth, reconciles
 every prepared handshake handoff, and only then permits deferred resolution by
-a future reviewed SCKA-backed resolver. Close drains the handoff, handshake,
-session, and inbox controllers in dependency order before removing the
-repository context and destroying the owned key copy. A restore error is
+its own pinned SCKA-backed resolver. The inbox, resolver, and durable controller
+are not exposed by the scope. New frames, deferred replay,
+authentication-failure cleanup, and complete delivery commit all flow through
+scope methods bound to the same durable controller. Fragment-zero-triggered
+automatic replay is assembly-scoped; the explicit all-assembly replay surface
+returns every delivery it completes. Close drains the resolver, handoff,
+handshake, session, and inbox controllers in dependency order before removing
+the repository context and destroying the owned key copy. A restore error is
 fail-stop for that owner and requires reconstruction. This boundary is not
 registered in providers and does not activate protocol v3.
 
