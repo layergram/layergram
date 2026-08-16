@@ -1,9 +1,9 @@
 # Layergram ML-KEM Braid public message revision 1
 
 Status: **canonical private codec frozen; Header/Ek/Ct1/Ct2 output and
-canonical input connected only to the private transition engine, whose
-revision-1 transitions 1-13 are implemented;
-public ABI not connected; protocol v3 inactive**
+canonical input connected to the private transition engine, whose revision-1
+transitions 1-13 are implemented; engineering candidate ABI connected,
+default ABI `NOT_READY`, no application packaging; protocol v3 inactive**
 
 This document freezes Layergram's `BM3` representation of one logical public
 message from the public-domain [ML-KEM Braid revision-1
@@ -23,15 +23,15 @@ BM3 parsing; a completing authenticated acknowledgement creates the exact
 private `Ct2Sampled` or `EkReceivedCt1Sampled` state. Transition 11 continues
 the canonical `EkCt1Ack` decoder from `Ct1Acknowledged` and creates
 `Ct2Sampled` only after complete public-key validation and ciphertext
-authentication, but the codec is not called by the C ABI, cannot be packaged
-through Flutter. Transition 12 consumes a current-epoch canonical `EkCt1Ack`
+authentication, but only the explicit `candidate-ffi` build calls the codec
+through the C ABI; it is not packaged through Flutter. Transition 12 consumes a current-epoch canonical `EkCt1Ack`
 after transition 10 has already stored the validated complete key; it completes
 and authenticates the ciphertext without replacing that stored key. The codec
 also carries exact `Ct2Sampled.Send` symbols and transition-13 next-epoch
 evidence. A raw next-epoch BM3 record is not independently authenticated; the
 future Layergram framing must authenticate it before committed state advances.
-The codec is not called by the C ABI and does not
-change the scaffold's `NOT_READY` result.
+The codec remains unreachable from the default `NOT_READY` ABI and does not
+change the application's inactive status.
 
 ## 1. Logical message and epoch ownership
 

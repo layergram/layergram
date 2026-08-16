@@ -6,7 +6,8 @@
 //! This private module is the only Rust path that composes canonical `LS3`
 //! authenticated state, canonical `LB3` plaintext, canonical `BM3` public
 //! messages, operating-system entropy, and the revision-1 transition graph.
-//! It deliberately remains disconnected from the public C ABI and application
+//! The default build remains disconnected from operational C entrypoints; an
+//! explicit engineering candidate feature exposes it without application
 //! packaging. A future session authority must durably commit the exact returned
 //! sealed state, public message, optional epoch output, and matching TR3
 //! revision before any carrier export is exposed.
@@ -194,7 +195,7 @@ pub(crate) fn send_authenticated(
     )
 }
 
-fn send_with_entropy(
+pub(crate) fn send_with_entropy(
     role: StateRole,
     session_id: &[u8],
     state_key: &[u8],
@@ -226,10 +227,14 @@ fn send_with_entropy(
     })
 }
 
-/// Consumes a canonical BM3 only after the future outer Layergram framing has
-/// authenticated and session-bound it. Raw BM3 bytes are not an authentication
-/// boundary by themselves; this private function is intentionally unreachable
-/// from the public ABI until that caller contract is enforced.
+/// Derives a detached candidate from one canonical BM3 record.
+///
+/// Raw BM3 bytes are not an authentication boundary. The scope-owned Layergram
+/// receive path may derive this candidate before it has the message key needed
+/// to authenticate LMF, but it must discard the candidate on AEAD failure and
+/// must never commit it before the complete LMF delivery is authenticated.
+/// Direct calls through a manually built candidate ABI are not an application
+/// security boundary.
 pub(crate) fn receive_authenticated(
     role: StateRole,
     session_id: &[u8],
@@ -722,7 +727,7 @@ mod tests {
     }
 
     #[test]
-    fn production_entrypoints_use_os_transition_entropy_and_remain_private() {
+    fn candidate_entrypoints_use_os_transition_entropy() {
         let state =
             initialize_authenticated(StateRole::Initiator, SESSION, &SHARED_SECRET, &STATE_KEY)
                 .unwrap();

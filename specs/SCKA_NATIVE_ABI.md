@@ -1,8 +1,9 @@
 # Layergram SCKA native ABI and state envelope v1
 
-Status: **frozen inactive scaffold; private authenticated LS3/LB3/BM3
-composition and transitions 1-13 implemented; public ABI, durable coordinator,
-and protocol v3 activation disconnected**
+Status: **default build is a frozen `NOT_READY` scaffold; an explicit
+engineering-only Cargo feature connects the authenticated composition to the
+frozen ABI, while application packaging, production registration, and protocol
+v3 activation remain disconnected**
 
 This document freezes the first Layergram-owned C ABI and authenticated state
 envelope for an eventual independent implementation of ML-KEM Braid revision 1.
@@ -13,11 +14,12 @@ and transitions 1-13 as specified by `SCKA_TRANSITION_ENGINE.md`; the private
 composition in `SCKA_AUTHENTICATED_COMPOSITION.md` now authenticates and
 semantically validates LS3/LB3, dispatches canonical BM3, seals each detached
 successor once with an injective role-and-revision nonce, and preserves exact
-candidate bytes. The
-crate still deliberately returns
-`LG_SCKA_V1_ERR_NOT_READY`
-from its self-test and every correctly shaped state operation. It cannot be
-registered as a `V3SckaBackend` and does not make Layergram quantum-resistant.
+candidate bytes. With default features the crate deliberately returns
+`LG_SCKA_V1_ERR_NOT_READY` from its self-test and every correctly shaped state
+operation. Cargo feature `candidate-ffi` connects those exact ABI shapes to the
+private authenticated composition for laboratory integration tests. That
+feature changes the implementation ID, is not referenced by any platform
+package, and does not make Layergram quantum-resistant.
 
 The crate is Apache-2.0, pins Rust 1.87.0, and is suitable for the public
 repository that is merged into the separately distributed paid Premium
@@ -30,6 +32,14 @@ transitive-license, notice, and target-specific review.
 
 The authoritative public header is
 `native/layergram_scka/include/layergram_scka.h`.
+
+The default implementation ID is `layergram-scka-scaffold-r1-abi1`. The
+engineering feature identifies itself as
+`layergram-scka-private-r1-abi1-state2-build1`. The Dart candidate loader
+hard-codes that second identity together with every table value below. This
+allowlist is compiled into the signed Dart binary rather than read from a
+carrier message or mutable storage. It is necessary but not sufficient for
+production approval.
 
 | Constant | Value |
 |---|---:|
@@ -52,8 +62,9 @@ public specification); the responder is its initial receiving participant
 (`InitBob`). The Braid internal epoch begins at 1, so the first reported
 `sending_epoch`/`receiving_epoch` high-water value is 0.
 
-The private transition result does not change this public ABI contract: it
-cannot be called through the header, Dart, Flutter, or a packaged application.
+The private transition result does not change this public ABI contract. It is
+reachable through the header and Dart only in an explicitly built engineering
+candidate; it remains unreachable from every packaged application.
 
 Every transition is candidate-only:
 
@@ -169,7 +180,8 @@ The root and MAC keys stored inside `LB3` are interpreted only through the
 exact `KDF_AUTH`, `KDF_OK`, and HMAC domains frozen in
 `SCKA_AUTHENTICATOR.md`. The implementation derives immutable successor state
 and zeroizing output-key owners. It is used by the private transition engine
-but remains disconnected from the public C ABI and application packaging.
+and the explicit candidate ABI, but remains disconnected from default ABI
+behavior and application packaging.
 
 The standalone public-message erasure representation is frozen in
 `SCKA_ERASURE_CODE.md`; the canonical logical message that carries one such
@@ -181,11 +193,18 @@ its exact 2,080-byte opaque continuation state are frozen in
 payload representation are tested inside the Rust crate. The private composition
 now joins them as specified by `SCKA_AUTHENTICATED_COMPOSITION.md`, including
 transition 13, exact revision-plus-one checks, and one injective LS3 nonce per
-role/revision. It remains disconnected from all ABI operations. Authenticated outer
-LMF/HR3 dispatch, durable LS3/TR3/outbox recovery, public ABI composition,
-packaging, and independent review remain unimplemented.
+role/revision. The engineering feature connects these operations to the
+candidate ABI and the scope-owned Dart dispatcher. Production packaging and
+independent review remain unimplemented.
 
 ## 4. ABI operations
+
+All operations below remain `NOT_READY` in the default build. They are
+operational only when the crate is deliberately built with `candidate-ffi`.
+The candidate clears full fixed-capacity output buffers before validation,
+maps typed authentication/format/revision/entropy failures to the frozen status
+domain, copies outputs only from a complete detached candidate, and rejects an
+empty or non-canonical revision-1 BM3 input.
 
 `lg_scka_v1_state_validate` authenticates and semantically validates one exact
 state against role, session ID, state-sealing key, and expected revision.

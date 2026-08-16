@@ -1,14 +1,16 @@
 # Layergram authenticated SCKA composition v1
 
-Status: **implemented privately; the inactive Dart durable scope pins one
-admitted backend and owns its complete receive dispatch, while the Rust
-composition, public ABI, application packaging, and protocol v3 activation
-remain disconnected**
+Status: **implemented behind an engineering-only candidate FFI feature; the
+default ABI remains `NOT_READY`, application packaging and registration remain
+disconnected, and protocol v3 remains inactive**
 
 This document freezes the internal composition implemented by
 `native/layergram_scka/src/authenticated_braid.rs`. It joins the already frozen
 Layergram-owned `LS3`, `LB3`, `BM3`, entropy, and ML-KEM Braid revision-1
-transition modules without exposing a C ABI or registering a Flutter backend.
+transition modules. Cargo feature `candidate-ffi` now connects that composition
+to the frozen C shapes strictly for engineering verification. The default
+feature set still returns `NOT_READY`; no Flutter package or application
+bootstrap loads either build.
 
 ## 1. Boundary and ownership
 
@@ -69,8 +71,11 @@ wiped. LS3 nonce derivation consumes no entropy.
 ## 4. Receive and outer authentication precondition
 
 Raw `BM3` is public protocol material and is not a Layergram authentication
-boundary. The private receive composition may be invoked only after the future
-LMF/HR3 path has authenticated and session-bound the complete message. It then:
+boundary. The scope-owned LMF/HR3 path may invoke the private receive
+composition speculatively to derive the message key needed for LMF
+authentication. The returned candidate is non-authoritative: AEAD failure must
+discard it, and only a complete authenticated LMF delivery may commit it. The
+composition:
 
 1. decodes one exact canonical non-empty `BM3` record;
 2. opens and semantically validates the exact expected `LS3` revision;
@@ -78,9 +83,12 @@ LMF/HR3 path has authenticated and session-bound the complete message. It then:
 4. requires stable role/session and an exact revision-plus-one successor;
 5. seals that successor exactly once with its injective role-and-revision nonce.
 
-This checkpoint cannot enforce the outer-caller precondition because no public
-ABI or application caller is connected. Activating the C ABI before the
-authenticated LMF/HR3 dispatcher owns the call would be a security error.
+The engineering candidate is invoked through
+`V3SckaCandidateFfiBackend` only from the scope-owned authenticated LMF/HR3
+dispatcher in integration tests. Direct raw C calls remain possible in a
+manually built candidate library and therefore are not an application security
+boundary. Packaging or registering that candidate before the scope owns every
+receive call would be a security error.
 
 ## 5. Epoch domains
 
@@ -134,10 +142,13 @@ authentication-failure handler, or commit controller into this scope path.
 Scope-owned wrappers preserve durable send, exact re-export, ACK processing,
 compaction, and retention operations without exposing the controller itself.
 
-This is an authority-side integration seam, not a connection to the private
-Rust composition: the native ABI still returns `NOT_READY`, is unregistered,
-and is not packaged. Authenticated outer dispatch through the real application
-and the native ABI connection remain activation gates.
+The candidate-only bridge now exercises the private Rust composition through
+the authority-side integration seam. Its Dart loader accepts only an explicit
+path and checks the exact implementation ID, ABI, protocol revision, state
+format, and every fixed size before admission. The normal Rust feature set
+still returns `NOT_READY`; the candidate is unregistered and absent from every
+app package. Authenticated dispatch from the active application remains an
+activation gate.
 
 ## 7. Verification and commercial boundary
 
@@ -153,6 +164,14 @@ atomic AR3/TR3 commit, replay cleanup, and a second restart at the committed
 ratchet revision without caller-supplied resolver or controller objects. A
 two-session regression proves automatic fragment-zero replay cannot consume an
 unrelated ready delivery and that explicit replay returns it separately.
+
+The candidate FFI integration builds the default and `candidate-ffi` libraries
+separately. It proves that the default implementation ID is rejected by the
+candidate allowlist, then uses real LS3 states for an outgoing journal/outbox
+commit, exact retry after restart, delayed and duplicated continuation,
+receive-side restart, atomic incoming commit, backend validation at TR3
+revision one, and committed replay suppression. No transition is rerun to
+produce retry bytes.
 
 This checkpoint pins RustCrypto `aes-gcm-siv` 0.11.1 and `aes` 0.8.4 with its
 `zeroize` feature under their Apache-2.0 licensing alternatives. The crate and

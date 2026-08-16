@@ -1,6 +1,7 @@
 # Layergram SCKA erasure code revision 1
 
-Status: **internal representation frozen; not connected to the native ABI; protocol v3 inactive**
+Status: **internal representation frozen; engineering candidate ABI connected,
+default ABI `NOT_READY`, no application packaging; protocol v3 inactive**
 
 This document freezes the Layergram-owned erasure-code representation for the
 public messages used by ML-KEM Braid revision 1. The implementation is
@@ -8,9 +9,10 @@ Apache-2.0 code in `native/layergram_scka/src/erasure.rs`; it has no third-party
 dependency and is suitable for the public base that is merged into the paid,
 proprietary Premium application.
 
-The module is deliberately not called by `lg_scka_v1_initialize`,
-`lg_scka_v1_send`, `lg_scka_v1_receive`, or the native self-test. The SCKA
-backend remains `NOT_READY`, unregistered, unlinked, and non-production.
+The explicit `candidate-ffi` build reaches this module through
+`lg_scka_v1_initialize`, `lg_scka_v1_send`, `lg_scka_v1_receive`, and the
+native self-test. The default build remains `NOT_READY`; the SCKA backend is
+still unregistered, unlinked from application packages, and non-production.
 
 ## 1. Sources and scope
 

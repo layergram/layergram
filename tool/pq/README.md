@@ -27,14 +27,15 @@ The exact commercially compatible `libcrux-ml-kem` candidate is now pinned only
 inside the inactive native crate; it is not linked into the application.
 
 `native/layergram_scka` is an Apache-2.0 Rust scaffold with exact pinned
-permissive dependencies and notices. It implements the outer `LS3`
-AES-256-GCM-SIV
-envelope behind an internal module but deliberately returns `NOT_READY`; it is
-not referenced by application packaging or Dart FFI. The crate also contains
+permissive dependencies and notices. Its default build deliberately returns
+`NOT_READY`. An explicit engineering-only `candidate-ffi` build exposes the
+outer `LS3` AES-256-GCM-SIV composition through the frozen C ABI and an
+exact-build-allowlisted Dart FFI loader. Neither build is referenced by
+application packaging. The crate also contains
 Layergram-owned erasure-code and incremental-ML-KEM boundary modules specified
 by `specs/SCKA_ERASURE_CODE.md` and `specs/SCKA_INCREMENTAL_MLKEM.md`. Its
-private transition engine uses both modules while they remain disconnected
-from the public ABI and application packaging. The private `LB3` codec freezes
+private transition engine uses both modules. Only the candidate build connects
+them to the C ABI; application packaging remains disconnected. The private `LB3` codec freezes
 the canonical plaintext representation for all 11 revision-1 states as
 specified by `specs/SCKA_STATE_PAYLOAD.md`, and the transition engine persists
 its candidates through that representation. The private authenticator module
@@ -59,15 +60,19 @@ authentication, and transitions 2-13 as specified by
 validated `EkReceivedCt1Sampled` state after a delayed or lost Ct1 carrier
 export. Transition 13 now continues exact authenticated Ct2 symbols across
 loss/restart and switches roles only on the immediately following authenticated
-Braid epoch. All revision-1 transitions 1-13 are implemented privately, while
-the engine remains disconnected from the ABI and every application package.
+Braid epoch. All revision-1 transitions 1-13 are implemented privately. The
+explicit candidate build connects them to the frozen C ABI for integration
+tests, while the default ABI and every application package remain disconnected.
 The private composition specified by
 `specs/SCKA_AUTHENTICATED_COMPOSITION.md` now opens and semantically validates
 exact LS3/LB3 state, dispatches canonical BM3, checks revision-plus-one
 successors, derives injective role-and-revision state nonces, uses RFC 8452
 nonce-misuse-resistant state sealing, and returns immutable exact sealed
-candidates. It is still not callable through C, Dart, Flutter, or a packaged
-binary, and it is not connected to the durable session journals.
+candidates. The engineering-only candidate is callable through an explicit
+library path from Dart and is exercised with the durable session journals,
+TR3, LMF, and the encrypted Aux store. There is no packaged loader, application
+registration, or production activation, and the default ABI remains
+`NOT_READY`.
 
 ## Reproducible checks
 
@@ -95,6 +100,22 @@ tool/pq/test_scka_scaffold_apple.sh
 powershell -ExecutionPolicy Bypass -File `
   tool\pq\test_scka_scaffold_windows.ps1
 ```
+
+Run the explicit-path candidate bridge on macOS/Linux or Windows respectively:
+
+```sh
+tool/pq/test_scka_candidate_ffi.sh
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File `
+  tool\pq\test_scka_candidate_ffi_windows.ps1
+```
+
+The Windows candidate check selects the Rust release target from the actual
+Dart runtime architecture. This matters on Windows 11 ARM, where the current
+Flutter/Dart toolchain may run as x64 under emulation and cannot load an ARM64
+DLL into that process.
 
 The Apple check builds separate static libraries for iOS device ARM64 and iOS
 simulator ARM64/x86_64. This is target-specific compilation evidence, not a

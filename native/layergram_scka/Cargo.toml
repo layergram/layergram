@@ -7,6 +7,13 @@ license = "Apache-2.0"
 publish = false
 description = "Inactive Layergram ML-KEM Braid revision-1 native ABI scaffold"
 
+[features]
+default = []
+# Engineering-only bridge used to exercise the complete authenticated SCKA
+# composition through the frozen ABI. Application packaging must never enable
+# this feature until the production activation gates are closed.
+candidate-ffi = []
+
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(getrandom_backend, values("custom", "efi_rng", "rdrand", "rndr", "linux_getrandom", "linux_raw", "windows_legacy", "unsupported", "extern_impl"))'] }
 

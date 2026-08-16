@@ -295,7 +295,7 @@ Frozen portable vectors:
 ### 4.1 Sparse-PQ backend and hybrid-header boundary
 
 The Dart boundary models the ML-KEM Braid SCKA operations `Init`, `Send`, and
-`Receive` without implementing them. A conforming native backend MUST leave its
+`Receive`. A conforming native backend MUST leave its
 input export unchanged, return a distinct candidate export, bind the export to
 the session ID and stable role, validate it before and after every transition,
 and internally version and authenticate it. The export MUST NOT be an expanded
@@ -307,6 +307,15 @@ through `V3SparsePqRatchet`, which checks the canonical diagnostic
 implementation ID, exact revision `1`, and self-test before invoking native
 state semantics. Future provider registration must separately allowlist the
 exact approved implementation ID.
+
+The engineering-only `V3SckaCandidateFfiBackend` implements that exact build
+admission for Cargo feature `candidate-ffi`: implementation ID, ABI, protocol
+revision, state format, and every fixed size are compared against constants
+compiled into Dart before self-test or state use. It exposes no packaged-loader
+factory. The normal Rust build retains a different scaffold ID and returns
+`NOT_READY`, so it is rejected by the candidate loader. This closes the
+candidate integration proof only; production code signing, packaged-path
+verification, and registration remain gates.
 
 The inactive encrypted session scope MUST pin one admitted backend instance
 for its lifetime. Checkpoint restore, HP3-to-TR3 handoff, durable send, and the

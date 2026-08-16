@@ -2,9 +2,9 @@
 
 Status: **internal primitive adopted; key generation, keypair restoration,
 public-vector access, validation, decapsulation, and two-part encapsulation
-connected only to the private engine, whose transitions 1-13 are implemented;
-not connected to the native ABI;
-protocol v3 inactive**
+connected to the private engine, whose transitions 1-13 are implemented;
+engineering candidate ABI connected, default ABI `NOT_READY`, no application
+packaging; protocol v3 inactive**
 
 This document freezes the Layergram-owned boundary around the incremental
 ML-KEM-768 primitive needed by ML-KEM Braid revision 1. The implementation is
@@ -29,10 +29,11 @@ key already stored by transition 10 when its delayed `ct1` acknowledgement
 arrives. Transition 13 invokes no ML-KEM primitive: it only continues exact
 persisted `ct2` output or advances roles after an authenticated next-epoch
 message. No candidate survives a key-integrity or primitive failure. The
-module is still not called by `lg_scka_v1_self_test`,
-`lg_scka_v1_initialize`, `lg_scka_v1_send`, `lg_scka_v1_receive`, or
-`lg_scka_v1_state_validate`. The native backend therefore remains `NOT_READY`,
-unregistered, unlinked, and unavailable to production code.
+explicit `candidate-ffi` build reaches the module through
+`lg_scka_v1_self_test`, `lg_scka_v1_initialize`, `lg_scka_v1_send`,
+`lg_scka_v1_receive`, and `lg_scka_v1_state_validate`. The default build
+remains `NOT_READY`; the native backend is unregistered, unlinked from
+application packages, and unavailable to production code.
 
 ## 1. Dependency and licensing boundary
 

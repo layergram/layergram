@@ -40,10 +40,10 @@ Transition 12 performs the same exact ciphertext MAC after revalidating the
 complete key stored by transition 10; it also neither ratchets nor emits a key.
 Transition 13 preserves that already-ratcheted authenticator unchanged while
 switching roles at the immediately following epoch; it neither derives nor
-emits another key. State-envelope persistence and every C ABI operation remain
-disconnected.
-Native self-test and every correctly shaped public operation continue to return
-`NOT_READY`.
+emits another key. The explicit `candidate-ffi` build connects state-envelope
+persistence and the frozen C ABI for engineering tests. The default native
+self-test and every correctly shaped default operation continue to return
+`NOT_READY`; application packaging remains disconnected.
 
 ## 1. Frozen parameters
 

@@ -1,8 +1,9 @@
 # Layergram ML-KEM Braid transition engine revision 1
 
 Status: **initialization and all revision-1 transitions 1-13 plus private
-authenticated LS3/LB3/BM3 composition implemented; public ABI and durable
-coordinator not connected; protocol v3 inactive**
+authenticated LS3/LB3/BM3 composition implemented; engineering candidate ABI
+and durable coordinator connected, default ABI `NOT_READY`, no application
+packaging; protocol v3 inactive**
 
 This document freezes the initial bounded slice of Layergram's independent
 Apache-2.0 implementation of the public-domain [ML-KEM Braid revision-1

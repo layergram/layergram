@@ -47,6 +47,26 @@ void main() {
     expect(scaffold['abiVersion'], 1);
     expect(scaffold['protocolRevision'], 1);
     expect(scaffold['stateFormatVersion'], 2);
+    expect(scaffold['candidateFeature'], 'candidate-ffi');
+    expect(
+      scaffold['candidateImplementationId'],
+      'layergram-scka-private-r1-abi1-state2-build1',
+    );
+    expect(scaffold['defaultFeatureSetNotReady'], isTrue);
+    expect(scaffold['candidateFeatureOperational'], isTrue);
+    expect(scaffold['candidateFeaturePackaged'], isFalse);
+    expect(scaffold['candidateHostRuntimeValidation'], <String, dynamic>{
+      'macosArm64': true,
+      'linuxX64': true,
+      'windowsX64OnWindowsArm64': true,
+    });
+    expect(scaffold['candidateCrossCompileValidation'], <String, dynamic>{
+      'iosDeviceArm64': true,
+      'iosSimulatorArm64': true,
+      'iosSimulatorX64': true,
+      'androidArm64': true,
+      'packagedApplicationRuntime': false,
+    });
     expect(scaffold['runtimeStatus'], 'not-ready-not-registered-not-linked');
 
     final primitive =
@@ -451,6 +471,15 @@ void main() {
     expect(composition['dartScopeRestartReceiveCommitTest'], isTrue);
     expect(composition['dartAutomaticResumeAssemblyScoped'], isTrue);
     expect(composition['dartCrossSessionDeferredIsolationTest'], isTrue);
+    expect(composition['candidateFfiBridgeConnected'], isTrue);
+    expect(composition['candidateExactBuildAllowlist'], isTrue);
+    expect(composition['candidateExplicitPathOnly'], isTrue);
+    expect(composition['candidateDefaultScaffoldRejected'], isTrue);
+    expect(composition['candidateRealLs3AuxSendReceiveRestartTest'], isTrue);
+    expect(composition['candidateNativeRevisionAtomicallyBoundToTr3'], isTrue);
+    expect(composition['candidateExactFramesRestoredFromOutbox'], isTrue);
+    expect(composition['candidateOuterLmfDispatchConnected'], isTrue);
+    expect(composition['candidateDurableJournalConnected'], isTrue);
     expect(composition['outerLmfDispatchConnected'], isFalse);
     expect(composition['durableJournalConnected'], isFalse);
     expect(composition['publicAbiConnected'], isFalse);
@@ -487,6 +516,9 @@ void main() {
     expect(effects['transitionTwelveAdded'], isTrue);
     expect(effects['transitionThirteenAdded'], isTrue);
     expect(effects['authenticatedCompositionAdded'], isTrue);
+    expect(effects['candidateFfiBridgeAdded'], isTrue);
+    expect(effects['candidateExactBuildAllowlistAdded'], isTrue);
+    expect(effects['candidateRealAuxAtomicIntegrationTestAdded'], isTrue);
     expect(effects['pubspecChanged'], isFalse);
     expect(effects['protocolV3Activated'], isFalse);
 
@@ -509,6 +541,12 @@ void main() {
       ),
       isTrue,
     );
+    expect(
+      remainingGates.any(
+        (gate) => gate.contains('keep the default ABI NOT_READY'),
+      ),
+      isTrue,
+    );
   });
 
   test('Layergram SCKA dependencies are pinned, permissive, and not packaged',
@@ -521,6 +559,8 @@ void main() {
     ).readAsStringSync();
 
     expect(manifest, contains('license = "Apache-2.0"'));
+    expect(manifest, contains('default = []'));
+    expect(manifest, contains('candidate-ffi = []'));
     expect(
       manifest,
       contains(
@@ -582,6 +622,20 @@ void main() {
     expect(lock, contains('name = "sha2"'));
     expect(header, contains('LG_SCKA_V1_ERR_NOT_READY = -2'));
 
+    final nativeEntry =
+        File('native/layergram_scka/src/lib.rs').readAsStringSync();
+    expect(
+      nativeEntry,
+      contains('layergram-scka-private-r1-abi1-state2-build1'),
+    );
+    expect(nativeEntry, contains('cfg(feature = "candidate-ffi")'));
+    final dartCandidate = File(
+      'lib/core/crypto/v3/scka_candidate_ffi.dart',
+    ).readAsStringSync();
+    expect(dartCandidate, contains('approvedImplementationId'));
+    expect(dartCandidate, contains('validateAllowlist'));
+    expect(dartCandidate, isNot(contains('openPackaged')));
+
     final entropySource = File(
       'native/layergram_scka/src/entropy.rs',
     ).readAsStringSync();
@@ -634,7 +688,7 @@ void main() {
     }
   });
 
-  test('incremental ML-KEM module remains internal and outside the ABI', () {
+  test('incremental ML-KEM remains internal behind candidate composition', () {
     final nativeEntry = File(
       'native/layergram_scka/src/lib.rs',
     ).readAsStringSync();
@@ -651,13 +705,19 @@ void main() {
     expect(nativeEntry, contains('mod authenticated_braid;'));
     expect(nativeEntry, contains('mod entropy;'));
     expect(nativeEntry, isNot(contains('incremental_mlkem::')));
-    expect(nativeEntry, isNot(contains('state_envelope::')));
     expect(nativeEntry, isNot(contains('braid_authenticator::')));
     expect(nativeEntry, isNot(contains('braid_message::')));
     expect(nativeEntry, isNot(contains('braid_state_payload::')));
     expect(nativeEntry, isNot(contains('braid_transition::')));
-    expect(nativeEntry, isNot(contains('authenticated_braid::')));
-    expect(nativeEntry, isNot(contains('entropy::')));
+    expect(
+      nativeEntry,
+      contains(
+          '#[cfg(feature = "candidate-ffi")]\nuse crate::state_envelope::StateRole;'),
+    );
+    expect(nativeEntry, contains('authenticated_braid::send_authenticated'));
+    expect(nativeEntry, contains('authenticated_braid::receive_authenticated'));
+    expect(nativeEntry,
+        contains('impl entropy::EntropySource for SelfTestEntropy'));
     expect(source, contains('validate_pk_bytes'));
     expect(source, contains('checked_seed.zeroize()'));
     expect(source, contains('part_one: EncapsulationPartOne'));

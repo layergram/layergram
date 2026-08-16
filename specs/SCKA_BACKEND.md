@@ -1,10 +1,8 @@
 # ML-KEM Braid / SCKA backend decision
 
-Status: **inactive ABI; outer state envelope, canonical inner payload, and
-ratcheted authenticator implemented; erasure representation, canonical public
-message, and incremental primitive boundary frozen; private initialization and
-transitions 1-13 implemented; no public transition engine or production backend;
-protocol v3 inactive**
+Status: **engineering-only candidate ABI connected behind an explicit Cargo
+feature and exact Dart build allowlist; default ABI `NOT_READY`, no packaged or
+registered production backend, protocol v3 inactive**
 
 Layergram needs an ML-KEM Braid revision-1 backend to provide the Sparse
 Continuous Key Agreement input to its inactive Triple Ratchet. This component
@@ -74,19 +72,22 @@ controllers directly, but the scope intended for eventual application wiring
 rejects a different per-call backend before transition or persistence. This
 does not register the Rust scaffold or make its `NOT_READY` ABI callable.
 
-The Layergram-owned Rust crate under `native/layergram_scka` now freezes the
-minimal ABI and outer authenticated state envelope described in
-`SCKA_NATIVE_ABI.md`. It is not linked into any app. Its self-test and every
-correctly shaped state operation return `NOT_READY`, so the scaffold cannot
-satisfy the Dart admission gate or activate protocol v3.
+The Layergram-owned Rust crate under `native/layergram_scka` freezes the minimal
+ABI and authenticated composition described in `SCKA_NATIVE_ABI.md`. It is not
+linked into any app. Its default build returns `NOT_READY`. An explicit
+`candidate-ffi` build is usable only through `V3SckaCandidateFfiBackend`, which
+has no packaged-loader factory and rejects any mismatch in implementation ID,
+ABI, protocol, state format, or fixed size. This engineering bridge does not
+activate protocol v3.
 
 The same crate now contains a Layergram-owned, dependency-free systematic
 Reed-Solomon encoder/decoder for the exact revision-1 public payload classes.
 `SCKA_ERASURE_CODE.md` freezes its GF(2^16) field, generator matrix, 34-byte
 chunk representation, duplicate policy, and resource limits. The private
-transition engine uses this module, but it remains disconnected from the
-public C ABI and application packaging, so this progress does not change the
-backend's inactive status.
+transition engine uses this module. The explicit `candidate-ffi` build connects
+it to the frozen C ABI, while the default ABI and application packaging remain
+disconnected, so this progress does not change the backend's inactive product
+status.
 
 The exact incremental ML-KEM candidate is now adopted only behind the internal,
 non-ABI wrapper frozen in `SCKA_INCREMENTAL_MLKEM.md`. The wrapper enforces
@@ -95,9 +96,10 @@ encapsulation step, and binds the opaque continuation state to its exact
 part-one public-key header. Its transient `Encaps1` result exposes the shared
 secret once, as required by revision-1 transition 7, then consumption into the
 pending completion owner drops that raw secret. Its FIPS output matches the
-separately implemented `mlkem-native` known-answer vector. It remains unused by
-every exported SCKA operation; self-test and all shaped state operations still
-return `NOT_READY`.
+separately implemented `mlkem-native` known-answer vector. It is used by
+exported SCKA operations only in the explicit `candidate-ffi` build. The
+default self-test and all default shaped state operations still return
+`NOT_READY`.
 
 The same inactive crate implements the frozen outer `LS3` AES-256-GCM-SIV container
 behind an internal module. It validates exact header fields, lengths,
@@ -106,7 +108,8 @@ and returns decrypted bytes only through a zeroizing owner. The lower-level
 envelope still accepts an exact caller-supplied nonce. The private composition
 specified by `SCKA_AUTHENTICATED_COMPOSITION.md` derives an injective
 `"LN3" || role || revision` nonce and connects LS3 to canonical LB3/BM3
-transitions without connecting any C ABI operation.
+transitions. Only the explicit `candidate-ffi` build connects that composition
+to the C ABI; the default build remains `NOT_READY`.
 
 The `LB3` codec represents all 11 revision-1 states, duplicates and
 cross-checks the authenticated `LS3` role/session/revision/epoch metadata,
@@ -118,7 +121,7 @@ Layergram revision-1 protocol domain, `KDF_AUTH`, `KDF_OK`, full-length
 HMAC-SHA-256 header/ciphertext tags, constant-time verification, detached
 authenticator successors, and zeroizing epoch-key ownership.
 
-The disconnected `BM3` codec frozen in `SCKA_PUBLIC_MESSAGE.md` represents all
+The application-disconnected `BM3` codec frozen in `SCKA_PUBLIC_MESSAGE.md` represents all
 seven revision-1 logical public-message types, preserves their internal Braid
 epoch, binds each data-bearing type to the exact erasure payload class, and
 accepts only canonical 24-byte or 58-byte records.
@@ -180,9 +183,10 @@ Every opt-in `getrandom` backend is rejected at compile time. The complete
 transition engine is now connected privately to LS3, LB3, BM3, and OS
 transition entropy by `authenticated_braid.rs`; LS3 state nonces are derived
 deterministically from role and revision. It remains deliberately disconnected
-from the C ABI and Flutter packaging. The Dart durable scope now freezes the
-backend-selection seam, but it cannot select this private Rust implementation
-because all exported operations still return `NOT_READY`.
+from Flutter packaging. The Dart durable scope freezes the backend-selection
+seam and can select the explicit-path, exact-build-allowlisted `candidate-ffi`
+implementation in engineering tests; the default exports still return
+`NOT_READY`.
 
 ## Incremental ML-KEM primitive, inactive internal adoption
 
@@ -271,7 +275,9 @@ platform artifacts already used by the ML-KEM primitive wrapper:
 - Linux: one hardened shared library per shipped architecture.
 
 Only exact absolute or platform loader paths may be used. Production exports
-must be allowlisted and test hooks must be absent. The Rust toolchain, panic
+must be allowlisted and test hooks must be absent. The current candidate loader
+accepts only an explicit path and an exact compile-time identity/ABI tuple; no
+application bootstrap references it. The Rust toolchain, panic
 policy, allocator behavior, symbol stripping, reproducibility, notices, and
 store packaging are separate release gates.
 
