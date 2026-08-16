@@ -88,6 +88,16 @@ before conversion to a platform `size_t`. A non-null pointer must reference the
 declared readable or writable range. `message_in` is the only optional buffer
 and may be null exactly when its length is zero.
 
+Candidate operations additionally reject naturally misaligned scalar outputs,
+overlapping writable outputs, and every overlap between a readable input and a
+writable output before constructing Rust slices. Deterministic hostile-state
+and message corpora exercise those rules with guard bytes and assert that every
+accepted non-`OK` path scrubs the fixed-capacity outputs. The pinned
+`tool/pq/test_scka_hardening.sh` reruns the complete candidate Rust suite under
+AddressSanitizer on the explicitly supported macOS/Linux host targets. This is
+an engineering checkpoint, not a substitute for continuous coverage-guided
+fuzzing, physical-device testing, or an independent audit.
+
 ## 2. Stable state-sealing key
 
 The state export is not self-authenticating merely because it contains a MAC

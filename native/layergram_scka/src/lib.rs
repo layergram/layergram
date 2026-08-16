@@ -4,6 +4,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use core::ffi::c_char;
+use core::mem::{align_of, size_of};
 use core::ptr;
 
 #[cfg(feature = "candidate-ffi")]
@@ -210,6 +211,49 @@ fn valid_exact_output(pointer: *mut u8, capacity: u64, expected: u64) -> bool {
     !pointer.is_null() && capacity == expected
 }
 
+fn valid_scalar_output<T>(pointer: *mut T) -> bool {
+    !pointer.is_null() && (pointer as usize) % align_of::<T>() == 0
+}
+
+#[derive(Clone, Copy)]
+struct AbiMemoryRange {
+    start: usize,
+    end: usize,
+}
+
+impl AbiMemoryRange {
+    fn from_bytes(pointer: *const u8, length: u64) -> Option<Self> {
+        let length = usize::try_from(length).ok()?;
+        let start = pointer as usize;
+        let end = start.checked_add(length)?;
+        Some(Self { start, end })
+    }
+
+    fn from_scalar<T>(pointer: *const T) -> Option<Self> {
+        let start = pointer as usize;
+        let end = start.checked_add(size_of::<T>())?;
+        Some(Self { start, end })
+    }
+
+    fn overlaps(self, other: Self) -> bool {
+        self.start < other.end && other.start < self.end
+    }
+}
+
+fn pairwise_disjoint(ranges: &[AbiMemoryRange]) -> bool {
+    ranges.iter().enumerate().all(|(index, range)| {
+        ranges[index + 1..]
+            .iter()
+            .all(|other| !range.overlaps(*other))
+    })
+}
+
+fn inputs_disjoint_from_outputs(inputs: &[AbiMemoryRange], outputs: &[AbiMemoryRange]) -> bool {
+    inputs
+        .iter()
+        .all(|input| outputs.iter().all(|output| !input.overlaps(*output)))
+}
+
 unsafe fn reset_bytes(pointer: *mut u8, length: u64) {
     unsafe {
         ptr::write_bytes(pointer, 0, length as usize);
@@ -369,10 +413,17 @@ pub unsafe extern "C" fn lg_scka_v1_initialize(
     state_out_len: *mut u64,
 ) -> i32 {
     if !valid_exact_output(state_out, state_out_capacity, MAX_STATE_BYTES)
-        || state_out_len.is_null()
+        || !valid_scalar_output(state_out_len)
     {
         return STATUS_INVALID_ARGUMENT;
     }
+    let output_ranges = match (
+        AbiMemoryRange::from_bytes(state_out, state_out_capacity),
+        AbiMemoryRange::from_scalar(state_out_len),
+    ) {
+        (Some(state), Some(length)) if pairwise_disjoint(&[state, length]) => [state, length],
+        _ => return STATUS_INVALID_ARGUMENT,
+    };
     unsafe {
         reset_bytes(state_out, state_out_capacity);
         reset_u64(state_out_len);
@@ -382,6 +433,17 @@ pub unsafe extern "C" fn lg_scka_v1_initialize(
         || !valid_exact_input(state_key, state_key_len, STATE_KEY_BYTES)
         || !valid_exact_input(shared_secret, shared_secret_len, SHARED_SECRET_BYTES)
     {
+        return STATUS_INVALID_ARGUMENT;
+    }
+    let input_ranges = match (
+        AbiMemoryRange::from_bytes(session_id, session_id_len),
+        AbiMemoryRange::from_bytes(state_key, state_key_len),
+        AbiMemoryRange::from_bytes(shared_secret, shared_secret_len),
+    ) {
+        (Some(session), Some(key), Some(shared)) => [session, key, shared],
+        _ => return STATUS_INVALID_ARGUMENT,
+    };
+    if !inputs_disjoint_from_outputs(&input_ranges, &output_ranges) {
         return STATUS_INVALID_ARGUMENT;
     }
     #[cfg(feature = "candidate-ffi")]
@@ -439,14 +501,57 @@ pub unsafe extern "C" fn lg_scka_v1_send(
     if !valid_exact_output(state_out, state_out_capacity, MAX_STATE_BYTES)
         || !valid_exact_output(message_out, message_out_capacity, MAX_MESSAGE_BYTES)
         || !valid_exact_output(epoch_secret_out, epoch_secret_out_len, EPOCH_SECRET_BYTES)
-        || state_out_len.is_null()
-        || message_out_len.is_null()
-        || sending_epoch_out.is_null()
-        || has_epoch_secret_out.is_null()
-        || epoch_secret_epoch_out.is_null()
+        || !valid_scalar_output(state_out_len)
+        || !valid_scalar_output(message_out_len)
+        || !valid_scalar_output(sending_epoch_out)
+        || !valid_scalar_output(has_epoch_secret_out)
+        || !valid_scalar_output(epoch_secret_epoch_out)
     {
         return STATUS_INVALID_ARGUMENT;
     }
+    let output_ranges = match (
+        AbiMemoryRange::from_bytes(state_out, state_out_capacity),
+        AbiMemoryRange::from_scalar(state_out_len),
+        AbiMemoryRange::from_bytes(message_out, message_out_capacity),
+        AbiMemoryRange::from_scalar(message_out_len),
+        AbiMemoryRange::from_scalar(sending_epoch_out),
+        AbiMemoryRange::from_scalar(has_epoch_secret_out),
+        AbiMemoryRange::from_scalar(epoch_secret_epoch_out),
+        AbiMemoryRange::from_bytes(epoch_secret_out, epoch_secret_out_len),
+    ) {
+        (
+            Some(state),
+            Some(state_len),
+            Some(message),
+            Some(message_len),
+            Some(epoch),
+            Some(has_secret),
+            Some(secret_epoch),
+            Some(secret),
+        ) if pairwise_disjoint(&[
+            state,
+            state_len,
+            message,
+            message_len,
+            epoch,
+            has_secret,
+            secret_epoch,
+            secret,
+        ]) =>
+        {
+            [
+                state,
+                state_len,
+                message,
+                message_len,
+                epoch,
+                has_secret,
+                secret_epoch,
+                secret,
+            ]
+        }
+        _ => return STATUS_INVALID_ARGUMENT,
+    };
     unsafe {
         reset_bytes(state_out, state_out_capacity);
         reset_u64(state_out_len);
@@ -463,6 +568,17 @@ pub unsafe extern "C" fn lg_scka_v1_send(
         || !valid_revision(expected_state_revision)
         || !valid_state_input(state_in, state_in_len)
     {
+        return STATUS_INVALID_ARGUMENT;
+    }
+    let input_ranges = match (
+        AbiMemoryRange::from_bytes(session_id, session_id_len),
+        AbiMemoryRange::from_bytes(state_key, state_key_len),
+        AbiMemoryRange::from_bytes(state_in, state_in_len),
+    ) {
+        (Some(session), Some(key), Some(state)) => [session, key, state],
+        _ => return STATUS_INVALID_ARGUMENT,
+    };
+    if !inputs_disjoint_from_outputs(&input_ranges, &output_ranges) {
         return STATUS_INVALID_ARGUMENT;
     }
     #[cfg(feature = "candidate-ffi")]
@@ -558,13 +674,33 @@ pub unsafe extern "C" fn lg_scka_v1_receive(
 ) -> i32 {
     if !valid_exact_output(state_out, state_out_capacity, MAX_STATE_BYTES)
         || !valid_exact_output(epoch_secret_out, epoch_secret_out_len, EPOCH_SECRET_BYTES)
-        || state_out_len.is_null()
-        || receiving_epoch_out.is_null()
-        || has_epoch_secret_out.is_null()
-        || epoch_secret_epoch_out.is_null()
+        || !valid_scalar_output(state_out_len)
+        || !valid_scalar_output(receiving_epoch_out)
+        || !valid_scalar_output(has_epoch_secret_out)
+        || !valid_scalar_output(epoch_secret_epoch_out)
     {
         return STATUS_INVALID_ARGUMENT;
     }
+    let output_ranges = match (
+        AbiMemoryRange::from_bytes(state_out, state_out_capacity),
+        AbiMemoryRange::from_scalar(state_out_len),
+        AbiMemoryRange::from_scalar(receiving_epoch_out),
+        AbiMemoryRange::from_scalar(has_epoch_secret_out),
+        AbiMemoryRange::from_scalar(epoch_secret_epoch_out),
+        AbiMemoryRange::from_bytes(epoch_secret_out, epoch_secret_out_len),
+    ) {
+        (
+            Some(state),
+            Some(state_len),
+            Some(epoch),
+            Some(has_secret),
+            Some(secret_epoch),
+            Some(secret),
+        ) if pairwise_disjoint(&[state, state_len, epoch, has_secret, secret_epoch, secret]) => {
+            [state, state_len, epoch, has_secret, secret_epoch, secret]
+        }
+        _ => return STATUS_INVALID_ARGUMENT,
+    };
     unsafe {
         reset_bytes(state_out, state_out_capacity);
         reset_u64(state_out_len);
@@ -580,6 +716,18 @@ pub unsafe extern "C" fn lg_scka_v1_receive(
         || !valid_state_input(state_in, state_in_len)
         || !valid_optional_input(message_in, message_in_len, MAX_MESSAGE_BYTES)
     {
+        return STATUS_INVALID_ARGUMENT;
+    }
+    let input_ranges = match (
+        AbiMemoryRange::from_bytes(session_id, session_id_len),
+        AbiMemoryRange::from_bytes(state_key, state_key_len),
+        AbiMemoryRange::from_bytes(state_in, state_in_len),
+        AbiMemoryRange::from_bytes(message_in, message_in_len),
+    ) {
+        (Some(session), Some(key), Some(state), Some(message)) => [session, key, state, message],
+        _ => return STATUS_INVALID_ARGUMENT,
+    };
+    if !inputs_disjoint_from_outputs(&input_ranges, &output_ranges) {
         return STATUS_INVALID_ARGUMENT;
     }
     #[cfg(feature = "candidate-ffi")]

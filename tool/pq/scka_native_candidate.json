@@ -57,7 +57,9 @@
     "candidateHostRuntimeValidation": {
       "macosUniversalSignedScope": true,
       "linuxX64PackagedScope": true,
-      "windowsX64OnWindowsArm64PackagedScope": true
+      "windowsX64OnWindowsArm64PackagedScope": true,
+      "macosArm64AddressSanitizer": true,
+      "linuxX64AddressSanitizer": true
     },
     "candidateCrossCompileValidation": {
       "iosDeviceArm64PackagedUnsigned": true,
@@ -516,6 +518,10 @@
     "candidateAndroidExactApkAbiValidated": true,
     "candidateLinuxScopeRuntimeValidated": true,
     "candidateWindowsScopeRuntimeValidated": true,
+    "candidateAbiDisjointRangeValidation": true,
+    "candidateDeterministicHostileCorpus": true,
+    "candidateMacosArm64AddressSanitizer": true,
+    "candidateLinuxX64AddressSanitizer": true,
     "candidateDefaultScaffoldRejected": true,
     "candidateRealLs3AuxSendReceiveRestartTest": true,
     "candidateNativeRevisionAtomicallyBoundToTr3": true,
@@ -565,6 +571,9 @@
     "candidateOptInPackagingToolsAdded": true,
     "candidatePackagedScopeLoaderAdded": true,
     "candidatePackagedApplicationSmokeAdded": true,
+    "candidateAbiMemoryRangeHardeningAdded": true,
+    "candidateDeterministicHostileCorpusAdded": true,
+    "candidateAddressSanitizerCheckpointAdded": true,
     "protocolV3Activated": false
   },
   "remainingGates": [
@@ -573,7 +582,7 @@
     "independently review the frozen canonical LB3 plaintext state-machine payload, BM3 public-message codec, and opaque incremental-continuation version binding",
     "run upstream primitive vectors plus independent cross-implementation ML-KEM Braid vectors",
     "test signed installable artifacts for every shipped architecture; current iOS device and Android evidence is packaged but not physical-runtime evidence",
-    "complete fuzzing, sanitizer, crash, rollback, replay, and secret-lifecycle tests",
+    "extend the bounded hostile corpus and macOS/Linux AddressSanitizer checkpoint with continuous coverage-guided fuzzing plus crash, rollback, replay, concurrency, resource, and secret-lifecycle campaigns",
     "obtain independent cryptographic and implementation review"
   ]
 }

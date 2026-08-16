@@ -268,6 +268,36 @@ tool/pq/verify_packaged_linux.sh
 The expected artifact marker is `LAYERGRAM_MLKEM_PACKAGED_LINUX_OK`; the
 process marker remains `LAYERGRAM_MLKEM_PACKAGED_SMOKE_OK`.
 
+## SCKA native hostile corpus and AddressSanitizer
+
+The Rust ABI has a dependency-free deterministic hostile-input corpus covering
+authenticated-state mutations, bounded random state/message shapes, output
+scrubbing, guard bytes, pointer overlap, and scalar alignment. Run that corpus
+together with the complete candidate suite under AddressSanitizer with:
+
+```sh
+rustup toolchain install nightly-2026-08-16 --profile minimal
+tool/pq/test_scka_hardening.sh
+```
+
+The pinned nightly is only a test instrument. It does not alter the crate's
+Rust 1.87 production baseline, `Cargo.lock`, application packaging, or the
+commercially usable dependency graph. Supported hosts are macOS arm64/x64 and
+glibc Linux arm64/x64. This checkpoint is bounded and repeatable; continuous
+coverage-guided fuzzing and the independent audit remain required before
+production registration.
+
+For the macOS packaged-scope smoke, `LAYERGRAM_SCKA_MACOS_SIGN_IDENTITY=-`
+applies an ad-hoc signature without Hardened Runtime because an ad-hoc identity
+has no Team ID. A real signing identity keeps Hardened Runtime enabled. The
+ad-hoc path proves local code integrity only; release signing, nested-code Team
+ID consistency, notarization, and store verification remain separate gates.
+
+On Windows, set `LAYERGRAM_SCKA_WINDOWS_TARGET_DIR` to an NTFS-local directory
+when the repository is exposed through a Parallels shared folder. Cargo's
+temporary archive rename operations are not reliable on that shared filesystem;
+the generated DLL is still copied into and verified from the Flutter bundle.
+
 The common `ml_kem_768_packaging_test.dart` traversal also checks the complete
 24-word v3 identity vector and the imported ML-KEM public-key validation
 boundary. Run the same file on every shipped target; matching only the native

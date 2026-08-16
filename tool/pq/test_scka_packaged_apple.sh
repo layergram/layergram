@@ -35,8 +35,15 @@ xcodebuild -quiet -workspace macos/Runner.xcworkspace -scheme Runner \
 if [ -n "$SIGN_IDENTITY" ]; then
   # Local artifact proof only. Distribution archives must sign nested code
   # explicitly through the release pipeline and complete notarization.
-  codesign --force --deep --options runtime --timestamp=none \
-    --sign "$SIGN_IDENTITY" "$APP"
+  if [ "$SIGN_IDENTITY" = - ]; then
+    # Ad-hoc signatures have no Team ID. Enabling Hardened Runtime here would
+    # make dyld reject the pre-signed Flutter engine and does not model a real
+    # distribution identity, so keep this smoke local and non-hardened.
+    codesign --force --deep --timestamp=none --sign - "$APP"
+  else
+    codesign --force --deep --options runtime --timestamp=none \
+      --sign "$SIGN_IDENTITY" "$APP"
+  fi
   codesign --verify --deep --strict --verbose=2 "$APP"
 fi
 actual="$PACKAGE_ROOT/macos-process-symbols.txt"

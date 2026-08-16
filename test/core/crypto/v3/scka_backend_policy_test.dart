@@ -63,6 +63,8 @@ void main() {
       'macosUniversalSignedScope': true,
       'linuxX64PackagedScope': true,
       'windowsX64OnWindowsArm64PackagedScope': true,
+      'macosArm64AddressSanitizer': true,
+      'linuxX64AddressSanitizer': true,
     });
     expect(scaffold['candidateCrossCompileValidation'], <String, dynamic>{
       'iosDeviceArm64PackagedUnsigned': true,
@@ -493,6 +495,10 @@ void main() {
     expect(composition['candidateAndroidExactApkAbiValidated'], isTrue);
     expect(composition['candidateLinuxScopeRuntimeValidated'], isTrue);
     expect(composition['candidateWindowsScopeRuntimeValidated'], isTrue);
+    expect(composition['candidateAbiDisjointRangeValidation'], isTrue);
+    expect(composition['candidateDeterministicHostileCorpus'], isTrue);
+    expect(composition['candidateMacosArm64AddressSanitizer'], isTrue);
+    expect(composition['candidateLinuxX64AddressSanitizer'], isTrue);
     expect(composition['candidateDefaultScaffoldRejected'], isTrue);
     expect(composition['candidateRealLs3AuxSendReceiveRestartTest'], isTrue);
     expect(composition['candidateNativeRevisionAtomicallyBoundToTr3'], isTrue);
@@ -541,6 +547,9 @@ void main() {
     expect(effects['candidateOptInPackagingToolsAdded'], isTrue);
     expect(effects['candidatePackagedScopeLoaderAdded'], isTrue);
     expect(effects['candidatePackagedApplicationSmokeAdded'], isTrue);
+    expect(effects['candidateAbiMemoryRangeHardeningAdded'], isTrue);
+    expect(effects['candidateDeterministicHostileCorpusAdded'], isTrue);
+    expect(effects['candidateAddressSanitizerCheckpointAdded'], isTrue);
     expect(effects['pubspecChanged'], isFalse);
     expect(effects['protocolV3Activated'], isFalse);
 
@@ -565,6 +574,12 @@ void main() {
     expect(
       remainingGates.any(
         (gate) => gate.contains('keep the default ABI NOT_READY'),
+      ),
+      isTrue,
+    );
+    expect(
+      remainingGates.any(
+        (gate) => gate.contains('continuous coverage-guided fuzzing'),
       ),
       isTrue,
     );

@@ -303,7 +303,9 @@ than production project registration.
   reordering, loss, duplication, and offline recovery;
 - test state corruption, replay, crash windows, rollback, allocation limits,
   panic containment, wiping, and concurrent calls;
-- pass native sanitizers, fuzzing, static analysis, signed distribution/store
+- retain the bounded deterministic hostile corpus and macOS/Linux
+  AddressSanitizer checkpoint, then extend it with continuous coverage-guided
+  fuzzing, static analysis, crash/resource campaigns, signed distribution/store
   packaging, and physical-device tests;
 - obtain independent cryptographic and implementation review.
 

@@ -77,6 +77,10 @@ LG_SCKA_EXPORT int32_t lg_scka_v1_self_test(void);
 // non-zero length. state_out_capacity must equal LG_SCKA_V1_MAX_STATE_BYTES;
 // message_out_capacity must equal LG_SCKA_V1_MAX_MESSAGE_BYTES; and
 // epoch_secret_out_len must equal LG_SCKA_V1_EPOCH_SECRET_BYTES.
+// Every scalar output pointer must be naturally aligned. Writable output
+// ranges must be pairwise disjoint and must not overlap any readable input
+// range. Violations return LG_SCKA_V1_ERR_INVALID_ARGUMENT before Rust creates
+// borrowed slices from the caller-owned memory.
 //
 // The state key is a stable, independently derived session secret. It must not
 // be stored inside the state export itself. expected_state_revision binds the

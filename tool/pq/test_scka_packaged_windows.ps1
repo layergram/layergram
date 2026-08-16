@@ -3,12 +3,19 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $crateDir = Join-Path $repoRoot 'native\layergram_scka'
 $packageRoot = Join-Path $repoRoot '.dart_tool\layergram_pq\scka-package\windows'
-$targetDir = Join-Path $packageRoot 'target'
+$targetDir = if ([string]::IsNullOrWhiteSpace(
+    $env:LAYERGRAM_SCKA_WINDOWS_TARGET_DIR)) {
+  Join-Path $packageRoot 'target'
+} else {
+  $env:LAYERGRAM_SCKA_WINDOWS_TARGET_DIR
+}
 $releaseDir = Join-Path $repoRoot 'build\windows\x64\runner\Release'
 $library = Join-Path $releaseDir 'layergram_scka.dll'
 $executable = Join-Path $releaseDir 'layergram.exe'
 $symbolsFile = Join-Path $PSScriptRoot 'scka_expected_symbols.txt'
 $rustTarget = 'x86_64-pc-windows-msvc'
+
+Set-Location $repoRoot
 
 $rustVersion = (& rustc --version).Split(' ')[1]
 if ($rustVersion -ne '1.87.0') {
@@ -20,6 +27,8 @@ if ($LASTEXITCODE -ne 0) {
   throw "Missing Rust target: $rustTarget"
 }
 
+New-Item -ItemType Directory -Path $packageRoot, $targetDir -Force |
+  Out-Null
 & cargo build --release --locked --offline --features candidate-ffi `
   --manifest-path (Join-Path $crateDir 'Cargo.toml') `
   --target-dir $targetDir --target $rustTarget
@@ -58,7 +67,8 @@ if (Test-Path $marker -PathType Leaf) {
   Remove-Item -Force $marker
 }
 $env:LAYERGRAM_SCKA_PACKAGED_MARKER = $marker
-$process = Start-Process -FilePath $executable -Wait -PassThru
+$process = Start-Process -FilePath $executable -WorkingDirectory $releaseDir `
+  -Wait -PassThru
 if ($process.ExitCode -ne 0) {
   throw "Packaged Windows SCKA process exited with $($process.ExitCode)"
 }
