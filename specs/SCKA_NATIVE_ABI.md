@@ -2,8 +2,9 @@
 
 Status: **default build is a frozen `NOT_READY` scaffold; an explicit
 engineering-only Cargo feature connects the authenticated composition to the
-frozen ABI, while application packaging, production registration, and protocol
-v3 activation remain disconnected**
+frozen ABI; opt-in generated candidate artifacts are packaged for verification,
+while ordinary application bootstrap, production registration, and protocol v3
+activation remain disconnected**
 
 This document freezes the first Layergram-owned C ABI and authenticated state
 envelope for an eventual independent implementation of ML-KEM Braid revision 1.
@@ -18,8 +19,10 @@ candidate bytes. With default features the crate deliberately returns
 `LG_SCKA_V1_ERR_NOT_READY` from its self-test and every correctly shaped state
 operation. Cargo feature `candidate-ffi` connects those exact ABI shapes to the
 private authenticated composition for laboratory integration tests. That
-feature changes the implementation ID, is not referenced by any platform
-package, and does not make Layergram quantum-resistant.
+feature changes the implementation ID. Opt-in scripts package it into
+generated, ignored platform artifacts and exercise the scope-owned loader; it
+is not referenced by ordinary `lib/main.dart`, is not registered for
+production, and does not make Layergram quantum-resistant.
 
 The crate is Apache-2.0, pins Rust 1.87.0, and is suitable for the public
 repository that is merged into the separately distributed paid Premium
@@ -64,7 +67,8 @@ public specification); the responder is its initial receiving participant
 
 The private transition result does not change this public ABI contract. It is
 reachable through the header and Dart only in an explicitly built engineering
-candidate; it remains unreachable from every packaged application.
+candidate. Generated candidate smoke packages may reach it only through the
+scope-owned loader; released application packages remain outside this path.
 
 Every transition is candidate-only:
 
@@ -233,13 +237,14 @@ local failures. `NOT_READY` is reserved for this scaffold and any deliberately
 disabled build. No non-`OK` result may be interpreted as an empty/no-op SCKA
 transition.
 
-## 5. Packaging and platform proof
+## 5. Candidate packaging and platform proof
 
-The crate emits `staticlib`, `cdylib`, and `rlib` artifacts but is not linked by
-Flutter, CocoaPods, CMake, Gradle, or the Windows runner. Exact export tests
-allow only `lg_scka_v1_*` symbols.
+The crate emits `staticlib`, `cdylib`, and `rlib` artifacts. Opt-in scripts link
+or copy generated candidate artifacts into disposable Flutter smoke builds;
+normal application builds contain no generated library and do not call the
+packaged loader. Exact export tests allow only `lg_scka_v1_*` symbols.
 
-Required scaffold proof is:
+Current candidate proof is:
 
 - macOS ARM64: Rust unit tests, release dylib, C-header ABI smoke, exact exports;
 - iOS device ARM64: release static library, header compile against the iPhoneOS
@@ -249,8 +254,18 @@ Required scaffold proof is:
 - Linux x64: Rust unit tests, release shared library, C-header ABI smoke, exact
   exports;
 - Windows x64: Rust unit tests, release DLL, exact PE exports;
-- Android and any shipped ARM64 Linux/Windows target: required before the crate
-  is packaged, but not implied by the current host-only scaffold.
+- Android arm64-v8a, armeabi-v7a, and x86_64: release APK contains the exact
+  allowlisted library for every tested ABI;
+- macOS ARM64/x86_64: universal candidate linked into a locally signed smoke
+  app and exercised through the persistence scope;
+- iOS simulator x86_64: packaged scope smoke executed; device ARM64 and
+  simulator ARM64 artifacts compile with exact symbols;
+- Linux x64 and Windows x64: packaged scope smoke executed from the final
+  bundle location with exact exports; Linux also verifies RELRO/BIND_NOW.
+
+The macOS signature is a local developer verification, not a notarized release.
+iOS physical-device and Android physical-device execution, store archives,
+notarization, and every actually shipped ABI remain mandatory release gates.
 
 When real native transitions exist, these compile-time checks are insufficient.
 Every shipped ABI must then run identical primitive/state-machine vectors,

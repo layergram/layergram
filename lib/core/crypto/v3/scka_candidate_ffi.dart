@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import 'dart:ffi';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
@@ -36,12 +37,13 @@ final class V3SckaCandidateNativeException implements Exception {
       '${_statusDescription(status)})';
 }
 
-/// Explicit-path FFI bridge for the non-packaged SCKA candidate build.
+/// FFI bridge for the opt-in SCKA candidate build.
 ///
 /// The normal Rust build keeps every operation and self-test at `NOT_READY`.
 /// Only a library compiled deliberately with Cargo feature `candidate-ffi`
 /// can satisfy this class's exact ABI/build allowlist. There is intentionally
-/// no packaged-library factory and no application registration point.
+/// no application registration point. The packaged factory is consumed only
+/// by the scope-owned protocol-v3 bootstrap and remains unused by `main.dart`.
 ///
 /// The allowlist is compiled into the signed Dart application binary: ABI,
 /// protocol revision, state format, every fixed size, and the implementation
@@ -51,6 +53,53 @@ final class V3SckaCandidateFfiBackend implements V3SckaBackend {
       V3SckaCandidateFfiBackend._(
         _V3SckaCandidateBindings(DynamicLibrary.open(libraryPath)),
       );
+
+  /// Opens the candidate ABI embedded by Layergram's explicit packaging tools.
+  ///
+  /// Application code must open it through
+  /// `V3SessionPersistenceScope.openPackagedScka`, which owns this backend
+  /// together with persistence, receive resolution, and atomic commit.
+  factory V3SckaCandidateFfiBackend.openPackaged() {
+    if (Platform.isIOS || Platform.isMacOS) {
+      return V3SckaCandidateFfiBackend._(
+        _V3SckaCandidateBindings(DynamicLibrary.process()),
+      );
+    }
+    if (Platform.isAndroid) {
+      return V3SckaCandidateFfiBackend.open(
+        libraryPath: 'liblayergram_scka.so',
+      );
+    }
+    if (Platform.isLinux) {
+      return V3SckaCandidateFfiBackend.open(
+        libraryPath: packagedLinuxLibraryPath(),
+      );
+    }
+    if (Platform.isWindows) {
+      return V3SckaCandidateFfiBackend.open(
+        libraryPath: packagedWindowsLibraryPath(),
+      );
+    }
+    throw UnsupportedError(
+      'Packaged Layergram SCKA is not available on '
+      '${Platform.operatingSystem}',
+    );
+  }
+
+  /// Resolves the Linux library from the executable-owned bundle directory.
+  static String packagedLinuxLibraryPath({String? executablePath}) {
+    final executable = File(executablePath ?? Platform.resolvedExecutable);
+    return '${executable.parent.path}/lib/liblayergram_scka.so';
+  }
+
+  /// Resolves the Windows DLL from the executable-owned bundle directory.
+  ///
+  /// An absolute path avoids the ambient DLL search order.
+  static String packagedWindowsLibraryPath({String? executablePath}) {
+    final executable = File(executablePath ?? Platform.resolvedExecutable);
+    return '${executable.parent.path}${Platform.pathSeparator}'
+        'layergram_scka.dll';
+  }
 
   V3SckaCandidateFfiBackend._(this._bindings) {
     _bindings.validateAllowlist();

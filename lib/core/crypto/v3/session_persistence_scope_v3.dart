@@ -28,6 +28,7 @@ import 'lmf_v3_acknowledgement.dart';
 import 'lmf_v3_outbox.dart';
 import 'lmf_v3_persistence.dart';
 import 'retention_policy_v3.dart';
+import 'scka_candidate_ffi.dart';
 import 'session_checkpoint_v3.dart';
 import 'session_commit_controller_v3.dart';
 import 'session_ratchet_key_resolver_v3.dart';
@@ -212,6 +213,27 @@ final class V3SessionPersistenceScope {
       ownedKey.destroy();
       rethrow;
     }
+  }
+
+  /// Opens the complete durable scope with the packaged SCKA candidate.
+  ///
+  /// This is the intended application-facing packaged-library boundary. The
+  /// backend is created inside the scope and cannot be swapped between restore,
+  /// send, receive, handoff, or commit. Protocol v3 remains inactive until a
+  /// separately reviewed application bootstrap calls this method.
+  static Future<V3SessionPersistenceScope> openPackagedScka({
+    required String scopeToken,
+    required SecretKey auxStorageKey,
+    V3SessionSnapshotValidator? snapshotValidator,
+    int maxSessions = 4096,
+  }) {
+    return open(
+      scopeToken: scopeToken,
+      auxStorageKey: auxStorageKey,
+      sckaBackend: V3SckaCandidateFfiBackend.openPackaged(),
+      snapshotValidator: snapshotValidator,
+      maxSessions: maxSessions,
+    );
   }
 
   static bool _isCanonicalScopeToken(String value) {

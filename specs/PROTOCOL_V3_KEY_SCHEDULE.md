@@ -344,8 +344,9 @@ the existing encrypted identity/passphrase scope. Every Dart backend call gets
 a temporary copy plus the exact expected TR3 revision; initialization must
 validate native revision 0 and every candidate must report exactly
 `expected_revision + 1` before it can enter the atomic TR3 effect. The Rust
-scaffold still returns `NOT_READY`, is not registered, and is not linked into
-the app.
+scaffold still returns `NOT_READY` and is not registered. Generated opt-in
+candidate packages exercise only the scope-owned loader; ordinary application
+bootstrap does not link or load it.
 
 The public SCKA message uses a canonical `SK3` envelope:
 

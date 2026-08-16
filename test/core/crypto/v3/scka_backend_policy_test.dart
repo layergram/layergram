@@ -54,20 +54,29 @@ void main() {
     );
     expect(scaffold['defaultFeatureSetNotReady'], isTrue);
     expect(scaffold['candidateFeatureOperational'], isTrue);
-    expect(scaffold['candidateFeaturePackaged'], isFalse);
+    expect(scaffold['candidateFeaturePackaged'], isTrue);
+    expect(
+      scaffold['candidatePackagingMode'],
+      'explicit-generated-artifacts-only',
+    );
     expect(scaffold['candidateHostRuntimeValidation'], <String, dynamic>{
-      'macosArm64': true,
-      'linuxX64': true,
-      'windowsX64OnWindowsArm64': true,
+      'macosUniversalSignedScope': true,
+      'linuxX64PackagedScope': true,
+      'windowsX64OnWindowsArm64PackagedScope': true,
     });
     expect(scaffold['candidateCrossCompileValidation'], <String, dynamic>{
-      'iosDeviceArm64': true,
-      'iosSimulatorArm64': true,
-      'iosSimulatorX64': true,
-      'androidArm64': true,
-      'packagedApplicationRuntime': false,
+      'iosDeviceArm64PackagedUnsigned': true,
+      'iosSimulatorX64PackagedScope': true,
+      'androidArm64PackagedInApk': true,
+      'androidArmv7PackagedInApk': true,
+      'androidX64PackagedInApk': true,
+      'androidPhysicalRuntime': false,
+      'iosPhysicalRuntime': false,
     });
-    expect(scaffold['runtimeStatus'], 'not-ready-not-registered-not-linked');
+    expect(
+      scaffold['runtimeStatus'],
+      'candidate-packaged-not-registered-not-active',
+    );
 
     final primitive =
         receipt['incrementalMlKemPrimitiveCandidate'] as Map<String, dynamic>;
@@ -473,7 +482,17 @@ void main() {
     expect(composition['dartCrossSessionDeferredIsolationTest'], isTrue);
     expect(composition['candidateFfiBridgeConnected'], isTrue);
     expect(composition['candidateExactBuildAllowlist'], isTrue);
-    expect(composition['candidateExplicitPathOnly'], isTrue);
+    expect(composition['candidateExplicitOrPackagedScopeOnly'], isTrue);
+    expect(composition['candidatePackagedScopeLoaderConnected'], isTrue);
+    expect(
+      composition['candidatePackagedRawBackendApplicationBootstrap'],
+      isFalse,
+    );
+    expect(composition['candidateMacosLocalSignatureValidated'], isTrue);
+    expect(composition['candidateIosSimulatorScopeRuntimeValidated'], isTrue);
+    expect(composition['candidateAndroidExactApkAbiValidated'], isTrue);
+    expect(composition['candidateLinuxScopeRuntimeValidated'], isTrue);
+    expect(composition['candidateWindowsScopeRuntimeValidated'], isTrue);
     expect(composition['candidateDefaultScaffoldRejected'], isTrue);
     expect(composition['candidateRealLs3AuxSendReceiveRestartTest'], isTrue);
     expect(composition['candidateNativeRevisionAtomicallyBoundToTr3'], isTrue);
@@ -519,6 +538,9 @@ void main() {
     expect(effects['candidateFfiBridgeAdded'], isTrue);
     expect(effects['candidateExactBuildAllowlistAdded'], isTrue);
     expect(effects['candidateRealAuxAtomicIntegrationTestAdded'], isTrue);
+    expect(effects['candidateOptInPackagingToolsAdded'], isTrue);
+    expect(effects['candidatePackagedScopeLoaderAdded'], isTrue);
+    expect(effects['candidatePackagedApplicationSmokeAdded'], isTrue);
     expect(effects['pubspecChanged'], isFalse);
     expect(effects['protocolV3Activated'], isFalse);
 
@@ -529,8 +551,7 @@ void main() {
         remainingGates.any((gate) => gate.contains('transition 13')), isFalse);
     expect(
       remainingGates.any(
-        (gate) => gate
-            .contains('every shipped Apple, Android, Windows, and Linux ABI'),
+        (gate) => gate.contains('every shipped architecture'),
       ),
       isTrue,
     );
@@ -549,8 +570,7 @@ void main() {
     );
   });
 
-  test('Layergram SCKA dependencies are pinned, permissive, and not packaged',
-      () {
+  test('SCKA dependencies stay permissive and packaging remains opt-in', () {
     final manifest =
         File('native/layergram_scka/Cargo.toml').readAsStringSync();
     final lock = File('native/layergram_scka/Cargo.lock').readAsStringSync();
@@ -634,7 +654,8 @@ void main() {
     ).readAsStringSync();
     expect(dartCandidate, contains('approvedImplementationId'));
     expect(dartCandidate, contains('validateAllowlist'));
-    expect(dartCandidate, isNot(contains('openPackaged')));
+    expect(dartCandidate, contains('openPackaged'));
+    expect(dartCandidate, contains('packagedWindowsLibraryPath'));
 
     final entropySource = File(
       'native/layergram_scka/src/entropy.rs',
@@ -683,8 +704,32 @@ void main() {
       expect(
         File(path).readAsStringSync(),
         isNot(contains('layergram_scka')),
-        reason: '$path must not package the inactive SCKA scaffold',
+        reason: '$path must not enable the opt-in SCKA candidate by default',
       );
+    }
+
+    final androidBuild =
+        File('android/app/build.gradle.kts').readAsStringSync();
+    expect(androidBuild, contains('scka-package/android/jniLibs'));
+    expect(androidBuild, contains('layergramSckaCandidatePackage'));
+    final androidPackagingTool =
+        File('tool/pq/test_scka_packaged_android.sh').readAsStringSync();
+    expect(
+      androidPackagingTool,
+      contains('ORG_GRADLE_PROJECT_layergramSckaCandidatePackage=true'),
+    );
+    final mainEntry = File('lib/main.dart').readAsStringSync();
+    expect(mainEntry, isNot(contains('openPackagedScka')));
+    expect(mainEntry, isNot(contains('scka_candidate_ffi')));
+    for (final path in <String>[
+      'tool/pq/build_scka_packaged_apple.sh',
+      'tool/pq/test_scka_packaged_apple.sh',
+      'tool/pq/test_scka_packaged_ios.sh',
+      'tool/pq/test_scka_packaged_android.sh',
+      'tool/pq/test_scka_packaged_linux.sh',
+      'tool/pq/test_scka_packaged_windows.ps1',
+    ]) {
+      expect(File(path).existsSync(), isTrue, reason: '$path must be present');
     }
   });
 
@@ -858,6 +903,11 @@ void main() {
     expect(scope, contains('Future<V3LmfInboxRestoreResult> resumeDeferred'));
     expect(scope, contains('onlyAssemblyId: assemblyId'));
     expect(scope, contains('Future<V3SessionCommitResult> commitDelivery'));
+    expect(scope, contains('openPackagedScka'));
+    expect(
+      scope,
+      contains('sckaBackend: V3SckaCandidateFfiBackend.openPackaged()'),
+    );
     expect(
         scope, isNot(contains('required V3LmfFrameKeyResolver keyResolver')));
     expect(scope, isNot(contains('final V3LmfDurableInbox inbox;')));

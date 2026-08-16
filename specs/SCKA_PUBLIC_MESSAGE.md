@@ -3,7 +3,7 @@
 Status: **canonical private codec frozen; Header/Ek/Ct1/Ct2 output and
 canonical input connected to the private transition engine, whose revision-1
 transitions 1-13 are implemented; engineering candidate ABI connected,
-default ABI `NOT_READY`, no application packaging; protocol v3 inactive**
+default ABI `NOT_READY`, opt-in candidate packaging only; protocol v3 inactive**
 
 This document freezes Layergram's `BM3` representation of one logical public
 message from the public-domain [ML-KEM Braid revision-1
@@ -24,7 +24,9 @@ private `Ct2Sampled` or `EkReceivedCt1Sampled` state. Transition 11 continues
 the canonical `EkCt1Ack` decoder from `Ct1Acknowledged` and creates
 `Ct2Sampled` only after complete public-key validation and ciphertext
 authentication, but only the explicit `candidate-ffi` build calls the codec
-through the C ABI; it is not packaged through Flutter. Transition 12 consumes a current-epoch canonical `EkCt1Ack`
+through the C ABI. Generated opt-in Flutter smoke packages exercise it only
+through the scope-owned candidate loader; ordinary application bootstrap does
+not. Transition 12 consumes a current-epoch canonical `EkCt1Ack`
 after transition 10 has already stored the validated complete key; it completes
 and authenticates the ciphertext without replacing that stored key. The codec
 also carries exact `Ct2Sampled.Send` symbols and transition-13 next-epoch

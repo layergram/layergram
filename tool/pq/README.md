@@ -24,18 +24,22 @@ decision. The official Signal SPQR implementation is explicitly rejected for
 embedding because it is AGPL-3.0-only; no code from it is imported. The receipt
 selects a specification-first Layergram-owned Apache-2.0 implementation path.
 The exact commercially compatible `libcrux-ml-kem` candidate is now pinned only
-inside the inactive native crate; it is not linked into the application.
+inside the inactive native crate. Opt-in verification scripts link it only into
+generated, ignored candidate packages; ordinary application bootstrap does not
+load it.
 
 `native/layergram_scka` is an Apache-2.0 Rust scaffold with exact pinned
 permissive dependencies and notices. Its default build deliberately returns
 `NOT_READY`. An explicit engineering-only `candidate-ffi` build exposes the
 outer `LS3` AES-256-GCM-SIV composition through the frozen C ABI and an
-exact-build-allowlisted Dart FFI loader. Neither build is referenced by
-application packaging. The crate also contains
+exact-build-allowlisted Dart FFI loader. Reproducible opt-in packaging scripts
+exercise the candidate build through a scope-owned loader, while the default
+build and ordinary `lib/main.dart` remain disconnected. The crate also contains
 Layergram-owned erasure-code and incremental-ML-KEM boundary modules specified
 by `specs/SCKA_ERASURE_CODE.md` and `specs/SCKA_INCREMENTAL_MLKEM.md`. Its
 private transition engine uses both modules. Only the candidate build connects
-them to the C ABI; application packaging remains disconnected. The private `LB3` codec freezes
+them to the C ABI; production registration remains disconnected. The private
+`LB3` codec freezes
 the canonical plaintext representation for all 11 revision-1 states as
 specified by `specs/SCKA_STATE_PAYLOAD.md`, and the transition engine persists
 its candidates through that representation. The private authenticator module
@@ -62,17 +66,20 @@ export. Transition 13 now continues exact authenticated Ct2 symbols across
 loss/restart and switches roles only on the immediately following authenticated
 Braid epoch. All revision-1 transitions 1-13 are implemented privately. The
 explicit candidate build connects them to the frozen C ABI for integration
-tests, while the default ABI and every application package remain disconnected.
+tests, while the default ABI and ordinary application packages remain
+disconnected.
 The private composition specified by
 `specs/SCKA_AUTHENTICATED_COMPOSITION.md` now opens and semantically validates
 exact LS3/LB3 state, dispatches canonical BM3, checks revision-plus-one
 successors, derives injective role-and-revision state nonces, uses RFC 8452
 nonce-misuse-resistant state sealing, and returns immutable exact sealed
 candidates. The engineering-only candidate is callable through an explicit
-library path from Dart and is exercised with the durable session journals,
-TR3, LMF, and the encrypted Aux store. There is no packaged loader, application
-registration, or production activation, and the default ABI remains
-`NOT_READY`.
+library path or deterministic generated package location from Dart and is
+exercised with the durable session journals, TR3, LMF, and the encrypted Aux
+store. The packaged smoke constructs it through
+`V3SessionPersistenceScope.openPackagedScka`; there is no ordinary application
+bootstrap call, production registration, or protocol activation, and the
+default ABI remains `NOT_READY`.
 
 ## Reproducible checks
 
@@ -116,6 +123,33 @@ The Windows candidate check selects the Rust release target from the actual
 Dart runtime architecture. This matters on Windows 11 ARM, where the current
 Flutter/Dart toolchain may run as x64 under emulation and cannot load an ARM64
 DLL into that process.
+
+Run the opt-in packaged-scope candidate checks with generated artifacts:
+
+```sh
+tool/pq/test_scka_packaged_apple.sh
+tool/pq/test_scka_packaged_ios.sh
+tool/pq/test_scka_packaged_android.sh
+tool/pq/test_scka_packaged_linux.sh
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File `
+  tool\pq\test_scka_packaged_windows.ps1
+```
+
+`test_scka_packaged_apple.sh` creates an XCFramework and a macOS scope smoke.
+Set `LAYERGRAM_SCKA_MACOS_SIGN_IDENTITY` to a local signing identity to verify
+the generated macOS app with hardened runtime. This is not archive,
+notarization, or store-distribution evidence. The iOS script executes the x64
+simulator smoke when a compatible simulator is booted and also compiles the
+device ARM64 candidate without signing. Android physical-device and iOS
+physical-device execution remain separate gates. Linux retains RELRO/BIND_NOW;
+Windows uses an executable-relative absolute DLL path. All generated native
+artifacts live below ignored `.dart_tool` or Flutter build directories and are
+not committed. Android additionally requires the explicit
+`layergramSckaCandidatePackage` Gradle property set by its verification script,
+so stale generated libraries cannot enter a later ordinary build.
 
 The Apple check builds separate static libraries for iOS device ARM64 and iOS
 simulator ARM64/x86_64. This is target-specific compilation evidence, not a

@@ -99,6 +99,15 @@ android {
         }
     }
 
+    // Generated only by the explicit protocol-v3 packaging tool. Requiring a
+    // Gradle property prevents a later ordinary build from inheriting stale
+    // candidate artifacts left in the ignored directory.
+    if (providers.gradleProperty("layergramSckaCandidatePackage").orNull == "true") {
+        sourceSets.getByName("main").jniLibs.srcDir(
+            rootProject.file("../.dart_tool/layergram_pq/scka-package/android/jniLibs")
+        )
+    }
+
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")

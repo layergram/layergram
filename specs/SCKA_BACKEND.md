@@ -1,8 +1,9 @@
 # ML-KEM Braid / SCKA backend decision
 
 Status: **engineering-only candidate ABI connected behind an explicit Cargo
-feature and exact Dart build allowlist; default ABI `NOT_READY`, no packaged or
-registered production backend, protocol v3 inactive**
+feature and exact Dart build allowlist; default ABI `NOT_READY`, opt-in
+generated candidate packages tested but no registered production backend,
+protocol v3 inactive**
 
 Layergram needs an ML-KEM Braid revision-1 backend to provide the Sparse
 Continuous Key Agreement input to its inactive Triple Ratchet. This component
@@ -73,21 +74,24 @@ rejects a different per-call backend before transition or persistence. This
 does not register the Rust scaffold or make its `NOT_READY` ABI callable.
 
 The Layergram-owned Rust crate under `native/layergram_scka` freezes the minimal
-ABI and authenticated composition described in `SCKA_NATIVE_ABI.md`. It is not
-linked into any app. Its default build returns `NOT_READY`. An explicit
-`candidate-ffi` build is usable only through `V3SckaCandidateFfiBackend`, which
-has no packaged-loader factory and rejects any mismatch in implementation ID,
-ABI, protocol, state format, or fixed size. This engineering bridge does not
-activate protocol v3.
+ABI and authenticated composition described in `SCKA_NATIVE_ABI.md`. Its
+default build returns `NOT_READY`. An explicit `candidate-ffi` build is usable
+through `V3SckaCandidateFfiBackend`, which rejects any mismatch in
+implementation ID, ABI, protocol, state format, or fixed size. Reproducible
+opt-in scripts now package that exact candidate for Apple, Android, Linux, and
+Windows verification. The application-facing smoke constructs it only through
+`V3SessionPersistenceScope.openPackagedScka`; ordinary `lib/main.dart` does not
+import or call the packaged loader. This engineering bridge does not activate
+protocol v3.
 
 The same crate now contains a Layergram-owned, dependency-free systematic
 Reed-Solomon encoder/decoder for the exact revision-1 public payload classes.
 `SCKA_ERASURE_CODE.md` freezes its GF(2^16) field, generator matrix, 34-byte
 chunk representation, duplicate policy, and resource limits. The private
 transition engine uses this module. The explicit `candidate-ffi` build connects
-it to the frozen C ABI, while the default ABI and application packaging remain
-disconnected, so this progress does not change the backend's inactive product
-status.
+it to the frozen C ABI, while the default ABI and ordinary application
+bootstrap remain disconnected, so opt-in candidate packaging does not change
+the backend's inactive product status.
 
 The exact incremental ML-KEM candidate is now adopted only behind the internal,
 non-ABI wrapper frozen in `SCKA_INCREMENTAL_MLKEM.md`. The wrapper enforces
@@ -214,7 +218,9 @@ validation.
 The dependency is pinned in the inactive native crate together with `zeroize`
 1.8.1. The exact applicable dependency graph and notices are recorded in
 `native/layergram_scka/THIRD_PARTY_NOTICES.md` and the machine-readable receipt.
-The crate is still not linked into an application binary.
+The candidate crate is linked only into generated, ignored verification
+artifacts; no native binary is committed and the normal application target
+does not reference the packaged loader.
 
 Before any packaged use, Layergram must regenerate and verify the resolved
 target-specific graph for every release ABI and repeat the license/notice
@@ -261,11 +267,10 @@ independent golden outputs. RustCrypto HMAC verification supplies the
 constant-time tag comparison. This is an inactive primitive checkpoint, not an
 independent cryptographic audit or approval of the eventual state machine.
 
-## Packaging direction
+## Candidate packaging and release direction
 
-The future backend remains a Layergram-owned Rust static library behind the
-frozen C ABI. Once implemented and approved, it will be embedded into the same
-platform artifacts already used by the ML-KEM primitive wrapper:
+The backend remains a Layergram-owned Rust library behind the frozen C ABI.
+The opt-in verification scripts embed the exact candidate as follows:
 
 - iOS: statically linked into the signed application process;
 - macOS: signed embedded framework or static library with no loader search-path
@@ -274,15 +279,19 @@ platform artifacts already used by the ML-KEM primitive wrapper:
 - Windows: one DLL for every shipped architecture;
 - Linux: one hardened shared library per shipped architecture.
 
-Only exact absolute or platform loader paths may be used. Production exports
-must be allowlisted and test hooks must be absent. The current candidate loader
-accepts only an explicit path and an exact compile-time identity/ABI tuple; no
-application bootstrap references it. The Rust toolchain, panic
+Only exact absolute or platform-defined process loader paths may be used.
+Production exports must be allowlisted and test hooks must be absent. The
+candidate loader accepts either an explicit engineering path or the
+deterministic packaged location, plus an exact compile-time identity/ABI tuple;
+no ordinary application bootstrap references it. The Rust toolchain, panic
 policy, allocator behavior, symbol stripping, reproducibility, notices, and
 store packaging are separate release gates.
 
-The scaffold is currently compiled independently and is not referenced by
-CocoaPods, Gradle, CMake, the Windows runner, or Flutter FFI.
+Generated artifacts are connected only by the opt-in smoke scripts. The
+Android Gradle source set is enabled only by an explicit candidate property and
+then points at an ignored generated directory; Apple link flags, Linux bundle
+copying, and Windows DLL copying are supplied by verification scripts rather
+than production project registration.
 
 ## Remaining security gates
 
@@ -294,8 +303,8 @@ CocoaPods, Gradle, CMake, the Windows runner, or Flutter FFI.
   reordering, loss, duplication, and offline recovery;
 - test state corruption, replay, crash windows, rollback, allocation limits,
   panic containment, wiping, and concurrent calls;
-- pass native sanitizers, fuzzing, static analysis, platform packaging, and
-  physical-device tests;
+- pass native sanitizers, fuzzing, static analysis, signed distribution/store
+  packaging, and physical-device tests;
 - obtain independent cryptographic and implementation review.
 
 Until all gates pass, no provider may register this backend and Layergram must

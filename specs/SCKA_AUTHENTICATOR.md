@@ -43,7 +43,9 @@ switching roles at the immediately following epoch; it neither derives nor
 emits another key. The explicit `candidate-ffi` build connects state-envelope
 persistence and the frozen C ABI for engineering tests. The default native
 self-test and every correctly shaped default operation continue to return
-`NOT_READY`; application packaging remains disconnected.
+`NOT_READY`. Opt-in generated candidate packages exercise this path only
+through the scope-owned loader; ordinary application bootstrap and production
+registration remain disconnected.
 
 ## 1. Frozen parameters
 

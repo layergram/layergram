@@ -1,7 +1,8 @@
 # Layergram authenticated SCKA composition v1
 
 Status: **implemented behind an engineering-only candidate FFI feature; the
-default ABI remains `NOT_READY`, application packaging and registration remain
+default ABI remains `NOT_READY`; opt-in generated candidate artifacts are
+packaged only by the verification scripts, application registration remains
 disconnected, and protocol v3 remains inactive**
 
 This document freezes the internal composition implemented by
@@ -9,8 +10,9 @@ This document freezes the internal composition implemented by
 Layergram-owned `LS3`, `LB3`, `BM3`, entropy, and ML-KEM Braid revision-1
 transition modules. Cargo feature `candidate-ffi` now connects that composition
 to the frozen C shapes strictly for engineering verification. The default
-feature set still returns `NOT_READY`; no Flutter package or application
-bootstrap loads either build.
+feature set still returns `NOT_READY`. The opt-in packaged-scope smoke loads the
+candidate build only through `V3SessionPersistenceScope.openPackagedScka`;
+ordinary `lib/main.dart` and production registration load neither build.
 
 ## 1. Boundary and ownership
 
@@ -88,7 +90,9 @@ The engineering candidate is invoked through
 dispatcher in integration tests. Direct raw C calls remain possible in a
 manually built candidate library and therefore are not an application security
 boundary. Packaging or registering that candidate before the scope owns every
-receive call would be a security error.
+receive call would be a security error. The opt-in packaged smoke constructs
+the backend inside `V3SessionPersistenceScope`, so the scope owns restore,
+send, receive, handoff, and commit authority before storage is opened.
 
 ## 5. Epoch domains
 
