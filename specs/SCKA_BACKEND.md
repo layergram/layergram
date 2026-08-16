@@ -311,10 +311,10 @@ Play App Signing, upload, review, and production registration remain open.
   panic containment, wiping, and concurrent calls;
 - retain the bounded deterministic hostile corpus, macOS/Linux
   AddressSanitizer checkpoint, and locked state-validation/send/receive
-  coverage-guided fuzz harnesses; promote them to scheduled continuous fuzzing
-  and extend static analysis, crash/resource campaigns, signed
-  distribution/store packaging, and per-release physical-device regression
-  testing;
+  coverage-guided fuzz harnesses; collect and monitor recurring green runs from
+  the configured scheduled workflow, retain and triage any reproducer, and
+  extend static analysis, crash/resource campaigns, signed distribution/store
+  packaging, and per-release physical-device regression testing;
 - obtain independent cryptographic and implementation review.
 
 Until all gates pass, no provider may register this backend and Layergram must

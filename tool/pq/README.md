@@ -333,8 +333,16 @@ state validation, send, and receive through the candidate C ABI with
 AddressSanitizer. Its separate dependencies are test-only, permissively
 licensed, and recorded in `native/layergram_scka/fuzz/THIRD_PARTY_NOTICES.md`;
 they never enter the production crate lockfile or application packages. This
-local checkpoint is bounded and repeatable. Scheduled continuous campaigns
-and the independent audit remain required before production registration.
+local checkpoint is bounded and repeatable.
+
+`.github/workflows/scka-fuzz.yml` configures a daily Linux x64 campaign on the
+official repository. It uses a read-only token, immutable commits for the
+official GitHub Actions, a 600-second default per target, a 900-second manual
+ceiling, a one-hour job limit, an evolving cache containing only fuzz corpus
+inputs, and 30-day failure-reproducer retention. Pull requests and pushes do
+not execute the workflow. A hosted green run has not yet been collected from
+this branch, so recurring-run monitoring, failure triage, and the independent
+audit remain required before production registration.
 
 For the macOS packaged-scope smoke, `LAYERGRAM_SCKA_MACOS_SIGN_IDENTITY=-`
 applies an ad-hoc signature without Hardened Runtime because an ad-hoc identity

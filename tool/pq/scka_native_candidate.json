@@ -91,7 +91,26 @@
       ],
       "boundedMacosArm64": true,
       "boundedLinuxX64": true,
+      "scheduledCampaignConfigured": true,
+      "scheduledWorkflow": ".github/workflows/scka-fuzz.yml",
+      "scheduledRunner": "ubuntu-24.04",
+      "scheduledCronUtc": "47 2 * * *",
+      "defaultSecondsPerTarget": 600,
+      "maximumManualSecondsPerTarget": 900,
+      "jobTimeoutMinutes": 60,
+      "persistentCorpusCache": true,
+      "failureArtifactRetentionDays": 30,
+      "workflowContentsPermission": "read",
+      "untrustedPullRequestExecution": false,
+      "officialActionsPinnedByCommit": true,
+      "hostedGreenRunEvidence": false,
+      "operationallyVerified": false,
       "continuousCampaignRequired": true,
+      "workflowOnlyActionLicenses": [
+        "actions/checkout 7.0.1 — MIT",
+        "actions/cache 6.1.0 — MIT",
+        "actions/upload-artifact 7.0.1 — MIT"
+      ],
       "fuzzOnlyDependencyLicenses": [
         "arbitrary 1.4.2 — MIT OR Apache-2.0",
         "jobserver 0.1.35 — MIT OR Apache-2.0",
@@ -608,6 +627,7 @@
     "candidateDeterministicHostileCorpusAdded": true,
     "candidateAddressSanitizerCheckpointAdded": true,
     "candidateCoverageGuidedFuzzingCheckpointAdded": true,
+    "candidateScheduledCoverageGuidedFuzzingConfigured": true,
     "candidateIosPhysicalScopeSmokeAdded": true,
     "candidateAndroidPhysicalScopeSmokeAdded": true,
     "candidateAndroidAppBundleSmokeAdded": true,
@@ -619,7 +639,7 @@
     "independently review the frozen canonical LB3 plaintext state-machine payload, BM3 public-message codec, and opaque incremental-continuation version binding",
     "run upstream primitive vectors plus independent cross-implementation ML-KEM Braid vectors",
     "test signed installable artifacts for every shipped architecture; iOS has development-signed physical runtime evidence and Android has isolated Release-APK physical runtime evidence, neither of which replaces store-distribution verification",
-    "promote the bounded macOS/Linux checkpoint to scheduled continuous coverage-guided fuzzing campaigns and extend crash, rollback, replay, concurrency, resource, and secret-lifecycle coverage",
+    "collect and monitor recurring green runs from the configured scheduled coverage-guided fuzz workflow, retain and triage any reproducer, and extend crash, rollback, replay, concurrency, resource, and secret-lifecycle coverage",
     "obtain independent cryptographic and implementation review"
   ]
 }

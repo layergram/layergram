@@ -94,7 +94,33 @@ void main() {
     ]);
     expect(fuzzing['boundedMacosArm64'], isTrue);
     expect(fuzzing['boundedLinuxX64'], isTrue);
+    expect(fuzzing['scheduledCampaignConfigured'], isTrue);
+    expect(fuzzing['scheduledWorkflow'], '.github/workflows/scka-fuzz.yml');
+    expect(fuzzing['scheduledRunner'], 'ubuntu-24.04');
+    expect(fuzzing['scheduledCronUtc'], '47 2 * * *');
+    expect(fuzzing['defaultSecondsPerTarget'], 600);
+    expect(fuzzing['maximumManualSecondsPerTarget'], 900);
+    expect(fuzzing['jobTimeoutMinutes'], 60);
+    expect(fuzzing['persistentCorpusCache'], isTrue);
+    expect(fuzzing['failureArtifactRetentionDays'], 30);
+    expect(fuzzing['workflowContentsPermission'], 'read');
+    expect(fuzzing['untrustedPullRequestExecution'], isFalse);
+    expect(fuzzing['officialActionsPinnedByCommit'], isTrue);
+    expect(fuzzing['hostedGreenRunEvidence'], isFalse);
+    expect(fuzzing['operationallyVerified'], isFalse);
     expect(fuzzing['continuousCampaignRequired'], isTrue);
+    expect(fuzzing['workflowOnlyActionLicenses'], <String>[
+      'actions/checkout 7.0.1 — MIT',
+      'actions/cache 6.1.0 — MIT',
+      'actions/upload-artifact 7.0.1 — MIT',
+    ]);
+    for (final license
+        in (fuzzing['workflowOnlyActionLicenses'] as List<dynamic>)
+            .cast<String>()) {
+      expect(license, isNot(contains('AGPL')));
+      expect(license, isNot(contains('LGPL')));
+      expect(license, isNot(matches(RegExp(r'(^|[^A])GPL'))));
+    }
     for (final license
         in (fuzzing['fuzzOnlyDependencyLicenses'] as List<dynamic>)
             .cast<String>()) {
@@ -598,6 +624,10 @@ void main() {
       effects['candidateCoverageGuidedFuzzingCheckpointAdded'],
       isTrue,
     );
+    expect(
+      effects['candidateScheduledCoverageGuidedFuzzingConfigured'],
+      isTrue,
+    );
     expect(effects['candidateIosPhysicalScopeSmokeAdded'], isTrue);
     expect(effects['candidateAndroidPhysicalScopeSmokeAdded'], isTrue);
     expect(effects['candidateAndroidAppBundleSmokeAdded'], isTrue);
@@ -636,10 +666,74 @@ void main() {
     );
     expect(
       remainingGates.any(
-        (gate) => gate.contains('continuous coverage-guided fuzzing'),
+        (gate) => gate.contains('recurring green runs'),
       ),
       isTrue,
     );
+  });
+
+  test('SCKA scheduled fuzzing stays pinned and least privilege', () {
+    final workflow = File('.github/workflows/scka-fuzz.yml').readAsStringSync();
+    final notices = File(
+      'native/layergram_scka/fuzz/THIRD_PARTY_NOTICES.md',
+    ).readAsStringSync();
+
+    expect(workflow, contains('name: SCKA v3 scheduled fuzzing'));
+    expect(workflow, contains("cron: '47 2 * * *'"));
+    expect(workflow, contains('workflow_dispatch:'));
+    expect(workflow, isNot(contains('pull_request')));
+    expect(workflow, isNot(contains('\npush:')));
+    expect(workflow, contains('contents: read'));
+    expect(workflow, isNot(contains('contents: write')));
+    expect(workflow, isNot(contains('id-token: write')));
+    expect(workflow, isNot(contains('pull-requests: write')));
+    expect(
+      workflow,
+      contains("if: github.repository == 'layergram/layergram'"),
+    );
+    expect(workflow, contains('runs-on: ubuntu-24.04'));
+    expect(workflow, contains('timeout-minutes: 60'));
+    expect(workflow, contains('persist-credentials: false'));
+    expect(
+      workflow,
+      contains(
+        r"LAYERGRAM_SCKA_FUZZ_SECONDS: ${{ inputs.seconds_per_target || '600' }}",
+      ),
+    );
+    expect(workflow, contains('LAYERGRAM_SCKA_FUZZ_SECONDS > 900'));
+    expect(workflow, contains('tool/pq/test_scka_fuzz.sh'));
+    expect(workflow, contains('retention-days: 30'));
+    expect(workflow, contains(r'if: ${{ failure() }}'));
+    expect(
+      workflow,
+      contains(
+        'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1',
+      ),
+    );
+    expect(
+      workflow,
+      contains(
+        'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9',
+      ),
+    );
+    expect(
+      workflow,
+      contains(
+        'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a',
+      ),
+    );
+    expect(workflow, isNot(matches(RegExp(r'uses:\s+actions/[^@]+@v'))));
+    expect(
+      RegExp(
+        r'^\s*uses:\s+actions/[^@\s]+@[0-9a-f]{40}(?:\s+#.*)?$',
+        multiLine: true,
+      ).allMatches(workflow),
+      hasLength(3),
+    );
+    expect(notices, contains('actions/checkout'));
+    expect(notices, contains('actions/cache'));
+    expect(notices, contains('actions/upload-artifact'));
+    expect(notices, contains('not linked into'));
   });
 
   test('SCKA dependencies stay permissive and packaging remains opt-in', () {

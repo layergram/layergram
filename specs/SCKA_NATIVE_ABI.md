@@ -97,8 +97,11 @@ accepted non-`OK` path scrubs the fixed-capacity outputs. The pinned
 AddressSanitizer on the explicitly supported macOS/Linux host targets. The
 separate locked `native/layergram_scka/fuzz` package additionally drives state
 validation, send, and receive through this exact ABI under libFuzzer plus
-AddressSanitizer on macOS/Linux. This bounded engineering checkpoint is not a
-substitute for scheduled continuous campaigns, physical-device testing, or an
+AddressSanitizer on macOS/Linux. The official-repository workflow schedules the
+same locked harness daily on Linux x64 with a persistent public fuzz corpus,
+least-privilege read-only access, pinned official actions, bounded runtime, and
+failure-reproducer retention. Its configuration is not yet hosted-run evidence
+and is not a substitute for monitoring, physical-device testing, or an
 independent audit.
 
 ## 2. Stable state-sealing key
