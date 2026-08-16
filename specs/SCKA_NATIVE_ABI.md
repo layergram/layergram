@@ -273,21 +273,25 @@ Current candidate proof is:
 - iOS physical ARM64: a development-signed Release scope smoke executed on an
   iPhone 14 Pro Max running iOS 27.0, returned the exact success marker and
   exit code zero, and was removed after the test;
+- Android physical ARM64: an isolated Release scope smoke executed on a Huawei
+  SNE-LX1 running Android 10, returned the exact success marker and exit code
+  zero, and was removed after the test;
 - Linux x64 and Windows x64: packaged scope smoke executed from the final
   bundle location with exact exports; Linux also verifies RELRO/BIND_NOW.
 
 The macOS signature is a local developer verification, not a notarized release.
-Android physical-device execution, store archives, notarization, and every
-actually shipped ABI remain mandatory release gates. The physical iOS result
-is development-signing evidence and does not replace distribution signing.
+Store archives, notarization, and every actually shipped ABI remain mandatory
+release gates. The physical iOS and Android results are device-runtime evidence
+and do not replace distribution signing.
 
 When real native transitions exist, these compile-time checks are insufficient.
 Every shipped ABI must then run identical primitive/state-machine vectors,
 corruption, replay, rollback, loss/reorder/duplicate, concurrency, panic,
 allocation, wiping, sanitizer, fuzzing, restart, and packaged-app traversal.
 At least one physical iOS device and one physical Android device are mandatory;
-the iOS device checkpoint is now satisfied, while Android remains open. macOS
-success never substitutes for iOS evidence.
+both device checkpoints are now satisfied. macOS success never substitutes for
+iOS evidence, and an Android cross-build never substitutes for Android-device
+execution.
 
 ## 6. Activation gates
 

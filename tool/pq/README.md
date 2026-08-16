@@ -156,9 +156,19 @@ The physical script fails before building if `app.layergram.app` is already
 installed, so it cannot replace a real Layergram installation or its data. It
 requires an unlocked signing keychain and an existing development profile that
 contains the selected device. Its development signature is device-runtime
-evidence, not App Store distribution approval. Android physical-device
-execution remains a separate gate. Linux retains RELRO/BIND_NOW; Windows uses
-an executable-relative absolute DLL path. All generated native
+evidence, not App Store distribution approval. The corresponding Android gate
+builds a Release APK with a dedicated `app.layergram.sckasmoke` identifier,
+verifies its signature and exact native exports, executes it on an authorized
+non-emulator device, and removes it after the result:
+
+```sh
+LAYERGRAM_SCKA_ANDROID_PHYSICAL_DEVICE_ID=<adb-serial> \
+  tool/pq/test_scka_packaged_android_physical.sh
+```
+
+It never installs, uninstalls, or clears `app.layergram`; local APK signing is
+physical-runtime evidence, not Play Store signing approval. Linux retains
+RELRO/BIND_NOW; Windows uses an executable-relative absolute DLL path. All generated native
 artifacts live below ignored `.dart_tool` or Flutter build directories and are
 not committed. Android additionally requires the explicit
 `layergramSckaCandidatePackage` Gradle property set by its verification script,
@@ -166,7 +176,7 @@ so stale generated libraries cannot enter a later ordinary build.
 
 The Apple check builds separate static libraries for iOS device ARM64 and iOS
 simulator ARM64/x86_64. This is target-specific compilation evidence, not a
-simulator runtime test, physical-device test, or packaged-app integration.
+simulator runtime test or App Store distribution evidence.
 
 Build the packaged Android, Apple, and Windows artifacts on their respective
 hosts:

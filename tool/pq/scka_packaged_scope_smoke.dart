@@ -33,7 +33,10 @@ Future<void> main() async {
     if (markerPath != null && markerPath.isNotEmpty) {
       await File(markerPath).writeAsString('$marker\n', flush: true);
     }
-    stdout.writeln(marker);
+    // Flutter routes print through the Android engine log. Direct stdout is
+    // retained by desktop runners but is not observable through Android ADB.
+    // ignore: avoid_print
+    print(marker);
   } catch (error, stackTrace) {
     stderr.writeln(error);
     stderr.writeln(stackTrace);

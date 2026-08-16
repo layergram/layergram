@@ -12,6 +12,8 @@ val releaseStorePassword = keystoreProperties.getProperty("storePassword")
 val releaseKeyAlias = keystoreProperties.getProperty("keyAlias")
 val releaseKeyPassword = keystoreProperties.getProperty("keyPassword")
 val hasReleaseKeystore = keystorePropertiesFile.exists()
+val isLayergramSckaPhysicalSmoke =
+    providers.gradleProperty("layergramSckaPhysicalSmoke").orNull == "true"
 
 fun resolveKeystoreFile(path: String): File {
     val normalizedPath = if (path.startsWith("~/")) {
@@ -84,7 +86,11 @@ android {
     }
 
     defaultConfig {
-        applicationId = "app.layergram"
+        applicationId = if (isLayergramSckaPhysicalSmoke) {
+            "app.layergram.sckasmoke"
+        } else {
+            "app.layergram"
+        }
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
