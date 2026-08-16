@@ -293,6 +293,12 @@ then points at an ignored generated directory; Apple link flags, Linux bundle
 copying, and Windows DLL copying are supplied by verification scripts rather
 than production project registration.
 
+The Android bundle checkpoint also produces an isolated Release `.aab`,
+validates it with the Gradle-resolved bundletool, verifies its local JAR
+signature and protobuf manifest application ID, and rechecks the exact SCKA
+exports for every packaged ABI. It is store-shaped packaging evidence only;
+Play App Signing, upload, review, and production registration remain open.
+
 ## Remaining security gates
 
 - independently review the now-complete private revision-1 transition engine

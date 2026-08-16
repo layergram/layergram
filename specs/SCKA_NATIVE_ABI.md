@@ -266,6 +266,9 @@ Current candidate proof is:
 - Windows x64: Rust unit tests, release DLL, exact PE exports;
 - Android arm64-v8a, armeabi-v7a, and x86_64: release APK contains the exact
   allowlisted library for every tested ABI;
+- Android App Bundle: the isolated Release `.aab` passes bundletool validation,
+  has a locally valid JAR signature and `app.layergram.sckasmoke` manifest, and
+  contains the exact allowlisted library for all three Android ABIs;
 - macOS ARM64/x86_64: universal candidate linked into a locally signed smoke
   app and exercised through the persistence scope;
 - iOS simulator x86_64: packaged scope smoke executed; device ARM64 and
@@ -279,10 +282,11 @@ Current candidate proof is:
 - Linux x64 and Windows x64: packaged scope smoke executed from the final
   bundle location with exact exports; Linux also verifies RELRO/BIND_NOW.
 
-The macOS signature is a local developer verification, not a notarized release.
-Store archives, notarization, and every actually shipped ABI remain mandatory
-release gates. The physical iOS and Android results are device-runtime evidence
-and do not replace distribution signing.
+The macOS signature and Android App Bundle signature are local developer
+verification, not notarized or Play-signed releases. Store archives,
+notarization, and every actually shipped ABI remain mandatory release gates.
+The physical iOS and Android results are device-runtime evidence and do not
+replace distribution signing.
 
 When real native transitions exist, these compile-time checks are insufficient.
 Every shipped ABI must then run identical primitive/state-machine vectors,

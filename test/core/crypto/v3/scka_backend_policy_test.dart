@@ -74,6 +74,7 @@ void main() {
       'androidArm64PackagedInApk': true,
       'androidArmv7PackagedInApk': true,
       'androidX64PackagedInApk': true,
+      'androidReleaseAppBundleValidated': true,
       'androidPhysicalRuntime': true,
       'iosPhysicalRuntime': true,
     });
@@ -496,6 +497,10 @@ void main() {
     expect(composition['candidateIosSimulatorScopeRuntimeValidated'], isTrue);
     expect(composition['candidateIosPhysicalScopeRuntimeValidated'], isTrue);
     expect(composition['candidateAndroidExactApkAbiValidated'], isTrue);
+    expect(
+      composition['candidateAndroidReleaseAppBundleValidated'],
+      isTrue,
+    );
     expect(composition['candidateLinuxScopeRuntimeValidated'], isTrue);
     expect(composition['candidateWindowsScopeRuntimeValidated'], isTrue);
     expect(composition['candidateAbiDisjointRangeValidation'], isTrue);
@@ -555,6 +560,7 @@ void main() {
     expect(effects['candidateAddressSanitizerCheckpointAdded'], isTrue);
     expect(effects['candidateIosPhysicalScopeSmokeAdded'], isTrue);
     expect(effects['candidateAndroidPhysicalScopeSmokeAdded'], isTrue);
+    expect(effects['candidateAndroidAppBundleSmokeAdded'], isTrue);
     expect(effects['pubspecChanged'], isFalse);
     expect(effects['protocolV3Activated'], isFalse);
 
@@ -765,6 +771,25 @@ void main() {
     expect(androidPhysicalTool, contains('layergramSckaPhysicalSmoke=true'));
     expect(androidPhysicalTool, contains('ro.kernel.qemu'));
     expect(androidPhysicalTool, isNot(contains('uninstall app.layergram\n')));
+    final androidBundleTool = File(
+      'tool/pq/test_scka_packaged_android_bundle.sh',
+    ).readAsStringSync();
+    expect(
+      androidBundleTool,
+      contains('flutter build appbundle --release'),
+    );
+    expect(
+      androidBundleTool,
+      contains(
+        'AAB=\$REPO_ROOT/build/app/outputs/bundle/release/app-release.aab',
+      ),
+    );
+    expect(androidBundleTool, contains('PACKAGE_ID=app.layergram.sckasmoke'));
+    expect(androidBundleTool, contains('layergramSckaCandidatePackage=true'));
+    expect(androidBundleTool, contains('layergramSckaPhysicalSmoke=true'));
+    expect(androidBundleTool, contains('BundleToolMain'));
+    expect(androidBundleTool, contains('jarsigner -verify'));
+    expect(androidBundleTool, isNot(contains('app.layergram\n')));
     final mainEntry = File('lib/main.dart').readAsStringSync();
     expect(mainEntry, isNot(contains('openPackagedScka')));
     expect(mainEntry, isNot(contains('scka_candidate_ffi')));
@@ -775,6 +800,7 @@ void main() {
       'tool/pq/test_scka_packaged_ios_physical.sh',
       'tool/pq/test_scka_packaged_android.sh',
       'tool/pq/test_scka_packaged_android_physical.sh',
+      'tool/pq/test_scka_packaged_android_bundle.sh',
       'tool/pq/test_scka_packaged_linux.sh',
       'tool/pq/test_scka_packaged_windows.ps1',
     ]) {

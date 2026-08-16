@@ -174,6 +174,19 @@ not committed. Android additionally requires the explicit
 `layergramSckaCandidatePackage` Gradle property set by its verification script,
 so stale generated libraries cannot enter a later ordinary build.
 
+The separate App Bundle gate exercises the Play Store-shaped `.aab` container
+without uploading or publishing it:
+
+```sh
+tool/pq/test_scka_packaged_android_bundle.sh
+```
+
+It builds only the isolated `app.layergram.sckasmoke` application, validates
+the bundle with the bundletool already resolved by the Android Gradle Plugin,
+verifies the local JAR signature, reads the protobuf manifest, and checks the
+exact SCKA export allowlist for all three Android ABIs. This is local bundle
+structure evidence, not Play App Signing or store review evidence.
+
 The Apple check builds separate static libraries for iOS device ARM64 and iOS
 simulator ARM64/x86_64. This is target-specific compilation evidence, not a
 simulator runtime test or App Store distribution evidence.

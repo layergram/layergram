@@ -69,6 +69,7 @@
       "androidArm64PackagedInApk": true,
       "androidArmv7PackagedInApk": true,
       "androidX64PackagedInApk": true,
+      "androidReleaseAppBundleValidated": true,
       "androidPhysicalRuntime": true,
       "iosPhysicalRuntime": true
     },
@@ -519,6 +520,7 @@
     "candidateIosSimulatorScopeRuntimeValidated": true,
     "candidateIosPhysicalScopeRuntimeValidated": true,
     "candidateAndroidExactApkAbiValidated": true,
+    "candidateAndroidReleaseAppBundleValidated": true,
     "candidateLinuxScopeRuntimeValidated": true,
     "candidateWindowsScopeRuntimeValidated": true,
     "candidateAbiDisjointRangeValidation": true,
@@ -579,6 +581,7 @@
     "candidateAddressSanitizerCheckpointAdded": true,
     "candidateIosPhysicalScopeSmokeAdded": true,
     "candidateAndroidPhysicalScopeSmokeAdded": true,
+    "candidateAndroidAppBundleSmokeAdded": true,
     "protocolV3Activated": false
   },
   "remainingGates": [
