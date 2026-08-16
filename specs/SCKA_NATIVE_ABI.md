@@ -35,7 +35,7 @@ The authoritative public header is
 |---|---:|
 | ABI version | 1 |
 | ML-KEM Braid protocol revision | 1 |
-| state format | 1 |
+| state format | 2 |
 | suite | Layergram v3 suite 1 / ML-KEM-768 |
 | session ID | 16 bytes |
 | state-sealing key | 32 bytes |
@@ -45,7 +45,7 @@ The authoritative public header is
 | minimum state export | 97 bytes |
 | maximum state export | 196,608 bytes |
 | state header | 80 bytes |
-| AES-256-GCM tag | 16 bytes |
+| AES-256-GCM-SIV tag | 16 bytes |
 
 The initiator is ML-KEM Braid's initial sending participant (`InitAlice` in the
 public specification); the responder is its initial receiving participant
@@ -104,14 +104,14 @@ still forbidden until the remaining implementation and audit gates pass.
 ## 3. Canonical `LS3` authenticated state export
 
 All integers use unsigned big-endian encoding. Epochs and revisions are limited
-to `0..2^63-1`. The exact 80-byte header is AES-256-GCM additional authenticated
+to `0..2^63-1`. The exact 80-byte header is AES-256-GCM-SIV additional authenticated
 data. The encrypted payload is the canonical backend state-machine encoding;
 the 16-byte authentication tag is appended after its ciphertext.
 
 | Offset | Bytes | Field |
 |---:|---:|---|
 | 0 | 3 | magic `LS3` |
-| 3 | 1 | state format `0x01` |
+| 3 | 1 | state format `0x02` |
 | 4 | 1 | suite `0x01` |
 | 5 | 1 | stable role: initiator `0x01`, responder `0x02` |
 | 6 | 2 | flags, zero |
@@ -125,19 +125,22 @@ the 16-byte authentication tag is appended after its ciphertext.
 | 52 | 8 | receiving-epoch high-water value |
 | 60 | 12 | state-sealing nonce |
 | 72 | 8 | reserved zeros |
-| 80 | N | AES-256-GCM ciphertext, `1..196512` bytes |
-| 80+N | 16 | AES-256-GCM authentication tag |
+| 80 | N | AES-256-GCM-SIV ciphertext, `1..196512` bytes |
+| 80+N | 16 | AES-256-GCM-SIV authentication tag |
 
 The private composition derives the nonce as the exact 12 bytes
 `"LN3" || role_u8 || state_revision_u64_be`. Both roles share the state-sealing
 key, so the role byte creates disjoint nonce spaces and the signed-63 revision
 is injective within each space. The lower-level `state_envelope` module accepts
-that exact caller-owned nonce, uses the full 80-byte header as AES-256-GCM AAD,
-authenticates before returning a zeroizing plaintext owner, and enforces every
-fixed field and size bound. It is not called by the ABI and does not generate
-randomness. A candidate must be sealed once and its exact bytes persisted;
-retry never reseals the same logical
-revision. The complete implementation must reject malformed length arithmetic,
+that exact caller-owned nonce, uses the full 80-byte header as AES-256-GCM-SIV
+AAD, authenticates before returning a zeroizing plaintext owner, and enforces
+every fixed field and size bound. AES-GCM-SIV is the RFC 8452 nonce-misuse-
+resistant construction: divergent plaintext at the same role and revision
+cannot trigger AES-GCM's catastrophic nonce-reuse failure. It may still reveal
+whether candidate plaintexts are equal, so a candidate must be sealed once,
+persisted exactly, and retried from its stored bytes. It is not called by the
+ABI and does not generate randomness. The complete implementation must reject
+malformed length arithmetic,
 unsupported values, non-zero reserved fields, wrong session/role, an
 authentication failure, counter exhaustion, and any mismatch between header
 and decrypted state semantics.
@@ -249,6 +252,7 @@ The backend remains unregistrable until all of the following are complete:
 - per-platform production linking with an exact implementation-ID allowlist;
 - full security testing and an independent cryptographic/implementation audit.
 
-Changing a frozen function signature, status meaning, header field, or
-authenticated binding requires ABI/state format v2. Until then, the only safe
+Changing a frozen function signature, status meaning, header field, algorithm,
+or authenticated binding after this inactive state-format-v2 checkpoint
+requires a new ABI/state format. Until activation, the only safe
 runtime outcome from this crate is `LG_SCKA_V1_ERR_NOT_READY`.

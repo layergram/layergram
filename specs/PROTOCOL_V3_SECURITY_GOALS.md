@@ -16,7 +16,8 @@ RFC 2119.
 Protocol v3 assumes:
 
 - the user controls an uncompromised Layergram process while it is unlocked;
-- the platform CSPRNG, X25519 implementation, SHA-2, HKDF, AES-256-GCM, and the
+- the platform CSPRNG, X25519 implementation, SHA-2, HKDF, AES-256-GCM for LMF,
+  AES-256-GCM-SIV for local SCKA state, and the
   pinned ML-KEM-768 implementation behave according to their specifications;
 - users verify a contact's complete v3 fingerprint or SAS through an
   independent channel before treating the contact as authenticated;

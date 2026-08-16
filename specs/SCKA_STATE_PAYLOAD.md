@@ -1,7 +1,7 @@
 # Layergram ML-KEM Braid state payload revision 1
 
-Status: **canonical internal payload frozen; state transitions and public ABI
-connection not implemented; protocol v3 inactive**
+Status: **canonical internal payload frozen and used by private transitions
+1-13; public ABI connection not implemented; protocol v3 inactive**
 
 This document freezes the plaintext state-machine representation carried inside
 the authenticated `LS3` envelope defined by `SCKA_NATIVE_ABI.md`. The Apache-2.0
@@ -14,11 +14,10 @@ embedded. The codec introduces no dependency and is suitable for the public
 Layergram base that is merged into the separately distributed paid Premium
 application.
 
-This checkpoint does not implement `Send`, `Receive`, entropy acquisition, or
-any C ABI operation. The ratcheted authenticator and canonical public-message
-codec are frozen separately but remain disconnected. Native
-self-test and all correctly shaped public operations continue to return
-`NOT_READY`.
+The private authenticated composition implements `Send` and `Receive` across
+transitions 1-13 and uses the private OS-entropy boundary where required. No C
+ABI operation is connected. Native self-test and all correctly shaped public
+operations continue to return `NOT_READY`.
 
 ## 1. Authenticated composition
 
@@ -33,7 +32,7 @@ The duplication is deliberate. A future transition must:
 1. authenticate and open `LS3`;
 2. decode `LB3` against the metadata returned by that exact open operation;
 3. build one immutable candidate state;
-4. seal that candidate once with the injective
+4. seal that candidate once with nonce-misuse-resistant AES-256-GCM-SIV and the injective
    `"LN3" || role_u8 || state_revision_u64_be` nonce; and
 5. atomically commit it with the matching TR3 revision and application effect.
 

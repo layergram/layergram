@@ -3,16 +3,17 @@
 
 //! Inactive authenticated `LS3` state envelope.
 //!
-//! This module freezes and enforces the outer AES-256-GCM container described
+//! This module freezes and enforces the outer AES-256-GCM-SIV container described
 //! in `specs/SCKA_NATIVE_ABI.md`. It deliberately does not define the inner
 //! ML-KEM Braid state-machine payload and is not connected to the public C ABI.
-//! Callers must supply an exact 96-bit nonce under their own uniqueness policy,
-//! persist the returned bytes exactly once, and semantically validate the
-//! decrypted payload before accepting it as a candidate transition. The private
-//! authenticated composition uses an injective role-and-revision nonce.
+//! Callers supply the exact deterministic 96-bit role-and-revision nonce and
+//! must persist the returned bytes exactly once. AES-GCM-SIV prevents a
+//! divergent recomputation at the same revision from causing AES-GCM's
+//! catastrophic nonce-reuse failure; exact durable retry remains mandatory.
+//! The decrypted payload must be semantically validated before acceptance.
 
-use aes_gcm::aead::{AeadInPlace, KeyInit};
-use aes_gcm::{Aes256Gcm, Nonce, Tag};
+use aes_gcm_siv::aead::{AeadInPlace, KeyInit};
+use aes_gcm_siv::{Aes256GcmSiv, Nonce, Tag};
 use zeroize::Zeroize;
 
 use crate::{
@@ -25,7 +26,7 @@ pub(crate) const MAX_PAYLOAD_BYTES: usize =
     MAX_STATE_BYTES as usize - STATE_HEADER_BYTES as usize - STATE_TAG_BYTES as usize;
 
 const MAGIC: &[u8; 3] = b"LS3";
-const STATE_FORMAT: u8 = 1;
+const STATE_FORMAT: u8 = 2;
 const SUITE: u8 = 1;
 const PROTOCOL_REVISION: u16 = 1;
 
@@ -179,7 +180,7 @@ pub(crate) fn seal(
     header[NONCE_OFFSET..RESERVED_OFFSET].copy_from_slice(nonce);
 
     let mut checked_key = exact_array::<{ STATE_KEY_BYTES as usize }>(state_key)?;
-    let cipher_result = Aes256Gcm::new_from_slice(&checked_key);
+    let cipher_result = Aes256GcmSiv::new_from_slice(&checked_key);
     checked_key.zeroize();
     let cipher = cipher_result.map_err(|_| StateEnvelopeError::PrimitiveFailure)?;
 
@@ -236,7 +237,7 @@ pub(crate) fn open(
     let nonce = Nonce::from_slice(&header[NONCE_OFFSET..RESERVED_OFFSET]);
 
     let mut checked_key = exact_array::<{ STATE_KEY_BYTES as usize }>(state_key)?;
-    let cipher_result = Aes256Gcm::new_from_slice(&checked_key);
+    let cipher_result = Aes256GcmSiv::new_from_slice(&checked_key);
     checked_key.zeroize();
     let cipher = cipher_result.map_err(|_| StateEnvelopeError::PrimitiveFailure)?;
     if cipher
@@ -291,10 +292,11 @@ fn parse_header(
 
     let total_length = read_u32(header, TOTAL_LENGTH_OFFSET) as usize;
     let ciphertext_length = read_u32(header, CIPHERTEXT_LENGTH_OFFSET) as usize;
-    if total_length != encoded_length
-        || ciphertext_length + STATE_HEADER_BYTES as usize + STATE_TAG_BYTES as usize
-            != total_length
-    {
+    let expected_total_length = ciphertext_length
+        .checked_add(STATE_HEADER_BYTES as usize)
+        .and_then(|length| length.checked_add(STATE_TAG_BYTES as usize))
+        .ok_or(StateEnvelopeError::InvalidLength)?;
+    if total_length != encoded_length || expected_total_length != total_length {
         return Err(StateEnvelopeError::InvalidLength);
     }
     validate_payload_length(ciphertext_length)?;
@@ -386,7 +388,7 @@ mod tests {
                 STATE_HEADER_BYTES as usize + payload.len() + 16
             );
             assert_eq!(&sealed[..3], b"LS3");
-            assert_eq!(sealed[FORMAT_OFFSET], 1);
+            assert_eq!(sealed[FORMAT_OFFSET], 2);
             assert_eq!(sealed[SUITE_OFFSET], 1);
             assert_eq!(sealed[ROLE_OFFSET], role as u8);
             assert_eq!(read_u16(&sealed, HEADER_LENGTH_OFFSET), 80);
@@ -442,6 +444,45 @@ mod tests {
             open(StateRole::Initiator, &SESSION, &KEY, 6, &sealed),
             Err(StateEnvelopeError::StateRevision)
         ));
+    }
+
+    #[test]
+    fn gcm_siv_opens_divergent_same_revision_candidates_without_nonce_failure() {
+        let first = seal(
+            metadata(StateRole::Initiator),
+            &KEY,
+            &NONCE,
+            b"first randomized candidate",
+        )
+        .unwrap();
+        let second = seal(
+            metadata(StateRole::Initiator),
+            &KEY,
+            &NONCE,
+            b"second randomized candidate",
+        )
+        .unwrap();
+
+        assert_eq!(
+            &first[NONCE_OFFSET..RESERVED_OFFSET],
+            &second[NONCE_OFFSET..RESERVED_OFFSET],
+        );
+        assert_ne!(
+            &first[STATE_HEADER_BYTES as usize..],
+            &second[STATE_HEADER_BYTES as usize..],
+        );
+        assert_eq!(
+            open(StateRole::Initiator, &SESSION, &KEY, 7, &first)
+                .unwrap()
+                .payload(),
+            b"first randomized candidate",
+        );
+        assert_eq!(
+            open(StateRole::Initiator, &SESSION, &KEY, 7, &second)
+                .unwrap()
+                .payload(),
+            b"second randomized candidate",
+        );
     }
 
     #[test]
@@ -537,6 +578,27 @@ mod tests {
             Err(StateEnvelopeError::InvalidLength)
         ));
 
+        let mut impossible_ciphertext = sealed.clone();
+        impossible_ciphertext[CIPHERTEXT_LENGTH_OFFSET..SESSION_ID_OFFSET]
+            .copy_from_slice(&u32::MAX.to_be_bytes());
+        assert!(matches!(
+            open(
+                StateRole::Initiator,
+                &SESSION,
+                &KEY,
+                7,
+                &impossible_ciphertext
+            ),
+            Err(StateEnvelopeError::InvalidLength)
+        ));
+
+        let mut legacy_format = sealed.clone();
+        legacy_format[FORMAT_OFFSET] = 1;
+        assert!(matches!(
+            open(StateRole::Initiator, &SESSION, &KEY, 7, &legacy_format),
+            Err(StateEnvelopeError::InvalidMetadata)
+        ));
+
         let mut reserved = sealed;
         reserved[RESERVED_OFFSET] = 1;
         assert!(matches!(
@@ -546,16 +608,19 @@ mod tests {
     }
 
     #[test]
-    fn aes_256_gcm_configuration_matches_nist_zero_vector() {
-        let key = [0_u8; 32];
-        let nonce = [0_u8; 12];
-        let mut plaintext = [0_u8; 16];
-        let cipher = Aes256Gcm::new_from_slice(&key).unwrap();
+    fn aes_256_gcm_siv_matches_rfc_8452_vector() {
+        let mut key = [0_u8; 32];
+        key[0] = 1;
+        let mut nonce = [0_u8; 12];
+        nonce[0] = 3;
+        let mut plaintext = [0_u8; 8];
+        plaintext[0] = 1;
+        let cipher = Aes256GcmSiv::new_from_slice(&key).unwrap();
         let tag = cipher
             .encrypt_in_place_detached(Nonce::from_slice(&nonce), b"", &mut plaintext)
             .unwrap();
-        assert_eq!(hex(&plaintext), "cea7403d4d606b6e074ec5d3baf39d18");
-        assert_eq!(hex(&tag), "d0d1c8a799996bf0265b98b5d48ab919");
+        assert_eq!(hex(&plaintext), "c2ef328e5c71c83b");
+        assert_eq!(hex(&tag), "843122130f7364b761e0b97427e3df28");
     }
 
     fn hex(bytes: &[u8]) -> String {

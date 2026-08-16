@@ -340,8 +340,9 @@ current and skipped-future no-ops, role switching, authenticator preservation,
 deterministic `KeysUnsampled` output, encoder/revision exhaustion, and maximum
 epoch no-wrap behavior.
 `SCKA_AUTHENTICATED_COMPOSITION.md` freezes the private LS3/LB3/BM3 boundary,
-including exact sealed-candidate re-export, semantic inner validation, fresh
-role-and-revision state nonces, and a sealed two-party epoch-key agreement test. It does not yet
+including exact sealed-candidate re-export, semantic inner validation,
+deterministic role-and-revision state nonces under nonce-misuse-resistant
+AES-256-GCM-SIV, and a sealed two-party epoch-key agreement test. It does not yet
 connect native candidates to the existing durable send/receive journals; that
 atomic LS3/TR3/outbox composition remains activation-blocking.
 

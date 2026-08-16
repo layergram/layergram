@@ -28,8 +28,9 @@ message becomes visible to a share sheet or external carrier.
 
 Initialization performs `InitAlice` or `InitBob`, derives the exact 12-byte
 state nonce `"LN3" || role_u8 || state_revision_u64_be`, and seals the canonical
-revision-zero `LB3` payload as `LS3` under the separately derived 32-byte state
-key. It emits no public message or epoch output.
+revision-zero `LB3` payload as state-format-v2 `LS3` under the separately
+derived 32-byte state key with AES-256-GCM-SIV. It emits no public message or
+epoch output.
 
 Validation performs this exact order:
 
@@ -103,11 +104,12 @@ erasure symbol only from the previously committed successor state.
 
 Both participants use the same session state-sealing key. The stable role byte
 separates their nonce spaces, while the signed-63 revision is injective within
-each role. Because recomputing one randomized transition for the same role and
-revision could produce divergent plaintext under the same deterministic nonce,
-the future serialized durable authority MUST persist the exact candidate before
-another transition can observe that prior revision. Retry re-exports those
-exact bytes and never invokes the transition again.
+each role. AES-256-GCM-SIV prevents a divergent same-revision recomputation from
+causing AES-GCM's catastrophic nonce-reuse failure. It does not make repeated
+candidate generation desirable: the future serialized durable authority MUST
+persist the exact candidate before another transition can observe that prior
+revision. Retry re-exports those exact bytes and never invokes the transition
+again.
 
 The current Dart v3 journals already model exact-byte outbox recovery, but this
 private Rust composition is not connected to them. Atomic LS3/TR3/outbox
@@ -121,8 +123,10 @@ restart validation, deterministic role-and-revision nonce separation,
 transition-entropy failure before candidate exposure, and a two-party run
 through sealed states that reaches matching epoch outputs.
 
-This checkpoint adds no dependency. The crate and new source remain
-Apache-2.0. Existing pinned dependencies use the permissive commercial paths
+This checkpoint pins RustCrypto `aes-gcm-siv` 0.11.1 and `aes` 0.8.4 with its
+`zeroize` feature under their Apache-2.0 licensing alternatives. The crate and
+Layergram-owned source remain Apache-2.0.
+All pinned dependencies use the permissive commercial paths
 recorded in `native/layergram_scka/THIRD_PARTY_NOTICES.md` and
 `tool/pq/scka_native_candidate.json`. Signal's AGPL implementation remains
 excluded; this is an independent implementation of the public-domain protocol

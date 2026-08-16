@@ -42,11 +42,11 @@ void main() {
     expect(scaffold['crate'], 'layergram-scka');
     expect(scaffold['license'], 'Apache-2.0');
     expect(scaffold['rustVersion'], '1.87.0');
-    expect(scaffold['cargoLockPackageCount'], 98);
+    expect(scaffold['cargoLockPackageCount'], 97);
     expect(scaffold['thirdPartyDependencies'], hasLength(8));
     expect(scaffold['abiVersion'], 1);
     expect(scaffold['protocolRevision'], 1);
-    expect(scaffold['stateFormatVersion'], 1);
+    expect(scaffold['stateFormatVersion'], 2);
     expect(scaffold['runtimeStatus'], 'not-ready-not-registered-not-linked');
 
     final primitive =
@@ -106,11 +106,16 @@ void main() {
 
     final envelopePrimitive =
         receipt['authenticatedStateEnvelopePrimitive'] as Map<String, dynamic>;
-    expect(envelopePrimitive['crate'], 'aes-gcm');
-    expect(envelopePrimitive['version'], '0.10.3');
+    expect(envelopePrimitive['crate'], 'aes-gcm-siv');
+    expect(envelopePrimitive['version'], '0.11.1');
     expect(envelopePrimitive['selectedLicense'], 'Apache-2.0');
     expect(envelopePrimitive['defaultFeatures'], isFalse);
-    expect(envelopePrimitive['features'], <String>['aes', 'zeroize']);
+    expect(envelopePrimitive['features'], <String>['aes', 'alloc']);
+    expect(envelopePrimitive['aesRoundKeyZeroizationFeature'], isTrue);
+    expect(
+      envelopePrimitive['nonceMisuseResistance'],
+      'RFC 8452 AES-256-GCM-SIV',
+    );
     for (final license in (envelopePrimitive['runtimeOrBuildDependencyLicenses']
             as List<dynamic>)
         .cast<String>()) {
@@ -190,14 +195,19 @@ void main() {
 
     final envelope = receipt['layergramOwnedAuthenticatedStateEnvelope']
         as Map<String, dynamic>;
-    expect(envelope['algorithm'], 'AES-256-GCM');
+    expect(envelope['algorithm'], 'AES-256-GCM-SIV');
+    expect(envelope['stateFormatVersion'], 2);
     expect(envelope['headerBytes'], 80);
     expect(envelope['nonceBytes'], 12);
     expect(envelope['tagBytes'], 16);
     expect(envelope['maximumPayloadBytes'], 196512);
     expect(envelope['headerIsAad'], isTrue);
     expect(envelope['callerSuppliesExactNonce'], isTrue);
-    expect(envelope['compositionEnforcesDeterministicNonceUniqueness'], isTrue);
+    expect(envelope['compositionUsesDeterministicRoleRevisionNonce'], isTrue);
+    expect(
+      envelope['sameNonceDivergentPlaintextCatastropheResistant'],
+      isTrue,
+    );
     expect(envelope.containsKey('callerSuppliesFreshOsCsprngNonce'), isFalse);
     expect(envelope['publicAbiConnected'], isFalse);
     expect(envelope['privateAuthenticatedCompositionConnected'], isTrue);
@@ -503,8 +513,8 @@ void main() {
     expect(
       manifest,
       contains(
-        'aes-gcm = { version = "=0.10.3", default-features = false, '
-        'features = ["aes", "zeroize"] }',
+        'aes-gcm-siv = { version = "=0.11.1", default-features = false, '
+        'features = ["aes", "alloc"] }',
       ),
     );
     expect(
@@ -541,9 +551,10 @@ void main() {
     );
     expect(
       RegExp(r'^\[\[package\]\]$', multiLine: true).allMatches(lock),
-      hasLength(98),
+      hasLength(97),
     );
-    expect(lock, contains('name = "aes-gcm"'));
+    expect(lock, contains('name = "aes-gcm-siv"'));
+    expect(lock, isNot(contains('name = "aes-gcm"\n')));
     expect(lock, contains('name = "aes"'));
     expect(lock, contains('name = "getrandom"'));
     expect(lock, contains('name = "hkdf"'));
@@ -577,6 +588,7 @@ void main() {
       'native/layergram_scka/THIRD_PARTY_NOTICES.md',
     ).readAsStringSync();
     expect(notices, contains('libcrux-ml-kem'));
+    expect(notices, contains('aes-gcm-siv'));
     expect(notices, contains('hkdf'));
     expect(notices, contains('hmac'));
     expect(notices, contains('getrandom'));
@@ -634,10 +646,12 @@ void main() {
     expect(source, contains('pub(crate) struct EncapsulationStarted'));
     expect(source, contains('pub(crate) struct EncapsulationPartTwo'));
     expect(source, contains('pub(crate) fn into_pending(self)'));
-    expect(
-      File('native/layergram_scka/src/state_envelope.rs').readAsStringSync(),
-      contains('decrypt_in_place_detached'),
-    );
+    final stateEnvelope = File(
+      'native/layergram_scka/src/state_envelope.rs',
+    ).readAsStringSync();
+    expect(stateEnvelope, contains('Aes256GcmSiv'));
+    expect(stateEnvelope, contains('const STATE_FORMAT: u8 = 2;'));
+    expect(stateEnvelope, contains('decrypt_in_place_detached'));
     expect(
       File('specs/SCKA_INCREMENTAL_MLKEM.md').readAsStringSync(),
       contains('v3 inactive'),

@@ -91,7 +91,7 @@ separately implemented `mlkem-native` known-answer vector. It remains unused by
 every exported SCKA operation; self-test and all shaped state operations still
 return `NOT_READY`.
 
-The same inactive crate implements the frozen outer `LS3` AES-256-GCM container
+The same inactive crate implements the frozen outer `LS3` AES-256-GCM-SIV container
 behind an internal module. It validates exact header fields, lengths,
 role/session/revision bindings, signed-63 counters, AAD, ciphertext, and tag,
 and returns decrypted bytes only through a zeroizing owner. The lower-level
@@ -210,10 +210,12 @@ proprietary Premium combination must all remain acceptable.
 
 ## Authenticated state-envelope primitive, inactive internal adoption
 
-The `LS3` implementation pins `aes-gcm` 0.10.3 with default features disabled
-and only `aes,zeroize` enabled. It also pins `aes` 0.8.4 with its `zeroize`
-feature so the software and hardware-specific AES key schedules implement
-best-effort cleanup on drop. Both crates offer an Apache-2.0 licensing path.
+The `LS3` implementation pins `aes-gcm-siv` 0.11.1 with default features
+disabled and only `aes,alloc` enabled. It additionally pins `aes` 0.8.4 with
+its `zeroize` feature so Cargo feature unification enables best-effort erasure
+of expanded AES round keys when the envelope cipher is dropped. RustCrypto's
+applicable key and owned buffer types use the pinned `zeroize` graph for
+best-effort cleanup. Both crates offer an Apache-2.0 licensing path.
 
 The applicable graph adds only Apache-2.0/MIT-compatible packages plus
 `subtle` 2.6.1 under BSD-3-Clause. The exact BSD text is retained at
@@ -224,11 +226,13 @@ notice requirements are preserved, but this remains an engineering review and
 not legal advice.
 
 The internal envelope API still accepts a caller-supplied nonce. The private
-composition now derives an injective 96-bit nonce as
+composition derives an injective 96-bit nonce as
 `"LN3" || role_u8 || state_revision_u64_be`; the shared state key therefore has
-disjoint initiator/responder nonce spaces and no random-collision budget. The
-future durable authority must still ensure one seal per logical role/revision,
-persist the exact candidate before advancing, and re-export those bytes without
+disjoint initiator/responder nonce spaces and no random-collision budget.
+RFC 8452 AES-GCM-SIV prevents a divergent same-revision recomputation from
+causing AES-GCM's catastrophic nonce-reuse failure. The future durable
+authority must still ensure one logical candidate per role/revision, persist
+the exact candidate before advancing, and re-export those bytes without
 rerunning a randomized transition.
 
 ## Ratcheted-authenticator primitives, inactive internal adoption

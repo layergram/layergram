@@ -27,7 +27,7 @@ mod state_envelope;
 
 pub const ABI_VERSION: u32 = 1;
 pub const PROTOCOL_REVISION: u32 = 1;
-pub const STATE_FORMAT_VERSION: u32 = 1;
+pub const STATE_FORMAT_VERSION: u32 = 2;
 pub const SESSION_ID_BYTES: u64 = 16;
 pub const STATE_KEY_BYTES: u64 = 32;
 pub const SHARED_SECRET_BYTES: u64 = 32;
@@ -345,7 +345,7 @@ mod tests {
     fn metadata_is_frozen_and_scaffold_cannot_activate() {
         assert_eq!(lg_scka_v1_abi_version(), 1);
         assert_eq!(lg_scka_v1_protocol_revision(), 1);
-        assert_eq!(lg_scka_v1_state_format_version(), 1);
+        assert_eq!(lg_scka_v1_state_format_version(), 2);
         assert_eq!(lg_scka_v1_session_id_bytes(), 16);
         assert_eq!(lg_scka_v1_state_key_bytes(), 32);
         assert_eq!(lg_scka_v1_epoch_secret_bytes(), 32);

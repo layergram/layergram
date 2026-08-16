@@ -10,7 +10,7 @@ dual licensed. The complete Apache License 2.0 text is the repository root
 
 | Package | Version | Selected licensing path |
 |---|---:|---|
-| `aes-gcm` | 0.10.3 | Apache-2.0 alternative |
+| `aes-gcm-siv` | 0.11.1 | Apache-2.0 alternative |
 | `aead` | 0.5.2 | Apache-2.0 alternative |
 | `aes` | 0.8.4 | Apache-2.0 alternative |
 | `block-buffer` | 0.10.4 | Apache-2.0 alternative |
@@ -22,7 +22,6 @@ dual licensed. The complete Apache License 2.0 text is the repository root
 | `digest` | 0.10.7 | Apache-2.0 alternative |
 | `generic-array` | 0.14.7 | MIT |
 | `getrandom` | 0.4.3 | Apache-2.0 alternative |
-| `ghash` | 0.5.1 | Apache-2.0 alternative |
 | `hkdf` | 0.12.4 | Apache-2.0 alternative |
 | `hmac` | 0.12.1 | Apache-2.0 alternative |
 | `inout` | 0.1.4 | Apache-2.0 alternative |
@@ -50,6 +49,15 @@ dual licensed. The complete Apache License 2.0 text is the repository root
 | `r-efi` | 6.0.0 | Apache-2.0 alternative |
 | `sha2` | 0.10.9 | Apache-2.0 alternative |
 | `zeroize` | 1.8.1 | Apache-2.0 alternative |
+
+The LS3 state envelope uses `aes-gcm-siv` 0.11.1 under its Apache-2.0
+alternative. This RFC 8452 construction replaces the earlier AES-GCM
+candidate so a divergent same-revision recomputation cannot cause AES-GCM's
+catastrophic nonce-reuse failure. Its applicable graph is the permissive
+`aead`, `aes`, `cipher`, `ctr`, `polyval`, `subtle`, and `zeroize` graph listed
+above. The crate also pins `aes` 0.8.4 directly with its `zeroize` feature so
+Cargo feature unification enables best-effort erasure of expanded AES round
+keys when the envelope cipher is dropped.
 
 The normal/build ratcheted-authenticator graph adds `hkdf` 0.12.4 and `hmac`
 0.12.1 and promotes the already locked `sha2` 0.10.9, `block-buffer` 0.10.4,
