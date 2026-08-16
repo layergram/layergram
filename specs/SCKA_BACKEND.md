@@ -309,7 +309,10 @@ Play App Signing, upload, review, and production registration remain open.
   reordering, loss, duplication, and offline recovery;
 - test state corruption, replay, crash windows, rollback, allocation limits,
   panic containment, wiping, and concurrent calls;
-- retain the bounded deterministic hostile corpus, macOS/Linux
+- retain the bounded deterministic hostile corpus and fixed-schedule stateful
+  ABI campaign across concurrent sessions, carrier loss/reordering/replay,
+  exact-state restart, stale-revision rejection, and epoch-key agreement;
+  retain the macOS/Linux
   AddressSanitizer checkpoint, and locked state-validation/send/receive
   coverage-guided fuzz harnesses; collect and monitor recurring green runs from
   the configured scheduled workflow, retain and triage any reproducer, and

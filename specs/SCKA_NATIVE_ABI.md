@@ -303,6 +303,17 @@ both device checkpoints are now satisfied. macOS success never substitutes for
 iOS evidence, and an Android cross-build never substitutes for Android-device
 execution.
 
+The inactive candidate now also runs a dependency-free fixed-schedule ABI
+campaign over four concurrent sessions. It advances both participants through
+128 sends per endpoint, reopens exact sealed states between calls, rejects
+stale states when the current revision is required, bounds retained carrier
+messages, and verifies loss, reordering, duplicate replay, monotonic epoch
+high-water values, and matching epoch keys. This is native boundary evidence;
+the campaign passes on macOS arm64, Linux x64, and Windows x64 on Windows 11
+ARM64, with AddressSanitizer on macOS and Linux. It does not replace
+application-level power-loss tests, distribution evidence, independent
+vectors, or review.
+
 ## 6. Activation gates
 
 The backend remains unregistrable until all of the following are complete:

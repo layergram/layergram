@@ -316,6 +316,17 @@ rustup toolchain install nightly-2026-08-16 --profile minimal
 tool/pq/test_scka_hardening.sh
 ```
 
+The same corpus now includes a fixed-schedule stateful campaign across four
+concurrent independent sessions. Each session performs 128 sends per endpoint,
+persists and reopens exact sealed-state bytes between calls, rejects a stale
+state against the current revision, and exercises bounded carrier loss,
+delayed/out-of-order delivery, duplicate replay, monotonic epoch high-water
+values, and cross-participant epoch-key agreement. At most nine messages per
+direction are retained by the test schedule. The campaign uses only the
+existing production crate graph and never enables the candidate in the app.
+It passes natively on macOS arm64, Linux x64, and Windows x64 running under
+Windows 11 ARM64; the macOS and Linux runs also execute under AddressSanitizer.
+
 The pinned nightly is only a test instrument. It does not alter the crate's
 Rust 1.87 production baseline, `Cargo.lock`, application packaging, or the
 commercially usable dependency graph. Supported hosts are macOS arm64/x64 and

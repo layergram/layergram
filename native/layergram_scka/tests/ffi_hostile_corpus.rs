@@ -9,8 +9,10 @@ use layergram_scka::{
     SESSION_ID_BYTES, SHARED_SECRET_BYTES, STATE_KEY_BYTES, STATUS_AUTHENTICATION, STATUS_BACKEND,
     STATUS_ENTROPY, STATUS_INVALID_ARGUMENT, STATUS_OK, STATUS_STATE_FORMAT, STATUS_STATE_REVISION,
 };
+use std::collections::{BTreeMap, VecDeque};
 use std::mem::align_of;
 use std::ptr;
+use std::thread;
 
 const ROLE_INITIATOR: u32 = 1;
 const ROLE_RESPONDER: u32 = 2;
@@ -21,6 +23,12 @@ const DIRTY_VALUE: u8 = 0xa5;
 struct GuardedBytes {
     storage: Vec<u8>,
     payload_len: usize,
+}
+
+impl Drop for GuardedBytes {
+    fn drop(&mut self) {
+        self.storage.fill(0);
+    }
 }
 
 impl GuardedBytes {
@@ -222,6 +230,310 @@ fn fill_deterministic(bytes: &mut [u8], state: &mut u64) {
     for byte in bytes {
         *byte = next_u64(state) as u8;
     }
+}
+
+#[derive(Clone)]
+struct QueuedMessage {
+    bytes: Vec<u8>,
+}
+
+struct Participant {
+    role: u32,
+    state: Vec<u8>,
+    revision: u64,
+    sending_epoch: u64,
+    receiving_epoch: u64,
+    epoch_secrets: BTreeMap<u64, [u8; EPOCH_SECRET_BYTES as usize]>,
+}
+
+impl Participant {
+    fn new(
+        role: u32,
+        session: &[u8; SESSION_ID_BYTES as usize],
+        state_key: &[u8; STATE_KEY_BYTES as usize],
+        shared_secret: &[u8; SHARED_SECRET_BYTES as usize],
+    ) -> Self {
+        Self {
+            role,
+            state: initialize_state(role, session, state_key, shared_secret),
+            revision: 0,
+            sending_epoch: 0,
+            receiving_epoch: 0,
+            epoch_secrets: BTreeMap::new(),
+        }
+    }
+
+    fn validate_current(
+        &self,
+        session: &[u8; SESSION_ID_BYTES as usize],
+        state_key: &[u8; STATE_KEY_BYTES as usize],
+    ) {
+        let status = unsafe {
+            lg_scka_v1_state_validate(
+                self.role,
+                session.as_ptr(),
+                session.len() as u64,
+                state_key.as_ptr(),
+                state_key.len() as u64,
+                self.revision,
+                self.state.as_ptr(),
+                self.state.len() as u64,
+            )
+        };
+        assert_eq!(status, STATUS_OK);
+    }
+
+    fn record_secret(&mut self, epoch: u64, secret: [u8; EPOCH_SECRET_BYTES as usize]) {
+        if let Some(existing) = self.epoch_secrets.insert(epoch, secret) {
+            assert_eq!(existing, secret, "epoch {epoch} produced divergent secrets");
+        }
+    }
+
+    fn send(
+        &mut self,
+        session: &[u8; SESSION_ID_BYTES as usize],
+        state_key: &[u8; STATE_KEY_BYTES as usize],
+    ) -> QueuedMessage {
+        let prior_state = self.state.clone();
+        let prior_revision = self.revision;
+        let mut output = SendOutputs::new();
+        let status = unsafe {
+            lg_scka_v1_send(
+                self.role,
+                session.as_ptr(),
+                session.len() as u64,
+                state_key.as_ptr(),
+                state_key.len() as u64,
+                prior_revision,
+                prior_state.as_ptr(),
+                prior_state.len() as u64,
+                output.state.payload_mut_ptr(),
+                MAX_STATE_BYTES,
+                &mut output.state_len,
+                output.message.payload_mut_ptr(),
+                MAX_MESSAGE_BYTES,
+                &mut output.message_len,
+                &mut output.epoch,
+                &mut output.has_secret,
+                &mut output.secret_epoch,
+                output.secret.payload_mut_ptr(),
+                EPOCH_SECRET_BYTES,
+            )
+        };
+        assert_eq!(status, STATUS_OK);
+        assert!((MIN_STATE_BYTES..=MAX_STATE_BYTES).contains(&output.state_len));
+        assert!((1..=MAX_MESSAGE_BYTES).contains(&output.message_len));
+        assert!(output.epoch >= self.sending_epoch);
+        output.state.assert_guards();
+        output.message.assert_guards();
+        output.secret.assert_guards();
+
+        self.state = output.state.payload()[..output.state_len as usize].to_vec();
+        self.revision = prior_revision + 1;
+        self.sending_epoch = output.epoch;
+        if output.has_secret == 1 {
+            assert!((1..=MAX_COUNTER).contains(&output.secret_epoch));
+            let mut secret = [0_u8; EPOCH_SECRET_BYTES as usize];
+            secret.copy_from_slice(output.secret.payload());
+            output.secret.payload_mut().fill(0);
+            self.record_secret(output.secret_epoch, secret);
+        } else {
+            assert_eq!(output.has_secret, 0);
+            assert_eq!(output.secret_epoch, 0);
+            assert!(output.secret.payload().iter().all(|byte| *byte == 0));
+        }
+        self.validate_current(session, state_key);
+
+        let stale_status = unsafe {
+            lg_scka_v1_state_validate(
+                self.role,
+                session.as_ptr(),
+                session.len() as u64,
+                state_key.as_ptr(),
+                state_key.len() as u64,
+                self.revision,
+                prior_state.as_ptr(),
+                prior_state.len() as u64,
+            )
+        };
+        assert_eq!(stale_status, STATUS_STATE_REVISION);
+
+        QueuedMessage {
+            bytes: output.message.payload()[..output.message_len as usize].to_vec(),
+        }
+    }
+
+    fn receive(
+        &mut self,
+        session: &[u8; SESSION_ID_BYTES as usize],
+        state_key: &[u8; STATE_KEY_BYTES as usize],
+        message: &QueuedMessage,
+    ) {
+        let prior_state = self.state.clone();
+        let prior_revision = self.revision;
+        let mut output = ReceiveOutputs::new();
+        let status = unsafe {
+            lg_scka_v1_receive(
+                self.role,
+                session.as_ptr(),
+                session.len() as u64,
+                state_key.as_ptr(),
+                state_key.len() as u64,
+                prior_revision,
+                prior_state.as_ptr(),
+                prior_state.len() as u64,
+                message.bytes.as_ptr(),
+                message.bytes.len() as u64,
+                output.state.payload_mut_ptr(),
+                MAX_STATE_BYTES,
+                &mut output.state_len,
+                &mut output.epoch,
+                &mut output.has_secret,
+                &mut output.secret_epoch,
+                output.secret.payload_mut_ptr(),
+                EPOCH_SECRET_BYTES,
+            )
+        };
+        assert_eq!(status, STATUS_OK);
+        assert!((MIN_STATE_BYTES..=MAX_STATE_BYTES).contains(&output.state_len));
+        assert!(output.epoch >= self.receiving_epoch);
+        output.state.assert_guards();
+        output.secret.assert_guards();
+
+        self.state = output.state.payload()[..output.state_len as usize].to_vec();
+        self.revision = prior_revision + 1;
+        self.receiving_epoch = output.epoch;
+        if output.has_secret == 1 {
+            assert!((1..=MAX_COUNTER).contains(&output.secret_epoch));
+            let mut secret = [0_u8; EPOCH_SECRET_BYTES as usize];
+            secret.copy_from_slice(output.secret.payload());
+            output.secret.payload_mut().fill(0);
+            self.record_secret(output.secret_epoch, secret);
+        } else {
+            assert_eq!(output.has_secret, 0);
+            assert_eq!(output.secret_epoch, 0);
+            assert!(output.secret.payload().iter().all(|byte| *byte == 0));
+        }
+        self.validate_current(session, state_key);
+
+        let stale_status = unsafe {
+            lg_scka_v1_state_validate(
+                self.role,
+                session.as_ptr(),
+                session.len() as u64,
+                state_key.as_ptr(),
+                state_key.len() as u64,
+                self.revision,
+                prior_state.as_ptr(),
+                prior_state.len() as u64,
+            )
+        };
+        assert_eq!(stale_status, STATUS_STATE_REVISION);
+    }
+
+    fn wipe(&mut self) {
+        self.state.fill(0);
+        for secret in self.epoch_secrets.values_mut() {
+            secret.fill(0);
+        }
+        self.epoch_secrets.clear();
+    }
+}
+
+fn pop_scheduled(queue: &mut VecDeque<QueuedMessage>, newest_first: bool) -> Option<QueuedMessage> {
+    if newest_first {
+        queue.pop_back()
+    } else {
+        queue.pop_front()
+    }
+}
+
+fn run_stateful_session(session_index: u8) {
+    let session = [0x10_u8.wrapping_add(session_index); SESSION_ID_BYTES as usize];
+    let state_key = [0x40_u8.wrapping_add(session_index); STATE_KEY_BYTES as usize];
+    let shared_secret = [0x70_u8.wrapping_add(session_index); SHARED_SECRET_BYTES as usize];
+    let mut alice = Participant::new(ROLE_INITIATOR, &session, &state_key, &shared_secret);
+    let mut bob = Participant::new(ROLE_RESPONDER, &session, &state_key, &shared_secret);
+    let mut alice_to_bob = VecDeque::<QueuedMessage>::new();
+    let mut bob_to_alice = VecDeque::<QueuedMessage>::new();
+    let mut schedule = 0x4c41_5945_5247_0000_u64 | u64::from(session_index);
+    let mut delivered = 0_usize;
+    let mut replayed = 0_usize;
+    let mut dropped = 0_usize;
+
+    for round in 0..128_usize {
+        let alice_message = alice.send(&session, &state_key);
+        if next_u64(&mut schedule) % 11 == 0 {
+            dropped += 1;
+        } else {
+            alice_to_bob.push_back(alice_message);
+        }
+
+        let bob_message = bob.send(&session, &state_key);
+        if next_u64(&mut schedule) % 13 == 0 {
+            dropped += 1;
+        } else {
+            bob_to_alice.push_back(bob_message);
+        }
+
+        if round % 3 != 0 || alice_to_bob.len() > 8 {
+            if let Some(message) =
+                pop_scheduled(&mut alice_to_bob, next_u64(&mut schedule) & 1 == 1)
+            {
+                bob.receive(&session, &state_key, &message);
+                delivered += 1;
+                if round % 17 == 0 {
+                    bob.receive(&session, &state_key, &message);
+                    replayed += 1;
+                }
+            }
+        }
+        if round % 4 != 0 || bob_to_alice.len() > 8 {
+            if let Some(message) =
+                pop_scheduled(&mut bob_to_alice, next_u64(&mut schedule) & 1 == 1)
+            {
+                alice.receive(&session, &state_key, &message);
+                delivered += 1;
+                if round % 19 == 0 {
+                    alice.receive(&session, &state_key, &message);
+                    replayed += 1;
+                }
+            }
+        }
+        assert!(alice_to_bob.len() <= 9);
+        assert!(bob_to_alice.len() <= 9);
+    }
+
+    while let Some(message) = pop_scheduled(&mut alice_to_bob, schedule & 1 == 1) {
+        bob.receive(&session, &state_key, &message);
+        delivered += 1;
+        schedule = next_u64(&mut schedule);
+    }
+    while let Some(message) = pop_scheduled(&mut bob_to_alice, schedule & 1 == 1) {
+        alice.receive(&session, &state_key, &message);
+        delivered += 1;
+        schedule = next_u64(&mut schedule);
+    }
+
+    let mut matching_secrets = 0_usize;
+    for (epoch, alice_secret) in &alice.epoch_secrets {
+        if let Some(bob_secret) = bob.epoch_secrets.get(epoch) {
+            assert_eq!(
+                alice_secret, bob_secret,
+                "session {session_index}, epoch {epoch}"
+            );
+            matching_secrets += 1;
+        }
+    }
+    assert!(
+        matching_secrets > 0,
+        "session {session_index} made no shared-key progress"
+    );
+    assert!(delivered > 128);
+    assert!(replayed > 0);
+    assert!(dropped > 0);
+    alice.wipe();
+    bob.wipe();
 }
 
 #[test]
@@ -534,5 +846,16 @@ fn candidate_send_failures_scrub_guarded_outputs() {
         assert_ne!(status, STATUS_OK, "mutation at byte {index} was accepted");
         output.assert_scrubbed();
         mutated[index] = alice[index];
+    }
+}
+
+#[test]
+fn candidate_stateful_sessions_survive_loss_reorder_replay_restart_and_concurrency() {
+    let workers = (0_u8..4)
+        .map(|session_index| thread::spawn(move || run_stateful_session(session_index)))
+        .collect::<Vec<_>>();
+
+    for worker in workers {
+        worker.join().expect("stateful SCKA campaign worker");
     }
 }

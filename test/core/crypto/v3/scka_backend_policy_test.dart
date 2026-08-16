@@ -121,6 +121,30 @@ void main() {
       expect(license, isNot(contains('LGPL')));
       expect(license, isNot(matches(RegExp(r'(^|[^A])GPL'))));
     }
+    expect(
+      scaffold['candidateDeterministicStatefulCampaign'],
+      <String, dynamic>{
+        'implementation': 'native/layergram_scka/tests/ffi_hostile_corpus.rs',
+        'fixedScheduleSeed': true,
+        'concurrentSessions': 4,
+        'sendRoundsPerSession': 128,
+        'maximumQueuedMessagesPerDirection': 9,
+        'exactSealedStateRestart': true,
+        'staleRevisionRollbackRejected': true,
+        'carrierLossCovered': true,
+        'carrierReorderingCovered': true,
+        'duplicateReplayCovered': true,
+        'epochSecretAgreementChecked': true,
+        'failureOutputScrubbingRetained': true,
+        'macosArm64': true,
+        'linuxX64': true,
+        'windowsX64OnWindowsArm64': true,
+        'macosArm64AddressSanitizer': true,
+        'linuxX64AddressSanitizer': true,
+        'productionDependencyDelta': false,
+        'applicationPackagingConnected': false,
+      },
+    );
     for (final license
         in (fuzzing['fuzzOnlyDependencyLicenses'] as List<dynamic>)
             .cast<String>()) {
@@ -619,6 +643,7 @@ void main() {
     expect(effects['candidatePackagedApplicationSmokeAdded'], isTrue);
     expect(effects['candidateAbiMemoryRangeHardeningAdded'], isTrue);
     expect(effects['candidateDeterministicHostileCorpusAdded'], isTrue);
+    expect(effects['candidateDeterministicStatefulCampaignAdded'], isTrue);
     expect(effects['candidateAddressSanitizerCheckpointAdded'], isTrue);
     expect(
       effects['candidateCoverageGuidedFuzzingCheckpointAdded'],
