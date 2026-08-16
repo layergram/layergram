@@ -319,9 +319,22 @@ tool/pq/test_scka_hardening.sh
 The pinned nightly is only a test instrument. It does not alter the crate's
 Rust 1.87 production baseline, `Cargo.lock`, application packaging, or the
 commercially usable dependency graph. Supported hosts are macOS arm64/x64 and
-glibc Linux arm64/x64. This checkpoint is bounded and repeatable; continuous
-coverage-guided fuzzing and the independent audit remain required before
-production registration.
+glibc Linux arm64/x64.
+
+Run the separate locked coverage-guided fuzz package with:
+
+```sh
+LAYERGRAM_SCKA_FUZZ_SECONDS=60 tool/pq/test_scka_fuzz.sh
+```
+
+The runner pins `cargo-fuzz` 0.13.2 and `nightly-2026-08-16`, keeps its build,
+corpus, and crash artifacts under ignored `.dart_tool` paths, and exercises
+state validation, send, and receive through the candidate C ABI with
+AddressSanitizer. Its separate dependencies are test-only, permissively
+licensed, and recorded in `native/layergram_scka/fuzz/THIRD_PARTY_NOTICES.md`;
+they never enter the production crate lockfile or application packages. This
+local checkpoint is bounded and repeatable. Scheduled continuous campaigns
+and the independent audit remain required before production registration.
 
 For the macOS packaged-scope smoke, `LAYERGRAM_SCKA_MACOS_SIGN_IDENTITY=-`
 applies an ad-hoc signature without Hardened Runtime because an ad-hoc identity

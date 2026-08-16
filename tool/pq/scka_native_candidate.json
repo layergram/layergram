@@ -73,6 +73,31 @@
       "androidPhysicalRuntime": true,
       "iosPhysicalRuntime": true
     },
+    "candidateCoverageGuidedFuzzing": {
+      "toolchain": "nightly-2026-08-16",
+      "cargoFuzzVersion": "0.13.2",
+      "libfuzzerSysVersion": "0.4.13",
+      "separateManifest": "native/layergram_scka/fuzz/Cargo.toml",
+      "separateLockfile": "native/layergram_scka/fuzz/Cargo.lock",
+      "notices": "native/layergram_scka/fuzz/THIRD_PARTY_NOTICES.md",
+      "lockPackageCount": 101,
+      "productionManifestUnchanged": true,
+      "productionLockfileUnchanged": true,
+      "applicationPackagingConnected": false,
+      "targets": [
+        "ffi_state_validate",
+        "ffi_send",
+        "ffi_receive"
+      ],
+      "boundedMacosArm64": true,
+      "boundedLinuxX64": true,
+      "continuousCampaignRequired": true,
+      "fuzzOnlyDependencyLicenses": [
+        "arbitrary 1.4.2 — MIT OR Apache-2.0",
+        "jobserver 0.1.35 — MIT OR Apache-2.0",
+        "libfuzzer-sys 0.4.13 — (MIT OR Apache-2.0) AND NCSA"
+      ]
+    },
     "runtimeStatus": "candidate-packaged-not-registered-not-active",
     "stateEnvelopeSpecification": "specs/SCKA_NATIVE_ABI.md",
     "statePayloadSpecification": "specs/SCKA_STATE_PAYLOAD.md",
@@ -527,6 +552,9 @@
     "candidateDeterministicHostileCorpus": true,
     "candidateMacosArm64AddressSanitizer": true,
     "candidateLinuxX64AddressSanitizer": true,
+    "candidateCoverageGuidedFuzzingHarnesses": true,
+    "candidateMacosArm64CoverageGuidedFuzzing": true,
+    "candidateLinuxX64CoverageGuidedFuzzing": true,
     "candidateDefaultScaffoldRejected": true,
     "candidateRealLs3AuxSendReceiveRestartTest": true,
     "candidateNativeRevisionAtomicallyBoundToTr3": true,
@@ -579,6 +607,7 @@
     "candidateAbiMemoryRangeHardeningAdded": true,
     "candidateDeterministicHostileCorpusAdded": true,
     "candidateAddressSanitizerCheckpointAdded": true,
+    "candidateCoverageGuidedFuzzingCheckpointAdded": true,
     "candidateIosPhysicalScopeSmokeAdded": true,
     "candidateAndroidPhysicalScopeSmokeAdded": true,
     "candidateAndroidAppBundleSmokeAdded": true,
@@ -590,7 +619,7 @@
     "independently review the frozen canonical LB3 plaintext state-machine payload, BM3 public-message codec, and opaque incremental-continuation version binding",
     "run upstream primitive vectors plus independent cross-implementation ML-KEM Braid vectors",
     "test signed installable artifacts for every shipped architecture; iOS has development-signed physical runtime evidence and Android has isolated Release-APK physical runtime evidence, neither of which replaces store-distribution verification",
-    "extend the bounded hostile corpus and macOS/Linux AddressSanitizer checkpoint with continuous coverage-guided fuzzing plus crash, rollback, replay, concurrency, resource, and secret-lifecycle campaigns",
+    "promote the bounded macOS/Linux checkpoint to scheduled continuous coverage-guided fuzzing campaigns and extend crash, rollback, replay, concurrency, resource, and secret-lifecycle coverage",
     "obtain independent cryptographic and implementation review"
   ]
 }

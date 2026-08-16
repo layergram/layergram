@@ -309,10 +309,12 @@ Play App Signing, upload, review, and production registration remain open.
   reordering, loss, duplication, and offline recovery;
 - test state corruption, replay, crash windows, rollback, allocation limits,
   panic containment, wiping, and concurrent calls;
-- retain the bounded deterministic hostile corpus and macOS/Linux
-  AddressSanitizer checkpoint, then extend it with continuous coverage-guided
-  fuzzing, static analysis, crash/resource campaigns, signed distribution/store
-  packaging, and per-release physical-device regression testing;
+- retain the bounded deterministic hostile corpus, macOS/Linux
+  AddressSanitizer checkpoint, and locked state-validation/send/receive
+  coverage-guided fuzz harnesses; promote them to scheduled continuous fuzzing
+  and extend static analysis, crash/resource campaigns, signed
+  distribution/store packaging, and per-release physical-device regression
+  testing;
 - obtain independent cryptographic and implementation review.
 
 Until all gates pass, no provider may register this backend and Layergram must

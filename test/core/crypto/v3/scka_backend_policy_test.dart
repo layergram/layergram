@@ -78,6 +78,33 @@ void main() {
       'androidPhysicalRuntime': true,
       'iosPhysicalRuntime': true,
     });
+    final fuzzing =
+        scaffold['candidateCoverageGuidedFuzzing'] as Map<String, dynamic>;
+    expect(fuzzing['toolchain'], 'nightly-2026-08-16');
+    expect(fuzzing['cargoFuzzVersion'], '0.13.2');
+    expect(fuzzing['libfuzzerSysVersion'], '0.4.13');
+    expect(fuzzing['lockPackageCount'], 101);
+    expect(fuzzing['productionManifestUnchanged'], isTrue);
+    expect(fuzzing['productionLockfileUnchanged'], isTrue);
+    expect(fuzzing['applicationPackagingConnected'], isFalse);
+    expect(fuzzing['targets'], <String>[
+      'ffi_state_validate',
+      'ffi_send',
+      'ffi_receive',
+    ]);
+    expect(fuzzing['boundedMacosArm64'], isTrue);
+    expect(fuzzing['boundedLinuxX64'], isTrue);
+    expect(fuzzing['continuousCampaignRequired'], isTrue);
+    for (final license
+        in (fuzzing['fuzzOnlyDependencyLicenses'] as List<dynamic>)
+            .cast<String>()) {
+      expect(license, isNot(contains('AGPL')));
+      expect(license, isNot(contains('LGPL')));
+      expect(license, isNot(matches(RegExp(r'(^|[^A])GPL'))));
+    }
+    expect(File(fuzzing['separateManifest'] as String).existsSync(), isTrue);
+    expect(File(fuzzing['separateLockfile'] as String).existsSync(), isTrue);
+    expect(File(fuzzing['notices'] as String).existsSync(), isTrue);
     expect(
       scaffold['runtimeStatus'],
       'candidate-packaged-not-registered-not-active',
@@ -507,6 +534,15 @@ void main() {
     expect(composition['candidateDeterministicHostileCorpus'], isTrue);
     expect(composition['candidateMacosArm64AddressSanitizer'], isTrue);
     expect(composition['candidateLinuxX64AddressSanitizer'], isTrue);
+    expect(composition['candidateCoverageGuidedFuzzingHarnesses'], isTrue);
+    expect(
+      composition['candidateMacosArm64CoverageGuidedFuzzing'],
+      isTrue,
+    );
+    expect(
+      composition['candidateLinuxX64CoverageGuidedFuzzing'],
+      isTrue,
+    );
     expect(composition['candidateDefaultScaffoldRejected'], isTrue);
     expect(composition['candidateRealLs3AuxSendReceiveRestartTest'], isTrue);
     expect(composition['candidateNativeRevisionAtomicallyBoundToTr3'], isTrue);
@@ -558,6 +594,10 @@ void main() {
     expect(effects['candidateAbiMemoryRangeHardeningAdded'], isTrue);
     expect(effects['candidateDeterministicHostileCorpusAdded'], isTrue);
     expect(effects['candidateAddressSanitizerCheckpointAdded'], isTrue);
+    expect(
+      effects['candidateCoverageGuidedFuzzingCheckpointAdded'],
+      isTrue,
+    );
     expect(effects['candidateIosPhysicalScopeSmokeAdded'], isTrue);
     expect(effects['candidateAndroidPhysicalScopeSmokeAdded'], isTrue);
     expect(effects['candidateAndroidAppBundleSmokeAdded'], isTrue);
@@ -606,6 +646,13 @@ void main() {
     final manifest =
         File('native/layergram_scka/Cargo.toml').readAsStringSync();
     final lock = File('native/layergram_scka/Cargo.lock').readAsStringSync();
+    final fuzzManifest =
+        File('native/layergram_scka/fuzz/Cargo.toml').readAsStringSync();
+    final fuzzLock =
+        File('native/layergram_scka/fuzz/Cargo.lock').readAsStringSync();
+    final fuzzNotices = File(
+      'native/layergram_scka/fuzz/THIRD_PARTY_NOTICES.md',
+    ).readAsStringSync();
     final header = File(
       'native/layergram_scka/include/layergram_scka.h',
     ).readAsStringSync();
@@ -672,6 +719,25 @@ void main() {
     expect(lock, contains('name = "libcrux-ml-kem"'));
     expect(lock, contains('name = "zeroize"'));
     expect(lock, contains('name = "sha2"'));
+    expect(manifest, isNot(contains('libfuzzer-sys')));
+    expect(lock, isNot(contains('name = "libfuzzer-sys"')));
+    expect(fuzzManifest, contains('publish = false'));
+    expect(fuzzManifest, contains('license = "Apache-2.0"'));
+    expect(fuzzManifest, contains('libfuzzer-sys = "=0.4.13"'));
+    expect(fuzzManifest, contains('features = ["candidate-ffi"]'));
+    expect(fuzzManifest, contains('name = "ffi_state_validate"'));
+    expect(fuzzManifest, contains('name = "ffi_send"'));
+    expect(fuzzManifest, contains('name = "ffi_receive"'));
+    expect(
+      RegExp(r'^\[\[package\]\]$', multiLine: true).allMatches(fuzzLock),
+      hasLength(101),
+    );
+    expect(fuzzLock, contains('name = "libfuzzer-sys"'));
+    expect(fuzzLock, contains('version = "0.4.13"'));
+    expect(fuzzNotices, contains('engineering-only fuzzing tool'));
+    expect(fuzzNotices, contains('never linked into Layergram'));
+    expect(fuzzNotices, isNot(contains('AGPL')));
+    expect(fuzzNotices, isNot(contains('LGPL')));
     expect(header, contains('LG_SCKA_V1_ERR_NOT_READY = -2'));
 
     final nativeEntry =

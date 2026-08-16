@@ -94,9 +94,12 @@ writable output before constructing Rust slices. Deterministic hostile-state
 and message corpora exercise those rules with guard bytes and assert that every
 accepted non-`OK` path scrubs the fixed-capacity outputs. The pinned
 `tool/pq/test_scka_hardening.sh` reruns the complete candidate Rust suite under
-AddressSanitizer on the explicitly supported macOS/Linux host targets. This is
-an engineering checkpoint, not a substitute for continuous coverage-guided
-fuzzing, physical-device testing, or an independent audit.
+AddressSanitizer on the explicitly supported macOS/Linux host targets. The
+separate locked `native/layergram_scka/fuzz` package additionally drives state
+validation, send, and receive through this exact ABI under libFuzzer plus
+AddressSanitizer on macOS/Linux. This bounded engineering checkpoint is not a
+substitute for scheduled continuous campaigns, physical-device testing, or an
+independent audit.
 
 ## 2. Stable state-sealing key
 
