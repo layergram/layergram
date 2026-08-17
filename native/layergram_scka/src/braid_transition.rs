@@ -2106,6 +2106,7 @@ fn read_u16(bytes: &[u8], offset: usize) -> Result<u16, BraidTransitionError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::braid_authenticator::PROTOCOL_INFO;
     use crate::braid_message::BraidMessageType;
     use crate::erasure::decode_message;
     use crate::incremental_mlkem::{
@@ -2117,6 +2118,8 @@ mod tests {
     const SHARED_SECRET: [u8; 32] = [0x11; 32];
     const D: [u8; 32] = hex32("934d60b35624d740b30a7f227af2ae7c678e4e04e13c5f509eade2b79aea77e2");
     const Z: [u8; 32] = hex32("3e2a2ea6c9c476fc4937b013c993a793d6c0ab9960695ba838f649da539ca3d0");
+    const CROSS_IMPLEMENTATION_VECTOR: &str =
+        include_str!("../testdata/braid_r1_cross_impl_vector.txt");
 
     struct FixedEntropy {
         seed: [u8; KEY_GENERATION_SEED_BYTES],
@@ -2153,6 +2156,10 @@ mod tests {
                 calls: 0,
             }
         }
+
+        fn cross_implementation_vector() -> Self {
+            Self { seed: D, calls: 0 }
+        }
     }
 
     impl EntropySource for FixedEncapsulationEntropy {
@@ -2180,6 +2187,247 @@ mod tests {
         assert_eq!(bob.body(), &[0, 0]);
         assert_eq!(alice.auth_root_key(), bob.auth_root_key());
         assert_eq!(alice.auth_mac_key(), bob.auth_mac_key());
+    }
+
+    #[test]
+    fn full_epoch_matches_independent_public_domain_cross_implementation_vector() {
+        assert_eq!(
+            vector_value("format"),
+            "layergram-scka-cross-implementation-v1"
+        );
+        assert_eq!(hex(PROTOCOL_INFO), vector_value("protocol_info_hex"));
+
+        let mut key_seed = [0_u8; KEY_GENERATION_SEED_BYTES];
+        key_seed[..32].copy_from_slice(&D);
+        key_seed[32..].copy_from_slice(&Z);
+        let key_pair = key_pair_from_seed(&key_seed).unwrap();
+        key_seed.zeroize();
+
+        let mut standard_public_key = [0_u8; PUBLIC_KEY_VECTOR_BYTES + 32];
+        standard_public_key[..PUBLIC_KEY_VECTOR_BYTES]
+            .copy_from_slice(key_pair.public_key_vector());
+        standard_public_key[PUBLIC_KEY_VECTOR_BYTES..]
+            .copy_from_slice(&key_pair.public_key_header()[..32]);
+        assert_eq!(
+            hex(&Sha256::digest(standard_public_key)),
+            vector_value("public_key_sha256")
+        );
+        assert_eq!(
+            hex(key_pair.public_key_header()),
+            vector_value("header_hex")
+        );
+
+        let initial_auth = BraidAuthenticator::initialize(1, &SHARED_SECRET).unwrap();
+        assert_eq!(
+            hex(initial_auth.root_key()),
+            vector_value("initial_auth_root_hex")
+        );
+        assert_eq!(
+            hex(initial_auth.mac_key()),
+            vector_value("initial_auth_mac_hex")
+        );
+        let header_mac = initial_auth
+            .mac_header(1, key_pair.public_key_header())
+            .unwrap();
+        assert_eq!(hex(&header_mac), vector_value("header_mac_hex"));
+        let mut header_payload = [0_u8; HEADER_AND_MAC_BYTES];
+        header_payload[..PUBLIC_KEY_HEADER_BYTES].copy_from_slice(key_pair.public_key_header());
+        header_payload[PUBLIC_KEY_HEADER_BYTES..].copy_from_slice(&header_mac);
+        assert_eq!(
+            hex(&Sha256::digest(header_payload)),
+            vector_value("header_payload_sha256")
+        );
+        assert_eq!(
+            hex(
+                &encode_chunks(ErasureMessageKind::HeaderAndMac, &header_payload, &[3])
+                    .unwrap()
+                    .remove(0)
+                    .encode()
+            ),
+            vector_value("header_chunk_3_hex")
+        );
+
+        let started = encapsulate_part_one_from_seed(key_pair.public_key_header(), &D).unwrap();
+        assert_eq!(
+            hex(started.shared_secret()),
+            vector_value("shared_secret_hex")
+        );
+        let ciphertext_part_one = *started.ciphertext();
+        let output_key = derive_output_key(started.shared_secret(), 1).unwrap();
+        assert_eq!(hex(output_key.as_bytes()), vector_value("output_key_hex"));
+        let part_two =
+            encapsulate_part_two(started.into_pending(), key_pair.public_key_vector()).unwrap();
+        let mut standard_ciphertext = [0_u8; CIPHERTEXT_PART_ONE_BYTES + CIPHERTEXT_PART_TWO_BYTES];
+        standard_ciphertext[..CIPHERTEXT_PART_ONE_BYTES].copy_from_slice(&ciphertext_part_one);
+        standard_ciphertext[CIPHERTEXT_PART_ONE_BYTES..].copy_from_slice(part_two.ciphertext());
+        assert_eq!(
+            hex(&Sha256::digest(standard_ciphertext)),
+            vector_value("ciphertext_sha256")
+        );
+
+        let next_auth = initial_auth.ratchet(1, &output_key).unwrap();
+        assert_eq!(
+            hex(next_auth.root_key()),
+            vector_value("next_auth_root_hex")
+        );
+        assert_eq!(hex(next_auth.mac_key()), vector_value("next_auth_mac_hex"));
+        let ciphertext_mac = next_auth
+            .mac_ciphertext(1, &ciphertext_part_one, part_two.ciphertext())
+            .unwrap();
+        assert_eq!(hex(&ciphertext_mac), vector_value("ciphertext_mac_hex"));
+        let mut ct2_payload = [0_u8; CT2_WITH_MAC_BYTES];
+        ct2_payload[..CIPHERTEXT_PART_TWO_BYTES].copy_from_slice(part_two.ciphertext());
+        ct2_payload[CIPHERTEXT_PART_TWO_BYTES..].copy_from_slice(&ciphertext_mac);
+        assert_eq!(
+            hex(&Sha256::digest(ct2_payload)),
+            vector_value("ct2_payload_sha256")
+        );
+
+        for (kind, message, index, vector_key) in [
+            (
+                ErasureMessageKind::MlKem768PublicKeyVector,
+                key_pair.public_key_vector().as_slice(),
+                36_u16,
+                "public_vector_chunk_36_hex",
+            ),
+            (
+                ErasureMessageKind::MlKem768Ciphertext1,
+                ciphertext_part_one.as_slice(),
+                30_u16,
+                "ciphertext1_chunk_30_hex",
+            ),
+            (
+                ErasureMessageKind::MlKem768Ciphertext2AndMac,
+                ct2_payload.as_slice(),
+                5_u16,
+                "ciphertext2_chunk_5_hex",
+            ),
+        ] {
+            let encoded = encode_chunks(kind, message, &[index])
+                .unwrap()
+                .remove(0)
+                .encode();
+            assert_eq!(hex(&encoded), vector_value(vector_key));
+        }
+
+        let mut alice = initialize(StateRole::Initiator, SESSION, &SHARED_SECRET).unwrap();
+        let mut bob = initialize(StateRole::Responder, SESSION, &SHARED_SECRET).unwrap();
+        let mut alice_entropy = FixedEntropy::vector();
+        let mut bob_entropy = FixedEncapsulationEntropy::cross_implementation_vector();
+        let mut transcript = Sha256::new();
+        let mut records = 0_usize;
+        let mut alice_epoch_key: Option<(u64, [u8; 32])> = None;
+        let mut bob_epoch_key: Option<(u64, [u8; 32])> = None;
+
+        for round in 0..44 {
+            let sent = send_with_entropy_source(&alice, &mut alice_entropy).unwrap();
+            update_transcript(
+                &mut transcript,
+                b'S',
+                StateRole::Initiator,
+                sent.message(),
+                sent.sending_epoch(),
+                sent.output(),
+            );
+            records += 1;
+            assert_transcript_record(&transcript, records - 1);
+            if let Some(output) = sent.output() {
+                alice_epoch_key = Some((output.epoch(), output.key_bytes().try_into().unwrap()));
+            }
+            let (next_alice, message, alice_output) = sent.into_parts();
+            drop(alice_output);
+            alice = next_alice;
+
+            let received = receive(&bob, &message).unwrap();
+            update_transcript(
+                &mut transcript,
+                b'R',
+                StateRole::Responder,
+                &message,
+                received.receiving_epoch(),
+                received.output(),
+            );
+            records += 1;
+            assert_transcript_record(&transcript, records - 1);
+            if let Some(output) = received.output() {
+                bob_epoch_key = Some((output.epoch(), output.key_bytes().try_into().unwrap()));
+            }
+            let (next_bob, bob_output) = received.into_parts();
+            drop(bob_output);
+            bob = next_bob;
+
+            if round == 43 {
+                assert_eq!(
+                    hex(&transcript.clone().finalize()),
+                    vector_value(&format!("round_{round:02}_sha256")),
+                    "cross-implementation transcript diverged after round {round}"
+                );
+                break;
+            }
+
+            let sent = send_with_entropy_source(&bob, &mut bob_entropy).unwrap();
+            update_transcript(
+                &mut transcript,
+                b'S',
+                StateRole::Responder,
+                sent.message(),
+                sent.sending_epoch(),
+                sent.output(),
+            );
+            records += 1;
+            assert_transcript_record(&transcript, records - 1);
+            if let Some(output) = sent.output() {
+                bob_epoch_key = Some((output.epoch(), output.key_bytes().try_into().unwrap()));
+            }
+            let (next_bob, message, bob_output) = sent.into_parts();
+            drop(bob_output);
+            bob = next_bob;
+
+            let received = receive(&alice, &message).unwrap();
+            update_transcript(
+                &mut transcript,
+                b'R',
+                StateRole::Initiator,
+                &message,
+                received.receiving_epoch(),
+                received.output(),
+            );
+            records += 1;
+            assert_transcript_record(&transcript, records - 1);
+            if let Some(output) = received.output() {
+                alice_epoch_key = Some((output.epoch(), output.key_bytes().try_into().unwrap()));
+            }
+            let (next_alice, alice_output) = received.into_parts();
+            drop(alice_output);
+            alice = next_alice;
+
+            assert_eq!(
+                hex(&transcript.clone().finalize()),
+                vector_value(&format!("round_{round:02}_sha256")),
+                "cross-implementation transcript diverged after round {round}"
+            );
+        }
+
+        assert_eq!(records.to_string(), vector_value("transcript_records"));
+        assert_eq!(
+            hex(&transcript.finalize()),
+            vector_value("transcript_sha256")
+        );
+        assert_eq!(alice.variant(), BraidStateVariant::NoHeaderReceived);
+        assert_eq!(alice.epoch(), 2);
+        assert_eq!(bob.variant(), BraidStateVariant::KeysUnsampled);
+        assert_eq!(bob.epoch(), 2);
+        assert_eq!(alice_epoch_key, bob_epoch_key);
+        assert_eq!(
+            alice_epoch_key,
+            Some((1, hex32(vector_value("output_key_hex"))))
+        );
+        assert_eq!(alice.auth_root_key(), next_auth.root_key());
+        assert_eq!(alice.auth_mac_key(), next_auth.mac_key());
+        assert_eq!(bob.auth_root_key(), next_auth.root_key());
+        assert_eq!(bob.auth_mac_key(), next_auth.mac_key());
+        assert_eq!(alice_entropy.calls, 1);
+        assert_eq!(bob_entropy.calls, 1);
     }
 
     #[test]
@@ -4972,6 +5220,54 @@ mod tests {
 
     fn patterned_ciphertext_one() -> [u8; CIPHERTEXT_PART_ONE_BYTES] {
         core::array::from_fn(|index| ((index * 17 + 3) & 0xff) as u8)
+    }
+
+    fn vector_value(key: &str) -> &'static str {
+        CROSS_IMPLEMENTATION_VECTOR
+            .lines()
+            .filter_map(|line| line.split_once('='))
+            .find_map(|(candidate, value)| (candidate == key).then_some(value))
+            .unwrap_or_else(|| panic!("missing cross-implementation vector field {key}"))
+    }
+
+    fn update_transcript(
+        transcript: &mut Sha256,
+        operation: u8,
+        role: StateRole,
+        message: &BraidPublicMessage,
+        high_water: u64,
+        output: Option<&BraidEpochOutput>,
+    ) {
+        transcript.update([operation]);
+        transcript.update([match role {
+            StateRole::Initiator => 1,
+            StateRole::Responder => 2,
+        }]);
+        transcript.update(message.epoch().to_be_bytes());
+        transcript.update([message.message_type() as u8]);
+        if let Some(chunk) = message.chunk() {
+            transcript.update([1]);
+            transcript.update(chunk.index().to_be_bytes());
+            transcript.update(chunk.symbol());
+        } else {
+            transcript.update([0]);
+        }
+        transcript.update(high_water.to_be_bytes());
+        if let Some(output) = output {
+            transcript.update([1]);
+            transcript.update(output.epoch().to_be_bytes());
+            transcript.update(output.key_bytes());
+        } else {
+            transcript.update([0]);
+        }
+    }
+
+    fn assert_transcript_record(transcript: &Sha256, record: usize) {
+        assert_eq!(
+            hex(&transcript.clone().finalize()),
+            vector_value(&format!("record_{record:03}_sha256")),
+            "cross-implementation transcript diverged after record {record}"
+        );
     }
 
     fn hex(bytes: &[u8]) -> String {

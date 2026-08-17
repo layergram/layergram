@@ -6,6 +6,15 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 crate_dir="$repo_root/native/layergram_scka"
 toolchain="${LAYERGRAM_SCKA_SANITIZER_TOOLCHAIN:-nightly-2026-08-16}"
 
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "python3 is required to regenerate the independent SCKA vector" >&2
+  exit 1
+fi
+
+python3 "$repo_root/tool/pq/generate_scka_cross_implementation_vector.py" \
+  --kat "$repo_root/third_party/mlkem-native/test/expected_test_vectors.h" \
+  --check "$crate_dir/testdata/braid_r1_cross_impl_vector.txt"
+
 if ! command -v rustup >/dev/null 2>&1; then
   echo "rustup is required for the pinned SCKA sanitizer toolchain" >&2
   exit 1

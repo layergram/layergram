@@ -83,6 +83,22 @@ default ABI remains `NOT_READY`.
 
 ## Reproducible checks
 
+Regenerate and compare the independent revision-1 conformance vector with the
+Python 3 standard-library oracle:
+
+```sh
+python3 tool/pq/generate_scka_cross_implementation_vector.py \
+  --check native/layergram_scka/testdata/braid_r1_cross_impl_vector.txt
+cargo test --manifest-path native/layergram_scka/Cargo.toml \
+  full_epoch_matches_independent_public_domain_cross_implementation_vector
+```
+
+The oracle uses only the public-domain specification and the already vendored,
+permissively licensed `mlkem-native` ML-KEM-768 KAT. It does not import or run
+the production Rust module or Signal's AGPL implementation. The Rust test
+compares a complete two-party epoch at all 174 transcript records. This closes
+the independent-vector checkpoint but does not activate or register v3.
+
 Run the host-native wrapper, vector, production-ABI, and sanitizer checks:
 
 ```sh

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "implementation-path-selected-not-production-approved",
-  "observedOn": "2026-08-16",
+  "observedOn": "2026-08-17",
   "protocol": {
     "name": "ML-KEM Braid",
     "revision": 1,
@@ -538,6 +538,17 @@
     "transitionThirteenRequestsEntropy": false,
     "transitionThirteenEmitsEpochKey": false,
     "revisionOneTransitionGraphComplete": true,
+    "crossImplementationVector": {
+      "generator": "tool/pq/generate_scka_cross_implementation_vector.py",
+      "vector": "native/layergram_scka/testdata/braid_r1_cross_impl_vector.txt",
+      "oracle": "Python 3 standard library",
+      "productionImplementationImported": false,
+      "agplImplementationUsed": false,
+      "mlKemKatSource": "third_party/mlkem-native/test/expected_test_vectors.h ML-KEM-768",
+      "completeEpochs": 1,
+      "transcriptRecords": 174,
+      "transcriptSha256": "fdee3ec45793c14a7317076ebd914690a98c49408a02330046b7189882768275"
+    },
     "typedTerminalAuthenticationFailure": true,
     "publicAbiConnected": false,
     "authenticatedCompositionConnected": true,
@@ -651,6 +662,7 @@
     "candidateAddressSanitizerCheckpointAdded": true,
     "candidateCoverageGuidedFuzzingCheckpointAdded": true,
     "candidateScheduledCoverageGuidedFuzzingConfigured": true,
+    "candidateIndependentCrossImplementationVectorAdded": true,
     "candidateIosPhysicalScopeSmokeAdded": true,
     "candidateAndroidPhysicalScopeSmokeAdded": true,
     "candidateAndroidAppBundleSmokeAdded": true,
@@ -660,7 +672,6 @@
     "repeat locked target-specific dependency and notice review before every packaged release",
     "promote the candidate bridge only after production archive signing, notarization or store-package verification, and registration review; keep the default ABI NOT_READY until then",
     "independently review the frozen canonical LB3 plaintext state-machine payload, BM3 public-message codec, and opaque incremental-continuation version binding",
-    "run upstream primitive vectors plus independent cross-implementation ML-KEM Braid vectors",
     "test signed installable artifacts for every shipped architecture; iOS has development-signed physical runtime evidence and Android has isolated Release-APK physical runtime evidence, neither of which replaces store-distribution verification",
     "collect and monitor recurring green runs from the configured scheduled coverage-guided fuzz workflow, retain and triage any reproducer, and extend crash, rollback, replay, concurrency, resource, and secret-lifecycle coverage",
     "obtain independent cryptographic and implementation review"

@@ -267,6 +267,29 @@ independent golden outputs. RustCrypto HMAC verification supplies the
 constant-time tag comparison. This is an inactive primitive checkpoint, not an
 independent cryptographic audit or approval of the eventual state machine.
 
+## Independent revision-1 conformance vector
+
+`tool/pq/generate_scka_cross_implementation_vector.py` is a separately
+executed Layergram-owned Python 3 oracle. It uses only the standard library,
+the public-domain ML-KEM Braid revision-1 specification, and the already
+vendored permissive `mlkem-native` ML-KEM-768 KAT. It neither imports nor
+executes the Rust SCKA implementation and does not use Signal's AGPL source.
+
+The frozen vector at
+`native/layergram_scka/testdata/braid_r1_cross_impl_vector.txt` covers the
+standard ML-KEM public key, ciphertext and shared secret, the Layergram
+authenticator KDF/MAC values, systematic and parity erasure symbols, and one
+complete two-party epoch. The Rust test compares every one of the 174 ordered
+send/receive transcript records and the final participant states. The
+independent transcript digest is
+`fdee3ec45793c14a7317076ebd914690a98c49408a02330046b7189882768275`.
+`test_scka_hardening.sh` first regenerates and compares this vector before its
+sanitizer run.
+
+This closes the implementation-independent revision-1 vector gate. It is not
+an external audit, proof of the protocol, production registration, or
+cross-platform packaging approval.
+
 ## Candidate packaging and release direction
 
 The backend remains a Layergram-owned Rust library behind the frozen C ABI.
@@ -303,8 +326,6 @@ Play App Signing, upload, review, and production registration remain open.
 
 - independently review the now-complete private revision-1 transition engine
   together with its frozen authenticator, payload, and public-message codecs;
-- generate independent public vectors and compare with a separately executed
-  conforming implementation without linking its code;
 - verify erasure-code behavior, epoch uniqueness, output-key agreement,
   reordering, loss, duplication, and offline recovery;
 - test state corruption, replay, crash windows, rollback, allocation limits,

@@ -517,6 +517,23 @@ void main() {
     expect(transition['transitionThirteenRequestsEntropy'], isFalse);
     expect(transition['transitionThirteenEmitsEpochKey'], isFalse);
     expect(transition['revisionOneTransitionGraphComplete'], isTrue);
+    expect(
+      transition['crossImplementationVector'],
+      <String, dynamic>{
+        'generator': 'tool/pq/generate_scka_cross_implementation_vector.py',
+        'vector':
+            'native/layergram_scka/testdata/braid_r1_cross_impl_vector.txt',
+        'oracle': 'Python 3 standard library',
+        'productionImplementationImported': false,
+        'agplImplementationUsed': false,
+        'mlKemKatSource':
+            'third_party/mlkem-native/test/expected_test_vectors.h ML-KEM-768',
+        'completeEpochs': 1,
+        'transcriptRecords': 174,
+        'transcriptSha256':
+            'fdee3ec45793c14a7317076ebd914690a98c49408a02330046b7189882768275',
+      },
+    );
     expect(transition['typedTerminalAuthenticationFailure'], isTrue);
     expect(transition['publicAbiConnected'], isFalse);
     expect(transition['authenticatedCompositionConnected'], isTrue);
@@ -653,6 +670,10 @@ void main() {
       effects['candidateScheduledCoverageGuidedFuzzingConfigured'],
       isTrue,
     );
+    expect(
+      effects['candidateIndependentCrossImplementationVectorAdded'],
+      isTrue,
+    );
     expect(effects['candidateIosPhysicalScopeSmokeAdded'], isTrue);
     expect(effects['candidateAndroidPhysicalScopeSmokeAdded'], isTrue);
     expect(effects['candidateAndroidAppBundleSmokeAdded'], isTrue);
@@ -661,7 +682,7 @@ void main() {
 
     final remainingGates =
         (receipt['remainingGates'] as List<dynamic>).cast<String>();
-    expect(remainingGates, hasLength(7));
+    expect(remainingGates, hasLength(6));
     expect(
         remainingGates.any((gate) => gate.contains('transition 13')), isFalse);
     expect(
@@ -694,6 +715,12 @@ void main() {
         (gate) => gate.contains('recurring green runs'),
       ),
       isTrue,
+    );
+    expect(
+      remainingGates.any(
+        (gate) => gate.contains('cross-implementation ML-KEM Braid vectors'),
+      ),
+      isFalse,
     );
   });
 

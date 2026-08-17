@@ -401,9 +401,16 @@ cover exact `Ct2` re-export, loss, restart, erasure recovery, immediate-next-
 epoch filtering, role/high-water advance, authenticator preservation, encoder
 and revision exhaustion, and maximum-epoch no-wrap behavior.
 
+A separately executed Layergram-owned Python 3 standard-library oracle now
+freezes a full public-domain revision-1 epoch independently of this Rust
+module. The Rust conformance test matches the ML-KEM KAT boundary,
+authenticator KDF/MAC values, parity erasure symbols, all 174 ordered
+send/receive transcript records, both final states, and the shared epoch key.
+The oracle and vector add no runtime dependency and use no AGPL implementation
+source.
+
 Activation still requires durable terminal MAC-failure handling, a serialized
 authority that prevents divergent recomputation under one role/revision nonce,
 the public C ABI and panic containment, atomic TR3/journal composition,
-cross-implementation vectors,
 fuzzing/sanitizers, every shipped target, and an independent cryptographic and
 implementation audit.
