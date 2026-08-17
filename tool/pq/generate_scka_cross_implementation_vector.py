@@ -38,6 +38,40 @@ TYPE_CT1_ACK = 4
 TYPE_CT1 = 5
 TYPE_CT2 = 6
 
+LB3_SESSION_ID = bytes([0x44]) * 16
+LB3_STATE_REVISION = 7
+LB3_EPOCH = 1
+LB3_AUTH_ROOT = bytes([0x31]) * 32
+LB3_AUTH_MAC = bytes([0x72]) * 32
+LB3_CONTINUATION_BYTES = 2_080
+LB3_CONTINUATION = bytes(
+    ((index * 29 + 7) & 0xFF) for index in range(LB3_CONTINUATION_BYTES)
+)
+
+LB3_VARIANTS = {
+    "keys_unsampled": 1,
+    "keys_sampled": 2,
+    "header_sent": 3,
+    "ct1_received": 4,
+    "ek_sent_ct1_received": 5,
+    "no_header_received": 6,
+    "header_received": 7,
+    "ct1_sampled": 8,
+    "ek_received_ct1_sampled": 9,
+    "ct1_acknowledged": 10,
+    "ct2_sampled": 11,
+}
+
+BM3_TYPES = {
+    "none": TYPE_NONE,
+    "header": TYPE_HEADER,
+    "encapsulation_key": TYPE_EK,
+    "encapsulation_key_and_ciphertext1_ack": TYPE_EK_CT1_ACK,
+    "ciphertext1_ack": TYPE_CT1_ACK,
+    "ciphertext1": TYPE_CT1,
+    "ciphertext2": TYPE_CT2,
+}
+
 
 def hkdf(salt: bytes, ikm: bytes, info: bytes, length: int) -> bytes:
     prk = hmac.new(salt, ikm, hashlib.sha256).digest()
@@ -263,7 +297,9 @@ def parse_array(block: str, name: str, length: int) -> bytes:
     return value
 
 
-def load_mlkem768_kat(path: Path) -> tuple[bytes, bytes, bytes, bytes, bytes, bytes]:
+def load_mlkem768_kat(
+    path: Path,
+) -> tuple[bytes, bytes, bytes, bytes, bytes, bytes, bytes]:
     text = path.read_text(encoding="utf-8")
     start = text.index("#elif MLK_CONFIG_PARAMETER_SET == 768")
     end = text.index("#elif MLK_CONFIG_PARAMETER_SET == 1024", start)
@@ -276,9 +312,183 @@ def load_mlkem768_kat(path: Path) -> tuple[bytes, bytes, bytes, bytes, bytes, by
         z,
         m,
         parse_array(block, "test_vector_pk", 1184),
+        parse_array(block, "test_vector_sk", 2400),
         parse_array(block, "test_vector_ct", 1088),
         parse_array(block, "test_vector_ss", 32),
     )
+
+
+def encode_bm3(epoch: int, message_type: int, chunk: bytes | None) -> bytes:
+    requires_chunk = message_type not in (TYPE_NONE, TYPE_CT1_ACK)
+    if not 1 <= epoch <= 0x7FFF_FFFF_FFFF_FFFF:
+        raise ValueError("BM3 epoch is outside the signed-63 domain")
+    if requires_chunk != (chunk is not None):
+        raise ValueError("BM3 message type and chunk shape disagree")
+    if chunk is not None:
+        if len(chunk) != 34 or int.from_bytes(chunk[:2], "big") > 65_534:
+            raise ValueError("BM3 chunk is not canonical")
+    total_length = 58 if requires_chunk else 24
+    encoded = bytearray(total_length)
+    encoded[:3] = b"BM3"
+    encoded[3] = 1
+    encoded[4] = 1
+    encoded[5] = message_type
+    encoded[7] = 24
+    encoded[8:10] = total_length.to_bytes(2, "big")
+    encoded[10:12] = (1).to_bytes(2, "big")
+    encoded[12:20] = epoch.to_bytes(8, "big")
+    if chunk is not None:
+        encoded[24:] = chunk
+    return bytes(encoded)
+
+
+def encode_decoder(chunks: list[bytes], source_chunks: int, minimum: int = 0) -> bytes:
+    if not minimum <= len(chunks) < source_chunks:
+        raise ValueError("LB3 decoder progress is not incomplete and canonical")
+    canonical = sorted(chunks, key=lambda chunk: int.from_bytes(chunk[:2], "big"))
+    indexes = [int.from_bytes(chunk[:2], "big") for chunk in canonical]
+    if any(len(chunk) != 34 for chunk in canonical):
+        raise ValueError("LB3 decoder contains a malformed chunk")
+    if any(index > 65_534 for index in indexes) or len(set(indexes)) != len(indexes):
+        raise ValueError("LB3 decoder indexes are not canonical")
+    return len(canonical).to_bytes(2, "big") + b"".join(canonical)
+
+
+def encode_lb3(role: int, variant: int, body: bytes) -> bytes:
+    if role not in (1, 2) or variant not in LB3_VARIANTS.values():
+        raise ValueError("LB3 role or variant is not canonical")
+    total_length = 136 + len(body)
+    if not 136 <= total_length <= 4_434:
+        raise ValueError("LB3 payload exceeds the frozen revision-1 bound")
+    encoded = bytearray(136)
+    encoded[:3] = b"LB3"
+    encoded[3] = 1
+    encoded[4] = 1
+    encoded[5] = role
+    encoded[6] = variant
+    encoded[8:10] = (136).to_bytes(2, "big")
+    encoded[10:12] = (1).to_bytes(2, "big")
+    encoded[12:16] = total_length.to_bytes(4, "big")
+    encoded[16:32] = LB3_SESSION_ID
+    encoded[32:40] = LB3_STATE_REVISION.to_bytes(8, "big")
+    encoded[40:48] = LB3_EPOCH.to_bytes(8, "big")
+    encoded[48:56] = (0).to_bytes(8, "big")
+    encoded[56:64] = (0).to_bytes(8, "big")
+    encoded[64:96] = LB3_AUTH_ROOT
+    encoded[96:128] = LB3_AUTH_MAC
+    encoded[128:132] = len(body).to_bytes(4, "big")
+    return bytes(encoded) + body
+
+
+def codec_vectors(
+    private_key: bytes,
+    public_key_header: bytes,
+    public_key_vector: bytes,
+    header_mac: bytes,
+    ciphertext_one: bytes,
+    ciphertext_two: bytes,
+    ciphertext_mac: bytes,
+    header_payload: bytes,
+    ciphertext_two_payload: bytes,
+) -> dict[str, str]:
+    pending = public_key_header + LB3_CONTINUATION + ciphertext_one
+    if len(private_key) != 2_400 or len(pending) != 3_104:
+        raise AssertionError("frozen primitive sizes changed")
+
+    ct1_decoder = encode_decoder([erasure_chunk(ciphertext_one, 1)], 30, 1)
+    ct2_decoder = encode_decoder([erasure_chunk(ciphertext_two_payload, 1)], 5, 1)
+    public_decoder_one = encode_decoder([erasure_chunk(public_key_vector, 1)], 36, 1)
+    public_decoder_two = encode_decoder(
+        [erasure_chunk(public_key_vector, 1), erasure_chunk(public_key_vector, 4)],
+        36,
+    )
+    empty_header_decoder = encode_decoder([], 3)
+    empty_public_decoder = encode_decoder([], 36)
+
+    bodies = {
+        "keys_unsampled": b"",
+        "keys_sampled": private_key + header_mac + (1).to_bytes(2, "big"),
+        "header_sent": private_key + (0).to_bytes(2, "big") + ct1_decoder,
+        "ct1_received": private_key + ciphertext_one + (9).to_bytes(2, "big"),
+        "ek_sent_ct1_received": private_key + ciphertext_one + ct2_decoder,
+        "no_header_received": empty_header_decoder,
+        "header_received": public_key_header + empty_public_decoder,
+        "ct1_sampled": pending + (1).to_bytes(2, "big") + public_decoder_two,
+        "ek_received_ct1_sampled": pending
+        + public_key_vector
+        + (3).to_bytes(2, "big"),
+        "ct1_acknowledged": pending + public_decoder_one,
+        "ct2_sampled": ciphertext_two
+        + ciphertext_mac
+        + (0).to_bytes(2, "big"),
+    }
+
+    encoded_states: dict[str, bytes] = {}
+    sender_variants = {
+        "keys_unsampled",
+        "keys_sampled",
+        "header_sent",
+        "ct1_received",
+        "ek_sent_ct1_received",
+    }
+    for name, variant in LB3_VARIANTS.items():
+        encoded_states[name] = encode_lb3(
+            1 if name in sender_variants else 2,
+            variant,
+            bodies[name],
+        )
+
+    messages = {
+        "none": encode_bm3(7, TYPE_NONE, None),
+        "header": encode_bm3(7, TYPE_HEADER, erasure_chunk(header_payload, 3)),
+        "encapsulation_key": encode_bm3(
+            7, TYPE_EK, erasure_chunk(public_key_vector, 36)
+        ),
+        "encapsulation_key_and_ciphertext1_ack": encode_bm3(
+            7, TYPE_EK_CT1_ACK, erasure_chunk(public_key_vector, 37)
+        ),
+        "ciphertext1_ack": encode_bm3(7, TYPE_CT1_ACK, None),
+        "ciphertext1": encode_bm3(7, TYPE_CT1, erasure_chunk(ciphertext_one, 30)),
+        "ciphertext2": encode_bm3(
+            7, TYPE_CT2, erasure_chunk(ciphertext_two_payload, 5)
+        ),
+    }
+
+    state_bundle = hashlib.sha256()
+    values: dict[str, str] = {
+        "codec_vector_format": "layergram-scka-lb3-bm3-conformance-v1",
+        "lb3_payload_format": "1",
+        "lb3_protocol_revision": "1",
+        "lb3_session_id_hex": LB3_SESSION_ID.hex(),
+        "lb3_state_revision": str(LB3_STATE_REVISION),
+        "lb3_epoch": str(LB3_EPOCH),
+        "lb3_auth_root_hex": LB3_AUTH_ROOT.hex(),
+        "lb3_auth_mac_hex": LB3_AUTH_MAC.hex(),
+        "continuation_dependency": "libcrux-ml-kem=0.0.10",
+        "continuation_bytes": str(LB3_CONTINUATION_BYTES),
+        "continuation_pattern": "byte(i)=(29*i+7)%256",
+        "continuation_sha256": hashlib.sha256(LB3_CONTINUATION).hexdigest(),
+        "continuation_binding": "lb3-format-1+libcrux-ml-kem-0.0.10+2080-bytes",
+        "private_key_sha256": hashlib.sha256(private_key).hexdigest(),
+    }
+    for name, variant in LB3_VARIANTS.items():
+        encoded = encoded_states[name]
+        values[f"lb3_{name}_bytes"] = str(len(encoded))
+        values[f"lb3_{name}_sha256"] = hashlib.sha256(encoded).hexdigest()
+        state_bundle.update(bytes([variant]))
+        state_bundle.update(len(encoded).to_bytes(4, "big"))
+        state_bundle.update(encoded)
+    values["lb3_bundle_sha256"] = state_bundle.hexdigest()
+
+    message_bundle = hashlib.sha256()
+    for name, message_type in BM3_TYPES.items():
+        encoded = messages[name]
+        values[f"bm3_{name}_hex"] = encoded.hex()
+        message_bundle.update(bytes([message_type]))
+        message_bundle.update(len(encoded).to_bytes(2, "big"))
+        message_bundle.update(encoded)
+    values["bm3_bundle_sha256"] = message_bundle.hexdigest()
+    return values
 
 
 @dataclass(frozen=True)
@@ -377,7 +587,9 @@ def append_record(
 
 
 def generate_vector(kat_path: Path) -> dict[str, str]:
-    d, z, m, public_key, ciphertext, shared_secret = load_mlkem768_kat(kat_path)
+    d, z, m, public_key, private_key, ciphertext, shared_secret = load_mlkem768_kat(
+        kat_path
+    )
     public_vector, rho = public_key[:1152], public_key[1152:]
     ct1, ct2 = ciphertext[:960], ciphertext[960:]
     header = rho + hashlib.sha3_256(public_key).digest()
@@ -589,7 +801,7 @@ def generate_vector(kat_path: Path) -> dict[str, str]:
         raise AssertionError("Bob authenticator mismatch")
 
     vector = {
-        "format": "layergram-scka-cross-implementation-v2",
+        "format": "layergram-scka-cross-implementation-v3",
         "specification": "https://signal.org/docs/specifications/mlkembraid/ revision 1 2025-09-26",
         "mlkem_source": "third_party/mlkem-native/test/expected_test_vectors.h ML-KEM-768",
         "protocol_info_hex": PROTOCOL_INFO.hex(),
@@ -635,6 +847,19 @@ def generate_vector(kat_path: Path) -> dict[str, str]:
         "final_alice_state": "NoHeaderReceived:2",
         "final_bob_state": "KeysUnsampled:2",
     }
+    vector.update(
+        codec_vectors(
+            private_key,
+            header,
+            public_vector,
+            header_mac,
+            ct1,
+            ct2,
+            ciphertext_mac,
+            header_payload,
+            ct2_payload,
+        )
+    )
     vector.update(
         {
             f"round_{round_index:02d}_sha256": digest

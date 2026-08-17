@@ -2193,7 +2193,7 @@ mod tests {
     fn full_epoch_matches_independent_public_domain_cross_implementation_vector() {
         assert_eq!(
             vector_value("format"),
-            "layergram-scka-cross-implementation-v2"
+            "layergram-scka-cross-implementation-v3"
         );
         assert_eq!(hex(PROTOCOL_INFO), vector_value("protocol_info_hex"));
 
@@ -2484,6 +2484,354 @@ mod tests {
         assert_eq!(bob.auth_mac_key(), next_auth.mac_key());
         assert_eq!(alice_entropy.calls, 1);
         assert_eq!(bob_entropy.calls, 1);
+    }
+
+    #[test]
+    fn independent_lb3_bm3_and_continuation_binding_vectors_are_frozen() {
+        assert_eq!(
+            vector_value("codec_vector_format"),
+            "layergram-scka-lb3-bm3-conformance-v1"
+        );
+        assert_eq!(vector_value("lb3_payload_format"), "1");
+        assert_eq!(vector_value("lb3_protocol_revision"), "1");
+        assert_eq!(
+            vector_value("continuation_dependency"),
+            "libcrux-ml-kem=0.0.10"
+        );
+        assert_eq!(
+            vector_value("continuation_binding"),
+            "lb3-format-1+libcrux-ml-kem-0.0.10+2080-bytes"
+        );
+        assert_eq!(vector_value("continuation_pattern"), "byte(i)=(29*i+7)%256");
+
+        let mut key_seed = [0_u8; KEY_GENERATION_SEED_BYTES];
+        key_seed[..32].copy_from_slice(&D);
+        key_seed[32..].copy_from_slice(&Z);
+        let key_pair = key_pair_from_seed(&key_seed).unwrap();
+        key_seed.zeroize();
+        assert_eq!(
+            hex(&Sha256::digest(key_pair.private_key())),
+            vector_value("private_key_sha256")
+        );
+
+        let initial_auth = BraidAuthenticator::initialize(1, &SHARED_SECRET).unwrap();
+        let header_mac = initial_auth
+            .mac_header(1, key_pair.public_key_header())
+            .unwrap();
+        let mut header_payload = [0_u8; HEADER_AND_MAC_BYTES];
+        header_payload[..PUBLIC_KEY_HEADER_BYTES].copy_from_slice(key_pair.public_key_header());
+        header_payload[PUBLIC_KEY_HEADER_BYTES..].copy_from_slice(&header_mac);
+
+        let started = encapsulate_part_one_from_seed(key_pair.public_key_header(), &D).unwrap();
+        let ciphertext_part_one = *started.ciphertext();
+        let output_key = derive_output_key(started.shared_secret(), 1).unwrap();
+        let part_two =
+            encapsulate_part_two(started.into_pending(), key_pair.public_key_vector()).unwrap();
+        let next_auth = initial_auth.ratchet(1, &output_key).unwrap();
+        let ciphertext_mac = next_auth
+            .mac_ciphertext(1, &ciphertext_part_one, part_two.ciphertext())
+            .unwrap();
+        let mut ciphertext_two_payload = [0_u8; CT2_WITH_MAC_BYTES];
+        ciphertext_two_payload[..CIPHERTEXT_PART_TWO_BYTES].copy_from_slice(part_two.ciphertext());
+        ciphertext_two_payload[CIPHERTEXT_PART_TWO_BYTES..].copy_from_slice(&ciphertext_mac);
+
+        let continuation: Vec<u8> = (0..ENCAPSULATION_STATE_BYTES)
+            .map(|index| ((index * 29 + 7) & 0xff) as u8)
+            .collect();
+        assert_eq!(
+            continuation.len().to_string(),
+            vector_value("continuation_bytes")
+        );
+        assert_eq!(
+            hex(&Sha256::digest(&continuation)),
+            vector_value("continuation_sha256")
+        );
+
+        let encoded_decoder = |chunks: Vec<EncodedChunk>| {
+            let mut encoded = Vec::with_capacity(2 + chunks.len() * ENCODED_CHUNK_BYTES);
+            encoded.extend_from_slice(&(chunks.len() as u16).to_be_bytes());
+            for chunk in chunks {
+                encoded.extend_from_slice(&chunk.encode());
+            }
+            encoded
+        };
+        let chunk =
+            |kind, message: &[u8], index| encode_chunks(kind, message, &[index]).unwrap().remove(0);
+        let ct1_decoder = encoded_decoder(vec![chunk(
+            ErasureMessageKind::MlKem768Ciphertext1,
+            &ciphertext_part_one,
+            1,
+        )]);
+        let ct2_decoder = encoded_decoder(vec![chunk(
+            ErasureMessageKind::MlKem768Ciphertext2AndMac,
+            &ciphertext_two_payload,
+            1,
+        )]);
+        let public_decoder_one = encoded_decoder(vec![chunk(
+            ErasureMessageKind::MlKem768PublicKeyVector,
+            key_pair.public_key_vector(),
+            1,
+        )]);
+        let public_decoder_two = encoded_decoder(vec![
+            chunk(
+                ErasureMessageKind::MlKem768PublicKeyVector,
+                key_pair.public_key_vector(),
+                1,
+            ),
+            chunk(
+                ErasureMessageKind::MlKem768PublicKeyVector,
+                key_pair.public_key_vector(),
+                4,
+            ),
+        ]);
+
+        let pending = || {
+            let mut body = Vec::with_capacity(
+                PUBLIC_KEY_HEADER_BYTES + ENCAPSULATION_STATE_BYTES + CIPHERTEXT_PART_ONE_BYTES,
+            );
+            body.extend_from_slice(key_pair.public_key_header());
+            body.extend_from_slice(&continuation);
+            body.extend_from_slice(&ciphertext_part_one);
+            body
+        };
+        let mut keys_sampled = key_pair.private_key().to_vec();
+        keys_sampled.extend_from_slice(&header_mac);
+        keys_sampled.extend_from_slice(&1_u16.to_be_bytes());
+        let mut header_sent = key_pair.private_key().to_vec();
+        header_sent.extend_from_slice(&0_u16.to_be_bytes());
+        header_sent.extend_from_slice(&ct1_decoder);
+        let mut ct1_received = key_pair.private_key().to_vec();
+        ct1_received.extend_from_slice(&ciphertext_part_one);
+        ct1_received.extend_from_slice(&9_u16.to_be_bytes());
+        let mut ek_sent_ct1_received = key_pair.private_key().to_vec();
+        ek_sent_ct1_received.extend_from_slice(&ciphertext_part_one);
+        ek_sent_ct1_received.extend_from_slice(&ct2_decoder);
+        let mut header_received = key_pair.public_key_header().to_vec();
+        header_received.extend_from_slice(&0_u16.to_be_bytes());
+        let mut ct1_sampled = pending();
+        ct1_sampled.extend_from_slice(&1_u16.to_be_bytes());
+        ct1_sampled.extend_from_slice(&public_decoder_two);
+        let mut ek_received_ct1_sampled = pending();
+        ek_received_ct1_sampled.extend_from_slice(key_pair.public_key_vector());
+        ek_received_ct1_sampled.extend_from_slice(&3_u16.to_be_bytes());
+        let mut ct1_acknowledged = pending();
+        ct1_acknowledged.extend_from_slice(&public_decoder_one);
+        let mut ct2_sampled = ciphertext_two_payload.to_vec();
+        ct2_sampled.extend_from_slice(&0_u16.to_be_bytes());
+
+        let states = [
+            (
+                "keys_unsampled",
+                BraidStateVariant::KeysUnsampled,
+                StateRole::Initiator,
+                Vec::new(),
+            ),
+            (
+                "keys_sampled",
+                BraidStateVariant::KeysSampled,
+                StateRole::Initiator,
+                keys_sampled,
+            ),
+            (
+                "header_sent",
+                BraidStateVariant::HeaderSent,
+                StateRole::Initiator,
+                header_sent,
+            ),
+            (
+                "ct1_received",
+                BraidStateVariant::Ct1Received,
+                StateRole::Initiator,
+                ct1_received,
+            ),
+            (
+                "ek_sent_ct1_received",
+                BraidStateVariant::EkSentCt1Received,
+                StateRole::Initiator,
+                ek_sent_ct1_received,
+            ),
+            (
+                "no_header_received",
+                BraidStateVariant::NoHeaderReceived,
+                StateRole::Responder,
+                0_u16.to_be_bytes().to_vec(),
+            ),
+            (
+                "header_received",
+                BraidStateVariant::HeaderReceived,
+                StateRole::Responder,
+                header_received,
+            ),
+            (
+                "ct1_sampled",
+                BraidStateVariant::Ct1Sampled,
+                StateRole::Responder,
+                ct1_sampled,
+            ),
+            (
+                "ek_received_ct1_sampled",
+                BraidStateVariant::EkReceivedCt1Sampled,
+                StateRole::Responder,
+                ek_received_ct1_sampled,
+            ),
+            (
+                "ct1_acknowledged",
+                BraidStateVariant::Ct1Acknowledged,
+                StateRole::Responder,
+                ct1_acknowledged,
+            ),
+            (
+                "ct2_sampled",
+                BraidStateVariant::Ct2Sampled,
+                StateRole::Responder,
+                ct2_sampled,
+            ),
+        ];
+        let session = hex16(vector_value("lb3_session_id_hex"));
+        let state_revision = vector_value("lb3_state_revision").parse::<u64>().unwrap();
+        let epoch = vector_value("lb3_epoch").parse::<u64>().unwrap();
+        let auth_root = hex32(vector_value("lb3_auth_root_hex"));
+        let auth_mac = hex32(vector_value("lb3_auth_mac_hex"));
+        let mut state_bundle = Sha256::new();
+        let mut sampled_for_negative = None;
+        for (name, variant, role, body) in states {
+            let metadata =
+                StateMetadata::new(role, session, state_revision, epoch - 1, epoch - 1).unwrap();
+            let state =
+                braid_state_payload::encode(metadata, epoch, variant, &auth_root, &auth_mac, &body)
+                    .unwrap();
+            assert_eq!(
+                state.encoded().len().to_string(),
+                vector_value(&format!("lb3_{name}_bytes"))
+            );
+            assert_eq!(
+                hex(&Sha256::digest(state.encoded())),
+                vector_value(&format!("lb3_{name}_sha256"))
+            );
+            let decoded = braid_state_payload::decode(metadata, state.encoded()).unwrap();
+            assert_eq!(decoded.variant(), variant);
+            assert_eq!(decoded.encoded(), state.encoded());
+            state_bundle.update([variant as u8]);
+            state_bundle.update((state.encoded().len() as u32).to_be_bytes());
+            state_bundle.update(state.encoded());
+            if variant == BraidStateVariant::Ct1Sampled {
+                assert_eq!(
+                    hex(&Sha256::digest(
+                        &state.body()[PUBLIC_KEY_HEADER_BYTES
+                            ..PUBLIC_KEY_HEADER_BYTES + ENCAPSULATION_STATE_BYTES]
+                    )),
+                    vector_value("continuation_sha256")
+                );
+                sampled_for_negative = Some((metadata, state.encoded().to_vec()));
+            }
+        }
+        assert_eq!(
+            hex(&state_bundle.finalize()),
+            vector_value("lb3_bundle_sha256")
+        );
+
+        let (sampled_metadata, mut wrong_format) = sampled_for_negative.unwrap();
+        wrong_format[3] = 2;
+        assert!(braid_state_payload::decode(sampled_metadata, &wrong_format).is_err());
+        let mut short_continuation = key_pair.public_key_header().to_vec();
+        short_continuation.extend_from_slice(&continuation[..continuation.len() - 1]);
+        short_continuation.extend_from_slice(&ciphertext_part_one);
+        short_continuation.extend_from_slice(&1_u16.to_be_bytes());
+        short_continuation.extend_from_slice(&public_decoder_two);
+        assert!(braid_state_payload::encode(
+            sampled_metadata,
+            epoch,
+            BraidStateVariant::Ct1Sampled,
+            &auth_root,
+            &auth_mac,
+            &short_continuation,
+        )
+        .is_err());
+
+        let messages = [
+            (
+                "none",
+                BraidPublicMessage::without_data(7, BraidMessageType::None).unwrap(),
+            ),
+            (
+                "header",
+                BraidPublicMessage::with_chunk(
+                    7,
+                    BraidMessageType::Header,
+                    chunk(ErasureMessageKind::HeaderAndMac, &header_payload, 3),
+                )
+                .unwrap(),
+            ),
+            (
+                "encapsulation_key",
+                BraidPublicMessage::with_chunk(
+                    7,
+                    BraidMessageType::EncapsulationKey,
+                    chunk(
+                        ErasureMessageKind::MlKem768PublicKeyVector,
+                        key_pair.public_key_vector(),
+                        36,
+                    ),
+                )
+                .unwrap(),
+            ),
+            (
+                "encapsulation_key_and_ciphertext1_ack",
+                BraidPublicMessage::with_chunk(
+                    7,
+                    BraidMessageType::EncapsulationKeyAndCiphertext1Ack,
+                    chunk(
+                        ErasureMessageKind::MlKem768PublicKeyVector,
+                        key_pair.public_key_vector(),
+                        37,
+                    ),
+                )
+                .unwrap(),
+            ),
+            (
+                "ciphertext1_ack",
+                BraidPublicMessage::without_data(7, BraidMessageType::Ciphertext1Ack).unwrap(),
+            ),
+            (
+                "ciphertext1",
+                BraidPublicMessage::with_chunk(
+                    7,
+                    BraidMessageType::Ciphertext1,
+                    chunk(
+                        ErasureMessageKind::MlKem768Ciphertext1,
+                        &ciphertext_part_one,
+                        30,
+                    ),
+                )
+                .unwrap(),
+            ),
+            (
+                "ciphertext2",
+                BraidPublicMessage::with_chunk(
+                    7,
+                    BraidMessageType::Ciphertext2,
+                    chunk(
+                        ErasureMessageKind::MlKem768Ciphertext2AndMac,
+                        &ciphertext_two_payload,
+                        5,
+                    ),
+                )
+                .unwrap(),
+            ),
+        ];
+        let mut message_bundle = Sha256::new();
+        for (name, message) in messages {
+            let encoded = message.encode();
+            assert_eq!(hex(&encoded), vector_value(&format!("bm3_{name}_hex")));
+            assert_eq!(BraidPublicMessage::decode(&encoded).unwrap(), message);
+            message_bundle.update([message.message_type() as u8]);
+            message_bundle.update((encoded.len() as u16).to_be_bytes());
+            message_bundle.update(encoded);
+        }
+        assert_eq!(
+            hex(&message_bundle.finalize()),
+            vector_value("bm3_bundle_sha256")
+        );
     }
 
     #[test]
@@ -5352,6 +5700,17 @@ mod tests {
         let mut output = [0_u8; 32];
         let mut index = 0;
         while index < 32 {
+            output[index] = (nibble(bytes[index * 2]) << 4) | nibble(bytes[index * 2 + 1]);
+            index += 1;
+        }
+        output
+    }
+
+    const fn hex16(value: &str) -> [u8; 16] {
+        let bytes = value.as_bytes();
+        let mut output = [0_u8; 16];
+        let mut index = 0;
+        while index < 16 {
             output[index] = (nibble(bytes[index * 2]) << 4) | nibble(bytes[index * 2 + 1]);
             index += 1;
         }

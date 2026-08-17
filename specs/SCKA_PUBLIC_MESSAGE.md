@@ -118,9 +118,13 @@ wire-size boundaries, and hostile fixed-field/type/shape/chunk inputs. The
 golden bytes were generated independently with Python standard-library integer
 and byte encoding, not by the Rust codec under test.
 
-Activation still requires the complete immutable revision-1 transition engine,
-approved OS entropy, authenticated reconstruction integration, LS3/LB3/TR3
-atomic revision binding, independent cross-implementation vectors, fuzzing and
-sanitizers, panic containment, crash/restart/rollback/concurrency tests,
-packaged physical-device traversal, and independent cryptographic and
-implementation review.
+Cross-implementation vector format v3 independently constructs one exact BM3
+record for every message type from the frozen transcript material. Rust
+requires exact byte equality, canonical decode/re-encode, and an aggregate
+type/length/record digest. This is implementation-independent conformance
+evidence, not an external review or an activation decision.
+
+Activation still requires production LS3/LB3/TR3 atomic revision binding,
+recurring fuzzing and sanitizer evidence, signed packaged traversal for every
+shipped architecture, release registration review, and independent
+cryptographic and implementation review.

@@ -286,7 +286,7 @@ independent transcript digest is
 `test_scka_hardening.sh` first regenerates and compares this vector before its
 sanitizer run.
 
-Vector format v2 also contains a Python-owned GF(2^16) receive decoder. For
+Vector format v3 retains the Python-owned GF(2^16) receive decoder. For
 each of Header, public-key vector, Ct1, and `Ct2 || MAC`, it drops source
 symbols, mixes systematic and parity indexes, reverses their order, reconstructs
 the exact payload, treats exact duplicates idempotently, rejects conflicting
@@ -297,9 +297,21 @@ Negative tag mutations must be rejected. The Rust conformance test independently
 recreates the same mixed chunk sets, decodes them, and verifies the MACs over
 the recovered bytes.
 
-This closes the implementation-independent revision-1 vector gate. It is not
-an external audit, proof of the protocol, production registration, or
-cross-platform packaging approval.
+Format v3 additionally freezes the complete canonical `LB3` encoding of all
+11 revision-1 state variants and the complete canonical `BM3` encoding of all
+seven public-message types. Python constructs the headers, bodies, decoder
+progress, role/epoch metadata, and exact byte lengths without calling Rust;
+Rust reconstructs the same semantic fixtures, compares every per-state digest
+and every full BM3 record, decodes them, and checks aggregate bundle digests.
+The three pending variants carry one deterministic 2,080-byte opaque
+continuation whose digest is frozen together with payload format 1 and the
+exact `libcrux-ml-kem = 0.0.10` dependency. A different payload format or
+continuation length is rejected. Same-length continuation integrity still
+comes from authenticated `LS3`, as required by the protocol boundary.
+
+This strengthens the implementation-independent revision-1 vector gate. It is
+not the required external independent review, proof of the protocol,
+production registration, or cross-platform packaging approval.
 
 ## Candidate packaging and release direction
 

@@ -134,6 +134,13 @@ before part 2, malformed-key rejection, shared-secret agreement, transition-9
 completion through the restored pending owner, and exact public-key/ciphertext
 SHA-256 values from the existing independent `mlkem-native` FIPS vector.
 
+Cross-implementation vector format v3 additionally freezes one deterministic
+2,080-byte opaque continuation inside each pending LB3 variant. The vector
+binds its digest and length to LB3 payload format 1 and
+`libcrux-ml-kem = 0.0.10`; Rust rejects a different payload format or length.
+This deliberately does not claim semantic validation of arbitrary same-length
+opaque bytes, whose integrity is supplied by authenticated LS3 state.
+
 This primitive boundary alone does not provide Braid epochs, erasure
 scheduling, MACs, authenticated state payloads, recovery, rollback protection,
 or OS entropy. It does not make Layergram quantum-resistant. Activation still

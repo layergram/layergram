@@ -91,19 +91,25 @@ python3 tool/pq/generate_scka_cross_implementation_vector.py \
   --check native/layergram_scka/testdata/braid_r1_cross_impl_vector.txt
 cargo test --manifest-path native/layergram_scka/Cargo.toml \
   full_epoch_matches_independent_public_domain_cross_implementation_vector
+cargo test --manifest-path native/layergram_scka/Cargo.toml \
+  independent_lb3_bm3_and_continuation_binding_vectors_are_frozen
 ```
 
 The oracle uses only the public-domain specification and the already vendored,
 permissively licensed `mlkem-native` ML-KEM-768 KAT. It does not import or run
 the production Rust module or Signal's AGPL implementation. The Rust test
 compares a complete two-party epoch at all 174 transcript records. Vector
-format v2 also uses an independent Python GF(2^16) receive decoder to recover
+format v3 also uses an independent Python GF(2^16) receive decoder to recover
 Header, public-key vector, Ct1, and `Ct2 || MAC` from reordered mixtures of
 systematic and parity symbols. It verifies header MAC, public-key binding, and
 ciphertext MAC after recovery, including negative tag checks. Rust recreates
-the same mixed chunk-set digests and authenticates the recovered bytes. This
-closes the strengthened independent-vector checkpoint but does not activate or
-register v3.
+the same mixed chunk-set digests and authenticates the recovered bytes. Format
+v3 also constructs all 11 canonical `LB3` variants and all seven canonical
+`BM3` types in Python. Rust compares their independent digests or exact bytes,
+decodes them, and checks that the opaque 2,080-byte continuation remains tied
+to LB3 payload format 1 and `libcrux-ml-kem = 0.0.10`. This strengthens the
+independent-vector checkpoint but does not complete the external independent
+review, activate, or register v3.
 
 Run the host-native wrapper, vector, production-ABI, and sanitizer checks:
 

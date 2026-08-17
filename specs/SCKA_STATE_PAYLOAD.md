@@ -182,10 +182,17 @@ parity, signed-63 boundaries, private/public-key corruption, malformed lengths,
 reserved fields, decoder ordering/duplication/completion, impossible progress,
 and the explicit wipe path.
 
-Activation still requires the complete revision-1 transition engine,
-integration and review of the ratcheted authenticator and KDF frozen in
-`SCKA_AUTHENTICATOR.md` and the public-message codec frozen in
-`SCKA_PUBLIC_MESSAGE.md`, approved OS entropy, authenticated reconstruction,
-cross-implementation vectors, fuzzing and sanitizers,
-panic containment, crash/restart/rollback/concurrency tests, packaged physical
-device traversal, and independent cryptographic and implementation review.
+Cross-implementation vector format v3 independently constructs the complete
+canonical LB3 bytes for all 11 variants from the permissive ML-KEM KAT and
+Python standard-library byte encoding. Rust reconstructs the same semantic
+fixtures, compares every payload digest and an aggregate variant/length/payload
+digest, then performs canonical decode/re-encode. The pending variants share a
+deterministic opaque continuation whose exact 2,080-byte digest is frozen with
+payload format 1 and `libcrux-ml-kem = 0.0.10`; a changed format or length fails
+closed. Same-length opaque contents remain protected by authenticated LS3 and
+are not claimed to be semantically validated by LB3.
+
+Activation still requires production LS3/TR3 journal composition, recurring
+fuzzing and sanitizer evidence, signed packaged traversal for every shipped
+architecture, release registration review, and independent cryptographic and
+implementation review of the complete frozen boundary.
