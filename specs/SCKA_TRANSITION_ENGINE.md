@@ -406,6 +406,12 @@ freezes a full public-domain revision-1 epoch independently of this Rust
 module. The Rust conformance test matches the ML-KEM KAT boundary,
 authenticator KDF/MAC values, parity erasure symbols, all 174 ordered
 send/receive transcript records, both final states, and the shared epoch key.
+The v2 oracle additionally reconstructs all four data-bearing payload classes
+with its own GF(2^16) decoder from reordered mixtures of systematic and parity
+symbols. Header authentication, complete public-key binding, and ciphertext
+authentication are checked only after recovery, and deliberately corrupted
+tags fail closed. Rust freezes the same encoded-chunk-set digests and verifies
+the recovered payloads independently.
 The oracle and vector add no runtime dependency and use no AGPL implementation
 source.
 

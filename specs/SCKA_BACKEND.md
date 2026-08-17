@@ -286,6 +286,17 @@ independent transcript digest is
 `test_scka_hardening.sh` first regenerates and compares this vector before its
 sanitizer run.
 
+Vector format v2 also contains a Python-owned GF(2^16) receive decoder. For
+each of Header, public-key vector, Ct1, and `Ct2 || MAC`, it drops source
+symbols, mixes systematic and parity indexes, reverses their order, reconstructs
+the exact payload, treats exact duplicates idempotently, rejects conflicting
+duplicates, and freezes the encoded-chunk-set digest. The oracle then
+authenticates the reconstructed header, binds the reconstructed public-key
+vector to its header digest, and authenticates the reconstructed ciphertext.
+Negative tag mutations must be rejected. The Rust conformance test independently
+recreates the same mixed chunk sets, decodes them, and verifies the MACs over
+the recovered bytes.
+
 This closes the implementation-independent revision-1 vector gate. It is not
 an external audit, proof of the protocol, production registration, or
 cross-platform packaging approval.

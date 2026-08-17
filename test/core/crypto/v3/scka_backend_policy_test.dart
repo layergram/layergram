@@ -530,6 +530,17 @@ void main() {
             'third_party/mlkem-native/test/expected_test_vectors.h ML-KEM-768',
         'completeEpochs': 1,
         'transcriptRecords': 174,
+        'vectorFormat': 'layergram-scka-cross-implementation-v2',
+        'independentReceiveErasureDecoder': true,
+        'mixedSystematicParityRecovery': true,
+        'reorderedRecovery': true,
+        'exactDuplicateIdempotent': true,
+        'conflictingDuplicateRejected': true,
+        'headerMacVerifiedAfterRecovery': true,
+        'publicKeyBindingVerifiedAfterRecovery': true,
+        'ciphertextMacVerifiedAfterRecovery': true,
+        'tamperedAuthenticationRejected': true,
+        'recoveryChunkSetDigestsFrozen': true,
         'transcriptSha256':
             'fdee3ec45793c14a7317076ebd914690a98c49408a02330046b7189882768275',
       },
@@ -674,6 +685,7 @@ void main() {
       effects['candidateIndependentCrossImplementationVectorAdded'],
       isTrue,
     );
+    expect(effects['candidateIndependentReceiveOracleAdded'], isTrue);
     expect(effects['candidateIosPhysicalScopeSmokeAdded'], isTrue);
     expect(effects['candidateAndroidPhysicalScopeSmokeAdded'], isTrue);
     expect(effects['candidateAndroidAppBundleSmokeAdded'], isTrue);

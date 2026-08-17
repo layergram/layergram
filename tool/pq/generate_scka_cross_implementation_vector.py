@@ -172,6 +172,83 @@ def erasure_chunk(message: bytes, index: int) -> bytes:
     return index.to_bytes(2, "big") + encoded
 
 
+def erasure_decode(chunks: list[bytes], message_bytes: int) -> bytes:
+    """Recover one revision-1 erasure payload without production code."""
+    if message_bytes <= 0 or message_bytes % 32:
+        raise ValueError("message length must contain complete 32-byte symbols")
+    source_chunks = message_bytes // 32
+    if source_chunks > 36 or len(chunks) > 72:
+        raise ValueError("erasure recovery exceeds revision-1 bounds")
+
+    unique: dict[int, bytes] = {}
+    for chunk in chunks:
+        if len(chunk) != 34:
+            raise ValueError("encoded chunk must contain an index and 32-byte symbol")
+        index = int.from_bytes(chunk[:2], "big")
+        if index > 65_534:
+            raise ValueError("encoded chunk uses the reserved index")
+        previous = unique.get(index)
+        if previous is not None and not hmac.compare_digest(previous, chunk[2:]):
+            raise ValueError("conflicting duplicate erasure chunk")
+        unique[index] = chunk[2:]
+    if len(unique) < source_chunks:
+        raise ValueError("insufficient unique erasure chunks")
+
+    selected = sorted(unique.items())[:source_chunks]
+    systematic = systematic_inverse(source_chunks)
+    decoding_matrix = invert(
+        [coefficients(source_chunks, index, systematic) for index, _ in selected]
+    )
+    received_symbols = [
+        [
+            int.from_bytes(symbol[offset : offset + 2], "big")
+            for offset in range(0, 32, 2)
+        ]
+        for _, symbol in selected
+    ]
+    recovered = bytearray()
+    for row in decoding_matrix:
+        for word_index in range(16):
+            value = 0
+            for coefficient, symbol in zip(row, received_symbols):
+                value ^= gf_multiply(coefficient, symbol[word_index])
+            recovered.extend(value.to_bytes(2, "big"))
+    if len(recovered) != message_bytes:
+        raise AssertionError("independent erasure decoder returned the wrong length")
+    return bytes(recovered)
+
+
+def recovery_indexes(source_chunks: int) -> list[int]:
+    """Select a deterministic reordered mix of source and parity symbols."""
+    return list(
+        reversed(
+            [
+                offset if offset % 2 == 0 else source_chunks + offset * 7
+                for offset in range(source_chunks)
+            ]
+        )
+    )
+
+
+def recovery_vector(message: bytes) -> tuple[list[int], bytes, bytes]:
+    indexes = recovery_indexes(len(message) // 32)
+    chunks = [erasure_chunk(message, index) for index in indexes]
+    recovered = erasure_decode(chunks, len(message))
+    if not hmac.compare_digest(recovered, message):
+        raise AssertionError("mixed erasure recovery changed the payload")
+    if erasure_decode(chunks + [chunks[0]], len(message)) != recovered:
+        raise AssertionError("exact duplicate changed erasure recovery")
+    conflicting = bytearray(chunks[0])
+    conflicting[-1] ^= 1
+    try:
+        erasure_decode(chunks + [bytes(conflicting)], len(message))
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("conflicting erasure duplicate was accepted")
+    return indexes, hashlib.sha256(b"".join(chunks)).digest(), recovered
+
+
 def parse_array(block: str, name: str, length: int) -> bytes:
     match = re.search(
         rf"static const uint8_t {re.escape(name)}\[{length}\] = \{{(.*?)\}};",
@@ -217,9 +294,59 @@ class Actor:
     state: str
     epoch: int = 1
     send_index: int = 0
-    received: set[int] = field(default_factory=set)
+    received: dict[int, bytes] = field(default_factory=dict)
     root_key: bytes = b""
     mac_key: bytes = b""
+    recovered_header: bytes | None = None
+    recovered_ciphertext_one: bytes | None = None
+
+
+def store_chunk(actor: Actor, chunk: bytes | None) -> None:
+    if chunk is None or len(chunk) != 34:
+        raise ValueError("state transition requires one canonical erasure chunk")
+    index = int.from_bytes(chunk[:2], "big")
+    if index > 65_534:
+        raise ValueError("state transition received the reserved erasure index")
+    previous = actor.received.get(index)
+    if previous is not None and not hmac.compare_digest(previous, chunk):
+        raise ValueError("state transition received a conflicting duplicate")
+    actor.received[index] = chunk
+
+
+def verify_header_payload(payload: bytes, mac_key: bytes, epoch: int) -> bytes:
+    if len(payload) != 96:
+        raise ValueError("reconstructed header payload has the wrong length")
+    header, supplied_mac = payload[:64], payload[64:]
+    expected_mac = protocol_mac(mac_key, HEADER_MAC, epoch, header)
+    if not hmac.compare_digest(supplied_mac, expected_mac):
+        raise ValueError("reconstructed header authentication failed")
+    return header
+
+
+def verify_public_key_binding(header: bytes, public_vector: bytes) -> None:
+    if len(header) != 64 or len(public_vector) != 1_152:
+        raise ValueError("reconstructed public-key material has the wrong length")
+    rho, supplied_digest = header[:32], header[32:]
+    expected_digest = hashlib.sha3_256(public_vector + rho).digest()
+    if not hmac.compare_digest(supplied_digest, expected_digest):
+        raise ValueError("reconstructed public key is not bound to the header")
+
+
+def verify_ciphertext_payload(
+    payload: bytes,
+    ciphertext_one: bytes,
+    mac_key: bytes,
+    epoch: int,
+) -> bytes:
+    if len(payload) != 160 or len(ciphertext_one) != 960:
+        raise ValueError("reconstructed ciphertext material has the wrong length")
+    ciphertext_two, supplied_mac = payload[:128], payload[128:]
+    expected_mac = protocol_mac(
+        mac_key, CIPHERTEXT_MAC, epoch, ciphertext_one + ciphertext_two
+    )
+    if not hmac.compare_digest(supplied_mac, expected_mac):
+        raise ValueError("reconstructed ciphertext authentication failed")
+    return ciphertext_two
 
 
 def append_record(
@@ -261,6 +388,38 @@ def generate_vector(kat_path: Path) -> dict[str, str]:
     ciphertext_mac = protocol_mac(next_mac, CIPHERTEXT_MAC, 1, ct1 + ct2)
     header_payload = header + header_mac
     ct2_payload = ct2 + ciphertext_mac
+
+    recovery = {
+        "header": recovery_vector(header_payload),
+        "public_vector": recovery_vector(public_vector),
+        "ciphertext1": recovery_vector(ct1),
+        "ciphertext2": recovery_vector(ct2_payload),
+    }
+    if verify_header_payload(recovery["header"][2], initial_mac, 1) != header:
+        raise AssertionError("mixed header recovery changed the authenticated header")
+    verify_public_key_binding(header, recovery["public_vector"][2])
+    recovered_ct2 = verify_ciphertext_payload(
+        recovery["ciphertext2"][2], recovery["ciphertext1"][2], next_mac, 1
+    )
+    if not hmac.compare_digest(recovered_ct2, ct2):
+        raise AssertionError("mixed ciphertext recovery changed ciphertext part two")
+
+    tampered_header = bytearray(header_payload)
+    tampered_header[-1] ^= 1
+    try:
+        verify_header_payload(bytes(tampered_header), initial_mac, 1)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("tampered header MAC was accepted")
+    tampered_ciphertext = bytearray(ct2_payload)
+    tampered_ciphertext[-1] ^= 1
+    try:
+        verify_ciphertext_payload(bytes(tampered_ciphertext), ct1, next_mac, 1)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("tampered ciphertext MAC was accepted")
 
     alice = Actor(1, "keys_unsampled", root_key=initial_root, mac_key=initial_mac)
     bob = Actor(2, "no_header", root_key=initial_root, mac_key=initial_mac)
@@ -313,26 +472,44 @@ def generate_vector(kat_path: Path) -> dict[str, str]:
         nonlocal alice_output
         high_water = actor.epoch - 1
         if actor.state == "no_header" and message.epoch == actor.epoch and message.message_type == TYPE_HEADER:
-            actor.received.add(int.from_bytes(message.chunk[:2], "big"))
+            store_chunk(actor, message.chunk)
             if len(actor.received) == 3:
+                payload = erasure_decode(list(actor.received.values()), 96)
+                actor.recovered_header = verify_header_payload(
+                    payload, actor.mac_key, actor.epoch
+                )
                 actor.state = "header_received"
                 actor.received.clear()
             return high_water, None
         if actor.state == "keys_sampled" and message.epoch == actor.epoch and message.message_type == TYPE_CT1:
             actor.state = "header_sent"
             actor.send_index = 0
-            actor.received = {int.from_bytes(message.chunk[:2], "big")}
+            store_chunk(actor, message.chunk)
             return high_water, None
         if actor.state == "header_sent" and message.epoch == actor.epoch and message.message_type == TYPE_CT1:
-            actor.received.add(int.from_bytes(message.chunk[:2], "big"))
+            store_chunk(actor, message.chunk)
             if len(actor.received) == 30:
+                actor.recovered_ciphertext_one = erasure_decode(
+                    list(actor.received.values()), 960
+                )
                 actor.state = "ct1_received"
                 actor.received.clear()
             return high_water, None
         if actor.state in ("ct1_sampled", "ct1_acknowledged") and message.epoch == actor.epoch and message.message_type in (TYPE_EK, TYPE_EK_CT1_ACK):
-            actor.received.add(int.from_bytes(message.chunk[:2], "big"))
+            store_chunk(actor, message.chunk)
             acknowledged = message.message_type == TYPE_EK_CT1_ACK
-            if len(actor.received) == 36 and acknowledged:
+            if len(actor.received) >= 36:
+                recovered_public_vector = erasure_decode(
+                    list(actor.received.values()), 1_152
+                )
+                if actor.recovered_header is None:
+                    raise AssertionError("public key completed before its header")
+                verify_public_key_binding(
+                    actor.recovered_header, recovered_public_vector
+                )
+                if not hmac.compare_digest(recovered_public_vector, public_vector):
+                    raise AssertionError("transcript public key differs from the ML-KEM KAT")
+            if len(actor.received) >= 36 and acknowledged:
                 actor.state = "ct2_sampled"
                 actor.send_index = 0
                 actor.received.clear()
@@ -341,11 +518,25 @@ def generate_vector(kat_path: Path) -> dict[str, str]:
             return high_water, None
         if actor.state == "ct1_received" and message.epoch == actor.epoch and message.message_type == TYPE_CT2:
             actor.state = "ek_sent_ct1_received"
-            actor.received = {int.from_bytes(message.chunk[:2], "big")}
+            store_chunk(actor, message.chunk)
             return high_water, None
         if actor.state == "ek_sent_ct1_received" and message.epoch == actor.epoch and message.message_type == TYPE_CT2:
-            actor.received.add(int.from_bytes(message.chunk[:2], "big"))
+            store_chunk(actor, message.chunk)
             if len(actor.received) == 5:
+                payload = erasure_decode(list(actor.received.values()), 160)
+                if actor.recovered_ciphertext_one is None:
+                    raise AssertionError("ciphertext part two completed before part one")
+                recovered_ciphertext_two = verify_ciphertext_payload(
+                    payload,
+                    actor.recovered_ciphertext_one,
+                    next_mac,
+                    actor.epoch,
+                )
+                if not hmac.compare_digest(
+                    actor.recovered_ciphertext_one + recovered_ciphertext_two,
+                    ciphertext,
+                ):
+                    raise AssertionError("transcript ciphertext differs from the ML-KEM KAT")
                 actor.state = "no_header"
                 actor.epoch += 1
                 actor.received.clear()
@@ -398,7 +589,7 @@ def generate_vector(kat_path: Path) -> dict[str, str]:
         raise AssertionError("Bob authenticator mismatch")
 
     vector = {
-        "format": "layergram-scka-cross-implementation-v1",
+        "format": "layergram-scka-cross-implementation-v2",
         "specification": "https://signal.org/docs/specifications/mlkembraid/ revision 1 2025-09-26",
         "mlkem_source": "third_party/mlkem-native/test/expected_test_vectors.h ML-KEM-768",
         "protocol_info_hex": PROTOCOL_INFO.hex(),
@@ -422,6 +613,23 @@ def generate_vector(kat_path: Path) -> dict[str, str]:
         "public_vector_chunk_36_hex": erasure_chunk(public_vector, 36).hex(),
         "ciphertext1_chunk_30_hex": erasure_chunk(ct1, 30).hex(),
         "ciphertext2_chunk_5_hex": erasure_chunk(ct2_payload, 5).hex(),
+        "receive_header_indexes": ",".join(
+            str(index) for index in recovery["header"][0]
+        ),
+        "receive_header_chunks_sha256": recovery["header"][1].hex(),
+        "receive_public_vector_indexes": ",".join(
+            str(index) for index in recovery["public_vector"][0]
+        ),
+        "receive_public_vector_chunks_sha256": recovery["public_vector"][1].hex(),
+        "receive_ciphertext1_indexes": ",".join(
+            str(index) for index in recovery["ciphertext1"][0]
+        ),
+        "receive_ciphertext1_chunks_sha256": recovery["ciphertext1"][1].hex(),
+        "receive_ciphertext2_indexes": ",".join(
+            str(index) for index in recovery["ciphertext2"][0]
+        ),
+        "receive_ciphertext2_chunks_sha256": recovery["ciphertext2"][1].hex(),
+        "receive_authentication": "header+public-key-binding+ciphertext-mac",
         "transcript_records": str(records),
         "transcript_sha256": transcript.hexdigest(),
         "final_alice_state": "NoHeaderReceived:2",

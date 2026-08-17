@@ -1,7 +1,7 @@
 # Layergram-owned independent ML-KEM Braid revision-1 vector
 # Generated only from the public-domain specification, Python stdlib,
 # and the permissively licensed mlkem-native ML-KEM-768 KAT.
-format=layergram-scka-cross-implementation-v1
+format=layergram-scka-cross-implementation-v2
 specification=https://signal.org/docs/specifications/mlkembraid/ revision 1 2025-09-26
 mlkem_source=third_party/mlkem-native/test/expected_test_vectors.h ML-KEM-768
 protocol_info_hex=4c617965726772616d56335f4d4c4b454d3736385f484d41432d534841323536
@@ -25,6 +25,15 @@ ct2_payload_sha256=2a63d0aab3d21a1d5dae6548145b6efcdc1191a59e00c823b43303419dd8f
 public_vector_chunk_36_hex=00241b5aa567cc012e81704f5df3d95ee77ba7e046a293d273a925ec632b714a9c84
 ciphertext1_chunk_30_hex=001ee0826481f6a34560bbbd83bfc956dba0f628ca2d5640cd82f497c951e8cec618
 ciphertext2_chunk_5_hex=000541879e8361642729fef7434df870483e829302cae04753f034e6753df98398d2
+receive_header_indexes=2,10,0
+receive_header_chunks_sha256=9b79b51391700e417c3b5bbf0f1cb42456f38ed8a5e9af7ec87976443517ab4a
+receive_public_vector_indexes=281,34,267,32,253,30,239,28,225,26,211,24,197,22,183,20,169,18,155,16,141,14,127,12,113,10,99,8,85,6,71,4,57,2,43,0
+receive_public_vector_chunks_sha256=34d65b4fc1624845f04861030448ee6dbc6e3d8b37285702b869fa5a5d7d3e1b
+receive_ciphertext1_indexes=233,28,219,26,205,24,191,22,177,20,163,18,149,16,135,14,121,12,107,10,93,8,79,6,65,4,51,2,37,0
+receive_ciphertext1_chunks_sha256=783fa6714b5a30b5d00f6ec3cb132f8256fb1cb9401cf6023da6ea10707077fb
+receive_ciphertext2_indexes=4,26,2,12,0
+receive_ciphertext2_chunks_sha256=a2b1b19e581ebc7c04af936d1509df5ca45c21c7467be846fe25dace7554cdcd
+receive_authentication=header+public-key-binding+ciphertext-mac
 transcript_records=174
 transcript_sha256=fdee3ec45793c14a7317076ebd914690a98c49408a02330046b7189882768275
 final_alice_state=NoHeaderReceived:2

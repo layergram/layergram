@@ -2193,7 +2193,7 @@ mod tests {
     fn full_epoch_matches_independent_public_domain_cross_implementation_vector() {
         assert_eq!(
             vector_value("format"),
-            "layergram-scka-cross-implementation-v1"
+            "layergram-scka-cross-implementation-v2"
         );
         assert_eq!(hex(PROTOCOL_INFO), vector_value("protocol_info_hex"));
 
@@ -2309,6 +2309,62 @@ mod tests {
                 .encode();
             assert_eq!(hex(&encoded), vector_value(vector_key));
         }
+
+        assert_eq!(
+            vector_value("receive_authentication"),
+            "header+public-key-binding+ciphertext-mac"
+        );
+        let recover = |kind, message: &[u8], indexes_key: &str, chunks_key: &str| {
+            let indexes = vector_indexes(indexes_key);
+            let chunks = encode_chunks(kind, message, &indexes).unwrap();
+            let encoded = chunks
+                .iter()
+                .flat_map(|chunk| chunk.encode())
+                .collect::<Vec<_>>();
+            assert_eq!(hex(&Sha256::digest(encoded)), vector_value(chunks_key));
+            let recovered = decode_message(kind, &chunks).unwrap();
+            assert_eq!(recovered, message);
+            recovered
+        };
+        let recovered_header = recover(
+            ErasureMessageKind::HeaderAndMac,
+            &header_payload,
+            "receive_header_indexes",
+            "receive_header_chunks_sha256",
+        );
+        initial_auth
+            .verify_header(1, &recovered_header[..64], &recovered_header[64..])
+            .unwrap();
+        assert_eq!(&recovered_header[..64], key_pair.public_key_header());
+
+        let recovered_public_vector = recover(
+            ErasureMessageKind::MlKem768PublicKeyVector,
+            key_pair.public_key_vector(),
+            "receive_public_vector_indexes",
+            "receive_public_vector_chunks_sha256",
+        );
+        assert_eq!(recovered_public_vector, key_pair.public_key_vector());
+
+        let recovered_ciphertext_one = recover(
+            ErasureMessageKind::MlKem768Ciphertext1,
+            &ciphertext_part_one,
+            "receive_ciphertext1_indexes",
+            "receive_ciphertext1_chunks_sha256",
+        );
+        let recovered_ciphertext_two = recover(
+            ErasureMessageKind::MlKem768Ciphertext2AndMac,
+            &ct2_payload,
+            "receive_ciphertext2_indexes",
+            "receive_ciphertext2_chunks_sha256",
+        );
+        next_auth
+            .verify_ciphertext(
+                1,
+                &recovered_ciphertext_one,
+                &recovered_ciphertext_two[..CIPHERTEXT_PART_TWO_BYTES],
+                &recovered_ciphertext_two[CIPHERTEXT_PART_TWO_BYTES..],
+            )
+            .unwrap();
 
         let mut alice = initialize(StateRole::Initiator, SESSION, &SHARED_SECRET).unwrap();
         let mut bob = initialize(StateRole::Responder, SESSION, &SHARED_SECRET).unwrap();
@@ -5228,6 +5284,17 @@ mod tests {
             .filter_map(|line| line.split_once('='))
             .find_map(|(candidate, value)| (candidate == key).then_some(value))
             .unwrap_or_else(|| panic!("missing cross-implementation vector field {key}"))
+    }
+
+    fn vector_indexes(key: &str) -> Vec<u16> {
+        vector_value(key)
+            .split(',')
+            .map(|value| {
+                value
+                    .parse::<u16>()
+                    .unwrap_or_else(|_| panic!("invalid erasure index in vector field {key}"))
+            })
+            .collect()
     }
 
     fn update_transcript(
