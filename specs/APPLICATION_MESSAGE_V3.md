@@ -77,11 +77,27 @@ message or restarting returns that exact ACK frame; it never allocates a new
 message ID, derives a replacement nonce, or reseals. ACK loss may therefore
 cause harmless duplicate message/ACK transport but cannot cause state rollback.
 
+## Chat projection and presentation state
+
+The encrypted canonical AR3 materializer is the plaintext source of truth. A
+chat projection stores only deterministic metadata under
+`v3m:<logical-message-id>`; it does not copy AP3 text into `MessageRecord.text`.
+Normal-mode AR3 copies with the same exact AP3 payload collapse to that one
+metadata record. A conflicting payload or pre-existing incompatible metadata
+fails closed instead of overwriting the chat.
+
+Read and delete state is a separate encrypted, monotonic, write-new-before-
+delete journal. Projection consults that journal on every reconciliation, so a
+retained AR3 replay proof cannot resurrect a user-deleted message or lose a
+delete-after-read decision. Plaintext lookup also requires current visible
+metadata and rejects a durable deletion tombstone.
+
 ## Activation boundary
 
-The AP3 codec, durable multi-device group, exact-byte ACK outbox, and
-text/link/steganography transport are currently reachable only through the
-inactive v3 runtime. Active chat-repository projection, production native SCKA
-packaging, passphrase and plausible-deniability integration tests, supported
-platform and physical-carrier tests, migration UX, and independent audit remain
-mandatory before `ProtocolV3Activation.messagingEnabled` can become true.
+The AP3 codec, durable multi-device group, exact-byte ACK outbox, chat metadata
+projection, presentation journal, and text/link/steganography transport are
+currently reachable only through the inactive v3 runtime. Active provider/UI
+bootstrap, production native SCKA packaging, passphrase and plausible-
+deniability integration tests, supported platform and physical-carrier tests,
+migration UX, and independent audit remain mandatory before
+`ProtocolV3Activation.messaging` can become true.

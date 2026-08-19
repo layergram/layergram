@@ -360,6 +360,12 @@ target is durable. Maximum mode instead requires one exclusive target session.
 The stable AP3 logical message ID is shared across these independent session
 encryptions; message keys, ratchets, nonces, and ACKs are never shared.
 
+The active chat schema may project only deterministic v3 metadata and must read
+text on demand from canonical AR3. A separate encrypted monotonic presentation
+journal records read and delete decisions before the mutable chat view changes.
+Reconciliation applies those decisions idempotently, preventing retained AR3
+from resurrecting deleted content.
+
 The reference defaults bound the inbox to 256 sealed frame records, 128 KiB of
 sealed frame bytes, 4,096 commit tombstones, and 8,192 relevant physical
 records. The atomic-effect journal is bounded to 4,096 effects, 17 KiB per

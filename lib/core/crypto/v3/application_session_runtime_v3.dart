@@ -21,7 +21,9 @@ import 'package:crypto/crypto.dart' as crypto;
 import 'package:cryptography/cryptography.dart';
 
 import '../../storage/aux_record_repository.dart';
+import '../../storage/messages_repository_core.dart';
 import 'application_payload_v3.dart';
+import 'application_projection_v3.dart';
 import 'application_send_group_v3.dart';
 import 'application_transport_v3.dart';
 import 'device_key_repository_v3.dart';
@@ -756,9 +758,113 @@ final class V3ApplicationSessionRuntime {
   Future<List<V3LmfFrame>> pendingAcknowledgementFrames() =>
       _serialized(_scope.pendingAcknowledgementFrames);
 
+  /// Reconciles the encrypted canonical AR3 source into active chat metadata.
+  ///
+  /// The repository receives no v3 plaintext. Repeating this after a crash is
+  /// idempotent because AP3 supplies one stable logical message ID shared by
+  /// every independently encrypted Normal-mode device copy.
+  Future<V3ApplicationProjectionResult> reconcileMessageRepository({
+    required MessagesRepositoryCore messagesRepository,
+    required String? keyTag,
+    int? nowUnixSeconds,
+  }) {
+    return _serialized(() async {
+      final projector = await _applicationProjector(
+        messagesRepository: messagesRepository,
+        keyTag: keyTag,
+      );
+      try {
+        return await projector.reconcile(nowUnixSeconds: nowUnixSeconds);
+      } finally {
+        projector.close();
+      }
+    });
+  }
+
+  /// Loads one v3 message body on demand from encrypted canonical AR3 state.
+  Future<String?> loadProjectedPlaintext({
+    required MessagesRepositoryCore messagesRepository,
+    required String messageRecordId,
+    required String? keyTag,
+  }) {
+    return _serialized(() async {
+      final projector = await _applicationProjector(
+        messagesRepository: messagesRepository,
+        keyTag: keyTag,
+      );
+      try {
+        return await projector.loadPlaintext(messageRecordId);
+      } finally {
+        projector.close();
+      }
+    });
+  }
+
+  /// Durably marks a v3 projection read before updating chat metadata.
+  Future<V3ApplicationProjectionResult> markProjectedMessageRead({
+    required MessagesRepositoryCore messagesRepository,
+    required String messageRecordId,
+    required String? keyTag,
+    DateTime? readAt,
+  }) {
+    return _serialized(() async {
+      await _scope.markProjectedMessageRead(
+        messageRecordId: messageRecordId,
+        readAt: readAt,
+      );
+      final projector = await _applicationProjector(
+        messagesRepository: messagesRepository,
+        keyTag: keyTag,
+      );
+      try {
+        return await projector.reconcile();
+      } finally {
+        projector.close();
+      }
+    });
+  }
+
+  /// Durably tombstones a v3 projection before removing chat metadata.
+  Future<V3ApplicationProjectionResult> deleteProjectedMessage({
+    required MessagesRepositoryCore messagesRepository,
+    required String messageRecordId,
+    required String? keyTag,
+    DateTime? deletedAt,
+  }) {
+    return _serialized(() async {
+      await _scope.markProjectedMessageDeleted(
+        messageRecordId: messageRecordId,
+        deletedAt: deletedAt,
+      );
+      final projector = await _applicationProjector(
+        messagesRepository: messagesRepository,
+        keyTag: keyTag,
+      );
+      try {
+        return await projector.reconcile();
+      } finally {
+        projector.close();
+      }
+    });
+  }
+
   Future<void> deleteAcknowledgementsOlderThan(DateTime cutoff) => _serialized(
         () => _scope.deleteAcknowledgementsOlderThan(cutoff),
       );
+
+  Future<V3ApplicationMessageProjector> _applicationProjector({
+    required MessagesRepositoryCore messagesRepository,
+    required String? keyTag,
+  }) async {
+    final presentationStates = await _scope.presentationStates();
+    return V3ApplicationMessageProjector(
+      messagesRepository: messagesRepository,
+      localIdentity: localIdentity.publicIdentity,
+      recordLoader: _scope.applicationRecordBytesForProjection,
+      keyTag: keyTag,
+      presentationStates: presentationStates,
+    );
+  }
 
   Future<void> markMessageExported(
     V3ApplicationMessageExport export, {

@@ -244,6 +244,7 @@ class MessageRecord {
     this.deletedAt,
     this.keyTag,
     this.isFsEncrypted = false,
+    this.protocolVersion = 2,
     this.fsClassification,
     this.backupExcluded = false,
   });
@@ -263,7 +264,10 @@ class MessageRecord {
   final int? deletedAt;
   final String? keyTag;
   final bool isFsEncrypted;
+  final int protocolVersion;
   final bool backupExcluded;
+
+  bool get isV3Encrypted => protocolVersion == 3;
 
   /// Per-message security classification (§14.4).
   ///
@@ -306,6 +310,7 @@ class MessageRecord {
     int? deletedAt,
     String? keyTag,
     bool? isFsEncrypted,
+    int? protocolVersion,
     FsMessageClassification? fsClassification,
     bool? backupExcluded,
   }) {
@@ -325,6 +330,7 @@ class MessageRecord {
       deletedAt: deletedAt ?? this.deletedAt,
       keyTag: keyTag ?? this.keyTag,
       isFsEncrypted: isFsEncrypted ?? this.isFsEncrypted,
+      protocolVersion: protocolVersion ?? this.protocolVersion,
       fsClassification: fsClassification ?? this.fsClassification,
       backupExcluded: backupExcluded ?? this.backupExcluded,
     );
@@ -347,6 +353,7 @@ class MessageRecord {
       'deletedAt': deletedAt,
       'keyTag': keyTag,
       if (isFsEncrypted) 'isFsEncrypted': true,
+      if (protocolVersion != 2) 'protocolVersion': protocolVersion,
       if (fsClassification != null) 'fsCls': fsClassification!.storageIndex,
       if (backupExcluded) 'backupExcluded': true,
     };
@@ -369,6 +376,7 @@ class MessageRecord {
       deletedAt: map['deletedAt'] as int?,
       keyTag: map['keyTag'] as String?,
       isFsEncrypted: (map['isFsEncrypted'] as bool?) ?? false,
+      protocolVersion: (map['protocolVersion'] as int?) ?? 2,
       fsClassification: map['fsCls'] != null
           ? FsMessageClassificationExt.fromStorageIndex(map['fsCls'] as int)
           : null,

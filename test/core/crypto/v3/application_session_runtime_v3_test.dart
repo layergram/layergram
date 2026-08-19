@@ -2,16 +2,19 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
+import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 import 'package:layergram/core/crypto/seed_service.dart';
 import 'package:layergram/core/crypto/v3/application_session_runtime_v3.dart';
+import 'package:layergram/core/crypto/v3/application_projection_v3.dart';
 import 'package:layergram/core/crypto/v3/key_schedule_v3.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3.dart';
 import 'package:layergram/core/crypto/v3/local_identity_v3.dart';
 import 'package:layergram/core/crypto/v3/ml_kem_768.dart';
 import 'package:layergram/core/crypto/v3/sparse_pq_ratchet_v3.dart';
 import 'package:layergram/core/storage/local_database.dart';
+import 'package:layergram/core/storage/messages_repository.dart';
 
 void main() {
   const aliceMnemonic =
@@ -197,7 +200,7 @@ void main() {
       remoteIdentity: bob.publicIdentity,
       expectedMode: V3HandshakeMode.normal,
       text: 'hello two devices',
-      timestampUnixSeconds: 1770000000,
+      timestampUnixSeconds: 2000000000,
       deleteAfterRead: true,
       backupExcluded: true,
     );
@@ -222,7 +225,7 @@ void main() {
     for (final frame in messageExport.frames.reversed) {
       final first = await bobRuntime.receiveApplicationFrame(
         frame: frame,
-        nowUnixSeconds: 1770000001,
+        nowUnixSeconds: 2000000001,
       );
       firstStatuses.add(first.status);
       if (first.status == V3ApplicationInboundStatus.notForThisInstallation) {
@@ -232,7 +235,7 @@ void main() {
       }
       final second = await bobSecondRuntime.receiveApplicationFrame(
         frame: frame,
-        nowUnixSeconds: 1770000001,
+        nowUnixSeconds: 2000000001,
       );
       secondStatuses.add(second.status);
       if (second.status == V3ApplicationInboundStatus.notForThisInstallation) {
@@ -283,6 +286,44 @@ void main() {
     final firstDeviceAck = firstDeviceDelivery.acknowledgementFrame!;
     await bobSecondRuntime.close();
 
+    final aliceMessages = MessagesRepository();
+    await aliceMessages.setActiveContext(
+      scopeToken: aliceScope,
+      storageKey: SecretKey(_testBytes(32, 0x91)),
+    );
+    final firstProjection = await aliceRuntime.reconcileMessageRepository(
+      messagesRepository: aliceMessages,
+      keyTag: 'primary-test',
+      nowUnixSeconds: 2000000001,
+    );
+    expect(firstProjection.insertedMessages, 1);
+    expect(firstProjection.exactDeviceDuplicates, 1);
+    final projected = (await aliceMessages.getAllMessages()).single;
+    expect(projected.isV3Encrypted, isTrue);
+    expect(projected.text, isNull);
+    expect(
+      await aliceRuntime.loadProjectedPlaintext(
+        messagesRepository: aliceMessages,
+        messageRecordId: projected.id,
+        keyTag: 'primary-test',
+      ),
+      'hello two devices',
+    );
+    final readProjection = await aliceRuntime.markProjectedMessageRead(
+      messagesRepository: aliceMessages,
+      messageRecordId: projected.id,
+      keyTag: 'primary-test',
+      readAt: DateTime.fromMillisecondsSinceEpoch(
+        2000000100 * 1000,
+        isUtc: true,
+      ),
+    );
+    expect(readProjection.updatedMessages, 1);
+    expect(
+      (await aliceMessages.getAllMessages()).single.readAt,
+      2000000100,
+    );
+
     final aliceSessionId = establishedConfirmation.session!.sessionIdBytes;
     final bobSessionId = establishedResponder.sessionIdBytes;
     final aliceSnapshot = await aliceRuntime.snapshotForSession(aliceSessionId);
@@ -325,6 +366,17 @@ void main() {
     );
     final pendingMessageExports = await aliceRuntime.pendingMessageExports();
     expect(pendingMessageExports, isEmpty);
+    final restoredProjection = await aliceRuntime.reconcileMessageRepository(
+      messagesRepository: aliceMessages,
+      keyTag: 'primary-test',
+      nowUnixSeconds: 2000000002,
+    );
+    expect(restoredProjection.insertedMessages, 0);
+    expect(restoredProjection.alreadyProjectedMessages, 1);
+    expect(
+      (await aliceMessages.getAllMessages()).single.readAt,
+      2000000100,
+    );
     final pendingAcks = await bobRuntime.pendingAcknowledgementFrames();
     expect(pendingAcks, hasLength(1));
     _expectExactFrames(
@@ -339,7 +391,7 @@ void main() {
           )
           .frames
           .first,
-      nowUnixSeconds: 1770000002,
+      nowUnixSeconds: 2000000002,
     );
     expect(replay.status, V3ApplicationInboundStatus.committedReplay);
     _expectExactFrames(
@@ -369,8 +421,41 @@ void main() {
     expect(duplicate.sessionId, establishedResponder.sessionId);
     expect(duplicate.recovered, isTrue);
 
+    final deletedProjection = await aliceRuntime.deleteProjectedMessage(
+      messagesRepository: aliceMessages,
+      messageRecordId: projected.id,
+      keyTag: 'primary-test',
+      deletedAt: DateTime.fromMillisecondsSinceEpoch(
+        2000000200 * 1000,
+        isUtc: true,
+      ),
+    );
+    expect(deletedProjection.removedMessages, 1);
+    expect(await aliceMessages.getAllMessages(), isEmpty);
+    expect(
+      await aliceRuntime.reconcileMessageRepository(
+        messagesRepository: aliceMessages,
+        keyTag: 'primary-test',
+        nowUnixSeconds: 2000000201,
+      ),
+      isA<V3ApplicationProjectionResult>().having(
+        (result) => result.insertedMessages,
+        'insertedMessages',
+        0,
+      ),
+    );
+    expect(
+      await aliceRuntime.loadProjectedPlaintext(
+        messagesRepository: aliceMessages,
+        messageRecordId: projected.id,
+        keyTag: 'primary-test',
+      ),
+      isNull,
+    );
+
     aliceDeviceId.fillRange(0, aliceDeviceId.length, 0);
     bobDeviceId.fillRange(0, bobDeviceId.length, 0);
+    aliceMessages.dispose();
     await aliceRuntime.close();
     await bobRuntime.close();
   });
@@ -641,3 +726,7 @@ bool _constantTimeBytesEqual(Uint8List left, Uint8List right) {
   }
   return difference == 0;
 }
+
+Uint8List _testBytes(int length, int start) => Uint8List.fromList(
+      List<int>.generate(length, (index) => (start + index) & 0xff),
+    );

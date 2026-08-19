@@ -799,6 +799,45 @@ final class V3SessionCommitController {
     });
   }
 
+  /// Returns detached canonical AR3 application records for UI projection.
+  ///
+  /// The returned byte arrays contain authenticated application plaintext and
+  /// are owned by the caller, which must overwrite them after decoding. The
+  /// materializer remains the durable source of truth and never transfers its
+  /// internal buffers or authority.
+  Future<List<Uint8List>> applicationRecordBytesForProjection() {
+    return _serialized(() async {
+      _ensureReady();
+      final materializer = _committedRecordMaterializer;
+      if (materializer == null) {
+        throw StateError(
+          'Layergram v3 application materialization is not configured',
+        );
+      }
+      final result = <Uint8List>[];
+      try {
+        for (final materialized in materializer.records(
+          authority: _materializerAuthority,
+        )) {
+          final record = materialized.decodeRecord();
+          try {
+            if (record.kind == V3CommittedRecordKind.application) {
+              result.add(materialized.encodedRecord);
+            }
+          } finally {
+            record.wipeContent();
+          }
+        }
+        return List<Uint8List>.unmodifiable(result);
+      } catch (_) {
+        for (final bytes in result) {
+          _wipe(bytes);
+        }
+        rethrow;
+      }
+    });
+  }
+
   /// Seals one complete cumulative ACK from committed receive state.
   ///
   /// The caller must durably retain the returned exact frame before exposing

@@ -900,7 +900,8 @@ Before this schedule can carry user messages, Layergram still requires:
   and receive-dispatch capability topology and supplies its reviewed native
   SCKA validator/backend;
 - active message/UI repository projection from the idempotent durable AR3
-  source;
+  source is implemented at the inactive runtime boundary, but still requires
+  provider/UI lifecycle wiring and reviewed deletion/retention UX;
 - full packaging, crash, migration, multi-device, passphrase, Maximum-mode,
   text, link, QR, and steganography tests;
 - independent protocol and implementation audit with no unresolved high or

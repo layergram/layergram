@@ -137,6 +137,7 @@ final class V3ApplicationPayload {
 
 /// Strict AP3 application-payload encoding.
 abstract final class V3ApplicationPayloadCodec {
+  static const String messageRecordIdPrefix = 'v3m:';
   static const List<int> magic = <int>[0x41, 0x50, 0x33]; // "AP3"
   static const int formatVersion = 1;
   static const int messageIdBytes = 16;

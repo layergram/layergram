@@ -20,6 +20,7 @@ import 'package:cryptography/cryptography.dart';
 import '../../storage/aux_record_repository.dart';
 import 'acknowledgement_outbox_v3.dart';
 import 'application_send_group_v3.dart';
+import 'application_presentation_state_v3.dart';
 import 'committed_record_materializer_v3.dart';
 import 'handshake_frame_inbox_v3.dart';
 import 'handshake_persistence_v3.dart';
@@ -48,6 +49,7 @@ final class V3SessionPersistenceRestoreResult {
     required this.handshakes,
     required this.sendGroups,
     required this.acknowledgements,
+    required this.presentation,
     required this.sessions,
     required this.handoffs,
   });
@@ -72,6 +74,9 @@ final class V3SessionPersistenceRestoreResult {
 
   /// Exact sealed ACK frames retained independently of carrier delivery.
   final V3AcknowledgementOutboxRestoreResult acknowledgements;
+
+  /// Durable read/delete state for AR3-backed chat projections.
+  final V3ApplicationPresentationRestoreResult presentation;
 
   /// Reconstructed send/receive session state and durable application state.
   final V3SessionCommitRestoreResult sessions;
@@ -130,6 +135,7 @@ final class V3SessionPersistenceScope {
     required this.handshakes,
     required V3ApplicationSendGroupJournal sendGroups,
     required V3AcknowledgementOutbox acknowledgements,
+    required V3ApplicationPresentationJournal presentation,
     required V3SessionCommitController controller,
     required this.handoffs,
     required V3SessionRatchetKeyResolver ratchetKeyResolver,
@@ -138,6 +144,7 @@ final class V3SessionPersistenceScope {
         _inbox = inbox,
         _sendGroups = sendGroups,
         _acknowledgements = acknowledgements,
+        _presentation = presentation,
         _controller = controller,
         _ratchetKeyResolver = ratchetKeyResolver;
 
@@ -196,6 +203,7 @@ final class V3SessionPersistenceScope {
       );
       final sendGroups = V3ApplicationSendGroupJournal(store: store);
       final acknowledgements = V3AcknowledgementOutbox(store: store);
+      final presentation = V3ApplicationPresentationJournal(store: store);
       final controller = V3SessionCommitController(
         journal: V3LmfAtomicCommitJournal(store: store, inbox: inbox),
         sendJournal: V3SessionSendJournal(store: store),
@@ -231,6 +239,7 @@ final class V3SessionPersistenceScope {
         handshakes: handshakes,
         sendGroups: sendGroups,
         acknowledgements: acknowledgements,
+        presentation: presentation,
         controller: controller,
         handoffs: handoffs,
         ratchetKeyResolver: ratchetKeyResolver,
@@ -299,6 +308,9 @@ final class V3SessionPersistenceScope {
   /// Durable exact-byte receiver ACK retry storage.
   final V3AcknowledgementOutbox _acknowledgements;
 
+  /// Durable UI state that prevents retained AR3 from resurrecting messages.
+  final V3ApplicationPresentationJournal _presentation;
+
   /// Sole authority for durable session transitions and outgoing exports.
   /// It remains hidden so receive candidates cannot be committed around the
   /// scope-owned resolver/controller binding.
@@ -328,6 +340,7 @@ final class V3SessionPersistenceScope {
       handshakes.requiresRecovery ||
       _sendGroups.requiresRecovery ||
       _acknowledgements.requiresRecovery ||
+      _presentation.requiresRecovery ||
       _controller.requiresRecovery ||
       handoffs.requiresRecovery;
 
@@ -353,6 +366,7 @@ final class V3SessionPersistenceScope {
         final handshakeResult = await handshakes.restore();
         final sendGroupResult = await _sendGroups.restore();
         final acknowledgementResult = await _acknowledgements.restore();
+        final presentationResult = await _presentation.restore();
         final sessionResult = await _controller.restore(
           checkpoints: checkpoints,
         );
@@ -364,6 +378,7 @@ final class V3SessionPersistenceScope {
           handshakes: handshakeResult,
           sendGroups: sendGroupResult,
           acknowledgements: acknowledgementResult,
+          presentation: presentationResult,
           sessions: sessionResult,
           handoffs: handoffResult,
         );
@@ -624,6 +639,48 @@ final class V3SessionPersistenceScope {
     });
   }
 
+  /// Detached canonical AR3 application records for idempotent chat projection.
+  /// Callers own and must overwrite every returned byte array.
+  Future<List<Uint8List>> applicationRecordBytesForProjection() {
+    return _serialized(() async {
+      _ensureReady();
+      return _controller.applicationRecordBytesForProjection();
+    });
+  }
+
+  Future<Map<String, V3ApplicationPresentationState>> presentationStates() {
+    return _serialized(() async {
+      _ensureReady();
+      return _presentation.states();
+    });
+  }
+
+  Future<V3ApplicationPresentationState> markProjectedMessageRead({
+    required String messageRecordId,
+    DateTime? readAt,
+  }) {
+    return _serialized(() async {
+      _ensureReady();
+      return _presentation.markRead(
+        messageRecordId: messageRecordId,
+        readAt: readAt,
+      );
+    });
+  }
+
+  Future<V3ApplicationPresentationState> markProjectedMessageDeleted({
+    required String messageRecordId,
+    DateTime? deletedAt,
+  }) {
+    return _serialized(() async {
+      _ensureReady();
+      return _presentation.markDeleted(
+        messageRecordId: messageRecordId,
+        deletedAt: deletedAt,
+      );
+    });
+  }
+
   /// Returns an already-durable ACK or seals and persists one before export.
   Future<V3LmfFrame> acknowledgementFor({
     required V3LmfFrame targetFrame,
@@ -705,19 +762,23 @@ final class V3SessionPersistenceScope {
                 await _acknowledgements.close();
               } finally {
                 try {
-                  await handshakes.close();
+                  await _presentation.close();
                 } finally {
                   try {
-                    await _controller.close();
+                    await handshakes.close();
                   } finally {
                     try {
-                      await _inbox.close();
+                      await _controller.close();
                     } finally {
-                      _repository.setActiveContext(
-                        scopeToken: null,
-                        auxStorageKey: null,
-                      );
-                      _ownedAuxStorageKey.destroy();
+                      try {
+                        await _inbox.close();
+                      } finally {
+                        _repository.setActiveContext(
+                          scopeToken: null,
+                          auxStorageKey: null,
+                        );
+                        _ownedAuxStorageKey.destroy();
+                      }
                     }
                   }
                 }
