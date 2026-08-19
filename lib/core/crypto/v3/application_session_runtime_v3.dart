@@ -24,6 +24,7 @@ import '../../storage/aux_record_repository.dart';
 import '../../storage/messages_repository_core.dart';
 import 'application_payload_v3.dart';
 import 'application_projection_v3.dart';
+import 'application_runtime_owner_v3.dart';
 import 'application_send_group_v3.dart';
 import 'application_transport_v3.dart';
 import 'device_key_repository_v3.dart';
@@ -214,7 +215,7 @@ final class V3ApplicationMessageInboundResult {
 /// durable HP3 controller, HP3-to-TR3 handoff and session inbox/outbox. It
 /// deliberately does not own [localIdentity]; the process-level identity
 /// runtime closes that handle only after this runtime has drained.
-final class V3ApplicationSessionRuntime {
+final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
   V3ApplicationSessionRuntime._({
     required this.localIdentity,
     required V3LocalDeviceHandle localDevice,
@@ -237,6 +238,44 @@ final class V3ApplicationSessionRuntime {
     Iterable<V3TripleRatchetState> bootstrapCheckpoints = const [],
     V3SessionSnapshotValidator? snapshotValidator,
     int maxSessions = 4096,
+  }) =>
+      _open(
+        localIdentity: localIdentity,
+        scopeToken: scopeToken,
+        sckaBackend: sckaBackend,
+        bootstrapCheckpoints: bootstrapCheckpoints,
+        snapshotValidator: snapshotValidator,
+        maxSessions: maxSessions,
+      );
+
+  /// Opens the runtime with the signed candidate library embedded by the
+  /// platform packaging scripts.
+  ///
+  /// Merely compiling this method does not load the library. The application
+  /// lifecycle calls it only after the single fail-closed activation policy is
+  /// true.
+  static Future<V3ApplicationSessionRuntime> openPackagedScka({
+    required V3LocalIdentityHandle localIdentity,
+    required String scopeToken,
+    Iterable<V3TripleRatchetState> bootstrapCheckpoints = const [],
+    V3SessionSnapshotValidator? snapshotValidator,
+    int maxSessions = 4096,
+  }) =>
+      _open(
+        localIdentity: localIdentity,
+        scopeToken: scopeToken,
+        bootstrapCheckpoints: bootstrapCheckpoints,
+        snapshotValidator: snapshotValidator,
+        maxSessions: maxSessions,
+      );
+
+  static Future<V3ApplicationSessionRuntime> _open({
+    required V3LocalIdentityHandle localIdentity,
+    required String scopeToken,
+    V3SckaBackend? sckaBackend,
+    required Iterable<V3TripleRatchetState> bootstrapCheckpoints,
+    V3SessionSnapshotValidator? snapshotValidator,
+    required int maxSessions,
   }) async {
     if (localIdentity.isClosed) {
       throw StateError('Layergram v3 local identity is closed');
@@ -255,13 +294,20 @@ final class V3ApplicationSessionRuntime {
       device = await V3DeviceKeyRepository(
         store: V3LmfAuxRecordStore(deviceRepository),
       ).loadOrCreate();
-      scope = await V3SessionPersistenceScope.open(
-        scopeToken: scopeToken,
-        auxStorageKey: extractedKey,
-        sckaBackend: sckaBackend,
-        snapshotValidator: snapshotValidator,
-        maxSessions: maxSessions,
-      );
+      scope = sckaBackend == null
+          ? await V3SessionPersistenceScope.openPackagedScka(
+              scopeToken: scopeToken,
+              auxStorageKey: extractedKey,
+              snapshotValidator: snapshotValidator,
+              maxSessions: maxSessions,
+            )
+          : await V3SessionPersistenceScope.open(
+              scopeToken: scopeToken,
+              auxStorageKey: extractedKey,
+              sckaBackend: sckaBackend,
+              snapshotValidator: snapshotValidator,
+              maxSessions: maxSessions,
+            );
       final restored = await scope.restore(
         checkpoints: bootstrapCheckpoints,
       );
@@ -983,6 +1029,7 @@ final class V3ApplicationSessionRuntime {
         ),
       );
 
+  @override
   Future<void> close() {
     return _serialized(() async {
       if (_closed) return;

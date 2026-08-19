@@ -25,6 +25,8 @@ import 'v3/identity_runtime_v3.dart';
 import 'v3/identity_v3_adapter.dart';
 import 'v3/public_identity_v3.dart';
 
+typedef V3PassphraseContextChangeHandler = Future<void> Function();
+
 /// Ephemeral passphrase-derived key state.
 ///
 /// Keys are held **in memory only** and are destroyed when the app is killed
@@ -74,14 +76,17 @@ class PassphraseNotifier extends StateNotifier<PassphraseState> {
   PassphraseNotifier({
     required SeedService seedService,
     V3IdentityRuntime? v3IdentityRuntime,
+    V3PassphraseContextChangeHandler? beforeV3ContextChange,
     bool enableProtocolV3 = false,
   })  : _seedService = seedService,
         _v3IdentityRuntime = v3IdentityRuntime,
+        _beforeV3ContextChange = beforeV3ContextChange,
         _enableProtocolV3 = enableProtocolV3,
         super(const PassphraseState.inactive());
 
   final SeedService _seedService;
   final V3IdentityRuntime? _v3IdentityRuntime;
+  final V3PassphraseContextChangeHandler? _beforeV3ContextChange;
   final bool _enableProtocolV3;
   static final _x25519 = X25519();
 
@@ -95,51 +100,74 @@ class PassphraseNotifier extends StateNotifier<PassphraseState> {
     final seedHex =
         bip39.mnemonicToSeedHex(mnemonic.trim(), passphrase: passphrase);
     final seed = Uint8List.fromList(_hexToBytes(seedHex));
-    final privateKey = await _seedService.derivePassphraseIdentityPrivateKey(
-      seed,
-      version: derivationVersion,
-    );
-    final pair = await _x25519.newKeyPairFromSeed(privateKey);
-    final publicKey = await pair.extractPublicKey();
-    final pubBytes = Uint8List.fromList(publicKey.bytes);
+    Uint8List? privateKey;
+    Uint8List? pubBytes;
+    try {
+      privateKey = await _seedService.derivePassphraseIdentityPrivateKey(
+        seed,
+        version: derivationVersion,
+      );
+      final pair = await _x25519.newKeyPairFromSeed(privateKey);
+      final publicKey = await pair.extractPublicKey();
+      pubBytes = Uint8List.fromList(publicKey.bytes);
 
-    V3PublicIdentity? v3Identity;
-    if (_enableProtocolV3) {
-      final runtime = _v3IdentityRuntime;
-      if (runtime == null) {
-        throw StateError('Layergram v3 identity runtime is unavailable');
+      V3PublicIdentity? v3Identity;
+      if (_enableProtocolV3) {
+        final runtime = _v3IdentityRuntime;
+        if (runtime == null) {
+          throw StateError('Layergram v3 identity runtime is unavailable');
+        }
+        await _beforeV3ContextChange?.call();
+        state = const PassphraseState.inactive();
+        try {
+          v3Identity = await runtime.activatePassphrase(
+            mnemonic: mnemonic,
+            passphrase: passphrase,
+            displayName: displayName,
+          );
+        } catch (_) {
+          await runtime.deactivatePassphrase();
+          rethrow;
+        }
       }
-      try {
-        v3Identity = await runtime.activatePassphrase(
-          mnemonic: mnemonic,
-          passphrase: passphrase,
-          displayName: displayName,
-        );
-      } catch (_) {
-        await runtime.deactivatePassphrase();
-        rethrow;
-      }
+
+      state = PassphraseState._(
+        isActive: true,
+        privateKeyBase64: base64Encode(privateKey),
+        publicKeyBase64: base64Encode(pubBytes),
+        keyTag: computeKeyTag(pubBytes),
+        derivationVersion: derivationVersion,
+        derivationAlgorithm: derivationVersion.algorithm,
+        v3IdentityId: v3Identity?.identityId,
+        v3Fingerprint: v3Identity?.fingerprint,
+        v3PublicIdentityBase64: v3Identity == null
+            ? null
+            : V3IdentityAdapter.encodePublicBundle(v3Identity),
+      );
+    } finally {
+      seed.fillRange(0, seed.length, 0);
+      privateKey?.fillRange(0, privateKey.length, 0);
+      pubBytes?.fillRange(0, pubBytes.length, 0);
     }
-
-    state = PassphraseState._(
-      isActive: true,
-      privateKeyBase64: base64Encode(privateKey),
-      publicKeyBase64: base64Encode(pubBytes),
-      keyTag: computeKeyTag(pubBytes),
-      derivationVersion: derivationVersion,
-      derivationAlgorithm: derivationVersion.algorithm,
-      v3IdentityId: v3Identity?.identityId,
-      v3Fingerprint: v3Identity?.fingerprint,
-      v3PublicIdentityBase64: v3Identity == null
-          ? null
-          : V3IdentityAdapter.encodePublicBundle(v3Identity),
-    );
   }
 
   /// Destroy the passphrase-derived keys and revert to the original identity.
   Future<void> deactivate() async {
+    Object? contextError;
+    StackTrace? contextStackTrace;
+    if (_enableProtocolV3) {
+      try {
+        await _beforeV3ContextChange?.call();
+      } catch (error, stackTrace) {
+        contextError = error;
+        contextStackTrace = stackTrace;
+      }
+    }
     state = const PassphraseState.inactive();
     await _v3IdentityRuntime?.deactivatePassphrase();
+    if (contextError != null) {
+      Error.throwWithStackTrace(contextError, contextStackTrace!);
+    }
   }
 
   /// Compute a short opaque tag from a public key's raw bytes.

@@ -13,9 +13,12 @@ deferred-fragment key resolution, and an inactive crash-consistent send/receive
 session coordinator, encrypted stable-ID AR3 materializer, and monotonic TR3
 checkpoint repository now exist. A scope-pinned owner also connects those
 components and a bounded crash-consistent hybrid-handshake pending repository
-to Layergram's real encrypted Aux/Hive storage without registering them in the
-active application. No production SCKA backend or active product integration
-exists, and protocol v3 remains disabled.
+to Layergram's real encrypted Aux/Hive storage. A fail-closed application
+lifecycle owner now selects the exact primary/passphrase scope, drains the old
+runtime before its identity handle is destroyed, and can open the packaged SCKA
+candidate only after the single production activation policy becomes true.
+That policy remains false, so normal application startup neither constructs the
+owner nor loads the native backend. Protocol v3 remains disabled.
 
 `PROTOCOL_V3_SECURITY_GOALS.md` remains authoritative. This draft and its code
 must change if later transcript design, ML-KEM Braid integration, persistence
@@ -70,6 +73,11 @@ This checkpoint provides:
   handshake/journal/outbox/checkpoint topology, restores sealed frames and
   pending handshakes before session keys are requested, and destroys its copied
   storage key on close;
+- one inactive application lifecycle owner that serializes primary,
+  passphrase, and multi-identity context changes, closes the complete session
+  scope before its private identity handle is replaced or expelled, and leaves
+  the packaged native loader unreachable while the activation selector is
+  false;
 - encrypted, bounded HP3 persistence with persist-before-export exact
   offer/reply retry, single-controller authority, per-identity capacity
   preflight, fail-stop ambiguous-write recovery, and write-before-delete
@@ -900,8 +908,9 @@ Before this schedule can carry user messages, Layergram still requires:
   and receive-dispatch capability topology and supplies its reviewed native
   SCKA validator/backend;
 - active message/UI repository projection from the idempotent durable AR3
-  source is implemented at the inactive runtime boundary, but still requires
-  provider/UI lifecycle wiring and reviewed deletion/retention UX;
+  source and fail-closed provider lifecycle ownership are implemented at the
+  inactive runtime boundary, but chat send/receive/display routing and reviewed
+  deletion/retention UX still require application wiring;
 - full packaging, crash, migration, multi-device, passphrase, Maximum-mode,
   text, link, QR, and steganography tests;
 - independent protocol and implementation audit with no unresolved high or

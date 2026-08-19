@@ -79,6 +79,34 @@ void main() {
     expect(() => runtime.activePassphraseHandle, throwsStateError);
     await runtime.close();
   });
+
+  test('registered session owner drains before identity handle destruction',
+      () async {
+    final backend = _RuntimeMlKemBackend();
+    final runtime = V3IdentityRuntime(
+      seedService: SeedService(),
+      backendLoader: () => backend,
+    );
+    await runtime.activatePassphrase(
+      mnemonic: mnemonic,
+      passphrase: 'hidden context',
+      displayName: 'Hidden Alice',
+    );
+    final identity = runtime.activePassphraseHandle;
+    var evictionCalls = 0;
+    final registration = runtime.registerHandleEvictionHandler((handle) async {
+      evictionCalls++;
+      expect(identical(handle, identity), isTrue);
+      expect(handle.isClosed, isFalse);
+    });
+
+    await runtime.deactivatePassphrase();
+    expect(evictionCalls, 1);
+    expect(identity.isClosed, isTrue);
+
+    runtime.unregisterHandleEvictionHandler(registration);
+    await runtime.close();
+  });
 }
 
 final class _RuntimePrivateKeyHandle implements MlKem768PrivateKeyHandle {

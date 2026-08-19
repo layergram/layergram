@@ -523,6 +523,10 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
 
   @override
   Widget build(BuildContext context) {
+    // Keeps the single v3 runtime owner synchronized with identity and
+    // passphrase changes. While the reviewed activation policy is false this
+    // resolves to null without loading a native library.
+    ref.watch(v3ApplicationSessionRuntimeProvider);
     final themeMode = ref.watch(themeModeProvider);
     final needsUnlock = ref.watch(appNeedsUnlockProvider);
     final screenProtectionEnabled = ref.watch(screenProtectionEnabledProvider);

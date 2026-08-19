@@ -27,6 +27,8 @@ import 'crypto/identity_manager.dart';
 import 'crypto/models.dart';
 import 'crypto/passphrase_service.dart';
 import 'crypto/seed_service.dart';
+import 'crypto/v3/application_runtime_owner_v3.dart';
+import 'crypto/v3/application_session_runtime_v3.dart';
 import 'crypto/v3/identity_runtime_v3.dart';
 import 'crypto/v3/protocol_v3_activation.dart';
 import 'security/app_lock_service.dart';
@@ -310,6 +312,15 @@ final protocolV3IdentityEnabledProvider = Provider<bool>((_) {
   return ProtocolV3Activation.isActive;
 });
 
+/// Fail-closed selector for the complete v3 session/message runtime.
+///
+/// Identity sharing and messaging deliberately use the same all-or-nothing
+/// production decision. Tests may override this seam without changing the
+/// compiled production policy.
+final protocolV3MessagingEnabledProvider = Provider<bool>((_) {
+  return ProtocolV3Activation.isActive;
+});
+
 /// Process owner for deterministic v3 identity handles.
 ///
 /// The backend is loaded lazily on first use, so merely constructing the app
@@ -322,6 +333,76 @@ final v3IdentityRuntimeProvider = Provider<V3IdentityRuntime>((ref) {
   return runtime;
 });
 
+final v3ApplicationRuntimeFactoryProvider =
+    Provider<V3ApplicationRuntimeFactory<V3ApplicationSessionRuntime>>((_) {
+  return ({required localIdentity, required scopeToken}) =>
+      V3ApplicationSessionRuntime.openPackagedScka(
+        localIdentity: localIdentity,
+        scopeToken: scopeToken,
+      );
+});
+
+/// Sole owner of an open v3 identity/passphrase persistence scope.
+///
+/// The owner is kept separate from the async selector so rapid Riverpod
+/// rebuilds cannot overlap two durable runtimes or destroy an identity handle
+/// before its journals have drained.
+final v3ApplicationRuntimeOwnerProvider =
+    Provider<V3ApplicationRuntimeOwner<V3ApplicationSessionRuntime>>((ref) {
+  final owner = V3ApplicationRuntimeOwner<V3ApplicationSessionRuntime>(
+    identityRuntime: ref.watch(v3IdentityRuntimeProvider),
+    runtimeFactory: ref.watch(v3ApplicationRuntimeFactoryProvider),
+  );
+  ref.onDispose(() => unawaited(owner.close()));
+  return owner;
+});
+
+/// Restored v3 application runtime for the currently effective identity.
+///
+/// With the production activation constants still false this provider returns
+/// without constructing the identity owner or loading any native library.
+final v3ApplicationSessionRuntimeProvider =
+    FutureProvider<V3ApplicationSessionRuntime?>((ref) async {
+  if (!ref.watch(protocolV3MessagingEnabledProvider)) return null;
+
+  final activeIdentityId = ref.watch(activeIdentityIdProvider);
+  ref.watch(identityReloadTokenProvider);
+  final passphrase = ref.watch(passphraseProvider);
+  final owner = ref.watch(v3ApplicationRuntimeOwnerProvider);
+  if (activeIdentityId == null || activeIdentityId.isEmpty) {
+    await owner.closeCurrent();
+    return null;
+  }
+
+  final local = await ref.read(identityManagerProvider).getLocalIdentity();
+  if (local == null || local.identityId != activeIdentityId) {
+    await owner.closeCurrent();
+    return null;
+  }
+  final context = await ref
+      .read(localStorageSecurityProvider)
+      .contextForIdentity(activeIdentityId);
+  if (context == null) {
+    await owner.closeCurrent();
+    return null;
+  }
+
+  final usePassphrase = passphrase.isActive;
+  final effectiveIdentityId =
+      usePassphrase ? passphrase.v3IdentityId : local.identityId;
+  if (effectiveIdentityId == null || effectiveIdentityId.isEmpty) {
+    await owner.closeCurrent();
+    return null;
+  }
+  return owner.open(
+    recoveryIdentity: local,
+    scopeToken: context.scopeToken,
+    contextId:
+        '${usePassphrase ? 'passphrase' : 'primary'}|$effectiveIdentityId|${context.scopeToken}',
+    usePassphraseIdentity: usePassphrase,
+  );
+});
+
 final passphraseProvider =
     StateNotifierProvider<PassphraseNotifier, PassphraseState>((ref) {
   final enableProtocolV3 = ref.watch(protocolV3IdentityEnabledProvider);
@@ -329,6 +410,9 @@ final passphraseProvider =
     seedService: ref.watch(seedServiceProvider),
     v3IdentityRuntime:
         enableProtocolV3 ? ref.watch(v3IdentityRuntimeProvider) : null,
+    beforeV3ContextChange: enableProtocolV3
+        ? ref.watch(v3ApplicationRuntimeOwnerProvider).closeCurrent
+        : null,
     enableProtocolV3: enableProtocolV3,
   );
 });

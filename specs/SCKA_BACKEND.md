@@ -328,10 +328,12 @@ The opt-in verification scripts embed the exact candidate as follows:
 Only exact absolute or platform-defined process loader paths may be used.
 Production exports must be allowlisted and test hooks must be absent. The
 candidate loader accepts either an explicit engineering path or the
-deterministic packaged location, plus an exact compile-time identity/ABI tuple;
-no ordinary application bootstrap references it. The Rust toolchain, panic
-policy, allocator behavior, symbol stripping, reproducibility, notices, and
-store packaging are separate release gates.
+deterministic packaged location, plus an exact compile-time identity/ABI tuple.
+The ordinary application now contains a fail-closed lifecycle reference to the
+packaged factory, but its selector returns before constructing the owner or
+loading the library while the production activation policy is false. The Rust
+toolchain, panic policy, allocator behavior, symbol stripping, reproducibility,
+notices, and store packaging are separate release gates.
 
 Generated artifacts are connected only by the opt-in smoke scripts. The
 Android Gradle source set is enabled only by an explicit candidate property and
@@ -364,5 +366,6 @@ Play App Signing, upload, review, and production registration remain open.
   packaging, and per-release physical-device regression testing;
 - obtain independent cryptographic and implementation review.
 
-Until all gates pass, no provider may register this backend and Layergram must
-not claim that protocol v3 or the released app is quantum-resistant.
+Until all gates pass, no enabled production provider may return this backend
+and Layergram must not claim that protocol v3 or the released app is
+quantum-resistant.
