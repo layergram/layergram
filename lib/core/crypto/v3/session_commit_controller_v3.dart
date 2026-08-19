@@ -22,6 +22,7 @@ import 'ec_double_ratchet_v3.dart';
 import 'initial_session_handoff_authority_v3.dart';
 import 'key_schedule_v3.dart';
 import 'lmf_v3.dart';
+import 'lmf_v3_acknowledgement.dart';
 import 'lmf_v3_atomic_commit.dart';
 import 'lmf_v3_outbox.dart';
 import 'lmf_v3_persistence.dart';
@@ -100,6 +101,22 @@ final class V3SessionSendResult {
   final String messageRecordId;
   final int ratchetRevision;
   final List<V3LmfFrame> frames;
+}
+
+/// Non-secret binding used to reconcile a higher-level multi-device group
+/// after a crash between the per-session send commit and the group update.
+final class V3PendingSessionSendBinding {
+  const V3PendingSessionSendBinding({
+    required this.assemblyId,
+    required this.previousRatchetRevision,
+    required this.ratchetRevision,
+    required this.isFullyAcknowledged,
+  });
+
+  final String assemblyId;
+  final int previousRatchetRevision;
+  final int ratchetRevision;
+  final bool isFullyAcknowledged;
 }
 
 /// Result of durably registering the revision-zero TR3 produced by one
@@ -774,6 +791,117 @@ final class V3SessionCommitController {
     });
   }
 
+  /// Checks routing ownership without exposing a detached secret snapshot.
+  Future<bool> hasSession(Uint8List sessionId) {
+    return _serialized(() async {
+      _ensureReady();
+      return _sessions.containsKey(_sessionKey(sessionId));
+    });
+  }
+
+  /// Seals one complete cumulative ACK from committed receive state.
+  ///
+  /// The caller must durably retain the returned exact frame before exposing
+  /// it to a carrier. Every newly sealed cumulative ACK supplies a fresh
+  /// [messageId]; retries must reuse the persisted frame instead.
+  Future<V3LmfFrame> sealAcknowledgement({
+    required V3LmfFrame targetFrame,
+    required V3LmfAcknowledgement acknowledgement,
+    required Uint8List messageId,
+  }) {
+    return _serialized(() async {
+      _ensureReady();
+      if (targetFrame.metadata.kind == V3LmfFrameKind.acknowledgement ||
+          messageId.length != V3LmfFrameCodec.messageIdBytes ||
+          _isAllZero(messageId)) {
+        throw const FormatException(
+          'Invalid Layergram v3 acknowledgement target',
+        );
+      }
+      final targetMessageId = targetFrame.metadata.messageId;
+      final acknowledgementMessageId = acknowledgement.targetMessageId;
+      final sessionId = targetFrame.metadata.sessionId;
+      final senderBinding = targetFrame.metadata.senderBinding;
+      final recipientBinding = targetFrame.metadata.recipientBinding;
+      final snapshot = _sessions[_sessionKey(sessionId)];
+      if (snapshot == null) {
+        _wipe(targetMessageId);
+        _wipe(acknowledgementMessageId);
+        _wipe(sessionId);
+        _wipe(senderBinding);
+        _wipe(recipientBinding);
+        throw const FormatException(
+          'Layergram v3 acknowledgement session is not registered',
+        );
+      }
+      final initiatorBinding = snapshot.initiatorRoutingBinding;
+      final responderBinding = snapshot.responderRoutingBinding;
+      final initiatorAckRoot = snapshot.initiatorToResponderAckRootKey;
+      final responderAckRoot = snapshot.responderToInitiatorAckRootKey;
+      V3AcknowledgementKeyMaterial? material;
+      Uint8List? plaintext;
+      Uint8List? nonce;
+      try {
+        _validateInboundRouting(snapshot, targetFrame);
+        if (acknowledgement.targetSuite != targetFrame.metadata.suite ||
+            acknowledgement.targetKind != targetFrame.metadata.kind ||
+            acknowledgement.targetEpoch != targetFrame.metadata.epoch ||
+            acknowledgement.targetMessageCounter !=
+                targetFrame.metadata.messageCounter ||
+            acknowledgement.targetAssembledPlaintextLength !=
+                targetFrame.assembledPlaintextLength ||
+            acknowledgement.targetFragmentCount != targetFrame.fragmentCount ||
+            !_bytesEqual(targetMessageId, acknowledgementMessageId)) {
+          throw const FormatException(
+            'Layergram v3 acknowledgement does not match its target',
+          );
+        }
+        final direction = snapshot.role == V3SessionRole.initiator
+            ? V3TrafficDirection.initiatorToResponder
+            : V3TrafficDirection.responderToInitiator;
+        final metadata = V3LmfMessageMetadata(
+          kind: V3LmfFrameKind.acknowledgement,
+          senderBinding: recipientBinding,
+          recipientBinding: senderBinding,
+          messageId: messageId,
+          sessionId: sessionId,
+          epoch: targetFrame.metadata.epoch,
+          messageCounter: targetFrame.metadata.messageCounter,
+        );
+        material = await V3KeySchedule.deriveAcknowledgementFromCommittedState(
+          sessionId: sessionId,
+          initiatorRoutingBinding: initiatorBinding,
+          responderRoutingBinding: responderBinding,
+          initiatorToResponderAckRootKey: initiatorAckRoot,
+          responderToInitiatorAckRootKey: responderAckRoot,
+          direction: direction,
+          metadata: metadata,
+        );
+        plaintext = V3LmfAcknowledgementCodec.encode(acknowledgement);
+        nonce = material.nonce;
+        return V3LmfAead.sealSingle(
+          metadata: metadata,
+          plaintext: plaintext,
+          secretKey: material.secretKey,
+          nonce: nonce,
+        );
+      } finally {
+        material?.close();
+        if (plaintext != null) _wipe(plaintext);
+        if (nonce != null) _wipe(nonce);
+        _wipe(targetMessageId);
+        _wipe(acknowledgementMessageId);
+        _wipe(sessionId);
+        _wipe(senderBinding);
+        _wipe(recipientBinding);
+        _wipe(initiatorBinding);
+        _wipe(responderBinding);
+        _wipe(initiatorAckRoot);
+        _wipe(responderAckRoot);
+      }
+    });
+  }
+
   /// Persists and registers one exact active revision-zero TR3 before the
   /// handshake controller may retire HP3. Repeating the byte-identical
   /// snapshot is idempotent; a same-session fork fails closed.
@@ -1196,6 +1324,38 @@ final class V3SessionCommitController {
       return outbox.pendingFrames(
         assemblyId,
         authority: _outboxAuthority,
+      );
+    });
+  }
+
+  Future<V3PendingSessionSendBinding?> pendingSendForTransition({
+    required Uint8List sessionId,
+    required int previousRatchetRevision,
+  }) {
+    return _serialized(() async {
+      _ensureReady();
+      final sessionKey = _sessionKey(sessionId);
+      V3SessionSendEffect? match;
+      for (final effect in _sendEffects.values) {
+        final targetSession =
+            _sessionKey(effect.frames.first.metadata.sessionId);
+        if (targetSession != sessionKey ||
+            effect.previousRatchetRevision != previousRatchetRevision) {
+          continue;
+        }
+        if (match != null && match.assemblyId != effect.assemblyId) {
+          throw const V3LmfPersistenceConflictException(
+            'multiple v3 sends claim one session transition',
+          );
+        }
+        match = effect;
+      }
+      if (match == null) return null;
+      return V3PendingSessionSendBinding(
+        assemblyId: match.assemblyId,
+        previousRatchetRevision: match.previousRatchetRevision,
+        ratchetRevision: match.revision,
+        isFullyAcknowledged: match.isFullyAcknowledged,
       );
     });
   }

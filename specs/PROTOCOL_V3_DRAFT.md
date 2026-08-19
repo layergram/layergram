@@ -183,16 +183,21 @@ without repeating ML-KEM, and is replaced only after a checkpoint-bound
 completion tombstone is durable. Crossed offers use a clock-free deterministic
 tie-break, which the future active contact/device coordinator must enforce.
 
-The handshake is still a research candidate and is not wired to bootstrap
-transport, contacts, messages, UI, backup, or Premium. The v3 EC
-transition engine and HR3 transport are now implemented as inactive components.
-The receive-commit controller still depends on a reviewed native ML-KEM Braid
-transition/state validator and trusted candidate construction. A complete send
-and receive persistence authority, deferred continuation-key resolution,
-checkpointing, replay retirement, pending-handshake persistence, and the exact
-prepare/checkpoint/tombstone initial-TR3 handoff exist only behind the inactive
-v3 boundary. Its initial registration/completion API is now protected by one
-unexposed scope-created identity capability, including concurrent forged-claim
-rejection. Controller-level device policy, a reviewed production SCKA backend,
-active projection, resend/progress UX, real cross-app loss tests, and erasure
-coding remain activation gates.
+The handshake and application runtime remain research candidates behind the
+inactive v3 boundary. They now compose canonical identity import, durable
+offer/reply/confirmation bootstrap, the exact initial-TR3 handoff, complete
+send/receive persistence authority, deferred continuation-key resolution,
+checkpointing, replay retirement, AP3 application plaintext, Normal-mode
+multi-device send groups, Maximum-mode exclusivity, exact receiver-ACK retry,
+and per-frame text/link/steganography carriage. `APPLICATION_MESSAGE_V3.md`
+freezes that application boundary.
+
+This is library/runtime integration, not product activation. It is still absent
+from the active contact/message repositories, chat UI, backup projection, and
+Premium composition. The controller still depends on reviewed production
+native SCKA packaging and trusted candidate construction. Its initial
+registration/completion API is protected by one unexposed scope-created
+identity capability, including concurrent forged-claim rejection. Active
+repository projection, resend/progress UX, passphrase and plausible-deniability
+coverage, real cross-application loss tests, supported physical devices, and
+independent review remain activation gates.

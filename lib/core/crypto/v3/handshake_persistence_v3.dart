@@ -956,6 +956,38 @@ final class V3DurableHandshakeOutbound {
   final bool restored;
 }
 
+/// Non-secret routing metadata for one completed HP3 -> TR3 session.
+///
+/// Identity values are canonical SHA-384 binding digests, while device and
+/// session identifiers are canonical base64url strings. This lets the
+/// application map a contact to one or more installation sessions without
+/// exposing HP3 or TR3 secret state.
+final class V3CompletedHandshakeSession {
+  const V3CompletedHandshakeSession({
+    required this.handshakeId,
+    required this.role,
+    required this.mode,
+    required this.localIdentityDigest,
+    required this.remoteIdentityDigest,
+    required this.localDeviceId,
+    required this.remoteDeviceId,
+    required this.sessionId,
+    required this.checkpointDigest,
+    required this.completedAt,
+  });
+
+  final String handshakeId;
+  final V3SessionRole role;
+  final V3HandshakeMode mode;
+  final String localIdentityDigest;
+  final String remoteIdentityDigest;
+  final String localDeviceId;
+  final String remoteDeviceId;
+  final String sessionId;
+  final String checkpointDigest;
+  final DateTime completedAt;
+}
+
 /// Single authority that performs cryptography before a durable write but
 /// never releases the resulting offer/reply until that write succeeds.
 final class V3HandshakePersistenceController {
@@ -1027,6 +1059,29 @@ final class V3HandshakePersistenceController {
       return _repository
           .pending(authority: _authority)
           .map((value) => _outbound(value, restored: true))
+          .toList(growable: false);
+    });
+  }
+
+  Future<List<V3CompletedHandshakeSession>> completedSessions() {
+    return _serialized(() async {
+      _ensureReady();
+      return _repository
+          .completions(authority: _authority)
+          .map(
+            (value) => V3CompletedHandshakeSession(
+              handshakeId: value.handshakeId,
+              role: value.role,
+              mode: value.mode,
+              localIdentityDigest: value.localIdentityDigest,
+              remoteIdentityDigest: value.remoteIdentityDigest,
+              localDeviceId: value.localDeviceId,
+              remoteDeviceId: value.remoteDeviceId,
+              sessionId: value.sessionId,
+              checkpointDigest: value.checkpointDigest,
+              completedAt: value.completedAt,
+            ),
+          )
           .toList(growable: false);
     });
   }
@@ -1169,7 +1224,27 @@ final class V3HandshakePersistenceController {
     return _serialized(() async {
       _ensureReady();
       final remoteDigest = _identityDigest(remoteIdentity);
+      final localDigest = _identityDigest(localIdentity.publicIdentity);
+      final localDeviceId = localDevice.deviceId;
       try {
+        if (mode == V3HandshakeMode.maximum) {
+          for (final pending in _repository.pending(authority: _authority)) {
+            if (pending.remoteIdentityDigest != remoteDigest.armored) continue;
+            if (pending.role == V3SessionRole.initiator &&
+                pending.mode == mode &&
+                pending.localIdentityDigest == localDigest.armored &&
+                pending.localDeviceId == _id(localDeviceId)) {
+              return _outbound(pending, restored: true);
+            }
+            throw const V3LmfPersistenceConflictException(
+              'maximum-mode v3 contact already has a pending session',
+            );
+          }
+        }
+        _enforceExclusiveCompletedSession(
+          remoteIdentityDigest: remoteDigest.armored,
+          requestedMode: mode,
+        );
         await _repository.preflightCreate(
           remoteIdentityDigest: remoteDigest.armored,
           additionalBytes: V3HandshakePendingStateCodec.initiatorEncodedBytes +
@@ -1178,6 +1253,8 @@ final class V3HandshakePersistenceController {
         );
       } finally {
         _wipe(remoteDigest.bytes);
+        _wipe(localDigest.bytes);
+        _wipe(localDeviceId);
       }
       V3InitiatorPendingHandshake? state;
       try {
@@ -1260,6 +1337,14 @@ final class V3HandshakePersistenceController {
       }
       final initiatorDigest = _identityDigest(initiatorIdentity);
       try {
+        _enforceExclusivePendingSession(
+          remoteIdentityDigest: initiatorDigest.armored,
+          requestedMode: expectedMode,
+        );
+        _enforceExclusiveCompletedSession(
+          remoteIdentityDigest: initiatorDigest.armored,
+          requestedMode: expectedMode,
+        );
         await _repository.preflightCreate(
           remoteIdentityDigest: initiatorDigest.armored,
           additionalBytes: V3HandshakePendingStateCodec.responderEncodedBytes +
@@ -1291,6 +1376,36 @@ final class V3HandshakePersistenceController {
         state?.close();
       }
     });
+  }
+
+  void _enforceExclusivePendingSession({
+    required String remoteIdentityDigest,
+    required V3HandshakeMode requestedMode,
+  }) {
+    for (final pending in _repository.pending(authority: _authority)) {
+      if (pending.remoteIdentityDigest != remoteIdentityDigest) continue;
+      if (requestedMode == V3HandshakeMode.maximum ||
+          pending.mode == V3HandshakeMode.maximum) {
+        throw const V3LmfPersistenceConflictException(
+          'maximum-mode v3 contact already has a pending session',
+        );
+      }
+    }
+  }
+
+  void _enforceExclusiveCompletedSession({
+    required String remoteIdentityDigest,
+    required V3HandshakeMode requestedMode,
+  }) {
+    for (final completion in _repository.completions(authority: _authority)) {
+      if (completion.remoteIdentityDigest != remoteIdentityDigest) continue;
+      if (requestedMode == V3HandshakeMode.maximum ||
+          completion.mode == V3HandshakeMode.maximum) {
+        throw const V3LmfPersistenceConflictException(
+          'maximum-mode v3 contact already has a completed session',
+        );
+      }
+    }
   }
 
   Future<V3InitiatorPendingHandshake> resumeInitiator(String handshakeId) {

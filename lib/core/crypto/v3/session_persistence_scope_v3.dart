@@ -18,6 +18,8 @@ import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
 
 import '../../storage/aux_record_repository.dart';
+import 'acknowledgement_outbox_v3.dart';
+import 'application_send_group_v3.dart';
 import 'committed_record_materializer_v3.dart';
 import 'handshake_frame_inbox_v3.dart';
 import 'handshake_persistence_v3.dart';
@@ -44,6 +46,8 @@ final class V3SessionPersistenceRestoreResult {
     required this.inbox,
     required this.handshakeInbox,
     required this.handshakes,
+    required this.sendGroups,
+    required this.acknowledgements,
     required this.sessions,
     required this.handoffs,
   });
@@ -62,6 +66,12 @@ final class V3SessionPersistenceRestoreResult {
   /// Durable pending offer/reply state restored before any new handshake
   /// cryptography or export is allowed.
   final V3HandshakeControllerRestoreResult handshakes;
+
+  /// Logical multi-device sends restored before any new export is created.
+  final V3ApplicationSendGroupRestoreResult sendGroups;
+
+  /// Exact sealed ACK frames retained independently of carrier delivery.
+  final V3AcknowledgementOutboxRestoreResult acknowledgements;
 
   /// Reconstructed send/receive session state and durable application state.
   final V3SessionCommitRestoreResult sessions;
@@ -118,12 +128,16 @@ final class V3SessionPersistenceScope {
     required V3LmfDurableInbox inbox,
     required this.handshakeInbox,
     required this.handshakes,
+    required V3ApplicationSendGroupJournal sendGroups,
+    required V3AcknowledgementOutbox acknowledgements,
     required V3SessionCommitController controller,
     required this.handoffs,
     required V3SessionRatchetKeyResolver ratchetKeyResolver,
   })  : _repository = repository,
         _ownedAuxStorageKey = ownedAuxStorageKey,
         _inbox = inbox,
+        _sendGroups = sendGroups,
+        _acknowledgements = acknowledgements,
         _controller = controller,
         _ratchetKeyResolver = ratchetKeyResolver;
 
@@ -180,6 +194,8 @@ final class V3SessionPersistenceScope {
         repository: V3HandshakePendingRepository(store: store),
         initialHandoffAuthority: initialHandoffAuthority,
       );
+      final sendGroups = V3ApplicationSendGroupJournal(store: store);
+      final acknowledgements = V3AcknowledgementOutbox(store: store);
       final controller = V3SessionCommitController(
         journal: V3LmfAtomicCommitJournal(store: store, inbox: inbox),
         sendJournal: V3SessionSendJournal(store: store),
@@ -213,6 +229,8 @@ final class V3SessionPersistenceScope {
         inbox: inbox,
         handshakeInbox: handshakeInbox,
         handshakes: handshakes,
+        sendGroups: sendGroups,
+        acknowledgements: acknowledgements,
         controller: controller,
         handoffs: handoffs,
         ratchetKeyResolver: ratchetKeyResolver,
@@ -275,6 +293,12 @@ final class V3SessionPersistenceScope {
   /// Sole authority for pending hybrid-handshake persistence and exact resend.
   final V3HandshakePersistenceController handshakes;
 
+  /// Higher-level all-device send journal, private behind scope methods.
+  final V3ApplicationSendGroupJournal _sendGroups;
+
+  /// Durable exact-byte receiver ACK retry storage.
+  final V3AcknowledgementOutbox _acknowledgements;
+
   /// Sole authority for durable session transitions and outgoing exports.
   /// It remains hidden so receive candidates cannot be committed around the
   /// scope-owned resolver/controller binding.
@@ -302,6 +326,8 @@ final class V3SessionPersistenceScope {
       _recoveryRequired ||
       handshakeInbox.requiresRecovery ||
       handshakes.requiresRecovery ||
+      _sendGroups.requiresRecovery ||
+      _acknowledgements.requiresRecovery ||
       _controller.requiresRecovery ||
       handoffs.requiresRecovery;
 
@@ -325,6 +351,8 @@ final class V3SessionPersistenceScope {
         final inboxResult = await _inbox.restore(keyResolver: (_) => null);
         final handshakeInboxResult = await handshakeInbox.restore();
         final handshakeResult = await handshakes.restore();
+        final sendGroupResult = await _sendGroups.restore();
+        final acknowledgementResult = await _acknowledgements.restore();
         final sessionResult = await _controller.restore(
           checkpoints: checkpoints,
         );
@@ -334,6 +362,8 @@ final class V3SessionPersistenceScope {
           inbox: inboxResult,
           handshakeInbox: handshakeInboxResult,
           handshakes: handshakeResult,
+          sendGroups: sendGroupResult,
+          acknowledgements: acknowledgementResult,
           sessions: sessionResult,
           handoffs: handoffResult,
         );
@@ -480,10 +510,75 @@ final class V3SessionPersistenceScope {
     });
   }
 
+  Future<V3ApplicationSendGroup> createSendGroup({
+    required Uint8List plaintext,
+    required V3LmfFrameKind kind,
+    required int expiresAtUnixSeconds,
+    required Map<String, int> targetExpectedRevisions,
+    DateTime? createdAt,
+  }) {
+    return _serialized(() async {
+      _ensureReady();
+      return _sendGroups.create(
+        plaintext: plaintext,
+        kind: kind,
+        expiresAtUnixSeconds: expiresAtUnixSeconds,
+        targetExpectedRevisions: targetExpectedRevisions,
+        createdAt: createdAt,
+      );
+    });
+  }
+
+  Future<List<V3ApplicationSendGroup>> pendingSendGroups() {
+    return _serialized(() async {
+      _ensureReady();
+      return _sendGroups.groups();
+    });
+  }
+
+  Future<V3ApplicationSendGroup> markSendGroupTargetCommitted({
+    required String groupId,
+    required String sessionId,
+    required String assemblyId,
+    required int ratchetRevision,
+    DateTime? updatedAt,
+  }) {
+    return _serialized(() async {
+      _ensureReady();
+      return _sendGroups.markCommitted(
+        groupId: groupId,
+        sessionId: sessionId,
+        assemblyId: assemblyId,
+        ratchetRevision: ratchetRevision,
+        updatedAt: updatedAt,
+      );
+    });
+  }
+
+  Future<void> deleteReadySendGroup(String groupId) {
+    return _serialized(() async {
+      _ensureReady();
+      await _sendGroups.deleteReady(groupId);
+    });
+  }
+
   Future<List<V3LmfFrame>> pendingSendFrames(String assemblyId) {
     return _serialized(() async {
       _ensureReady();
       return _controller.pendingSendFrames(assemblyId);
+    });
+  }
+
+  Future<V3PendingSessionSendBinding?> pendingSendForTransition({
+    required Uint8List sessionId,
+    required int previousRatchetRevision,
+  }) {
+    return _serialized(() async {
+      _ensureReady();
+      return _controller.pendingSendForTransition(
+        sessionId: sessionId,
+        previousRatchetRevision: previousRatchetRevision,
+      );
     });
   }
 
@@ -519,6 +614,51 @@ final class V3SessionPersistenceScope {
     return _serialized(() async {
       _ensureReady();
       return _controller.snapshotForSession(sessionId);
+    });
+  }
+
+  Future<bool> hasSession(Uint8List sessionId) {
+    return _serialized(() async {
+      _ensureReady();
+      return _controller.hasSession(sessionId);
+    });
+  }
+
+  /// Returns an already-durable ACK or seals and persists one before export.
+  Future<V3LmfFrame> acknowledgementFor({
+    required V3LmfFrame targetFrame,
+    required V3LmfAcknowledgement acknowledgement,
+    DateTime? createdAt,
+  }) {
+    return _serialized(() async {
+      _ensureReady();
+      final targetAssemblyId = V3LmfFrameCodec.assemblyId(targetFrame);
+      final entry = await _acknowledgements.getOrCreate(
+        targetAssemblyId: targetAssemblyId,
+        createdAt: createdAt,
+        builder: (messageId) => _controller.sealAcknowledgement(
+          targetFrame: targetFrame,
+          acknowledgement: acknowledgement,
+          messageId: messageId,
+        ),
+      );
+      return entry.frame;
+    });
+  }
+
+  Future<List<V3LmfFrame>> pendingAcknowledgementFrames() {
+    return _serialized(() async {
+      _ensureReady();
+      return List.unmodifiable(
+        (await _acknowledgements.entries()).map((entry) => entry.frame),
+      );
+    });
+  }
+
+  Future<void> deleteAcknowledgementsOlderThan(DateTime cutoff) {
+    return _serialized(() async {
+      _ensureReady();
+      await _acknowledgements.deleteOlderThan(cutoff);
     });
   }
 
@@ -559,19 +699,27 @@ final class V3SessionPersistenceScope {
             await handshakeInbox.close();
           } finally {
             try {
-              await handshakes.close();
+              await _sendGroups.close();
             } finally {
               try {
-                await _controller.close();
+                await _acknowledgements.close();
               } finally {
                 try {
-                  await _inbox.close();
+                  await handshakes.close();
                 } finally {
-                  _repository.setActiveContext(
-                    scopeToken: null,
-                    auxStorageKey: null,
-                  );
-                  _ownedAuxStorageKey.destroy();
+                  try {
+                    await _controller.close();
+                  } finally {
+                    try {
+                      await _inbox.close();
+                    } finally {
+                      _repository.setActiveContext(
+                        scopeToken: null,
+                        auxStorageKey: null,
+                      );
+                      _ownedAuxStorageKey.destroy();
+                    }
+                  }
                 }
               }
             }

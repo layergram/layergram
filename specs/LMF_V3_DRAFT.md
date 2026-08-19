@@ -344,6 +344,22 @@ be removed. Restart suppresses and cleans a stale outbox copy when that durable
 completed revision already exists. Unauthenticated ACK rejection happens before
 any persistence attempt and therefore does not poison a clean retry.
 
+At the application layer, the receiver creates a complete cumulative ACK only
+after the complete AP3 delivery has been durably committed. The separately
+encrypted ACK outbox persists that exact sealed ACK frame before it is made
+available for export. A replay or restart returns the same frame bytes and
+message ID; it never reseals the ACK. Because ACKs are not themselves
+acknowledged, their retirement is a conservative local retention operation and
+must not be inferred from carrier behavior.
+
+Normal-mode fan-out is coordinated by an encrypted all-or-none send-group
+journal above the per-session journals. It stores one canonical AP3 plaintext,
+the selected target sessions and their expected revisions, then records each
+target assembly monotonically. No frame set is exposed until every selected
+target is durable. Maximum mode instead requires one exclusive target session.
+The stable AP3 logical message ID is shared across these independent session
+encryptions; message keys, ratchets, nonces, and ACKs are never shared.
+
 The reference defaults bound the inbox to 256 sealed frame records, 128 KiB of
 sealed frame bytes, 4,096 commit tombstones, and 8,192 relevant physical
 records. The atomic-effect journal is bounded to 4,096 effects, 17 KiB per

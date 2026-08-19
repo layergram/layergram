@@ -142,14 +142,154 @@ void main() {
       establishedResponder.sessionId,
       establishedConfirmation.session!.sessionId,
     );
+    final aliceSessions =
+        await aliceRuntime.sessionsForRemoteIdentity(bob.publicIdentity);
+    final bobSessions =
+        await bobRuntime.sessionsForRemoteIdentity(alice.publicIdentity);
+    expect(aliceSessions, hasLength(1));
+    expect(bobSessions, hasLength(1));
+    expect(aliceSessions.single.mode, V3HandshakeMode.normal);
+    expect(
+        aliceSessions.single.remoteDeviceId, bobSessions.single.localDeviceId);
+
+    // Normal mode may start another independent device session. Moving an
+    // existing contact to Maximum requires explicit session reset/rekey.
+    final additionalDeviceOffer = await aliceRuntime.createOffer(
+      remoteIdentity: bob.publicIdentity,
+      mode: V3HandshakeMode.normal,
+    );
+    expect(additionalDeviceOffer.handshakeId, isNot(offer.handshakeId));
+    final bobSecondBackend = _InitialSckaBackend();
+    final bobSecondRuntime = await V3ApplicationSessionRuntime.open(
+      localIdentity: bob,
+      scopeToken: 'bob2-v3-scope000',
+      sckaBackend: bobSecondBackend,
+    );
+    final secondReply = await bobSecondRuntime.receiveOffer(
+      frames: additionalDeviceOffer.frames,
+      initiatorIdentity: alice.publicIdentity,
+      expectedMode: V3HandshakeMode.normal,
+    );
+    final secondConfirmation = await aliceRuntime.receiveReply(
+      frames: secondReply.frames,
+      responderIdentity: bob.publicIdentity,
+    );
+    await bobSecondRuntime.receiveConfirmation(
+      frames: secondConfirmation.frames,
+      initiatorIdentity: alice.publicIdentity,
+    );
+    final twoDeviceSessions =
+        await aliceRuntime.sessionsForRemoteIdentity(bob.publicIdentity);
+    expect(twoDeviceSessions, hasLength(2));
+    expect(
+      twoDeviceSessions.map((session) => session.remoteDeviceId).toSet(),
+      hasLength(2),
+    );
+    await expectLater(
+      aliceRuntime.createOffer(
+        remoteIdentity: bob.publicIdentity,
+        mode: V3HandshakeMode.maximum,
+      ),
+      throwsA(anything),
+    );
+
+    final messageExport = await aliceRuntime.sendApplicationMessageToIdentity(
+      remoteIdentity: bob.publicIdentity,
+      expectedMode: V3HandshakeMode.normal,
+      text: 'hello two devices',
+      timestampUnixSeconds: 1770000000,
+      deleteAfterRead: true,
+      backupExcluded: true,
+    );
+    expect(messageExport.targets, hasLength(2));
+    expect(messageExport.frames, isNotEmpty);
+    expect(
+      messageExport.textParts,
+      everyElement(
+        hasLength(
+          lessThanOrEqualTo(V3LmfFrameCodec.portableShareCharacterLimit),
+        ),
+      ),
+    );
+    await aliceRuntime.markMessageExported(messageExport);
+
+    V3ApplicationMessageInboundResult? firstDeviceDelivery;
+    V3ApplicationMessageInboundResult? secondDeviceDelivery;
+    var firstDeviceIgnored = 0;
+    var secondDeviceIgnored = 0;
+    final firstStatuses = <V3ApplicationInboundStatus>[];
+    final secondStatuses = <V3ApplicationInboundStatus>[];
+    for (final frame in messageExport.frames.reversed) {
+      final first = await bobRuntime.receiveApplicationFrame(
+        frame: frame,
+        nowUnixSeconds: 1770000001,
+      );
+      firstStatuses.add(first.status);
+      if (first.status == V3ApplicationInboundStatus.notForThisInstallation) {
+        firstDeviceIgnored++;
+      } else if (first.status == V3ApplicationInboundStatus.delivered) {
+        firstDeviceDelivery = first;
+      }
+      final second = await bobSecondRuntime.receiveApplicationFrame(
+        frame: frame,
+        nowUnixSeconds: 1770000001,
+      );
+      secondStatuses.add(second.status);
+      if (second.status == V3ApplicationInboundStatus.notForThisInstallation) {
+        secondDeviceIgnored++;
+      } else if (second.status == V3ApplicationInboundStatus.delivered) {
+        secondDeviceDelivery = second;
+      }
+    }
+    expect(firstDeviceIgnored, greaterThan(0));
+    expect(secondDeviceIgnored, greaterThan(0));
+    expect(firstDeviceDelivery, isNotNull, reason: '$firstStatuses');
+    expect(secondDeviceDelivery, isNotNull, reason: '$secondStatuses');
+    expect(firstDeviceDelivery?.payload?.text, 'hello two devices');
+    expect(secondDeviceDelivery?.payload?.text, 'hello two devices');
+    expect(firstDeviceDelivery?.payload?.deleteAfterRead, isTrue);
+    expect(firstDeviceDelivery?.payload?.backupExcluded, isTrue);
+    expect(
+      firstDeviceDelivery?.payload?.stableMessageId,
+      secondDeviceDelivery?.payload?.stableMessageId,
+    );
+    expect(firstDeviceDelivery?.acknowledgementFrame, isNotNull);
+    expect(secondDeviceDelivery?.acknowledgementFrame, isNotNull);
+
+    expect(
+      await aliceRuntime.receiveApplicationCarrier(
+        carrier: firstDeviceDelivery!.acknowledgementText!,
+      ),
+      isA<V3ApplicationMessageInboundResult>().having(
+        (result) => result.status,
+        'status',
+        V3ApplicationInboundStatus.acknowledgementApplied,
+      ),
+    );
+    final afterFirstAck = await aliceRuntime.pendingMessageExports();
+    expect(afterFirstAck, hasLength(1));
+    expect(afterFirstAck.single.frames, isNotEmpty);
+    expect(
+      await aliceRuntime.receiveApplicationCarrier(
+        carrier: secondDeviceDelivery!.acknowledgementLink!,
+      ),
+      isA<V3ApplicationMessageInboundResult>().having(
+        (result) => result.status,
+        'status',
+        V3ApplicationInboundStatus.acknowledgementApplied,
+      ),
+    );
+    expect(await aliceRuntime.pendingMessageExports(), isEmpty);
+    final firstDeviceAck = firstDeviceDelivery.acknowledgementFrame!;
+    await bobSecondRuntime.close();
 
     final aliceSessionId = establishedConfirmation.session!.sessionIdBytes;
     final bobSessionId = establishedResponder.sessionIdBytes;
     final aliceSnapshot = await aliceRuntime.snapshotForSession(aliceSessionId);
     final bobSnapshot = await bobRuntime.snapshotForSession(bobSessionId);
     try {
-      expect(aliceSnapshot.revision, 0);
-      expect(bobSnapshot.revision, 0);
+      expect(aliceSnapshot.revision, 1);
+      expect(bobSnapshot.revision, 1);
       expect(aliceSnapshot.role, V3SessionRole.initiator);
       expect(bobSnapshot.role, V3SessionRole.responder);
     } finally {
@@ -176,11 +316,35 @@ void main() {
     expect(bobRuntime.localDeviceId, orderedEquals(bobDeviceId));
     expect(
       aliceRuntime.restoreResult.sessions.sessionRevisions.values,
-      <int>[0],
+      everyElement(1),
     );
+    expect(aliceRuntime.restoreResult.sessions.sessionRevisions, hasLength(2));
     expect(
       bobRuntime.restoreResult.sessions.sessionRevisions.values,
-      <int>[0],
+      <int>[1],
+    );
+    final pendingMessageExports = await aliceRuntime.pendingMessageExports();
+    expect(pendingMessageExports, isEmpty);
+    final pendingAcks = await bobRuntime.pendingAcknowledgementFrames();
+    expect(pendingAcks, hasLength(1));
+    _expectExactFrames(
+      <V3LmfFrame>[firstDeviceAck],
+      pendingAcks,
+    );
+
+    final replay = await bobRuntime.receiveApplicationFrame(
+      frame: messageExport.targets
+          .singleWhere(
+            (target) => target.sessionId == establishedResponder.sessionId,
+          )
+          .frames
+          .first,
+      nowUnixSeconds: 1770000002,
+    );
+    expect(replay.status, V3ApplicationInboundStatus.committedReplay);
+    _expectExactFrames(
+      <V3LmfFrame>[firstDeviceAck],
+      <V3LmfFrame>[replay.acknowledgementFrame!],
     );
 
     final confirmationRetry = await aliceRuntime.retryHandshake(
@@ -228,6 +392,12 @@ void main() {
         remoteIdentity: bob.publicIdentity,
         mode: V3HandshakeMode.maximum,
       );
+      final retry = await aliceRuntime.createOffer(
+        remoteIdentity: bob.publicIdentity,
+        mode: V3HandshakeMode.maximum,
+      );
+      expect(retry.handshakeId, offer.handshakeId);
+      _expectExactFrames(retry.frames, offer.frames);
       await expectLater(
         bobRuntime.receiveOffer(
           frames: offer.frames,
@@ -365,15 +535,7 @@ final class _InitialSckaBackend implements V3SckaBackend {
     required Uint8List sharedSecret,
     required Uint8List stateSealKey,
   }) async =>
-      Uint8List.fromList(
-        sha256.convert(<int>[
-          ...'application-runtime-test-scka\x00'.codeUnits,
-          role.wireId,
-          ...sessionId,
-          ...sharedSecret,
-          ...stateSealKey,
-        ]).bytes,
-      );
+      _state(role, sessionId, 0, 0);
 
   @override
   Future<void> validateAuthenticatedState({
@@ -383,10 +545,14 @@ final class _InitialSckaBackend implements V3SckaBackend {
     required Uint8List stateSealKey,
     required int expectedStateRevision,
   }) async {
-    if (sessionId.length != 16 ||
-        authenticatedState.length != 32 ||
-        authenticatedState.every((byte) => byte == 0) ||
-        expectedStateRevision != 0) {
+    if (authenticatedState.length != 26 ||
+        authenticatedState[0] != role.wireId ||
+        !_constantTimeBytesEqual(
+          Uint8List.sublistView(authenticatedState, 1, 17),
+          sessionId,
+        ) ||
+        ByteData.sublistView(authenticatedState).getUint64(18, Endian.big) !=
+            expectedStateRevision) {
       throw StateError('invalid test SCKA state');
     }
   }
@@ -399,8 +565,26 @@ final class _InitialSckaBackend implements V3SckaBackend {
     required Uint8List stateSealKey,
     required int expectedStateRevision,
     required V3SckaMessage message,
-  }) =>
-      throw UnsupportedError('not needed by application runtime handshake');
+  }) async {
+    final currentEpoch = authenticatedState[17];
+    final payload = message.nativePayload;
+    if (payload.length != 1 || payload.single < currentEpoch) {
+      throw const FormatException('invalid test SCKA message');
+    }
+    final outputEpoch = payload.single;
+    return V3SckaReceiveCandidate(
+      nextAuthenticatedState:
+          _state(role, sessionId, outputEpoch, expectedStateRevision + 1),
+      stateRevision: expectedStateRevision + 1,
+      receivingEpoch: message.sendingEpoch,
+      epochSecret: outputEpoch == currentEpoch
+          ? null
+          : V3SckaEpochSecret(
+              epoch: outputEpoch,
+              secret: _epochSecret(sessionId, outputEpoch),
+            ),
+    );
+  }
 
   @override
   Future<V3SckaSendCandidate> sendCandidate({
@@ -409,6 +593,51 @@ final class _InitialSckaBackend implements V3SckaBackend {
     required Uint8List authenticatedState,
     required Uint8List stateSealKey,
     required int expectedStateRevision,
-  }) =>
-      throw UnsupportedError('not needed by application runtime handshake');
+  }) async {
+    final currentEpoch = authenticatedState[17];
+    final outputEpoch = currentEpoch == 0 ? 1 : currentEpoch;
+    return V3SckaSendCandidate(
+      nextAuthenticatedState:
+          _state(role, sessionId, outputEpoch, expectedStateRevision + 1),
+      stateRevision: expectedStateRevision + 1,
+      sendingEpoch: currentEpoch,
+      nativePayload: Uint8List.fromList(<int>[outputEpoch]),
+      epochSecret: currentEpoch == outputEpoch
+          ? null
+          : V3SckaEpochSecret(
+              epoch: outputEpoch,
+              secret: _epochSecret(sessionId, outputEpoch),
+            ),
+    );
+  }
+
+  static Uint8List _state(
+    V3SessionRole role,
+    Uint8List sessionId,
+    int epoch,
+    int revision,
+  ) {
+    final result = Uint8List.fromList(<int>[
+      role.wireId,
+      ...sessionId,
+      epoch,
+      ...List<int>.filled(8, 0),
+    ]);
+    ByteData.sublistView(result).setUint64(18, revision, Endian.big);
+    return result;
+  }
+
+  static Uint8List _epochSecret(Uint8List sessionId, int epoch) =>
+      Uint8List.fromList(
+        sha256.convert(<int>[0x53, ...sessionId, epoch]).bytes,
+      );
+}
+
+bool _constantTimeBytesEqual(Uint8List left, Uint8List right) {
+  if (left.length != right.length) return false;
+  var difference = 0;
+  for (var index = 0; index < left.length; index++) {
+    difference |= left[index] ^ right[index];
+  }
+  return difference == 0;
 }

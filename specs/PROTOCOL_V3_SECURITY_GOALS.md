@@ -224,6 +224,9 @@ reviewed standard alternative or narrow its product claim explicitly.
 - Normal mode MUST maintain an independently authenticated session for every
   accepted recipient device and MUST enforce a device cap. Adding a device is
   never a silent replacement.
+- A Normal-mode logical send MUST NOT become exportable until the exact sealed
+  frame set for every selected device is durable. Partial target preparation
+  remains recoverable local state, not a silently reduced recipient set.
 - Maximum mode MUST pin the authenticated device pair and block user content on
   an unexpected device until the user explicitly repairs or changes mode.
 - A content key MAY be wrapped for several authenticated device sessions in
@@ -246,6 +249,8 @@ reviewed standard alternative or narrow its product claim explicitly.
   the routing roles. Acknowledgements MUST NOT acknowledge acknowledgements.
 - Resend and retention policy MUST NOT trust a peer-supplied clock. A lost ACK
   may cause an exact-byte duplicate resend, never state rollback or nonce reuse.
+- A receiver-generated ACK MUST itself become durable before first export;
+  replay or restart MUST return its exact sealed bytes rather than resealing it.
 - The single static identity QR MUST carry the entire public identity. Reliability
   on representative screens, printers, cameras, reductions, and photocopies is
   a physical test gate, not implied by theoretical QR capacity.
