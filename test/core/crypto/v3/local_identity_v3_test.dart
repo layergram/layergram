@@ -146,6 +146,31 @@ void main() {
     expect(privateHandle.closeCalls, 1);
   });
 
+  test('scoped Aux key is deterministic, isolated and unavailable after close',
+      () async {
+    final primary = await factory.restorePrimary(mnemonic: mnemonic);
+    final passphrase = await factory.restorePassphrase(
+      mnemonic: mnemonic,
+      passphrase: 'hidden context',
+    );
+    final primaryKey = await (await primary.deriveAuxStorageKey()).extract();
+    final primaryAgain = await (await primary.deriveAuxStorageKey()).extract();
+    final passphraseKey =
+        await (await passphrase.deriveAuxStorageKey()).extract();
+    try {
+      expect(primaryKey.bytes, orderedEquals(primaryAgain.bytes));
+      expect(primaryKey.bytes, isNot(orderedEquals(passphraseKey.bytes)));
+    } finally {
+      primaryKey.destroy();
+      primaryAgain.destroy();
+      passphraseKey.destroy();
+    }
+
+    await primary.close();
+    expect(() => primary.deriveAuxStorageKey(), throwsStateError);
+    await passphrase.close();
+  });
+
   test('invalid mnemonic and empty passphrase fail before the backend',
       () async {
     const invalidMnemonic = 'secret words must never appear in an error';

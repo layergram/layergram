@@ -31,15 +31,40 @@ class IdentityQrCode extends StatelessWidget {
     super.key,
   });
 
-  final String data;
+  /// Legacy identities use a text payload. Protocol v3 uses canonical binary
+  /// bytes so the complete ML-KEM public key still fits one static QR.
+  final Object data;
   final double size;
   final Color color;
   final Color backgroundColor;
 
   @override
   Widget build(BuildContext context) {
+    if (data case final Uint8List binary) {
+      final qr = QrCode.fromUint8List(
+        data: binary,
+        errorCorrectLevel: identityQrErrorCorrectionLevel,
+      );
+      return SizedBox.square(
+        dimension: size,
+        child: CustomPaint(
+          painter: QrPainter.withQr(
+            qr: qr,
+            gapless: true,
+            eyeStyle: QrEyeStyle(
+              eyeShape: QrEyeShape.square,
+              color: color,
+            ),
+            dataModuleStyle: QrDataModuleStyle(
+              dataModuleShape: QrDataModuleShape.square,
+              color: color,
+            ),
+          ),
+        ),
+      );
+    }
     return QrImageView(
-      data: data,
+      data: data as String,
       size: size,
       errorCorrectionLevel: identityQrErrorCorrectionLevel,
       eyeStyle: QrEyeStyle(eyeShape: QrEyeShape.square, color: color),
@@ -57,38 +82,60 @@ class IdentityQrCode extends StatelessWidget {
 }
 
 Future<Uint8List?> renderIdentityQrPng(
-  String data, {
+  Object data, {
   int pixelSize = 1024,
   AssetBundle? assetBundle,
 }) async {
-  final logoData = await (assetBundle ?? rootBundle).load(identityQrLogoAsset);
-  final logoBytes = logoData.buffer.asUint8List(
-    logoData.offsetInBytes,
-    logoData.lengthInBytes,
-  );
-  final codec = await ui.instantiateImageCodec(logoBytes);
-  final frame = await codec.getNextFrame();
-  final logoImage = frame.image;
+  ui.Codec? codec;
+  ui.Image? logoImage;
 
   try {
-    final painter = QrPainter(
-      data: data,
-      version: QrVersions.auto,
-      errorCorrectionLevel: identityQrErrorCorrectionLevel,
-      gapless: true,
-      eyeStyle: const QrEyeStyle(
-        eyeShape: QrEyeShape.square,
-        color: Colors.black,
-      ),
-      dataModuleStyle: const QrDataModuleStyle(
-        dataModuleShape: QrDataModuleShape.square,
-        color: Colors.black,
-      ),
-      embeddedImage: logoImage,
-      embeddedImageStyle: QrEmbeddedImageStyle(
-        size: Size.square(pixelSize * identityQrLogoScale),
-      ),
-    );
+    late final QrPainter painter;
+    if (data case final Uint8List binary) {
+      painter = QrPainter.withQr(
+        qr: QrCode.fromUint8List(
+          data: binary,
+          errorCorrectLevel: identityQrErrorCorrectionLevel,
+        ),
+        gapless: true,
+        eyeStyle: const QrEyeStyle(
+          eyeShape: QrEyeShape.square,
+          color: Colors.black,
+        ),
+        dataModuleStyle: const QrDataModuleStyle(
+          dataModuleShape: QrDataModuleShape.square,
+          color: Colors.black,
+        ),
+      );
+    } else {
+      final logoData =
+          await (assetBundle ?? rootBundle).load(identityQrLogoAsset);
+      final logoBytes = logoData.buffer.asUint8List(
+        logoData.offsetInBytes,
+        logoData.lengthInBytes,
+      );
+      codec = await ui.instantiateImageCodec(logoBytes);
+      final frame = await codec.getNextFrame();
+      logoImage = frame.image;
+      painter = QrPainter(
+        data: data as String,
+        version: QrVersions.auto,
+        errorCorrectionLevel: identityQrErrorCorrectionLevel,
+        gapless: true,
+        eyeStyle: const QrEyeStyle(
+          eyeShape: QrEyeShape.square,
+          color: Colors.black,
+        ),
+        dataModuleStyle: const QrDataModuleStyle(
+          dataModuleShape: QrDataModuleShape.square,
+          color: Colors.black,
+        ),
+        embeddedImage: logoImage,
+        embeddedImageStyle: QrEmbeddedImageStyle(
+          size: Size.square(pixelSize * identityQrLogoScale),
+        ),
+      );
+    }
     final size = Size.square(pixelSize.toDouble());
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
@@ -104,7 +151,7 @@ Future<Uint8List?> renderIdentityQrPng(
       picture.dispose();
     }
   } finally {
-    logoImage.dispose();
-    codec.dispose();
+    logoImage?.dispose();
+    codec?.dispose();
   }
 }

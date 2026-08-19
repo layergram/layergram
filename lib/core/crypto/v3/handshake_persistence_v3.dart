@@ -1044,6 +1044,36 @@ final class V3HandshakePersistenceController {
     });
   }
 
+  /// Returns the non-secret digest that binds an HP3 pending/completed state.
+  ///
+  /// The application coordinator needs this for idempotent replay of a
+  /// responder confirmation after the secret pending record has already been
+  /// replaced by its compact completion tombstone. Returning only the digest
+  /// does not expose the encoded HP3 state or any private key material.
+  Future<String?> stateDigestForId(String handshakeId) {
+    return _serialized(() async {
+      _ensureReady();
+      final pending = _repository.pendingForId(
+        handshakeId,
+        authority: _authority,
+      );
+      final completion = _repository.completionForId(
+        handshakeId,
+        authority: _authority,
+      );
+      final pendingDigest = pending?.stateDigest;
+      final completionDigest = completion?.pendingStateDigest;
+      if (pendingDigest != null &&
+          completionDigest != null &&
+          pendingDigest != completionDigest) {
+        throw const V3LmfPersistenceConflictException(
+          'v3 handshake pending/completion state diverged',
+        );
+      }
+      return pendingDigest ?? completionDigest;
+    });
+  }
+
   /// Returns the exact initiator confirmation retained by the completion
   /// tombstone, allowing loss recovery without rebuilding session material.
   Future<V3DurableHandshakeOutbound?> completedConfirmationForId(

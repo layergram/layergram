@@ -18,17 +18,22 @@ void main() {
     );
   });
 
-  test('v3 derives deterministic full-size X25519 and ML-KEM seeds', () async {
+  test('v3 derives deterministic identity and local-storage roots', () async {
     final seed = service.mnemonicToSeed(mnemonic);
     final first = await service.deriveV3IdentityKeySeeds(seed);
     final second = await service.deriveV3IdentityKeySeeds(seed);
 
     expect(first.x25519Seed, hasLength(32));
     expect(first.mlKem768KeyGenerationSeed, hasLength(64));
+    expect(first.localStorageRoot, hasLength(32));
     expect(first.x25519Seed, orderedEquals(second.x25519Seed));
     expect(
       first.mlKem768KeyGenerationSeed,
       orderedEquals(second.mlKem768KeyGenerationSeed),
+    );
+    expect(
+      first.localStorageRoot,
+      orderedEquals(second.localStorageRoot),
     );
     expect(
       _toHex(first.x25519Seed),
@@ -37,6 +42,10 @@ void main() {
     expect(
       _toHex(first.mlKem768KeyGenerationSeed),
       'adb82691ed7a3f930f8754a9f546bce2ce745f31582fb9464d6ca530431181d7c8177c5d583637ad480d0dbf5b7f92b0878cbd7a0e901fe698beaff48b34f0ff',
+    );
+    expect(
+      _toHex(first.localStorageRoot),
+      'aa590ee16dcb89835a688996b8d972196fe880475b1fe89fb96a8662635e5afa',
     );
   });
 
@@ -53,6 +62,10 @@ void main() {
     expect(
       passphrase.mlKem768KeyGenerationSeed,
       isNot(orderedEquals(base.mlKem768KeyGenerationSeed)),
+    );
+    expect(
+      passphrase.localStorageRoot,
+      isNot(orderedEquals(base.localStorageRoot)),
     );
   });
 
@@ -95,6 +108,7 @@ void main() {
 
     expect(material.x25519Seed, everyElement(0));
     expect(material.mlKem768KeyGenerationSeed, everyElement(0));
+    expect(material.localStorageRoot, everyElement(0));
   });
 }
 

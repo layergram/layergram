@@ -262,8 +262,18 @@ class _AddIdentityViewState extends ConsumerState<AddIdentityView> {
                             child: MobileScanner(
                               onDetect: (capture) async {
                                 if (_qrImported) return;
-                                final value = capture.barcodes.first.rawValue;
-                                if (value == null || value.isEmpty) return;
+                                final barcode = capture.barcodes.first;
+                                final Object? value =
+                                    switch (barcode.rawDecodedBytes) {
+                                  DecodedBarcodeBytes(:final bytes) => bytes,
+                                  DecodedVisionBarcodeBytes(:final bytes?) =>
+                                    bytes,
+                                  _ => barcode.rawValue,
+                                };
+                                if (value == null ||
+                                    (value is String && value.isEmpty)) {
+                                  return;
+                                }
                                 _qrImported = true;
                                 try {
                                   final parsed = ref

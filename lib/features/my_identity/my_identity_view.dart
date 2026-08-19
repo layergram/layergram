@@ -71,9 +71,14 @@ class _MyIdentityViewState extends ConsumerState<MyIdentityView> {
     }
   }
 
-  Future<void> _shareQrImage(String data) async {
+  Future<void> _shareQrImage(Object data) async {
     final messenger = ScaffoldMessenger.of(context);
-    if (data.trim().isEmpty) {
+    final isEmpty = switch (data) {
+      final String value => value.trim().isEmpty,
+      final Uint8List value => value.isEmpty,
+      _ => true,
+    };
+    if (isEmpty) {
       messenger.showSnackBar(
         SnackBar(
           content: Text(AppStrings.t(context, 'identityQrImageUnavailable')),
@@ -122,7 +127,7 @@ class _MyIdentityViewState extends ConsumerState<MyIdentityView> {
     }
   }
 
-  Future<void> _showQrActions(String data) async {
+  Future<void> _showQrActions(Object data) async {
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -260,14 +265,22 @@ class _MyIdentityViewState extends ConsumerState<MyIdentityView> {
                   child: LayoutBuilder(
                     builder: (lbContext, constraints) {
                       final isWide = constraints.maxWidth > 600;
-                      final qr = FutureBuilder<Map<String, dynamic>?>(
+                      final qr = FutureBuilder<Object?>(
                         future: ref
                             .read(myIdentityControllerProvider)
                             .identityQrPayload(),
                         builder: (qrContext, payloadSnap) {
                           final payload = payloadSnap.data;
-                          final data =
-                              payload == null ? '' : jsonEncode(payload);
+                          final Object data = payload == null
+                              ? ''
+                              : payload is Uint8List
+                                  ? payload
+                                  : jsonEncode(payload);
+                          final hasData = switch (data) {
+                            final String value => value.isNotEmpty,
+                            final Uint8List value => value.isNotEmpty,
+                            _ => false,
+                          };
                           return Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -280,10 +293,10 @@ class _MyIdentityViewState extends ConsumerState<MyIdentityView> {
                                       context, 'identityQrActionHint'),
                                   child: InkWell(
                                     borderRadius: BorderRadius.circular(18),
-                                    onTap: data.isEmpty
+                                    onTap: !hasData
                                         ? null
                                         : () => _showQrActions(data),
-                                    onLongPress: data.isEmpty
+                                    onLongPress: !hasData
                                         ? null
                                         : () => _showQrActions(data),
                                     child: Padding(
@@ -302,7 +315,7 @@ class _MyIdentityViewState extends ConsumerState<MyIdentityView> {
                               ),
                               const SizedBox(height: 8),
                               TextButton.icon(
-                                onPressed: data.isEmpty
+                                onPressed: !hasData
                                     ? null
                                     : () => _showQrActions(data),
                                 icon: const Icon(Icons.file_download_outlined),

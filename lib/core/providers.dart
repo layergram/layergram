@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -26,6 +27,8 @@ import 'crypto/identity_manager.dart';
 import 'crypto/models.dart';
 import 'crypto/passphrase_service.dart';
 import 'crypto/seed_service.dart';
+import 'crypto/v3/identity_runtime_v3.dart';
+import 'crypto/v3/protocol_v3_activation.dart';
 import 'security/app_lock_service.dart';
 import 'security/cover_message_length_limit_service.dart';
 import 'security/screen_protection_service.dart';
@@ -299,9 +302,35 @@ final identityManagerProvider = Provider((ref) {
   );
 });
 
+/// Fail-closed application selector for protocol-v3 identity presentation.
+///
+/// Tests may override this while the production value remains tied to the
+/// reviewed activation policy. Identity sharing is never enabled on its own.
+final protocolV3IdentityEnabledProvider = Provider<bool>((_) {
+  return ProtocolV3Activation.isActive;
+});
+
+/// Process owner for deterministic v3 identity handles.
+///
+/// The backend is loaded lazily on first use, so merely constructing the app
+/// cannot activate or probe the native protocol path.
+final v3IdentityRuntimeProvider = Provider<V3IdentityRuntime>((ref) {
+  final runtime = V3IdentityRuntime(
+    seedService: ref.watch(seedServiceProvider),
+  );
+  ref.onDispose(() => unawaited(runtime.close()));
+  return runtime;
+});
+
 final passphraseProvider =
     StateNotifierProvider<PassphraseNotifier, PassphraseState>((ref) {
-  return PassphraseNotifier(seedService: ref.watch(seedServiceProvider));
+  final enableProtocolV3 = ref.watch(protocolV3IdentityEnabledProvider);
+  return PassphraseNotifier(
+    seedService: ref.watch(seedServiceProvider),
+    v3IdentityRuntime:
+        enableProtocolV3 ? ref.watch(v3IdentityRuntimeProvider) : null,
+    enableProtocolV3: enableProtocolV3,
+  );
 });
 
 /// The keyTag for the original (non-passphrase) identity.
@@ -559,7 +588,7 @@ final fsPassphraseTimeoutControllerProvider =
               identityContext: keyTag,
             );
       }
-      ref.read(passphraseProvider.notifier).deactivate();
+      unawaited(ref.read(passphraseProvider.notifier).deactivate());
     },
   );
 });

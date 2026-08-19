@@ -45,22 +45,26 @@ enum IdentityDerivationPurpose {
     'layergram-identity-x25519-v2',
     'layergram/v3/identity/x25519-seed',
     'layergram/v3/identity/ml-kem-768-keygen-seed',
+    'layergram/v3/identity/local-storage-root',
   ),
   passphraseIdentity(
     'layergram-passphrase-identity-x25519-v2',
     'layergram/v3/passphrase-identity/x25519-seed',
     'layergram/v3/passphrase-identity/ml-kem-768-keygen-seed',
+    'layergram/v3/passphrase-identity/local-storage-root',
   );
 
   const IdentityDerivationPurpose(
     this.v2Info,
     this.v3X25519Info,
     this.v3MlKem768Info,
+    this.v3LocalStorageInfo,
   );
 
   final String v2Info;
   final String v3X25519Info;
   final String v3MlKem768Info;
+  final String v3LocalStorageInfo;
 }
 
 /// Deterministic v3 seeds derived from one BIP39 seed.
@@ -73,9 +77,11 @@ class V3IdentityKeySeeds {
   V3IdentityKeySeeds({
     required Uint8List x25519Seed,
     required Uint8List mlKem768KeyGenerationSeed,
+    required Uint8List localStorageRoot,
   })  : x25519Seed = Uint8List.fromList(x25519Seed),
         mlKem768KeyGenerationSeed =
-            Uint8List.fromList(mlKem768KeyGenerationSeed) {
+            Uint8List.fromList(mlKem768KeyGenerationSeed),
+        localStorageRoot = Uint8List.fromList(localStorageRoot) {
     if (this.x25519Seed.length != 32) {
       throw ArgumentError.value(
         this.x25519Seed.length,
@@ -90,10 +96,18 @@ class V3IdentityKeySeeds {
         'must be exactly 64 bytes',
       );
     }
+    if (this.localStorageRoot.length != 32) {
+      throw ArgumentError.value(
+        this.localStorageRoot.length,
+        'localStorageRoot.length',
+        'must be exactly 32 bytes',
+      );
+    }
   }
 
   final Uint8List x25519Seed;
   final Uint8List mlKem768KeyGenerationSeed;
+  final Uint8List localStorageRoot;
 
   /// Best-effort overwrite for managed-memory buffers.
   ///
@@ -106,6 +120,7 @@ class V3IdentityKeySeeds {
       mlKem768KeyGenerationSeed.length,
       0,
     );
+    localStorageRoot.fillRange(0, localStorageRoot.length, 0);
   }
 }
 
@@ -245,9 +260,15 @@ class SeedService {
       seed,
       purpose: purpose,
     );
+    final localStorageRoot = await _deriveV3(
+      seed,
+      outputLength: 32,
+      info: purpose.v3LocalStorageInfo,
+    );
     return V3IdentityKeySeeds(
       x25519Seed: x25519Seed,
       mlKem768KeyGenerationSeed: mlKemSeed,
+      localStorageRoot: localStorageRoot,
     );
   }
 

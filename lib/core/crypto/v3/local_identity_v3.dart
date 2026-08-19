@@ -18,6 +18,7 @@ import 'package:crypto/crypto.dart' as crypto;
 import 'package:cryptography/cryptography.dart';
 
 import '../seed_service.dart';
+import '../aux_record_cipher.dart';
 import 'key_schedule_v3.dart';
 import 'ml_kem_768.dart';
 import 'public_identity_v3.dart';
@@ -34,14 +35,17 @@ final class V3LocalIdentityHandle {
   V3LocalIdentityHandle._({
     required this.publicIdentity,
     required Uint8List x25519PrivateSeed,
+    required Uint8List localStorageRoot,
     required MlKem768PrivateKeyHandle mlKem768PrivateKeyHandle,
     required MlKem768Backend mlKem768Backend,
   })  : _x25519PrivateSeed = Uint8List.fromList(x25519PrivateSeed),
+        _localStorageRoot = Uint8List.fromList(localStorageRoot),
         _mlKem768PrivateKeyHandle = mlKem768PrivateKeyHandle,
         _mlKem768Backend = mlKem768Backend;
 
   final V3PublicIdentity publicIdentity;
   final Uint8List _x25519PrivateSeed;
+  final Uint8List _localStorageRoot;
   final MlKem768PrivateKeyHandle _mlKem768PrivateKeyHandle;
   final MlKem768Backend _mlKem768Backend;
 
@@ -57,8 +61,17 @@ final class V3LocalIdentityHandle {
   Future<void> close() async {
     if (_isClosed) return;
     _x25519PrivateSeed.fillRange(0, _x25519PrivateSeed.length, 0);
+    _localStorageRoot.fillRange(0, _localStorageRoot.length, 0);
     await _mlKem768PrivateKeyHandle.close();
     _isClosed = true;
+  }
+
+  /// Derives the scoped Aux-record key without exposing its root material.
+  Future<SecretKey> deriveAuxStorageKey() {
+    if (_isClosed) {
+      throw StateError('Layergram v3 identity handle is closed');
+    }
+    return AuxRecordCipher.deriveAuxStorageKey(_localStorageRoot);
   }
 }
 
@@ -159,6 +172,7 @@ final class V3LocalIdentityFactory {
       final identity = V3LocalIdentityHandle._(
         publicIdentity: publicIdentity,
         x25519PrivateSeed: keySeeds.x25519Seed,
+        localStorageRoot: keySeeds.localStorageRoot,
         mlKem768PrivateKeyHandle: mlKemKeyPair.privateKeyHandle,
         mlKem768Backend: _mlKem768Backend,
       );

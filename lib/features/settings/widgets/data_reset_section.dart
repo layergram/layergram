@@ -92,7 +92,7 @@ class DataResetSection extends ConsumerWidget {
 
             if (second.deleteIdentities) {
               await ref.read(identityManagerProvider).clearLocalIdentity();
-              ref.read(passphraseProvider.notifier).deactivate();
+              await ref.read(passphraseProvider.notifier).deactivate();
 
               // ── Reset FS state per spec §8.6.3 ─────────────────────────────
               // Mark all sessions as broken, wipe ratchet keys, clear persisted state
