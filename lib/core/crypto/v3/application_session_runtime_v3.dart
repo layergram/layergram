@@ -22,6 +22,7 @@ import 'package:cryptography/cryptography.dart';
 
 import '../../storage/aux_record_repository.dart';
 import '../../storage/messages_repository_core.dart';
+import '../fs_message_classification.dart';
 import 'application_payload_v3.dart';
 import 'application_projection_v3.dart';
 import 'application_runtime_owner_v3.dart';
@@ -564,6 +565,31 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     });
   }
 
+  /// Returns the newest exact pending setup export for this installation and
+  /// peer, or null when a new offer is required.
+  Future<V3ApplicationHandshakeExport?> pendingHandshakeForRemoteIdentity({
+    required V3PublicIdentity remoteIdentity,
+    required V3HandshakeMode mode,
+  }) {
+    return _serialized(() async {
+      final outbound = await _scope.handshakes.latestPendingOutboundForPeer(
+        localIdentity: localIdentity,
+        localDevice: _localDevice,
+        remoteIdentity: remoteIdentity,
+        mode: mode,
+      );
+      if (outbound == null) return null;
+      final localIsResponder = outbound.kind == V3HandshakeRecordKind.reply;
+      return _sealOutbound(
+        outbound,
+        initiatorIdentity:
+            localIsResponder ? remoteIdentity : localIdentity.publicIdentity,
+        responderIdentity:
+            localIsResponder ? localIdentity.publicIdentity : remoteIdentity,
+      );
+    });
+  }
+
   /// Returns every completed device session bound to [remoteIdentity].
   /// Normal mode may return multiple device IDs; Maximum mode is enforced as
   /// an exclusive pair by the durable handshake controller.
@@ -903,12 +929,20 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     required String? keyTag,
   }) async {
     final presentationStates = await _scope.presentationStates();
+    final classificationsBySessionId = <String, FsMessageClassification>{};
+    for (final session in await _scope.handshakes.completedSessions()) {
+      classificationsBySessionId[session.sessionId] =
+          session.mode == V3HandshakeMode.maximum
+              ? FsMessageClassification.strictFs
+              : FsMessageClassification.fsOnly;
+    }
     return V3ApplicationMessageProjector(
       messagesRepository: messagesRepository,
       localIdentity: localIdentity.publicIdentity,
       recordLoader: _scope.applicationRecordBytesForProjection,
       keyTag: keyTag,
       presentationStates: presentationStates,
+      classificationsBySessionId: classificationsBySessionId,
     );
   }
 
@@ -926,6 +960,31 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
           exportedAt: exportedAt,
         );
       }
+    });
+  }
+
+  Future<void> markMessagePartExported(
+    V3ApplicationMessageExport export, {
+    required String assemblyId,
+    required int fragmentIndex,
+    DateTime? exportedAt,
+  }) {
+    return _serialized(() async {
+      final targets = export.targets
+          .where((target) => target.assemblyId == assemblyId)
+          .toList(growable: false);
+      if (targets.length != 1 ||
+          !targets.single.frames
+              .any((frame) => frame.fragmentIndex == fragmentIndex)) {
+        throw ArgumentError(
+          'Layergram v3 export does not contain the selected carrier part',
+        );
+      }
+      await _scope.markSendExported(
+        assemblyId: assemblyId,
+        fragmentIndexes: <int>{fragmentIndex},
+        exportedAt: exportedAt,
+      );
     });
   }
 

@@ -1063,6 +1063,52 @@ final class V3HandshakePersistenceController {
     });
   }
 
+  /// Returns the newest exact pending export for one local device/peer/mode.
+  ///
+  /// This lets a manual carrier retry a lost setup message without creating a
+  /// second HP3 state or rerunning X25519/ML-KEM. Only public outbound bytes
+  /// leave the controller; the matching pending state remains encrypted.
+  Future<V3DurableHandshakeOutbound?> latestPendingOutboundForPeer({
+    required V3LocalIdentityHandle localIdentity,
+    required V3LocalDeviceHandle localDevice,
+    required V3PublicIdentity remoteIdentity,
+    required V3HandshakeMode mode,
+  }) {
+    return _serialized(() async {
+      _ensureReady();
+      if (localIdentity.isClosed || localDevice.isClosed) {
+        throw StateError('Layergram v3 identity/device handle is closed');
+      }
+      final localDigest = _identityDigest(localIdentity.publicIdentity);
+      final remoteDigest = _identityDigest(remoteIdentity);
+      final localDeviceId = localDevice.deviceId;
+      try {
+        final matches = _repository
+            .pending(authority: _authority)
+            .where(
+              (pending) =>
+                  pending.localIdentityDigest == localDigest.armored &&
+                  pending.remoteIdentityDigest == remoteDigest.armored &&
+                  pending.localDeviceId == _id(localDeviceId) &&
+                  pending.mode == mode,
+            )
+            .toList(growable: false)
+          ..sort((left, right) {
+            final byCreated = right.createdAt.compareTo(left.createdAt);
+            if (byCreated != 0) return byCreated;
+            return right.handshakeId.compareTo(left.handshakeId);
+          });
+        return matches.isEmpty
+            ? null
+            : _outbound(matches.first, restored: true);
+      } finally {
+        _wipe(localDigest.bytes);
+        _wipe(remoteDigest.bytes);
+        _wipe(localDeviceId);
+      }
+    });
+  }
+
   Future<List<V3CompletedHandshakeSession>> completedSessions() {
     return _serialized(() async {
       _ensureReady();

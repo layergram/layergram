@@ -2,8 +2,8 @@
 
 Status: **implemented behind an engineering-only candidate FFI feature; the
 default ABI remains `NOT_READY`; opt-in generated candidate artifacts are
-packaged only by the verification scripts, application registration remains
-disconnected, and protocol v3 remains inactive**
+packaged only by the verification scripts, application routing remains
+fail-closed behind the inactive selector, and protocol v3 remains inactive**
 
 This document freezes the internal composition implemented by
 `native/layergram_scka/src/authenticated_braid.rs`. It joins the already frozen
@@ -12,7 +12,8 @@ transition modules. Cargo feature `candidate-ffi` now connects that composition
 to the frozen C shapes strictly for engineering verification. The default
 feature set still returns `NOT_READY`. The opt-in packaged-scope smoke loads the
 candidate build only through `V3SessionPersistenceScope.openPackagedScka`;
-ordinary `lib/main.dart` and production registration load neither build.
+ordinary `lib/main.dart` reaches only the false activation selector and loads
+neither build.
 
 ## 1. Boundary and ownership
 
@@ -151,8 +152,9 @@ the authority-side integration seam. Its Dart loader accepts only an explicit
 path and checks the exact implementation ID, ABI, protocol revision, state
 format, and every fixed size before admission. The normal Rust feature set
 still returns `NOT_READY`; the candidate is unregistered and absent from every
-app package. Authenticated dispatch from the active application remains an
-activation gate.
+app package. The application now has inactive text, link, and steganography
+routing through the scope-owned dispatcher. Production registration, packaged
+candidate selection, migration UX, and activation review remain gates.
 
 ## 7. Verification and commercial boundary
 

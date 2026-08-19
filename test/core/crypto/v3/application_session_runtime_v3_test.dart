@@ -6,8 +6,12 @@ import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 import 'package:layergram/core/crypto/seed_service.dart';
+import 'package:layergram/core/crypto/models.dart';
+import 'package:layergram/core/crypto/v3/application_chat_bridge_v3.dart';
 import 'package:layergram/core/crypto/v3/application_session_runtime_v3.dart';
 import 'package:layergram/core/crypto/v3/application_projection_v3.dart';
+import 'package:layergram/core/crypto/v3/application_transport_v3.dart';
+import 'package:layergram/core/crypto/v3/identity_v3_adapter.dart';
 import 'package:layergram/core/crypto/v3/key_schedule_v3.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3.dart';
 import 'package:layergram/core/crypto/v3/local_identity_v3.dart';
@@ -84,6 +88,14 @@ void main() {
     );
     expect(offerRetry, isNotNull);
     _expectExactFrames(offer.frames, offerRetry!.frames);
+    final pendingOffer = await aliceRuntime.pendingHandshakeForRemoteIdentity(
+      remoteIdentity: bob.publicIdentity,
+      mode: V3HandshakeMode.normal,
+    );
+    expect(pendingOffer, isNotNull);
+    expect(pendingOffer!.handshakeId, offer.handshakeId);
+    expect(pendingOffer.restored, isTrue);
+    _expectExactFrames(offer.frames, pendingOffer.frames);
 
     // Receive half an offer, restart, then finish it out of order.
     for (final frame in offer.frames.skip(3)) {
@@ -499,6 +511,224 @@ void main() {
         isNull,
       );
     } finally {
+      await aliceRuntime.close();
+      await bobRuntime.close();
+    }
+  });
+
+  test('chat bridge preserves text link and stego carrier workflows', () async {
+    final aliceRuntime = await V3ApplicationSessionRuntime.open(
+      localIdentity: alice,
+      scopeToken: aliceScope,
+      sckaBackend: _InitialSckaBackend(),
+    );
+    final bobRuntime = await V3ApplicationSessionRuntime.open(
+      localIdentity: bob,
+      scopeToken: bobScope,
+      sckaBackend: _InitialSckaBackend(),
+    );
+    final aliceMessages = MessagesRepository();
+    final bobMessages = MessagesRepository();
+    await aliceMessages.setActiveContext(
+      scopeToken: aliceScope,
+      storageKey: SecretKey(_testBytes(32, 0xa1)),
+    );
+    await bobMessages.setActiveContext(
+      scopeToken: bobScope,
+      storageKey: SecretKey(_testBytes(32, 0xc1)),
+    );
+    final aliceBridge = V3ApplicationChatBridge(
+      runtime: aliceRuntime,
+      messagesRepository: aliceMessages,
+      keyTag: 'alice-primary',
+    );
+    final bobBridge = V3ApplicationChatBridge(
+      runtime: bobRuntime,
+      messagesRepository: bobMessages,
+      keyTag: 'bob-primary',
+    );
+    final aliceContact = V3IdentityAdapter.toRemoteIdentity(
+      alice.publicIdentity,
+      verified: true,
+    );
+    final bobContact = V3IdentityAdapter.toRemoteIdentity(
+      bob.publicIdentity,
+      verified: true,
+    );
+    final cover = 'Ci vediamo domani alle nove. '.padRight(271, 'a');
+
+    try {
+      await expectLater(
+        aliceBridge.prepareOutbound(
+          contact: bobContact,
+          mode: V3HandshakeMode.normal,
+          carrierMode: V3ChatCarrierMode.steganography,
+          text: 'must not commit before carrier preflight',
+          coverText: 'troppo corto',
+        ),
+        throwsA(isA<V3ChatCoverCapacityException>()),
+      );
+      expect(
+        await aliceRuntime.pendingHandshakeForRemoteIdentity(
+          remoteIdentity: bob.publicIdentity,
+          mode: V3HandshakeMode.normal,
+        ),
+        isNull,
+      );
+
+      final offer = await aliceBridge.prepareOutbound(
+        contact: bobContact,
+        mode: V3HandshakeMode.normal,
+        carrierMode: V3ChatCarrierMode.steganography,
+        text: 'not sent before setup',
+        coverText: cover,
+      );
+      expect(offer.purpose, V3ChatOutboundPurpose.handshake);
+      expect(offer.parts, everyElement(hasLength(lessThanOrEqualTo(4000))));
+
+      final retriedOffer = await aliceBridge.prepareOutbound(
+        contact: bobContact,
+        mode: V3HandshakeMode.normal,
+        carrierMode: V3ChatCarrierMode.steganography,
+        text: 'still not sent before setup',
+        coverText: cover,
+      );
+      expect(retriedOffer.handshakeId, offer.handshakeId);
+      expect(retriedOffer.restored, isTrue);
+      _expectExactFrames(
+        offer.parts
+            .map((part) => V3ApplicationTransport.decode(part).frame)
+            .toList(growable: false),
+        retriedOffer.parts
+            .map((part) => V3ApplicationTransport.decode(part).frame)
+            .toList(growable: false),
+      );
+
+      V3ChatInboundResult? receivedOffer;
+      for (final part in offer.parts.reversed) {
+        receivedOffer = await bobBridge.receiveCarrier(
+          carrier: part,
+          contacts: <RemoteIdentity>[aliceContact],
+          modeForContact: (_) => V3HandshakeMode.normal,
+          responseCarrierMode: V3ChatCarrierMode.text,
+        );
+      }
+      expect(receivedOffer?.status, V3ChatInboundStatus.handshakeResponse);
+      expect(
+        receivedOffer?.response?.purpose,
+        V3ChatOutboundPurpose.handshake,
+      );
+
+      final receivedReply = await aliceBridge.receiveCarrier(
+        carrier: receivedOffer!.response!.bundledText,
+        contacts: <RemoteIdentity>[bobContact],
+        modeForContact: (_) => V3HandshakeMode.normal,
+        responseCarrierMode: V3ChatCarrierMode.link,
+      );
+      expect(receivedReply.status, V3ChatInboundStatus.handshakeResponse);
+      expect(
+        receivedReply.response!.parts,
+        everyElement(startsWith('layergram://m/')),
+      );
+
+      final receivedConfirmation = await bobBridge.receiveCarrier(
+        carrier: receivedReply.response!.bundledText,
+        contacts: <RemoteIdentity>[aliceContact],
+        modeForContact: (_) => V3HandshakeMode.normal,
+      );
+      expect(
+        receivedConfirmation.status,
+        V3ChatInboundStatus.sessionEstablished,
+      );
+
+      final linkMessage = await aliceBridge.prepareOutbound(
+        contact: bobContact,
+        mode: V3HandshakeMode.normal,
+        carrierMode: V3ChatCarrierMode.link,
+        text: 'messaggio quantum-safe via link',
+        timestampUnixSeconds: 2000001000,
+      );
+      expect(linkMessage.purpose, V3ChatOutboundPurpose.application);
+      expect(
+        linkMessage.parts,
+        everyElement(startsWith('layergram://m/')),
+      );
+      final deliveredLink = await bobBridge.receiveCarrier(
+        carrier: linkMessage.bundledText,
+        contacts: <RemoteIdentity>[aliceContact],
+        modeForContact: (_) => V3HandshakeMode.normal,
+        nowUnixSeconds: 2000001001,
+      );
+      expect(deliveredLink.status, V3ChatInboundStatus.delivered);
+      expect(deliveredLink.payload?.text, 'messaggio quantum-safe via link');
+      expect(deliveredLink.response, isNotNull);
+      expect(
+        (await aliceBridge.receiveCarrier(
+          carrier: deliveredLink.response!.bundledText,
+          contacts: <RemoteIdentity>[bobContact],
+          modeForContact: (_) => V3HandshakeMode.normal,
+        ))
+            .status,
+        V3ChatInboundStatus.acknowledgementApplied,
+      );
+
+      final stegoMessage = await bobBridge.prepareOutbound(
+        contact: aliceContact,
+        mode: V3HandshakeMode.normal,
+        carrierMode: V3ChatCarrierMode.steganography,
+        text: 'risposta quantum-safe nascosta',
+        coverText: cover,
+        timestampUnixSeconds: 2000001002,
+      );
+      expect(stegoMessage.purpose, V3ChatOutboundPurpose.application);
+      expect(
+        stegoMessage.parts,
+        everyElement(
+          allOf(
+            startsWith('Ci vediamo'),
+            hasLength(lessThanOrEqualTo(4000)),
+          ),
+        ),
+      );
+      V3ChatInboundResult? deliveredStego;
+      for (final part in stegoMessage.parts.reversed) {
+        deliveredStego = await aliceBridge.receiveCarrier(
+          carrier: part,
+          contacts: <RemoteIdentity>[bobContact],
+          modeForContact: (_) => V3HandshakeMode.normal,
+          nowUnixSeconds: 2000001003,
+        );
+      }
+      expect(deliveredStego?.status, V3ChatInboundStatus.delivered);
+      expect(deliveredStego?.payload?.text, 'risposta quantum-safe nascosta');
+      expect(
+        (await bobBridge.receiveCarrier(
+          carrier: deliveredStego!.response!.bundledText,
+          contacts: <RemoteIdentity>[aliceContact],
+          modeForContact: (_) => V3HandshakeMode.normal,
+        ))
+            .status,
+        V3ChatInboundStatus.acknowledgementApplied,
+      );
+
+      expect(await aliceRuntime.pendingMessageExports(), isEmpty);
+      expect(await bobRuntime.pendingMessageExports(), isEmpty);
+      final aliceRecords = await aliceMessages.getAllMessages();
+      final bobRecords = await bobMessages.getAllMessages();
+      expect(aliceRecords, hasLength(2));
+      expect(bobRecords, hasLength(2));
+      expect(
+        await Future.wait(
+          aliceRecords.map((record) => aliceBridge.loadPlaintext(record.id)),
+        ),
+        containsAll(<String>[
+          'messaggio quantum-safe via link',
+          'risposta quantum-safe nascosta',
+        ]),
+      );
+    } finally {
+      aliceMessages.dispose();
+      bobMessages.dispose();
       await aliceRuntime.close();
       await bobRuntime.close();
     }

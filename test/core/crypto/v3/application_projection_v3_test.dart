@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -6,6 +7,7 @@ import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 import 'package:layergram/core/crypto/models.dart';
+import 'package:layergram/core/crypto/fs_message_classification.dart';
 import 'package:layergram/core/crypto/v3/application_payload_v3.dart';
 import 'package:layergram/core/crypto/v3/application_projection_v3.dart';
 import 'package:layergram/core/crypto/v3/committed_record_v3.dart';
@@ -162,6 +164,50 @@ void main() {
 
     projector.close();
     repository.dispose();
+    payload.fillRange(0, payload.length, 0);
+    record.fillRange(0, record.length, 0);
+  });
+
+  test('projects Maximum sessions with strict classification', () async {
+    final alice = _identity(0x11, 'Alice');
+    final bob = _identity(0x61, 'Bob');
+    final payload = V3ApplicationPayloadCodec.encode(
+      V3ApplicationPayload(
+        messageId: _bytes(16, 0xc1),
+        senderIdentityDigest: _identityDigest(bob),
+        recipientIdentityDigest: _identityDigest(alice),
+        text: 'maximum post-quantum',
+        timestampUnixSeconds: 1880000000,
+      ),
+    );
+    const recordSeed = 0x41;
+    final record = _committed(payload, recordSeed);
+    final sessionId = _bytes(16, recordSeed + 3);
+    final encodedSessionId = base64UrlEncode(sessionId).replaceAll('=', '');
+    final repository = MessagesRepository();
+    await repository.setActiveContext(
+      scopeToken: 'maximum-projection-scope',
+      storageKey: SecretKey(_bytes(32, 0x81)),
+    );
+    final projector = V3ApplicationMessageProjector(
+      messagesRepository: repository,
+      localIdentity: alice,
+      recordLoader: () async => [Uint8List.fromList(record)],
+      keyTag: 'primary-tag',
+      classificationsBySessionId: {
+        encodedSessionId: FsMessageClassification.strictFs,
+      },
+    );
+
+    expect((await projector.reconcile()).insertedMessages, 1);
+    expect(
+      (await repository.getAllMessages()).single.fsClassification,
+      FsMessageClassification.strictFs,
+    );
+
+    projector.close();
+    repository.dispose();
+    sessionId.fillRange(0, sessionId.length, 0);
     payload.fillRange(0, payload.length, 0);
     record.fillRange(0, record.length, 0);
   });

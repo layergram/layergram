@@ -13,8 +13,9 @@ import '../../core/crypto/fs_security_mode.dart';
 import '../../core/crypto/fs_session_manager.dart';
 import '../../core/crypto/models.dart';
 import '../../core/crypto/stego_encoder.dart';
+import '../../core/crypto/v3/application_chat_bridge_v3.dart';
+import '../../core/crypto/v3/lmf_v3.dart';
 import '../../core/providers.dart';
-import '../../core/storage/messages_repository.dart';
 import '../../l10n/app_strings.dart';
 import '../../ui/fs_info_sheet.dart';
 import '../../ui/fs_maximum_setup_dialog.dart';
@@ -73,7 +74,7 @@ class _ExpiryOption {
 }
 
 class ChatViewState extends ConsumerState<ChatView> {
-  late final MessagesRepository _messagesRepo;
+  late final HomeController _homeController;
   static const _coverClearButtonKey =
       ValueKey<String>('chat_composer_clear_cover');
   static const _secretClearButtonKey =
@@ -164,6 +165,9 @@ class ChatViewState extends ConsumerState<ChatView> {
   bool _excludeFromBackups = false;
   MessageOutputMode _outputMode = MessageOutputMode.defaultMode;
   String _encryptedOutput = '';
+  V3ChatOutboundExport? _v3OutboundExport;
+  List<String> _v3OutputParts = const [];
+  int _v3OutputPartIndex = 0;
   bool _dirtySinceEncode = true;
   bool _sending = false;
   int? _exactCoverMissingCount;
@@ -184,6 +188,65 @@ class ChatViewState extends ConsumerState<ChatView> {
   bool get _isCoverMode => _outputMode == MessageOutputMode.cover;
 
   bool get _isLinkMode => _outputMode == MessageOutputMode.link;
+
+  bool get _usesProtocolV3 =>
+      ref.read(protocolV3MessagingEnabledProvider) &&
+      widget.contact.protocolVersion == 3 &&
+      (widget.contact.publicIdentityBase64?.isNotEmpty ?? false);
+
+  bool get _hasPreparedOutput => _encryptedOutput.isNotEmpty;
+
+  String _preparedOutputLabel(String baseLabel) {
+    if (_v3OutputParts.length <= 1) return baseLabel;
+    return '$baseLabel ${_v3OutputPartIndex + 1}/${_v3OutputParts.length}';
+  }
+
+  V3ChatCarrierMode get _v3CarrierMode => switch (_outputMode) {
+        MessageOutputMode.cover => V3ChatCarrierMode.steganography,
+        MessageOutputMode.text => V3ChatCarrierMode.text,
+        MessageOutputMode.link => V3ChatCarrierMode.link,
+      };
+
+  void _clearPreparedOutput() {
+    _encryptedOutput = '';
+    _v3OutboundExport = null;
+    _v3OutputParts = const [];
+    _v3OutputPartIndex = 0;
+  }
+
+  void _stageProtocolV3Output(V3ChatOutboundExport export) {
+    if (!mounted) return;
+    setState(() {
+      _v3OutboundExport = export;
+      _v3OutputParts = export.parts;
+      _v3OutputPartIndex = 0;
+      _encryptedOutput = export.parts.first;
+      _dirtySinceEncode = false;
+    });
+  }
+
+  Future<void> _recordPreparedOutputExported() async {
+    final export = _v3OutboundExport;
+    if (export == null) return;
+    await ref.read(homeControllerProvider).markProtocolV3Exported(
+          export,
+          partIndex: _v3OutputPartIndex,
+        );
+    if (!mounted || _v3OutputParts.length <= 1) return;
+    setState(() {
+      _v3OutputPartIndex = (_v3OutputPartIndex + 1) % _v3OutputParts.length;
+      _encryptedOutput = _v3OutputParts[_v3OutputPartIndex];
+    });
+  }
+
+  void _takePendingProtocolV3Response() {
+    final response = ref
+        .read(homeControllerProvider)
+        .takePendingProtocolV3Response(widget.contact.identityId);
+    if (response != null) {
+      _stageProtocolV3Output(response);
+    }
+  }
 
   Future<void> _startContactVerification() async {
     final result =
@@ -252,6 +315,9 @@ class ChatViewState extends ConsumerState<ChatView> {
   }
 
   int _estimatedPayloadBytesForSecret(String secretText) {
+    if (_usesProtocolV3) {
+      return V3LmfFrameCodec.maxPortableStegoFrameBytes;
+    }
     final fsController = ref.read(
       fsOpportunisticControllerProvider(widget.contact.identityId),
     );
@@ -289,6 +355,10 @@ class ChatViewState extends ConsumerState<ChatView> {
 
   int _estimatedDirectPayloadLengthForSecret(String secretText) {
     if (secretText.trim().isEmpty) return 0;
+    if (_usesProtocolV3) {
+      return V3LmfFrameCodec.tokenPrefix.length +
+          ((V3LmfFrameCodec.maxPortableStegoFrameBytes * 4 + 2) ~/ 3);
+    }
     // Estimate based on typical encrypted message size
     // V2 direct text format: base64url_encoded_data
     final estimatedPayloadBytes = _estimatedPayloadBytesForSecret(secretText);
@@ -837,7 +907,7 @@ class ChatViewState extends ConsumerState<ChatView> {
   @override
   void initState() {
     super.initState();
-    _messagesRepo = ref.read(messagesRepositoryProvider);
+    _homeController = ref.read(homeControllerProvider);
     _decryptionPrimed = widget.embedded;
     if (!widget.embedded) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -882,6 +952,7 @@ class ChatViewState extends ConsumerState<ChatView> {
       if (!mounted) {
         return;
       }
+      _takePendingProtocolV3Response();
       unawaited(
         ref
             .read(homeControllerProvider)
@@ -900,7 +971,9 @@ class ChatViewState extends ConsumerState<ChatView> {
       } else {
         _releaseBackgroundHold();
       }
-      _messagesRepo.purgeReadDeleteAfterReadFor(widget.contact.identityId);
+      unawaited(
+        _homeController.purgeReadDeleteAfterReadFor(widget.contact.identityId),
+      );
     });
 
     // Listen for identity reload/reset events and clear decryption cache
@@ -956,6 +1029,7 @@ class ChatViewState extends ConsumerState<ChatView> {
 
   void _onFieldChanged() {
     setState(() {
+      _clearPreparedOutput();
       _dirtySinceEncode = true;
       _exactCoverMissingCount = null;
     });
@@ -1235,7 +1309,7 @@ class ChatViewState extends ConsumerState<ChatView> {
             ),
           );
           if (confirmed == true) {
-            await ref.read(messagesRepositoryProvider).delete(message.id);
+            await ref.read(homeControllerProvider).deleteMessage(message);
           }
           break;
       }
@@ -1297,7 +1371,7 @@ class ChatViewState extends ConsumerState<ChatView> {
     }
     setState(() {
       _outputMode = mode;
-      _encryptedOutput = '';
+      _clearPreparedOutput();
       _dirtySinceEncode = true;
       _exactCoverMissingCount = null;
     });
@@ -1383,7 +1457,7 @@ class ChatViewState extends ConsumerState<ChatView> {
     }
     setState(() {
       _selectedExpiryMinutes = minutes;
-      _encryptedOutput = '';
+      _clearPreparedOutput();
       _dirtySinceEncode = true;
     });
     _saveSettings();
@@ -1401,6 +1475,7 @@ class ChatViewState extends ConsumerState<ChatView> {
     }
     setState(() {
       _deleteAfterRead = value;
+      _clearPreparedOutput();
       _dirtySinceEncode = true;
     });
     _saveSettings();
@@ -1436,6 +1511,7 @@ class ChatViewState extends ConsumerState<ChatView> {
   }
 
   void refreshAfterDecodedMessage() {
+    _takePendingProtocolV3Response();
     _decryptFutures.clear();
     if (mounted) {
       setState(() {});
@@ -1491,7 +1567,9 @@ class ChatViewState extends ConsumerState<ChatView> {
     _secretFocusNode.dispose();
     _scrollController.removeListener(_onScroll);
     // Purge messages marked deleteAfterRead that have been read in this thread.
-    _messagesRepo.purgeReadDeleteAfterReadFor(widget.contact.identityId);
+    unawaited(
+      _homeController.purgeReadDeleteAfterReadFor(widget.contact.identityId),
+    );
     _scrollController.dispose();
     super.dispose();
   }
@@ -1523,6 +1601,22 @@ class ChatViewState extends ConsumerState<ChatView> {
               (expiresMinutes * 60);
 
       final controller = ref.read(homeControllerProvider);
+      if (controller.isProtocolV3Contact(recipient)) {
+        final export = await controller.prepareProtocolV3Outbound(
+          recipient: recipient,
+          carrierMode: _v3CarrierMode,
+          text: _secretCtrl.text,
+          coverText: _coverCtrl.text,
+          expireAfter: expireAfter,
+          deleteAfterRead: _deleteAfterRead,
+          backupExcluded: _excludeFromBackups,
+        );
+        if (!mounted) return null;
+        _stageProtocolV3Output(export);
+        _scrollToBottom();
+        return _encryptedOutput;
+      }
+
       var maximumSetupOnly = false;
       late ({
         EncryptedMessage message,
@@ -1645,6 +1739,15 @@ class ChatViewState extends ConsumerState<ChatView> {
     } on FsSendBlockedException catch (e) {
       if (mounted) {
         _showTouchComposerSnackbar(AppStrings.t(context, e.messageKey));
+      }
+      return null;
+    } on V3ChatCoverCapacityException catch (e) {
+      final missing = max(1, e.missingCharacters);
+      if (mounted) {
+        setState(() => _exactCoverMissingCount = missing);
+        _showTouchComposerSnackbar(
+          AppStrings.t(context, 'coverTooShort').replaceAll('{n}', '$missing'),
+        );
       }
       return null;
     } finally {
@@ -1780,8 +1883,9 @@ class ChatViewState extends ConsumerState<ChatView> {
                     const PassphraseButton(iconSize: 18),
                     IconButton(
                       icon: const Icon(Icons.copy_outlined, size: 20),
-                      tooltip: t(context, 'copy'),
-                      onPressed: (!_isInputValid || _sending)
+                      tooltip: _preparedOutputLabel(t(context, 'copy')),
+                      onPressed: ((!_hasPreparedOutput && !_isInputValid) ||
+                              _sending)
                           ? null
                           : () async {
                               final output = await _encodeAndPersist();
@@ -1792,6 +1896,7 @@ class ChatViewState extends ConsumerState<ChatView> {
                               await ref
                                   .read(clipboardServiceProvider)
                                   .writeText(output);
+                              await _recordPreparedOutputExported();
                               if (!context.mounted) {
                                 return;
                               }
@@ -1804,20 +1909,22 @@ class ChatViewState extends ConsumerState<ChatView> {
                     ),
                     IconButton(
                       icon: const Icon(Icons.ios_share_outlined, size: 20),
-                      tooltip: t(context, 'share'),
-                      onPressed: (!_isInputValid || _sending)
-                          ? null
-                          : () async {
-                              final output = await _encodeAndPersist();
-                              if (output == null || !context.mounted) {
-                                return;
-                              }
-                              await shareTextExternally(
-                                context,
-                                output,
-                                forceStegoCover: _isCoverMode,
-                              );
-                            },
+                      tooltip: _preparedOutputLabel(t(context, 'share')),
+                      onPressed:
+                          ((!_hasPreparedOutput && !_isInputValid) || _sending)
+                              ? null
+                              : () async {
+                                  final output = await _encodeAndPersist();
+                                  if (output == null || !context.mounted) {
+                                    return;
+                                  }
+                                  await shareTextExternally(
+                                    context,
+                                    output,
+                                    forceStegoCover: _isCoverMode,
+                                  );
+                                  await _recordPreparedOutputExported();
+                                },
                     ),
                   ],
                 ),
@@ -2025,8 +2132,12 @@ class ChatViewState extends ConsumerState<ChatView> {
                   .read(homeControllerProvider)
                   .decodeHiddenMessage(source,
                       hintContactId: widget.contact.identityId);
-              if (!mounted) {
+              if (!context.mounted) {
                 return;
+              }
+              if (outcome.v3Inbound?.contact?.identityId ==
+                  widget.contact.identityId) {
+                _takePendingProtocolV3Response();
               }
 
               switch (outcome.kind) {
@@ -2067,6 +2178,28 @@ class ChatViewState extends ConsumerState<ChatView> {
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text(t(context, 'unknownSender'))),
+                    );
+                  }
+                  break;
+                case DecodeKind.v3Control:
+                  final contact = outcome.v3Inbound?.contact;
+                  if (contact == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(t(context, 'noMessageFoundDesc'))),
+                    );
+                    break;
+                  }
+                  if (contact.identityId == widget.contact.identityId) {
+                    _takePendingProtocolV3Response();
+                    refreshAfterDecodedMessage();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(t(context, 'messageDecoded'))),
+                    );
+                  } else {
+                    await Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(
+                        builder: (_) => ChatView(contact: contact),
+                      ),
                     );
                   }
                   break;
@@ -2266,8 +2399,8 @@ class ChatViewState extends ConsumerState<ChatView> {
                           DateTime.now().millisecondsSinceEpoch ~/ 1000;
                       final expired =
                           m.expireAfter != null && m.expireAfter! < nowSec;
-                      final isEncrypted =
-                          m.ciphertextBase64 != null && m.nonceBase64 != null;
+                      final isEncrypted = m.isV3Encrypted ||
+                          (m.ciphertextBase64 != null && m.nonceBase64 != null);
 
                       return FutureBuilder<String?>(
                         future: _decryptionPrimed ? _getDecryptFuture(m) : null,
@@ -2896,7 +3029,8 @@ class ChatViewState extends ConsumerState<ChatView> {
                                                           3),
                                                   child: OutlinedButton.icon(
                                                     onPressed:
-                                                        (!_isInputValid ||
+                                                        ((!_hasPreparedOutput &&
+                                                                    !_isInputValid) ||
                                                                 _sending)
                                                             ? null
                                                             : () async {
@@ -2916,6 +3050,7 @@ class ChatViewState extends ConsumerState<ChatView> {
                                                                         clipboardServiceProvider)
                                                                     .writeText(
                                                                         output);
+                                                                await _recordPreparedOutputExported();
                                                                 if (!context
                                                                     .mounted) {
                                                                   return;
@@ -2934,8 +3069,11 @@ class ChatViewState extends ConsumerState<ChatView> {
                                                         size: 18),
                                                     label: FittedBox(
                                                         fit: BoxFit.scaleDown,
-                                                        child: Text(t(
-                                                            context, 'copy'))),
+                                                        child: Text(
+                                                          _preparedOutputLabel(
+                                                            t(context, 'copy'),
+                                                          ),
+                                                        )),
                                                   ),
                                                 ),
                                               ),
@@ -2947,7 +3085,8 @@ class ChatViewState extends ConsumerState<ChatView> {
                                                           4),
                                                   child: OutlinedButton.icon(
                                                     onPressed:
-                                                        (!_isInputValid ||
+                                                        ((!_hasPreparedOutput &&
+                                                                    !_isInputValid) ||
                                                                 _sending)
                                                             ? null
                                                             : () async {
@@ -2965,6 +3104,7 @@ class ChatViewState extends ConsumerState<ChatView> {
                                                                   forceStegoCover:
                                                                       _isCoverMode,
                                                                 );
+                                                                await _recordPreparedOutputExported();
                                                               },
                                                     icon: const Icon(
                                                         Icons
@@ -2972,8 +3112,11 @@ class ChatViewState extends ConsumerState<ChatView> {
                                                         size: 18),
                                                     label: FittedBox(
                                                         fit: BoxFit.scaleDown,
-                                                        child: Text(t(
-                                                            context, 'share'))),
+                                                        child: Text(
+                                                          _preparedOutputLabel(
+                                                            t(context, 'share'),
+                                                          ),
+                                                        )),
                                                   ),
                                                 ),
                                               ),

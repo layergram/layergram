@@ -422,6 +422,14 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
           MaterialPageRoute(builder: (_) => ChatView(contact: sender)),
         );
         break;
+      case DecodeKind.v3Control:
+        final contact = outcome.v3Inbound?.contact;
+        final ctx = _navKey.currentContext;
+        if (contact == null || ctx == null || !ctx.mounted) return;
+        _navKey.currentState?.push(
+          MaterialPageRoute(builder: (_) => ChatView(contact: contact)),
+        );
+        break;
       default:
         {
           final ctx = _navKey.currentContext;

@@ -907,10 +907,11 @@ Before this schedule can carry user messages, Layergram still requires:
 - production wiring that preserves the implemented scope-owned initial-session
   and receive-dispatch capability topology and supplies its reviewed native
   SCKA validator/backend;
-- active message/UI repository projection from the idempotent durable AR3
-  source and fail-closed provider lifecycle ownership are implemented at the
-  inactive runtime boundary, but chat send/receive/display routing and reviewed
-  deletion/retention UX still require application wiring;
+- message/UI repository projection, fail-closed provider lifecycle ownership,
+  and chat text/link/steganography send, receive, display, acknowledgement,
+  deletion, and read-once routing are implemented behind the inactive runtime
+  selector; reviewed migration/status UX and release-level retention testing
+  remain activation gates;
 - full packaging, crash, migration, multi-device, passphrase, Maximum-mode,
   text, link, QR, and steganography tests;
 - independent protocol and implementation audit with no unresolved high or

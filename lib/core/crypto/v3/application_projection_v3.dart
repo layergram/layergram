@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:base32/base32.dart';
@@ -66,10 +67,13 @@ final class V3ApplicationMessageProjector {
     required V3ApplicationRecordLoader recordLoader,
     required String? keyTag,
     Map<String, V3ApplicationPresentationState> presentationStates = const {},
+    Map<String, FsMessageClassification> classificationsBySessionId = const {},
   })  : _messagesRepository = messagesRepository,
         _recordLoader = recordLoader,
         _keyTag = keyTag,
         _presentationStates = Map.unmodifiable(presentationStates),
+        _classificationsBySessionId =
+            Map.unmodifiable(classificationsBySessionId),
         _localIdentityId = localIdentity.identityId,
         _localIdentityDigest = _identityDigest(localIdentity);
 
@@ -80,6 +84,7 @@ final class V3ApplicationMessageProjector {
   final V3ApplicationRecordLoader _recordLoader;
   final String? _keyTag;
   final Map<String, V3ApplicationPresentationState> _presentationStates;
+  final Map<String, FsMessageClassification> _classificationsBySessionId;
   final String _localIdentityId;
   final Uint8List _localIdentityDigest;
   bool _closed = false;
@@ -151,7 +156,7 @@ final class V3ApplicationMessageProjector {
               keyTag: _keyTag,
               isFsEncrypted: true,
               protocolVersion: V3PublicIdentityCodec.protocolVersion,
-              fsClassification: FsMessageClassification.fsOnly,
+              fsClassification: _classificationFor(committed),
               backupExcluded: payload.backupExcluded,
             ),
           );
@@ -313,7 +318,7 @@ final class V3ApplicationMessageProjector {
             keyTag: _keyTag,
             isFsEncrypted: true,
             protocolVersion: V3PublicIdentityCodec.protocolVersion,
-            fsClassification: FsMessageClassification.fsOnly,
+            fsClassification: _classificationFor(committed),
             backupExcluded: payload.backupExcluded,
           );
           if (!_sameProjectedMetadata(metadata, expectedMetadata)) {
@@ -352,6 +357,17 @@ final class V3ApplicationMessageProjector {
   void _ensureOpen() {
     if (_closed) {
       throw StateError('Layergram v3 application projector is closed');
+    }
+  }
+
+  FsMessageClassification _classificationFor(V3CommittedRecord committed) {
+    final sessionId = committed.sessionId;
+    try {
+      final encoded = base64UrlEncode(sessionId).replaceAll('=', '');
+      return _classificationsBySessionId[encoded] ??
+          FsMessageClassification.fsOnly;
+    } finally {
+      _wipe(sessionId);
     }
   }
 }
