@@ -19,13 +19,15 @@ import '../../core/crypto/models.dart';
 import '../../core/providers.dart';
 import '../../l10n/app_strings.dart';
 import '../../ui/fs_contact_security_card.dart';
+import '../../ui/v3_contact_security_card.dart';
 import '../contact_verification/contact_verification_view.dart';
 import '../home/chat_view.dart';
 import '../home/home_controller.dart';
 import 'identities_controller.dart';
 
 class IdentityDetailView extends ConsumerStatefulWidget {
-  const IdentityDetailView({super.key, required this.identity, this.scrollController});
+  const IdentityDetailView(
+      {super.key, required this.identity, this.scrollController});
 
   final RemoteIdentity identity;
   final ScrollController? scrollController;
@@ -162,10 +164,13 @@ class _IdentityDetailViewState extends ConsumerState<IdentityDetailView> {
                               ? null
                               : () {
                                   // Set the recipient and navigate to chat
-                                  ref.read(encodeRecipientProvider.notifier).state = _identity;
+                                  ref
+                                      .read(encodeRecipientProvider.notifier)
+                                      .state = _identity;
                                   Navigator.of(context).push(
                                     MaterialPageRoute(
-                                      builder: (_) => ChatView(contact: _identity),
+                                      builder: (_) =>
+                                          ChatView(contact: _identity),
                                     ),
                                   );
                                 },
@@ -176,52 +181,61 @@ class _IdentityDetailViewState extends ConsumerState<IdentityDetailView> {
                             onPressed: _saving ? null : _handleVerifyAction,
                             child: Text(
                               _identity.verified
-                                  ? t(context, 'verifyContactCtaRevokeVerification')
+                                  ? t(context,
+                                      'verifyContactCtaRevokeVerification')
                                   : t(context, 'verifyContactCtaVerifyNow'),
                             ),
                           ),
                         if (!isMe)
                           FilledButton(
-                            style:
-                                FilledButton.styleFrom(backgroundColor: Colors.red),
+                            style: FilledButton.styleFrom(
+                                backgroundColor: Colors.red),
                             onPressed: _saving
-                              ? null
-                              : () async {
-                                  final confirm = await showDialog<bool>(
-                                    context: context,
-                                    builder: (ctx) => AlertDialog(
-                                      title: Text(t(ctx, 'deleteContactConfirmTitle')),
-                                      content: Text(t(ctx, 'deleteContactConfirmMsg')),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () => Navigator.of(ctx).pop(false),
-                                          child: Text(t(ctx, 'cancel')),
-                                        ),
-                                        TextButton(
-                                          onPressed: () => Navigator.of(ctx).pop(true),
-                                          child: Text(
-                                            t(ctx, 'delete'),
-                                            style: TextStyle(color: Theme.of(ctx).colorScheme.error),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                  if (confirm == true) {
-                                    await ref
-                                        .read(identitiesControllerProvider)
-                                        .delete(widget.identity.identityId);
-                                    if (!context.mounted) return;
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
+                                ? null
+                                : () async {
+                                    final confirm = await showDialog<bool>(
+                                      context: context,
+                                      builder: (ctx) => AlertDialog(
+                                        title: Text(t(
+                                            ctx, 'deleteContactConfirmTitle')),
                                         content: Text(
-                                          t(context, 'contactDeleted'),
-                                        ),
+                                            t(ctx, 'deleteContactConfirmMsg')),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () =>
+                                                Navigator.of(ctx).pop(false),
+                                            child: Text(t(ctx, 'cancel')),
+                                          ),
+                                          TextButton(
+                                            onPressed: () =>
+                                                Navigator.of(ctx).pop(true),
+                                            child: Text(
+                                              t(ctx, 'delete'),
+                                              style: TextStyle(
+                                                  color: Theme.of(ctx)
+                                                      .colorScheme
+                                                      .error),
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     );
-                                    Navigator.of(context).pop();
-                                  }
-                                },
+                                    if (confirm == true) {
+                                      await ref
+                                          .read(identitiesControllerProvider)
+                                          .delete(widget.identity.identityId);
+                                      if (!context.mounted) return;
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            t(context, 'contactDeleted'),
+                                          ),
+                                        ),
+                                      );
+                                      Navigator.of(context).pop();
+                                    }
+                                  },
                             child: Text(t(context, 'delete')),
                           ),
                         FilledButton(
@@ -231,7 +245,14 @@ class _IdentityDetailViewState extends ConsumerState<IdentityDetailView> {
                       ],
                     ),
                     if (!isMe) const SizedBox(height: 16),
-                    if (!isMe) FsContactSecurityCard(contactId: _identity.identityId),
+                    if (!isMe)
+                      ref.watch(protocolV3MessagingEnabledProvider)
+                          ? _identity.protocolVersion == 3
+                              ? V3ContactSecurityCard(contact: _identity)
+                              : const V3LegacyContactMigrationCard()
+                          : FsContactSecurityCard(
+                              contactId: _identity.identityId,
+                            ),
                   ],
                 ),
               ),

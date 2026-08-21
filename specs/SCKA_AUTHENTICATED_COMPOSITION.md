@@ -153,8 +153,10 @@ path and checks the exact implementation ID, ABI, protocol revision, state
 format, and every fixed size before admission. The normal Rust feature set
 still returns `NOT_READY`; the candidate is unregistered and absent from every
 app package. The application now has inactive text, link, and steganography
-routing through the scope-owned dispatcher. Production registration, packaged
-candidate selection, migration UX, and activation review remain gates.
+routing through the scope-owned dispatcher, plus inactive migration/status UX
+and durable Normal/Maximum session-generation selection. Production
+registration, packaged candidate selection, complete localization/platform
+verification, and activation review remain gates.
 
 ## 7. Verification and commercial boundary
 

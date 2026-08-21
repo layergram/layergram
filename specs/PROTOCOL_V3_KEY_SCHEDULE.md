@@ -108,14 +108,15 @@ It deliberately does not provide:
   candidate remains externally unreviewed);
 - a production ML-KEM Braid/SCKA implementation or reviewed native state
   exporter;
-- active contact/device bootstrap policy, an active durable send controller,
-  or projection from the durable AR3 source into the current message/UI
-  repository;
-- registration in providers or activation in contacts, messaging, UI, backup,
-  migration, or Premium paths.
+- production activation of the contact/device bootstrap policy, durable
+  coordinator, or AR3 projection path;
+- production activation in contacts, messaging, UI, backup, migration, or
+  Premium paths. The providers and UI seams described in Section 10 are
+  registered only behind the single fail-closed inactive selector.
 
-All code remains isolated under `lib/core/crypto/v3/`. Protocol v2 remains the
-only active messaging protocol.
+Protocol-v3 cryptography remains isolated under `lib/core/crypto/v3/`; the
+inactive application seams live in their ordinary provider/UI layers. Protocol
+v2 remains the only active messaging protocol.
 
 ## 2. Canonical notation
 
@@ -910,8 +911,18 @@ Before this schedule can carry user messages, Layergram still requires:
 - message/UI repository projection, fail-closed provider lifecycle ownership,
   and chat text/link/steganography send, receive, display, acknowledgement,
   deletion, and read-once routing are implemented behind the inactive runtime
-  selector; reviewed migration/status UX and release-level retention testing
-  remain activation gates;
+  selector; the same-24-word/new-public-identity migration notice, legacy-v2
+  send/import cutoff, per-contact v3 status, explicit reset, and Normal/Maximum
+  selection are also wired behind that selector;
+- Normal/Maximum policy changes atomically and durably exclude the exact
+  pre-change pending and completed handshake IDs instead of trusting either
+  endpoint's wall clock. Historical bindings remain for delayed authenticated
+  ACKs and recovery. Normal sending chooses at most sixteen devices and the
+  lexicographically greatest shared handshake ID per device; inbound content
+  accepts every non-excluded same-mode session so delayed messages are not
+  discarded. Maximum pins the first post-boundary remote device and rejects a
+  different device until another explicit reset. Release-level retention and
+  localized migration UX verification remain activation gates;
 - full packaging, crash, migration, multi-device, passphrase, Maximum-mode,
   text, link, QR, and steganography tests;
 - independent protocol and implementation audit with no unresolved high or

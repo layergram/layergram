@@ -1073,6 +1073,7 @@ final class V3HandshakePersistenceController {
     required V3LocalDeviceHandle localDevice,
     required V3PublicIdentity remoteIdentity,
     required V3HandshakeMode mode,
+    Set<String> excludedHandshakeIds = const <String>{},
   }) {
     return _serialized(() async {
       _ensureReady();
@@ -1090,7 +1091,8 @@ final class V3HandshakePersistenceController {
                   pending.localIdentityDigest == localDigest.armored &&
                   pending.remoteIdentityDigest == remoteDigest.armored &&
                   pending.localDeviceId == _id(localDeviceId) &&
-                  pending.mode == mode,
+                  pending.mode == mode &&
+                  !excludedHandshakeIds.contains(pending.handshakeId),
             )
             .toList(growable: false)
           ..sort((left, right) {
@@ -1101,6 +1103,42 @@ final class V3HandshakePersistenceController {
         return matches.isEmpty
             ? null
             : _outbound(matches.first, restored: true);
+      } finally {
+        _wipe(localDigest.bytes);
+        _wipe(remoteDigest.bytes);
+        _wipe(localDeviceId);
+      }
+    });
+  }
+
+  /// Returns non-secret pending handshake IDs for one peer. The application
+  /// policy coordinator uses this under the same serialized runtime boundary
+  /// as mode reset so delayed setup frames cannot cross that boundary.
+  Future<Set<String>> pendingHandshakeIdsForPeer({
+    required V3LocalIdentityHandle localIdentity,
+    required V3LocalDeviceHandle localDevice,
+    required V3PublicIdentity remoteIdentity,
+  }) {
+    return _serialized(() async {
+      _ensureReady();
+      if (localIdentity.isClosed || localDevice.isClosed) {
+        throw StateError('Layergram v3 identity/device handle is closed');
+      }
+      final localDigest = _identityDigest(localIdentity.publicIdentity);
+      final remoteDigest = _identityDigest(remoteIdentity);
+      final localDeviceId = localDevice.deviceId;
+      try {
+        return Set<String>.unmodifiable(
+          _repository
+              .pending(authority: _authority)
+              .where(
+                (pending) =>
+                    pending.localIdentityDigest == localDigest.armored &&
+                    pending.remoteIdentityDigest == remoteDigest.armored &&
+                    pending.localDeviceId == _id(localDeviceId),
+              )
+              .map((pending) => pending.handshakeId),
+        );
       } finally {
         _wipe(localDigest.bytes);
         _wipe(remoteDigest.bytes);
@@ -1265,6 +1303,7 @@ final class V3HandshakePersistenceController {
     required V3LocalDeviceHandle localDevice,
     required V3PublicIdentity remoteIdentity,
     required V3HandshakeMode mode,
+    Set<String> excludedHandshakeIds = const <String>{},
     DateTime? createdAt,
   }) {
     return _serialized(() async {
@@ -1276,6 +1315,7 @@ final class V3HandshakePersistenceController {
         if (mode == V3HandshakeMode.maximum) {
           for (final pending in _repository.pending(authority: _authority)) {
             if (pending.remoteIdentityDigest != remoteDigest.armored) continue;
+            if (excludedHandshakeIds.contains(pending.handshakeId)) continue;
             if (pending.role == V3SessionRole.initiator &&
                 pending.mode == mode &&
                 pending.localIdentityDigest == localDigest.armored &&
@@ -1287,10 +1327,11 @@ final class V3HandshakePersistenceController {
             );
           }
         }
-        _enforceExclusiveCompletedSession(
-          remoteIdentityDigest: remoteDigest.armored,
-          requestedMode: mode,
-        );
+        // Completed sessions are retained for delayed ACKs, recovery and
+        // explicit policy transitions. The application policy boundary picks
+        // only sessions completed after the latest mode change; exclusivity
+        // is therefore enforced among pending handshakes, not by deleting
+        // historical completion bindings.
         await _repository.preflightCreate(
           remoteIdentityDigest: remoteDigest.armored,
           additionalBytes: V3HandshakePendingStateCodec.initiatorEncodedBytes +
@@ -1331,6 +1372,7 @@ final class V3HandshakePersistenceController {
     required V3PublicIdentity initiatorIdentity,
     required V3HandshakeOffer offer,
     required V3HandshakeMode expectedMode,
+    Set<String> excludedHandshakeIds = const <String>{},
     DateTime? createdAt,
   }) {
     return _serialized(() async {
@@ -1341,6 +1383,11 @@ final class V3HandshakePersistenceController {
         authority: _authority,
       );
       if (existing != null) {
+        if (excludedHandshakeIds.contains(handshakeId)) {
+          throw const V3LmfPersistenceConflictException(
+            'excluded v3 handshake offer was replayed',
+          );
+        }
         final localDigest = _identityDigest(localIdentity.publicIdentity);
         final remoteDigest = _identityDigest(initiatorIdentity);
         final localDeviceId = localDevice.deviceId;
@@ -1386,10 +1433,7 @@ final class V3HandshakePersistenceController {
         _enforceExclusivePendingSession(
           remoteIdentityDigest: initiatorDigest.armored,
           requestedMode: expectedMode,
-        );
-        _enforceExclusiveCompletedSession(
-          remoteIdentityDigest: initiatorDigest.armored,
-          requestedMode: expectedMode,
+          excludedHandshakeIds: excludedHandshakeIds,
         );
         await _repository.preflightCreate(
           remoteIdentityDigest: initiatorDigest.armored,
@@ -1427,28 +1471,15 @@ final class V3HandshakePersistenceController {
   void _enforceExclusivePendingSession({
     required String remoteIdentityDigest,
     required V3HandshakeMode requestedMode,
+    Set<String> excludedHandshakeIds = const <String>{},
   }) {
     for (final pending in _repository.pending(authority: _authority)) {
       if (pending.remoteIdentityDigest != remoteIdentityDigest) continue;
+      if (excludedHandshakeIds.contains(pending.handshakeId)) continue;
       if (requestedMode == V3HandshakeMode.maximum ||
           pending.mode == V3HandshakeMode.maximum) {
         throw const V3LmfPersistenceConflictException(
           'maximum-mode v3 contact already has a pending session',
-        );
-      }
-    }
-  }
-
-  void _enforceExclusiveCompletedSession({
-    required String remoteIdentityDigest,
-    required V3HandshakeMode requestedMode,
-  }) {
-    for (final completion in _repository.completions(authority: _authority)) {
-      if (completion.remoteIdentityDigest != remoteIdentityDigest) continue;
-      if (requestedMode == V3HandshakeMode.maximum ||
-          completion.mode == V3HandshakeMode.maximum) {
-        throw const V3LmfPersistenceConflictException(
-          'maximum-mode v3 contact already has a completed session',
         );
       }
     }

@@ -340,6 +340,7 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
   final V3SessionPersistenceRestoreResult restoreResult;
 
   Future<void> _operationTail = Future<void>.value();
+  final Set<String> _locallyExcludedHandshakeIds = <String>{};
   bool _closed = false;
 
   bool get requiresRecovery => _scope.requiresRecovery;
@@ -350,14 +351,17 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
   Future<V3ApplicationHandshakeExport> createOffer({
     required V3PublicIdentity remoteIdentity,
     required V3HandshakeMode mode,
+    Set<String> excludedHandshakeIds = const <String>{},
     DateTime? createdAt,
   }) {
     return _serialized(() async {
+      final excluded = _effectiveExcludedHandshakeIds(excludedHandshakeIds);
       final outbound = await _scope.handshakes.createOffer(
         localIdentity: localIdentity,
         localDevice: _localDevice,
         remoteIdentity: remoteIdentity,
         mode: mode,
+        excludedHandshakeIds: excluded,
         createdAt: createdAt,
       );
       return _sealOutbound(
@@ -373,6 +377,7 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     required Iterable<V3LmfFrame> frames,
     required V3PublicIdentity initiatorIdentity,
     required V3HandshakeMode expectedMode,
+    Set<String> excludedHandshakeIds = const <String>{},
     DateTime? createdAt,
   }) {
     return _serialized(() async {
@@ -389,6 +394,8 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
           initiatorIdentity: initiatorIdentity,
           offer: offer,
           expectedMode: expectedMode,
+          excludedHandshakeIds:
+              _effectiveExcludedHandshakeIds(excludedHandshakeIds),
           createdAt: createdAt,
         );
         return _sealOutbound(
@@ -509,9 +516,21 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     required V3LmfFrame frame,
     required V3PublicIdentity remoteIdentity,
     required V3HandshakeMode expectedMode,
+    Set<String> excludedHandshakeIds = const <String>{},
+    String? maximumRemoteDeviceId,
+    String? Function()? maximumRemoteDeviceIdResolver,
+    Future<void> Function(V3CompletedHandshakeSession session)?
+        onSessionEstablished,
     DateTime? receivedAt,
   }) {
     return _serialized(() async {
+      final excluded = _effectiveExcludedHandshakeIds(excludedHandshakeIds);
+      final pinnedDeviceId =
+          maximumRemoteDeviceIdResolver?.call() ?? maximumRemoteDeviceId;
+      final handshakeId = _id(frame.metadata.sessionId);
+      if (excluded.contains(handshakeId)) {
+        throw const FormatException('Layergram v3 handshake was reset');
+      }
       final outcome = await _scope.handshakeInbox.receive(
         frame: frame,
         receivedAt: receivedAt,
@@ -528,8 +547,19 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
         assembly: assembly,
         remoteIdentity: remoteIdentity,
         expectedMode: expectedMode,
+        excludedHandshakeIds: excluded,
+        maximumRemoteDeviceId: pinnedDeviceId,
         receivedAt: receivedAt,
       );
+      final established = processed.session;
+      if (established != null && onSessionEstablished != null) {
+        final sessionId = established.sessionIdBytes;
+        try {
+          await onSessionEstablished(await _completedSessionForId(sessionId));
+        } finally {
+          _wipe(sessionId);
+        }
+      }
       await _scope.handshakeInbox.commit(
         assembly.assemblyId,
         committedAt: receivedAt,
@@ -570,6 +600,7 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
   Future<V3ApplicationHandshakeExport?> pendingHandshakeForRemoteIdentity({
     required V3PublicIdentity remoteIdentity,
     required V3HandshakeMode mode,
+    Set<String> excludedHandshakeIds = const <String>{},
   }) {
     return _serialized(() async {
       final outbound = await _scope.handshakes.latestPendingOutboundForPeer(
@@ -577,6 +608,8 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
         localDevice: _localDevice,
         remoteIdentity: remoteIdentity,
         mode: mode,
+        excludedHandshakeIds:
+            _effectiveExcludedHandshakeIds(excludedHandshakeIds),
       );
       if (outbound == null) return null;
       final localIsResponder = outbound.kind == V3HandshakeRecordKind.reply;
@@ -599,6 +632,53 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     return _serialized(() => _sessionsForRemoteIdentity(remoteIdentity));
   }
 
+  /// Captures every pending and completed handshake for one contact and
+  /// persists the new policy while this runtime's transition authority is
+  /// held. IDs are also denied locally before persistence, so an ambiguous
+  /// write cannot reopen them in the current process.
+  Future<T> commitContactPolicyBoundary<T>({
+    required V3PublicIdentity remoteIdentity,
+    required Future<T> Function(Set<String> handshakeIds) persist,
+  }) {
+    return _serialized(() async {
+      final ids = await _handshakeIdsForRemoteIdentity(remoteIdentity);
+      _locallyExcludedHandshakeIds.addAll(ids);
+      return persist(Set<String>.unmodifiable(ids));
+    });
+  }
+
+  /// Persists the first empty policy only if this contact has no durable
+  /// setup or completed session. Missing policy beside existing state is a
+  /// recovery condition, never an implicit default generation.
+  Future<T> initializeContactPolicy<T>({
+    required V3PublicIdentity remoteIdentity,
+    required Future<T> Function() persist,
+  }) {
+    return _serialized(() async {
+      if ((await _handshakeIdsForRemoteIdentity(remoteIdentity)).isNotEmpty) {
+        throw StateError('Layergram v3 contact policy requires recovery');
+      }
+      return persist();
+    });
+  }
+
+  /// Resolves only non-secret handshake routing metadata for a session frame.
+  /// Application routing bindings are session-specific, so the UI must not
+  /// guess a contact from the public identity routing used by HP3 frames.
+  Future<V3CompletedHandshakeSession?> completedSessionForFrame(
+    V3LmfFrame frame,
+  ) {
+    return _serialized(() async {
+      final sessionId = frame.metadata.sessionId;
+      try {
+        if (!await _scope.hasSession(sessionId)) return null;
+        return _completedSessionForId(sessionId);
+      } finally {
+        _wipe(sessionId);
+      }
+    });
+  }
+
   Future<V3ApplicationMessageExport> sendMessageToIdentity({
     required V3PublicIdentity remoteIdentity,
     required V3HandshakeMode expectedMode,
@@ -606,6 +686,9 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     V3LmfFrameKind kind = V3LmfFrameKind.application,
     int expiresAtUnixSeconds = 0,
     DateTime? persistedAt,
+    Set<String>? excludedHandshakeIds,
+    String? maximumRemoteDeviceId,
+    String? Function()? maximumRemoteDeviceIdResolver,
   }) {
     return _serialized(
       () => _sendMessageToIdentity(
@@ -615,6 +698,9 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
         kind: kind,
         expiresAtUnixSeconds: expiresAtUnixSeconds,
         persistedAt: persistedAt,
+        excludedHandshakeIds: excludedHandshakeIds,
+        maximumRemoteDeviceId:
+            maximumRemoteDeviceIdResolver?.call() ?? maximumRemoteDeviceId,
       ),
     );
   }
@@ -631,6 +717,9 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     bool deleteAfterRead = false,
     bool backupExcluded = false,
     DateTime? persistedAt,
+    Set<String>? excludedHandshakeIds,
+    String? maximumRemoteDeviceId,
+    String? Function()? maximumRemoteDeviceIdResolver,
   }) {
     return _serialized(() async {
       final messageId = _newRandomId(V3ApplicationPayloadCodec.messageIdBytes);
@@ -659,6 +748,9 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
           kind: V3LmfFrameKind.application,
           expiresAtUnixSeconds: expireAfterUnixSeconds ?? 0,
           persistedAt: persistedAt,
+          excludedHandshakeIds: excludedHandshakeIds,
+          maximumRemoteDeviceId:
+              maximumRemoteDeviceIdResolver?.call() ?? maximumRemoteDeviceId,
         );
       } finally {
         _wipe(messageId);
@@ -697,6 +789,10 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     required V3LmfFrame frame,
     DateTime? receivedAt,
     int? nowUnixSeconds,
+    V3HandshakeMode? expectedMode,
+    Set<String>? excludedHandshakeIds,
+    String? maximumRemoteDeviceId,
+    String? Function()? maximumRemoteDeviceIdResolver,
   }) {
     return _serialized(() async {
       final sessionId = frame.metadata.sessionId;
@@ -725,6 +821,38 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
         throw const FormatException(
           'Layergram v3 frame is not an application message or ACK',
         );
+      }
+
+      if (expectedMode != null) {
+        final targetSessionId = frame.metadata.sessionId;
+        try {
+          final target = await _completedSessionForId(targetSessionId);
+          final samePeer = (await _scope.handshakes.completedSessions())
+              .where(
+                (session) =>
+                    session.remoteIdentityDigest == target.remoteIdentityDigest,
+              )
+              .toList(growable: false);
+          if (!_isInboundSessionEligible(
+            target,
+            samePeer,
+            expectedMode: expectedMode,
+            excludedHandshakeIds:
+                _effectiveExcludedHandshakeIds(excludedHandshakeIds),
+            maximumRemoteDeviceId:
+                maximumRemoteDeviceIdResolver?.call() ?? maximumRemoteDeviceId,
+          )) {
+            return const V3ApplicationMessageInboundResult(
+              status: V3ApplicationInboundStatus.notForThisInstallation,
+            );
+          }
+        } on StateError {
+          return const V3ApplicationMessageInboundResult(
+            status: V3ApplicationInboundStatus.notForThisInstallation,
+          );
+        } finally {
+          _wipe(targetSessionId);
+        }
       }
 
       final accepted = await _scope.receiveFrame(
@@ -1109,6 +1237,8 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     required V3HandshakeFrameAssembly assembly,
     required V3PublicIdentity remoteIdentity,
     required V3HandshakeMode expectedMode,
+    required Set<String> excludedHandshakeIds,
+    String? maximumRemoteDeviceId,
     DateTime? receivedAt,
   }) async {
     final counter = assembly.frames.first.metadata.messageCounter;
@@ -1123,12 +1253,18 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     try {
       if (counter == 0) {
         final offer = opened.decodeOffer();
+        _validateMaximumRemoteDevice(
+          expectedMode: expectedMode,
+          maximumRemoteDeviceId: maximumRemoteDeviceId,
+          remoteDeviceId: offer.initiatorDeviceId,
+        );
         final outbound = await _scope.handshakes.createReply(
           localIdentity: localIdentity,
           localDevice: _localDevice,
           initiatorIdentity: remoteIdentity,
           offer: offer,
           expectedMode: expectedMode,
+          excludedHandshakeIds: excludedHandshakeIds,
           createdAt: receivedAt,
         );
         return (
@@ -1148,6 +1284,11 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
             'Layergram v3 handshake security mode mismatch',
           );
         }
+        _validateMaximumRemoteDevice(
+          expectedMode: expectedMode,
+          maximumRemoteDeviceId: maximumRemoteDeviceId,
+          remoteDeviceId: reply.responderDeviceId,
+        );
         final handshakeId = _id(reply.handshakeId);
         final stateDigest =
             await _scope.handshakes.stateDigestForId(handshakeId);
@@ -1198,6 +1339,11 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
             'Layergram v3 handshake security mode mismatch',
           );
         }
+        _validateMaximumRemoteDevice(
+          expectedMode: expectedMode,
+          maximumRemoteDeviceId: maximumRemoteDeviceId,
+          remoteDeviceId: confirmation.initiatorDeviceId,
+        );
         final handshakeId = _id(confirmation.handshakeId);
         final stateDigest =
             await _scope.handshakes.stateDigestForId(handshakeId);
@@ -1258,11 +1404,16 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     required V3LmfFrameKind kind,
     required int expiresAtUnixSeconds,
     DateTime? persistedAt,
+    Set<String>? excludedHandshakeIds,
+    String? maximumRemoteDeviceId,
   }) async {
     final sessions = await _sessionsForRemoteIdentity(remoteIdentity);
     final selected = _selectDeviceSessions(
       sessions,
       expectedMode: expectedMode,
+      excludedHandshakeIds:
+          _effectiveExcludedHandshakeIds(excludedHandshakeIds),
+      maximumRemoteDeviceId: maximumRemoteDeviceId,
     );
     final revisions = <String, int>{};
     for (final session in selected) {
@@ -1298,6 +1449,19 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
         .toList(growable: false);
   }
 
+  Future<Set<String>> _handshakeIdsForRemoteIdentity(
+    V3PublicIdentity remoteIdentity,
+  ) async =>
+      <String>{
+        for (final session in await _sessionsForRemoteIdentity(remoteIdentity))
+          session.handshakeId,
+        ...await _scope.handshakes.pendingHandshakeIdsForPeer(
+          localIdentity: localIdentity,
+          localDevice: _localDevice,
+          remoteIdentity: remoteIdentity,
+        ),
+      };
+
   Future<V3CompletedHandshakeSession> _completedSessionForId(
     Uint8List sessionId,
   ) async {
@@ -1316,36 +1480,79 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
   List<V3CompletedHandshakeSession> _selectDeviceSessions(
     List<V3CompletedHandshakeSession> sessions, {
     required V3HandshakeMode expectedMode,
+    Set<String>? excludedHandshakeIds,
+    String? maximumRemoteDeviceId,
   }) {
-    if (sessions.isEmpty) {
+    final eligible = sessions
+        .where(
+          (session) =>
+              session.mode == expectedMode &&
+              (excludedHandshakeIds == null ||
+                  !excludedHandshakeIds.contains(session.handshakeId)),
+        )
+        .toList(growable: false);
+    if (eligible.isEmpty) {
       throw StateError('Layergram v3 contact requires a completed handshake');
     }
-    final containsMaximum =
-        sessions.any((session) => session.mode == V3HandshakeMode.maximum);
     if (expectedMode == V3HandshakeMode.maximum) {
-      if (sessions.length != 1 || !containsMaximum) {
-        throw StateError(
-          'Layergram v3 Maximum mode requires one exclusive device session',
-        );
+      final deviceId = maximumRemoteDeviceId ??
+          (eligible.map((session) => session.remoteDeviceId).toList()..sort())
+              .first;
+      final deviceSessions = eligible
+          .where((session) => session.remoteDeviceId == deviceId)
+          .toList(growable: false);
+      if (deviceSessions.isEmpty) {
+        throw StateError('Maximum-mode Layergram v3 device is unavailable');
       }
-      return List.unmodifiable(sessions);
-    }
-    if (containsMaximum) {
-      throw StateError(
-        'Layergram v3 Maximum session cannot be used as Normal mode',
+      deviceSessions.sort(
+        (left, right) => right.handshakeId.compareTo(left.handshakeId),
+      );
+      return List.unmodifiable(
+        <V3CompletedHandshakeSession>[deviceSessions.first],
       );
     }
     final newestByDevice = <String, V3CompletedHandshakeSession>{};
-    for (final session in sessions) {
+    for (final session in eligible) {
       final existing = newestByDevice[session.remoteDeviceId];
       if (existing == null ||
-          session.completedAt.isAfter(existing.completedAt)) {
+          session.handshakeId.compareTo(existing.handshakeId) > 0) {
         newestByDevice[session.remoteDeviceId] = session;
       }
     }
     final selected = newestByDevice.values.toList(growable: false)
-      ..sort((left, right) => left.sessionId.compareTo(right.sessionId));
+      ..sort(
+          (left, right) => left.remoteDeviceId.compareTo(right.remoteDeviceId));
+    if (selected.length > 16) {
+      selected.removeRange(16, selected.length);
+    }
     return List.unmodifiable(selected);
+  }
+
+  bool _isInboundSessionEligible(
+    V3CompletedHandshakeSession target,
+    List<V3CompletedHandshakeSession> samePeer, {
+    required V3HandshakeMode expectedMode,
+    required Set<String> excludedHandshakeIds,
+    String? maximumRemoteDeviceId,
+  }) {
+    if (target.mode != expectedMode ||
+        excludedHandshakeIds.contains(target.handshakeId)) {
+      return false;
+    }
+    if (expectedMode == V3HandshakeMode.normal) return true;
+    final eligibleDeviceIds = samePeer
+        .where(
+          (session) =>
+              session.mode == expectedMode &&
+              !excludedHandshakeIds.contains(session.handshakeId),
+        )
+        .map((session) => session.remoteDeviceId)
+        .toSet()
+        .toList(growable: false)
+      ..sort();
+    if (eligibleDeviceIds.isEmpty) return false;
+    final deviceId = maximumRemoteDeviceId ?? eligibleDeviceIds.first;
+    return target.remoteDeviceId == deviceId;
   }
 
   Future<V3ApplicationMessageExport> _resumeSendGroup(
@@ -1475,6 +1682,30 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
       }
     });
     return completer.future;
+  }
+
+  Set<String> _effectiveExcludedHandshakeIds(Set<String>? persisted) =>
+      Set<String>.unmodifiable(<String>{
+        ..._locallyExcludedHandshakeIds,
+        ...?persisted,
+      });
+
+  void _validateMaximumRemoteDevice({
+    required V3HandshakeMode expectedMode,
+    required String? maximumRemoteDeviceId,
+    required Uint8List remoteDeviceId,
+  }) {
+    try {
+      if (expectedMode == V3HandshakeMode.maximum &&
+          maximumRemoteDeviceId != null &&
+          _id(remoteDeviceId) != maximumRemoteDeviceId) {
+        throw const FormatException(
+          'Maximum-mode Layergram v3 peer device does not match the pin',
+        );
+      }
+    } finally {
+      _wipe(remoteDeviceId);
+    }
   }
 }
 

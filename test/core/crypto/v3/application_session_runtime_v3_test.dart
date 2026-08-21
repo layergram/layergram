@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
+import 'package:layergram/core/crypto/fs_security_mode.dart';
 import 'package:layergram/core/crypto/seed_service.dart';
 import 'package:layergram/core/crypto/models.dart';
 import 'package:layergram/core/crypto/v3/application_chat_bridge_v3.dart';
@@ -167,8 +168,9 @@ void main() {
     expect(
         aliceSessions.single.remoteDeviceId, bobSessions.single.localDeviceId);
 
-    // Normal mode may start another independent device session. Moving an
-    // existing contact to Maximum requires explicit session reset/rekey.
+    // Normal mode may start another independent device session. A later
+    // Maximum handshake is a fresh policy generation while the historical
+    // Normal sessions remain available for delayed traffic and recovery.
     final additionalDeviceOffer = await aliceRuntime.createOffer(
       remoteIdentity: bob.publicIdentity,
       mode: V3HandshakeMode.normal,
@@ -200,19 +202,34 @@ void main() {
       twoDeviceSessions.map((session) => session.remoteDeviceId).toSet(),
       hasLength(2),
     );
-    await expectLater(
-      aliceRuntime.createOffer(
-        remoteIdentity: bob.publicIdentity,
-        mode: V3HandshakeMode.maximum,
-      ),
-      throwsA(anything),
+    final maximumOffer = await aliceRuntime.createOffer(
+      remoteIdentity: bob.publicIdentity,
+      mode: V3HandshakeMode.maximum,
+    );
+    final maximumReply = await bobRuntime.receiveOffer(
+      frames: maximumOffer.frames,
+      initiatorIdentity: alice.publicIdentity,
+      expectedMode: V3HandshakeMode.maximum,
+    );
+    final maximumConfirmation = await aliceRuntime.receiveReply(
+      frames: maximumReply.frames,
+      responderIdentity: bob.publicIdentity,
+    );
+    await bobRuntime.receiveConfirmation(
+      frames: maximumConfirmation.frames,
+      initiatorIdentity: alice.publicIdentity,
+    );
+    expect(
+      (await aliceRuntime.sessionsForRemoteIdentity(bob.publicIdentity))
+          .where((session) => session.mode == V3HandshakeMode.maximum),
+      hasLength(1),
     );
 
     final messageExport = await aliceRuntime.sendApplicationMessageToIdentity(
       remoteIdentity: bob.publicIdentity,
       expectedMode: V3HandshakeMode.normal,
       text: 'hello two devices',
-      timestampUnixSeconds: 2000000000,
+      timestampUnixSeconds: 2000000001,
       deleteAfterRead: true,
       backupExcluded: true,
     );
@@ -368,13 +385,18 @@ void main() {
     expect(aliceRuntime.localDeviceId, orderedEquals(aliceDeviceId));
     expect(bobRuntime.localDeviceId, orderedEquals(bobDeviceId));
     expect(
-      aliceRuntime.restoreResult.sessions.sessionRevisions.values,
-      everyElement(1),
+      aliceRuntime.restoreResult.sessions.sessionRevisions.values
+          .where((revision) => revision == 1),
+      hasLength(2),
     );
-    expect(aliceRuntime.restoreResult.sessions.sessionRevisions, hasLength(2));
     expect(
-      bobRuntime.restoreResult.sessions.sessionRevisions.values,
-      <int>[1],
+      aliceRuntime.restoreResult.sessions.sessionRevisions.values,
+      contains(0),
+    );
+    expect(aliceRuntime.restoreResult.sessions.sessionRevisions, hasLength(3));
+    expect(
+      bobRuntime.restoreResult.sessions.sessionRevisions.values.toSet(),
+      <int>{0, 1},
     );
     final pendingMessageExports = await aliceRuntime.pendingMessageExports();
     expect(pendingMessageExports, isEmpty);
@@ -516,6 +538,289 @@ void main() {
     }
   });
 
+  test('policy reset revokes a pending handshake and permits a fresh one',
+      () async {
+    final runtime = await V3ApplicationSessionRuntime.open(
+      localIdentity: alice,
+      scopeToken: aliceScope,
+      sckaBackend: _InitialSckaBackend(),
+    );
+    try {
+      final oldOffer = await runtime.createOffer(
+        remoteIdentity: bob.publicIdentity,
+        mode: V3HandshakeMode.normal,
+      );
+      late Set<String> boundary;
+      await runtime.commitContactPolicyBoundary<void>(
+        remoteIdentity: bob.publicIdentity,
+        persist: (ids) async => boundary = ids,
+      );
+      expect(boundary, contains(oldOffer.handshakeId));
+      expect(
+        await runtime.pendingHandshakeForRemoteIdentity(
+          remoteIdentity: bob.publicIdentity,
+          mode: V3HandshakeMode.normal,
+          excludedHandshakeIds: boundary,
+        ),
+        isNull,
+      );
+
+      final fresh = await runtime.createOffer(
+        remoteIdentity: bob.publicIdentity,
+        mode: V3HandshakeMode.normal,
+        excludedHandshakeIds: boundary,
+      );
+      expect(fresh.handshakeId, isNot(oldOffer.handshakeId));
+    } finally {
+      await runtime.close();
+    }
+  });
+
+  test('delayed message from an older non-excluded session is accepted',
+      () async {
+    final aliceRuntime = await V3ApplicationSessionRuntime.open(
+      localIdentity: alice,
+      scopeToken: aliceScope,
+      sckaBackend: _InitialSckaBackend(),
+    );
+    final bobRuntime = await V3ApplicationSessionRuntime.open(
+      localIdentity: bob,
+      scopeToken: bobScope,
+      sckaBackend: _InitialSckaBackend(),
+    );
+    try {
+      Future<void> completeHandshake() async {
+        final offer = await aliceRuntime.createOffer(
+          remoteIdentity: bob.publicIdentity,
+          mode: V3HandshakeMode.normal,
+        );
+        final reply = await bobRuntime.receiveOffer(
+          frames: offer.frames,
+          initiatorIdentity: alice.publicIdentity,
+          expectedMode: V3HandshakeMode.normal,
+        );
+        final confirmation = await aliceRuntime.receiveReply(
+          frames: reply.frames,
+          responderIdentity: bob.publicIdentity,
+        );
+        await bobRuntime.receiveConfirmation(
+          frames: confirmation.frames,
+          initiatorIdentity: alice.publicIdentity,
+        );
+      }
+
+      await completeHandshake();
+      final delayed = await aliceRuntime.sendApplicationMessageToIdentity(
+        remoteIdentity: bob.publicIdentity,
+        expectedMode: V3HandshakeMode.normal,
+        text: 'delayed but still eligible',
+        timestampUnixSeconds: 2000002000,
+      );
+      await completeHandshake();
+
+      V3ApplicationMessageInboundResult? delivered;
+      for (final frame in delayed.frames.reversed) {
+        final result = await bobRuntime.receiveApplicationFrame(
+          frame: frame,
+          expectedMode: V3HandshakeMode.normal,
+          nowUnixSeconds: 2000002001,
+        );
+        if (result.status == V3ApplicationInboundStatus.delivered) {
+          delivered = result;
+        }
+      }
+      expect(delivered?.payload?.text, 'delayed but still eligible');
+    } finally {
+      await aliceRuntime.close();
+      await bobRuntime.close();
+    }
+  });
+
+  test('same-device sessions tolerate opposite carrier completion order',
+      () async {
+    final aliceRuntime = await V3ApplicationSessionRuntime.open(
+      localIdentity: alice,
+      scopeToken: aliceScope,
+      sckaBackend: _InitialSckaBackend(),
+    );
+    final bobRuntime = await V3ApplicationSessionRuntime.open(
+      localIdentity: bob,
+      scopeToken: bobScope,
+      sckaBackend: _InitialSckaBackend(),
+    );
+    try {
+      final firstOffer = await aliceRuntime.createOffer(
+        remoteIdentity: bob.publicIdentity,
+        mode: V3HandshakeMode.normal,
+        createdAt: DateTime.utc(2026, 1, 1, 0, 0, 1),
+      );
+      final secondOffer = await aliceRuntime.createOffer(
+        remoteIdentity: bob.publicIdentity,
+        mode: V3HandshakeMode.normal,
+        createdAt: DateTime.utc(2026, 1, 1, 0, 0, 2),
+      );
+      expect(secondOffer.handshakeId, isNot(firstOffer.handshakeId));
+
+      final firstReply = await bobRuntime.receiveOffer(
+        frames: firstOffer.frames,
+        initiatorIdentity: alice.publicIdentity,
+        expectedMode: V3HandshakeMode.normal,
+        createdAt: DateTime.utc(2026, 1, 1, 0, 0, 3),
+      );
+      final secondReply = await bobRuntime.receiveOffer(
+        frames: secondOffer.frames,
+        initiatorIdentity: alice.publicIdentity,
+        expectedMode: V3HandshakeMode.normal,
+        createdAt: DateTime.utc(2026, 1, 1, 0, 0, 4),
+      );
+
+      final firstConfirmation = await aliceRuntime.receiveReply(
+        frames: firstReply.frames,
+        responderIdentity: bob.publicIdentity,
+        completedAt: DateTime.utc(2026, 1, 1, 0, 0, 5),
+      );
+      final secondConfirmation = await aliceRuntime.receiveReply(
+        frames: secondReply.frames,
+        responderIdentity: bob.publicIdentity,
+        completedAt: DateTime.utc(2026, 1, 1, 0, 0, 6),
+      );
+
+      // The carrier delivers confirmations in the opposite order, so local
+      // completion timestamps disagree across the two installations.
+      await bobRuntime.receiveConfirmation(
+        frames: secondConfirmation.frames,
+        initiatorIdentity: alice.publicIdentity,
+        completedAt: DateTime.utc(2026, 1, 1, 0, 0, 7),
+      );
+      await bobRuntime.receiveConfirmation(
+        frames: firstConfirmation.frames,
+        initiatorIdentity: alice.publicIdentity,
+        completedAt: DateTime.utc(2026, 1, 1, 0, 0, 8),
+      );
+
+      final aliceSessions =
+          await aliceRuntime.sessionsForRemoteIdentity(bob.publicIdentity);
+      final bobSessions =
+          await bobRuntime.sessionsForRemoteIdentity(alice.publicIdentity);
+      expect(aliceSessions, hasLength(2));
+      expect(bobSessions, hasLength(2));
+
+      final selectedHandshakeId = aliceSessions
+          .map((session) => session.handshakeId)
+          .reduce((left, right) => left.compareTo(right) > 0 ? left : right);
+      expect(
+        bobSessions
+            .map((session) => session.handshakeId)
+            .reduce((left, right) => left.compareTo(right) > 0 ? left : right),
+        selectedHandshakeId,
+      );
+
+      final outbound = await aliceRuntime.sendApplicationMessageToIdentity(
+        remoteIdentity: bob.publicIdentity,
+        expectedMode: V3HandshakeMode.normal,
+        text: 'completion order is transport-local',
+        timestampUnixSeconds: 2000002100,
+      );
+      expect(outbound.targets, hasLength(1));
+      final selectedSession = aliceSessions.singleWhere(
+        (session) => session.handshakeId == selectedHandshakeId,
+      );
+      expect(outbound.targets.single.sessionId, selectedSession.sessionId);
+
+      V3ApplicationMessageInboundResult? delivered;
+      for (final frame in outbound.frames.reversed) {
+        final result = await bobRuntime.receiveApplicationFrame(
+          frame: frame,
+          expectedMode: V3HandshakeMode.normal,
+          nowUnixSeconds: 2000002101,
+        );
+        if (result.status == V3ApplicationInboundStatus.delivered) {
+          delivered = result;
+        }
+      }
+      expect(delivered?.payload?.text, 'completion order is transport-local');
+    } finally {
+      await aliceRuntime.close();
+      await bobRuntime.close();
+    }
+  });
+
+  test('Maximum mode rejects a reply from a device outside the durable pin',
+      () async {
+    final aliceRuntime = await V3ApplicationSessionRuntime.open(
+      localIdentity: alice,
+      scopeToken: aliceScope,
+      sckaBackend: _InitialSckaBackend(),
+    );
+    final bobRuntime = await V3ApplicationSessionRuntime.open(
+      localIdentity: bob,
+      scopeToken: bobScope,
+      sckaBackend: _InitialSckaBackend(),
+    );
+    final bobSecondRuntime = await V3ApplicationSessionRuntime.open(
+      localIdentity: bob,
+      scopeToken: 'bob2-v3-scope000',
+      sckaBackend: _InitialSckaBackend(),
+    );
+    try {
+      final offer = await aliceRuntime.createOffer(
+        remoteIdentity: bob.publicIdentity,
+        mode: V3HandshakeMode.maximum,
+      );
+      final reply = await bobRuntime.receiveOffer(
+        frames: offer.frames,
+        initiatorIdentity: alice.publicIdentity,
+        expectedMode: V3HandshakeMode.maximum,
+      );
+      final confirmation = await aliceRuntime.receiveReply(
+        frames: reply.frames,
+        responderIdentity: bob.publicIdentity,
+      );
+      await bobRuntime.receiveConfirmation(
+        frames: confirmation.frames,
+        initiatorIdentity: alice.publicIdentity,
+      );
+      final pinned = (await aliceRuntime.sessionsForRemoteIdentity(
+        bob.publicIdentity,
+      ))
+          .single
+          .remoteDeviceId;
+
+      final replacementOffer = await aliceRuntime.createOffer(
+        remoteIdentity: bob.publicIdentity,
+        mode: V3HandshakeMode.maximum,
+      );
+      final replacementReply = await bobSecondRuntime.receiveOffer(
+        frames: replacementOffer.frames,
+        initiatorIdentity: alice.publicIdentity,
+        expectedMode: V3HandshakeMode.maximum,
+      );
+      for (final frame in replacementReply.frames.take(
+        replacementReply.frames.length - 1,
+      )) {
+        await aliceRuntime.receiveHandshakeFrame(
+          frame: frame,
+          remoteIdentity: bob.publicIdentity,
+          expectedMode: V3HandshakeMode.maximum,
+          maximumRemoteDeviceId: pinned,
+        );
+      }
+      await expectLater(
+        aliceRuntime.receiveHandshakeFrame(
+          frame: replacementReply.frames.last,
+          remoteIdentity: bob.publicIdentity,
+          expectedMode: V3HandshakeMode.maximum,
+          maximumRemoteDeviceId: pinned,
+        ),
+        throwsFormatException,
+      );
+    } finally {
+      await aliceRuntime.close();
+      await bobRuntime.close();
+      await bobSecondRuntime.close();
+    }
+  });
+
   test('chat bridge preserves text link and stego carrier workflows', () async {
     final aliceRuntime = await V3ApplicationSessionRuntime.open(
       localIdentity: alice,
@@ -558,6 +863,14 @@ void main() {
     final cover = 'Ci vediamo domani alle nove. '.padRight(271, 'a');
 
     try {
+      expect(
+        (await aliceBridge.securityStatus(
+          contact: bobContact,
+          selectedMode: V3HandshakeMode.normal,
+        ))
+            .phase,
+        V3ChatContactSecurityPhase.setupRequired,
+      );
       await expectLater(
         aliceBridge.prepareOutbound(
           contact: bobContact,
@@ -585,6 +898,14 @@ void main() {
       );
       expect(offer.purpose, V3ChatOutboundPurpose.handshake);
       expect(offer.parts, everyElement(hasLength(lessThanOrEqualTo(4000))));
+      expect(
+        (await aliceBridge.securityStatus(
+          contact: bobContact,
+          selectedMode: V3HandshakeMode.normal,
+        ))
+            .phase,
+        V3ChatContactSecurityPhase.setupPending,
+      );
 
       final retriedOffer = await aliceBridge.prepareOutbound(
         contact: bobContact,
@@ -640,6 +961,13 @@ void main() {
         receivedConfirmation.status,
         V3ChatInboundStatus.sessionEstablished,
       );
+      final activeStatus = await aliceBridge.securityStatus(
+        contact: bobContact,
+        selectedMode: V3HandshakeMode.normal,
+      );
+      expect(activeStatus.phase, V3ChatContactSecurityPhase.normalActive);
+      expect(activeStatus.activeSessionCount, 1);
+      expect(activeStatus.hasSessionsInAnotherMode, isFalse);
 
       final linkMessage = await aliceBridge.prepareOutbound(
         contact: bobContact,
@@ -652,6 +980,14 @@ void main() {
       expect(
         linkMessage.parts,
         everyElement(startsWith('layergram://m/')),
+      );
+      await aliceBridge.markExported(linkMessage, partIndex: 0);
+      final bobActiveSessions =
+          await bobRuntime.sessionsForRemoteIdentity(alice.publicIdentity);
+      expect(bobActiveSessions, hasLength(1));
+      expect(
+        linkMessage.messageExport!.targets.single.sessionId,
+        bobActiveSessions.single.sessionId,
       );
       final deliveredLink = await bobBridge.receiveCarrier(
         carrier: linkMessage.bundledText,
@@ -711,12 +1047,67 @@ void main() {
         V3ChatInboundStatus.acknowledgementApplied,
       );
 
+      final policyBoundary = V3SessionEligibilityPolicy(
+        isValid: true,
+        revision: 1,
+        excludedHandshakeIds:
+            await aliceBridge.handshakeIdsForContact(bobContact),
+      );
+      final oldPolicyMessage = await aliceBridge.prepareOutbound(
+        contact: bobContact,
+        mode: V3HandshakeMode.normal,
+        carrierMode: V3ChatCarrierMode.text,
+        text: 'messaggio della generazione precedente',
+        timestampUnixSeconds: 2000001004,
+      );
+      expect(
+        (await bobBridge.receiveCarrier(
+          carrier: oldPolicyMessage.bundledText,
+          contacts: <RemoteIdentity>[aliceContact],
+          modeForContact: (_) => V3HandshakeMode.normal,
+          eligibilityForContact: (_) => policyBoundary,
+          nowUnixSeconds: 2000001005,
+        ))
+            .status,
+        V3ChatInboundStatus.notForThisInstallation,
+      );
+      final acceptedOldPolicy = await bobBridge.receiveCarrier(
+        carrier: oldPolicyMessage.bundledText,
+        contacts: <RemoteIdentity>[aliceContact],
+        modeForContact: (_) => V3HandshakeMode.normal,
+        nowUnixSeconds: 2000001005,
+      );
+      expect(acceptedOldPolicy.status, V3ChatInboundStatus.delivered);
+      await aliceBridge.receiveCarrier(
+        carrier: acceptedOldPolicy.response!.bundledText,
+        contacts: <RemoteIdentity>[bobContact],
+        modeForContact: (_) => V3HandshakeMode.normal,
+      );
+
+      expect(
+        (await aliceBridge.securityStatus(
+          contact: bobContact,
+          selectedMode: V3HandshakeMode.normal,
+          eligibilityPolicy: policyBoundary,
+        ))
+            .phase,
+        V3ChatContactSecurityPhase.setupRequired,
+      );
+      final rekeyOffer = await aliceBridge.prepareOutbound(
+        contact: bobContact,
+        mode: V3HandshakeMode.normal,
+        carrierMode: V3ChatCarrierMode.text,
+        text: 'non esportato finché il nuovo setup non è completato',
+        eligibilityPolicy: policyBoundary,
+      );
+      expect(rekeyOffer.purpose, V3ChatOutboundPurpose.handshake);
+
       expect(await aliceRuntime.pendingMessageExports(), isEmpty);
       expect(await bobRuntime.pendingMessageExports(), isEmpty);
       final aliceRecords = await aliceMessages.getAllMessages();
       final bobRecords = await bobMessages.getAllMessages();
-      expect(aliceRecords, hasLength(2));
-      expect(bobRecords, hasLength(2));
+      expect(aliceRecords, hasLength(3));
+      expect(bobRecords, hasLength(3));
       expect(
         await Future.wait(
           aliceRecords.map((record) => aliceBridge.loadPlaintext(record.id)),
@@ -724,6 +1115,7 @@ void main() {
         containsAll(<String>[
           'messaggio quantum-safe via link',
           'risposta quantum-safe nascosta',
+          'messaggio della generazione precedente',
         ]),
       );
     } finally {

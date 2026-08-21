@@ -2,9 +2,13 @@ import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:layergram/core/crypto/identity_link_codec.dart';
+import 'package:layergram/core/crypto/models.dart';
 import 'package:layergram/core/crypto/v3/identity_v3_adapter.dart';
+import 'package:layergram/core/crypto/v3/identity_runtime_v3.dart';
 import 'package:layergram/core/crypto/v3/ml_kem_768.dart';
 import 'package:layergram/core/crypto/v3/public_identity_v3.dart';
+import 'package:layergram/core/providers.dart';
 import 'package:layergram/features/identities/identities_controller.dart';
 
 void main() {
@@ -55,4 +59,86 @@ void main() {
       throwsFormatException,
     );
   });
+
+  test('active v3 migration rejects newly imported legacy identities', () {
+    final active = ProviderContainer(
+      overrides: [
+        protocolV3IdentityEnabledProvider.overrideWithValue(true),
+      ],
+    );
+    addTearDown(active.dispose);
+    final activeController = active.read(identitiesControllerProvider);
+    const legacy = LocalIdentity(
+      identityId: 'legacy-contact',
+      publicKeyBase64: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+      fingerprint: 'AA-BB-CC-DD',
+      displayName: 'Legacy',
+      mnemonic:
+          'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+    );
+
+    expect(
+      () => activeController.parseIdentityFromLink(
+        IdentityLinkCodec.encode(legacy),
+      ),
+      throwsA(isA<ProtocolV3IdentityRequiredException>()),
+    );
+    expect(
+      activeController
+          .parseIdentityFromLink(
+            V3PublicIdentityCodec.encodeLink(identity),
+          )
+          .protocolVersion,
+      3,
+    );
+  });
+
+  test('invalid ML-KEM public material is rejected before persistence',
+      () async {
+    final active = ProviderContainer(
+      overrides: [
+        protocolV3IdentityEnabledProvider.overrideWithValue(true),
+        v3IdentityRuntimeProvider.overrideWith((ref) {
+          return V3IdentityRuntime(
+            seedService: ref.watch(seedServiceProvider),
+            backendLoader: () => _RejectingMlKemBackend(),
+          );
+        }),
+      ],
+    );
+    addTearDown(active.dispose);
+
+    await expectLater(
+      active
+          .read(identitiesControllerProvider)
+          .saveIdentity(V3IdentityAdapter.toRemoteIdentity(identity)),
+      throwsFormatException,
+    );
+  });
+}
+
+final class _RejectingMlKemBackend implements MlKem768Backend {
+  @override
+  String get implementationId => 'rejecting-test-backend';
+
+  @override
+  Future<bool> selfTest() async => true;
+
+  @override
+  Future<bool> validatePublicKey(Uint8List publicKey) async => false;
+
+  @override
+  Future<MlKem768KeyPair> keyPairFromSeed(Uint8List seed) =>
+      throw UnsupportedError('not used');
+
+  @override
+  Future<MlKem768Encapsulation> encapsulate(Uint8List publicKey) =>
+      throw UnsupportedError('not used');
+
+  @override
+  Future<Uint8List> decapsulate(
+    MlKem768PrivateKeyHandle privateKeyHandle,
+    Uint8List ciphertext,
+  ) =>
+      throw UnsupportedError('not used');
 }

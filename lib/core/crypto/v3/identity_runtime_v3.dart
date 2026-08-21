@@ -20,6 +20,7 @@ import 'local_identity_v3.dart';
 import 'ml_kem_768.dart';
 import 'ml_kem_768_ffi.dart';
 import 'public_identity_v3.dart';
+import 'public_identity_v3_validator.dart';
 
 typedef V3MlKemBackendLoader = MlKem768Backend Function();
 typedef V3IdentityHandleEvictionHandler = Future<void> Function(
@@ -116,6 +117,19 @@ final class V3IdentityRuntime {
       _serialized(() async {
         await _primaryPublicIdentity(local);
         return _primary!;
+      });
+
+  /// Validates imported public material with the same pinned ML-KEM backend
+  /// used by local identities before any contact record is persisted.
+  Future<V3StructurallyValidatedPublicIdentity> validateRemotePublicIdentity(
+    V3PublicIdentity identity,
+  ) =>
+      _serialized(() async {
+        _ensureOpen();
+        final backend = _backend ??= _backendLoader();
+        return V3PublicIdentityValidator(
+          mlKem768Backend: backend,
+        ).validate(identity);
       });
 
   /// Replaces the current ephemeral passphrase identity.

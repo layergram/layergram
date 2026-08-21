@@ -21,6 +21,7 @@ import '../../ui/fs_info_sheet.dart';
 import '../../ui/fs_maximum_setup_dialog.dart';
 import '../../ui/fs_message_classification_icon.dart';
 import '../../ui/fs_status_icon.dart';
+import '../../ui/v3_contact_security_card.dart';
 import '../../ui/passphrase_button.dart';
 import '../../utils/app_platform.dart';
 import '../../utils/sharing.dart';
@@ -1750,6 +1751,13 @@ class ChatViewState extends ConsumerState<ChatView> {
         );
       }
       return null;
+    } on ProtocolV3ContactMigrationRequiredException {
+      if (mounted) {
+        _showTouchComposerSnackbar(
+          AppStrings.t(context, 'security.fs.v3.contact_migration_required'),
+        );
+      }
+      return null;
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -2075,21 +2083,26 @@ class ChatViewState extends ConsumerState<ChatView> {
               ),
             ),
             const SizedBox(width: 6),
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () {
-                final fsState = ref.read(
-                  fsStateForContactProvider(widget.contact.identityId),
-                );
-                showFsInfoSheet(context, fsState);
-              },
-              child: FsStatusIcon(
-                fsState: ref.watch(
-                  fsStateForContactProvider(widget.contact.identityId),
+            if (_usesProtocolV3)
+              V3ContactStatusButton(contact: widget.contact)
+            else if (ref.watch(protocolV3MessagingEnabledProvider))
+              const V3LegacyContactStatusButton()
+            else
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  final fsState = ref.read(
+                    fsStateForContactProvider(widget.contact.identityId),
+                  );
+                  showFsInfoSheet(context, fsState);
+                },
+                child: FsStatusIcon(
+                  fsState: ref.watch(
+                    fsStateForContactProvider(widget.contact.identityId),
+                  ),
+                  size: 14,
                 ),
-                size: 14,
               ),
-            ),
           ],
         ),
         actions: [

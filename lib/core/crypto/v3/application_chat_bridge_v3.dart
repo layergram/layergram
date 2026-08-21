@@ -19,6 +19,7 @@ import 'package:crypto/crypto.dart' as crypto;
 
 import '../stego_encoder.dart';
 import '../../storage/messages_repository_core.dart';
+import '../fs_security_mode.dart';
 import '../models.dart';
 import 'application_payload_v3.dart';
 import 'application_session_runtime_v3.dart';
@@ -31,6 +32,33 @@ import 'public_identity_v3.dart';
 enum V3ChatCarrierMode { text, link, steganography }
 
 enum V3ChatOutboundPurpose { handshake, application, acknowledgement }
+
+enum V3ChatContactSecurityPhase {
+  setupRequired,
+  setupPending,
+  normalActive,
+  maximumActive,
+  recoveryRequired,
+}
+
+/// Non-secret security state used by contact and chat presentation.
+final class V3ChatContactSecurityStatus {
+  const V3ChatContactSecurityStatus({
+    required this.phase,
+    required this.selectedMode,
+    required this.activeSessionCount,
+    required this.hasSessionsInAnotherMode,
+  });
+
+  final V3ChatContactSecurityPhase phase;
+  final V3HandshakeMode selectedMode;
+  final int activeSessionCount;
+  final bool hasSessionsInAnotherMode;
+
+  bool get isActive =>
+      phase == V3ChatContactSecurityPhase.normalActive ||
+      phase == V3ChatContactSecurityPhase.maximumActive;
+}
 
 final class V3ChatCoverCapacityException implements Exception {
   const V3ChatCoverCapacityException(this.missingCharacters);
@@ -112,6 +140,18 @@ typedef V3HandshakeModeResolver = V3HandshakeMode Function(
   RemoteIdentity contact,
 );
 
+typedef V3SessionEligibilityResolver = V3SessionEligibilityPolicy? Function(
+  RemoteIdentity contact,
+);
+
+typedef V3SessionEligibilityEnsurer = Future<V3SessionEligibilityPolicy>
+    Function(RemoteIdentity contact, V3HandshakeMode mode);
+
+typedef V3MaximumDevicePinCommit = Future<void> Function(
+  RemoteIdentity contact,
+  String remoteDeviceId,
+);
+
 /// Application-facing adapter between chat identities and the durable v3
 /// transport runtime.
 ///
@@ -134,6 +174,111 @@ final class V3ApplicationChatBridge {
   String get localIdentityId =>
       _runtime.localIdentity.publicIdentity.identityId;
 
+  Future<V3ChatContactSecurityStatus> securityStatus({
+    required RemoteIdentity contact,
+    required V3HandshakeMode selectedMode,
+    V3SessionEligibilityPolicy? eligibilityPolicy,
+    bool requireEligibilityPolicy = false,
+  }) async {
+    final remote = V3IdentityAdapter.fromRemoteIdentity(contact);
+    final sessions = await _runtime.sessionsForRemoteIdentity(remote);
+    if (requireEligibilityPolicy &&
+        eligibilityPolicy == null &&
+        sessions.isNotEmpty) {
+      return V3ChatContactSecurityStatus(
+        phase: V3ChatContactSecurityPhase.recoveryRequired,
+        selectedMode: selectedMode,
+        activeSessionCount: 0,
+        hasSessionsInAnotherMode: true,
+      );
+    }
+    final matchingSessions = sessions
+        .where(
+          (session) =>
+              session.mode == selectedMode &&
+              (selectedMode != V3HandshakeMode.maximum ||
+                  eligibilityPolicy?.maximumRemoteDeviceId == null ||
+                  session.remoteDeviceId ==
+                      eligibilityPolicy!.maximumRemoteDeviceId) &&
+              (eligibilityPolicy == null ||
+                  !eligibilityPolicy.excludedHandshakeIds
+                      .contains(session.handshakeId)),
+        )
+        .toList(growable: false);
+    final hasOtherMode =
+        sessions.any((session) => session.mode != selectedMode);
+    if (_runtime.requiresRecovery || eligibilityPolicy?.isValid == false) {
+      return V3ChatContactSecurityStatus(
+        phase: V3ChatContactSecurityPhase.recoveryRequired,
+        selectedMode: selectedMode,
+        activeSessionCount: matchingSessions.length,
+        hasSessionsInAnotherMode: hasOtherMode,
+      );
+    }
+    if (matchingSessions.isNotEmpty) {
+      return V3ChatContactSecurityStatus(
+        phase: selectedMode == V3HandshakeMode.maximum
+            ? V3ChatContactSecurityPhase.maximumActive
+            : V3ChatContactSecurityPhase.normalActive,
+        selectedMode: selectedMode,
+        activeSessionCount: matchingSessions.length,
+        hasSessionsInAnotherMode: hasOtherMode,
+      );
+    }
+    final pending = await _runtime.pendingHandshakeForRemoteIdentity(
+      remoteIdentity: remote,
+      mode: selectedMode,
+      excludedHandshakeIds:
+          eligibilityPolicy?.excludedHandshakeIds ?? const <String>{},
+    );
+    if (requireEligibilityPolicy &&
+        eligibilityPolicy == null &&
+        pending != null) {
+      return V3ChatContactSecurityStatus(
+        phase: V3ChatContactSecurityPhase.recoveryRequired,
+        selectedMode: selectedMode,
+        activeSessionCount: 0,
+        hasSessionsInAnotherMode: hasOtherMode,
+      );
+    }
+    return V3ChatContactSecurityStatus(
+      phase: pending == null
+          ? V3ChatContactSecurityPhase.setupRequired
+          : V3ChatContactSecurityPhase.setupPending,
+      selectedMode: selectedMode,
+      activeSessionCount: 0,
+      hasSessionsInAnotherMode: hasOtherMode,
+    );
+  }
+
+  Future<Set<String>> handshakeIdsForContact(RemoteIdentity contact) async {
+    final remote = V3IdentityAdapter.fromRemoteIdentity(contact);
+    return Set<String>.unmodifiable(
+      (await _runtime.sessionsForRemoteIdentity(remote))
+          .map((session) => session.handshakeId),
+    );
+  }
+
+  Future<T> commitContactPolicyBoundary<T>({
+    required RemoteIdentity contact,
+    required Future<T> Function(Set<String> handshakeIds) persist,
+  }) {
+    return _runtime.commitContactPolicyBoundary(
+      remoteIdentity: V3IdentityAdapter.fromRemoteIdentity(contact),
+      persist: persist,
+    );
+  }
+
+  Future<T> initializeContactPolicy<T>({
+    required RemoteIdentity contact,
+    required Future<T> Function() persist,
+  }) {
+    return _runtime.initializeContactPolicy(
+      remoteIdentity: V3IdentityAdapter.fromRemoteIdentity(contact),
+      persist: persist,
+    );
+  }
+
   Future<V3ChatOutboundExport> prepareOutbound({
     required RemoteIdentity contact,
     required V3HandshakeMode mode,
@@ -144,18 +289,40 @@ final class V3ApplicationChatBridge {
     int? expireAfterUnixSeconds,
     bool deleteAfterRead = false,
     bool backupExcluded = false,
+    V3SessionEligibilityPolicy? eligibilityPolicy,
+    V3SessionEligibilityResolver? eligibilityForContact,
   }) async {
+    eligibilityPolicy =
+        eligibilityForContact?.call(contact) ?? eligibilityPolicy;
     _preflightCarrier(carrierMode, coverText);
+    if (eligibilityPolicy?.isValid == false) {
+      throw StateError('Layergram v3 contact policy requires recovery');
+    }
     final remote = V3IdentityAdapter.fromRemoteIdentity(contact);
     final sessions = await _runtime.sessionsForRemoteIdentity(remote);
-    if (sessions.isEmpty) {
+    final hasSelectedModeSession = sessions.any(
+      (session) =>
+          session.mode == mode &&
+          (mode != V3HandshakeMode.maximum ||
+              eligibilityPolicy?.maximumRemoteDeviceId == null ||
+              session.remoteDeviceId ==
+                  eligibilityPolicy!.maximumRemoteDeviceId) &&
+          (eligibilityPolicy == null ||
+              !eligibilityPolicy.excludedHandshakeIds
+                  .contains(session.handshakeId)),
+    );
+    if (!hasSelectedModeSession) {
       final pending = await _runtime.pendingHandshakeForRemoteIdentity(
             remoteIdentity: remote,
             mode: mode,
+            excludedHandshakeIds:
+                eligibilityPolicy?.excludedHandshakeIds ?? const <String>{},
           ) ??
           await _runtime.createOffer(
             remoteIdentity: remote,
             mode: mode,
+            excludedHandshakeIds:
+                eligibilityPolicy?.excludedHandshakeIds ?? const <String>{},
           );
       return _handshakeExport(
         pending,
@@ -172,6 +339,11 @@ final class V3ApplicationChatBridge {
       expireAfterUnixSeconds: expireAfterUnixSeconds,
       deleteAfterRead: deleteAfterRead,
       backupExcluded: backupExcluded,
+      excludedHandshakeIds: eligibilityPolicy?.excludedHandshakeIds,
+      maximumRemoteDeviceId: eligibilityPolicy?.maximumRemoteDeviceId,
+      maximumRemoteDeviceIdResolver: () =>
+          (eligibilityForContact?.call(contact) ?? eligibilityPolicy)
+              ?.maximumRemoteDeviceId,
     );
     await _runtime.reconcileMessageRepository(
       messagesRepository: _messagesRepository,
@@ -222,6 +394,9 @@ final class V3ApplicationChatBridge {
     required String carrier,
     required Iterable<RemoteIdentity> contacts,
     required V3HandshakeModeResolver modeForContact,
+    V3SessionEligibilityResolver? eligibilityForContact,
+    V3SessionEligibilityEnsurer? ensureEligibilityForContact,
+    V3MaximumDevicePinCommit? pinMaximumDevice,
     V3ChatCarrierMode responseCarrierMode = V3ChatCarrierMode.text,
     String acknowledgementCoverText = '',
     DateTime? receivedAt,
@@ -259,10 +434,43 @@ final class V3ApplicationChatBridge {
           );
           continue;
         }
+        var eligibility = eligibilityForContact?.call(contact.model);
+        final selectedMode = modeForContact(contact.model);
+        if (eligibility == null && ensureEligibilityForContact != null) {
+          eligibility = await _runtime.initializeContactPolicy(
+            remoteIdentity: contact.public,
+            persist: () => ensureEligibilityForContact(
+              contact.model,
+              selectedMode,
+            ),
+          );
+        }
+        if (eligibility?.isValid == false) {
+          selected = _preferInboundResult(
+            selected,
+            V3ChatInboundResult(
+              status: V3ChatInboundStatus.invalid,
+              contact: contact.model,
+            ),
+          );
+          continue;
+        }
         final inbound = await _runtime.receiveHandshakeFrame(
           frame: frame,
           remoteIdentity: contact.public,
-          expectedMode: modeForContact(contact.model),
+          expectedMode: selectedMode,
+          excludedHandshakeIds:
+              eligibility?.excludedHandshakeIds ?? const <String>{},
+          maximumRemoteDeviceId: eligibility?.maximumRemoteDeviceId,
+          maximumRemoteDeviceIdResolver: () =>
+              eligibilityForContact?.call(contact.model)?.maximumRemoteDeviceId,
+          onSessionEstablished: selectedMode == V3HandshakeMode.maximum &&
+                  pinMaximumDevice != null
+              ? (session) => pinMaximumDevice(
+                    contact.model,
+                    session.remoteDeviceId,
+                  )
+              : null,
           receivedAt: receivedAt,
         );
         final response = inbound.outbound == null
@@ -287,13 +495,44 @@ final class V3ApplicationChatBridge {
         continue;
       }
 
+      final session = await _runtime.completedSessionForFrame(frame);
+      final routedContact = session == null
+          ? null
+          : _contactForSession(session.remoteIdentityDigest, v3Contacts);
+      if (routedContact == null) {
+        selected = _preferInboundResult(
+          selected,
+          const V3ChatInboundResult(
+            status: V3ChatInboundStatus.notForThisInstallation,
+          ),
+        );
+        continue;
+      }
+      final eligibility = eligibilityForContact?.call(routedContact.model);
+      if ((eligibilityForContact != null && eligibility == null) ||
+          eligibility?.isValid == false) {
+        selected = _preferInboundResult(
+          selected,
+          V3ChatInboundResult(
+            status: V3ChatInboundStatus.invalid,
+            contact: routedContact.model,
+          ),
+        );
+        continue;
+      }
       final inbound = await _runtime.receiveApplicationFrame(
         frame: frame,
         receivedAt: receivedAt,
         nowUnixSeconds: nowUnixSeconds,
+        expectedMode: modeForContact(routedContact.model),
+        excludedHandshakeIds: eligibility?.excludedHandshakeIds,
+        maximumRemoteDeviceId: eligibility?.maximumRemoteDeviceId,
+        maximumRemoteDeviceIdResolver: () => eligibilityForContact
+            ?.call(routedContact.model)
+            ?.maximumRemoteDeviceId,
       );
       final contact = inbound.payload == null
-          ? _contactForInboundFrame(frame, v3Contacts)?.model
+          ? routedContact.model
           : _contactForPayload(inbound.payload!, v3Contacts);
       final response = inbound.acknowledgementFrame == null
           ? null
@@ -414,6 +653,21 @@ final class V3ApplicationChatBridge {
       _wipe(sender);
     }
   }
+
+  ({RemoteIdentity model, V3PublicIdentity public})? _contactForSession(
+    String remoteIdentityDigest,
+    List<({RemoteIdentity model, V3PublicIdentity public})> contacts,
+  ) {
+    for (final contact in contacts) {
+      final candidate = _identityDigest(contact.public);
+      try {
+        if (_armored(candidate) == remoteIdentityDigest) return contact;
+      } finally {
+        _wipe(candidate);
+      }
+    }
+    return null;
+  }
 }
 
 final class _V3ChatApplicationPart {
@@ -528,6 +782,8 @@ Uint8List _routingBinding(V3PublicIdentity identity) => Uint8List.fromList(
 Uint8List _identityDigest(V3PublicIdentity identity) => Uint8List.fromList(
       crypto.sha384.convert(identity.identityBindingBytes).bytes,
     );
+
+String _armored(Uint8List value) => base64UrlEncode(value).replaceAll('=', '');
 
 bool _bytesEqual(Uint8List left, Uint8List right) {
   if (left.length != right.length) return false;

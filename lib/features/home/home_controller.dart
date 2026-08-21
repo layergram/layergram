@@ -55,6 +55,10 @@ class FsSendBlockedException implements Exception {
   String toString() => messageKey;
 }
 
+class ProtocolV3ContactMigrationRequiredException implements Exception {
+  const ProtocolV3ContactMigrationRequiredException();
+}
+
 class HomeController {
   HomeController(this.ref);
 
@@ -126,16 +130,77 @@ class HomeController {
   }
 
   V3HandshakeMode _protocolV3ModeForContact(RemoteIdentity contact) {
-    final fsController = ref.read(
-      fsOpportunisticControllerProvider(contact.identityId),
-    );
+    final identityContext = _protocolV3PolicyContextId;
+    if (identityContext == null) return V3HandshakeMode.normal;
     final mode = ref.read(fsSecurityModeServiceProvider).getModeSync(
           contactId: contact.identityId,
-          identityContext: fsController.identityContext,
+          identityContext: identityContext,
         );
     return mode == FsSecurityMode.strict
         ? V3HandshakeMode.maximum
         : V3HandshakeMode.normal;
+  }
+
+  V3SessionEligibilityPolicy? _protocolV3EligibilityForContact(
+    RemoteIdentity contact,
+  ) {
+    final identityContext = _protocolV3PolicyContextId;
+    if (identityContext == null) return null;
+    return ref.read(fsSecurityModeServiceProvider).getV3SessionEligibilitySync(
+          contactId: contact.identityId,
+          identityContext: identityContext,
+        );
+  }
+
+  String? get _protocolV3PolicyContextId {
+    final passphrase = ref.read(passphraseProvider);
+    if (passphrase.isActive && (passphrase.v3IdentityId?.isNotEmpty ?? false)) {
+      return passphrase.v3IdentityId;
+    }
+    final active = ref.read(activeIdentityIdProvider);
+    return active == null || active.isEmpty ? null : active;
+  }
+
+  Future<V3ChatContactSecurityStatus?> protocolV3SecurityStatus(
+    RemoteIdentity contact,
+  ) async {
+    if (!isProtocolV3Contact(contact)) return null;
+    final bridge = await _protocolV3Bridge();
+    if (bridge == null) return null;
+    return bridge.securityStatus(
+      contact: contact,
+      selectedMode: _protocolV3ModeForContact(contact),
+      eligibilityPolicy: _protocolV3EligibilityForContact(contact),
+      requireEligibilityPolicy: true,
+    );
+  }
+
+  Future<void> setProtocolV3SecurityMode(
+    RemoteIdentity contact,
+    FsSecurityMode mode,
+  ) async {
+    if (!isProtocolV3Contact(contact) || mode == FsSecurityMode.base) {
+      throw ArgumentError('Invalid Layergram v3 contact security mode');
+    }
+    final bridge = await _protocolV3Bridge();
+    if (bridge == null) {
+      throw StateError('Layergram v3 runtime is not available');
+    }
+    final fsController = ref.read(
+      fsOpportunisticControllerProvider(contact.identityId),
+    );
+    await bridge.commitContactPolicyBoundary(
+      contact: contact,
+      persist: (handshakeIds) =>
+          ref.read(fsSecurityModeServiceProvider).setProtocolV3Mode(
+                contactId: contact.identityId,
+                identityContext: bridge.localIdentityId,
+                mode: mode,
+                existingHandshakeIds: handshakeIds,
+              ),
+    );
+    fsController.securityMode = mode;
+    ref.read(fsRegistryVersionProvider.notifier).state++;
   }
 
   Future<V3ChatOutboundExport> prepareProtocolV3Outbound({
@@ -154,16 +219,36 @@ class HomeController {
     if (bridge == null) {
       throw StateError('Layergram v3 runtime is not available');
     }
-    return bridge.prepareOutbound(
+    final selectedMode = _protocolV3ModeForContact(recipient);
+    final existingPolicy = _protocolV3EligibilityForContact(recipient);
+    final policy = existingPolicy ??
+        await bridge.initializeContactPolicy(
+          contact: recipient,
+          persist: () =>
+              ref.read(fsSecurityModeServiceProvider).ensureProtocolV3Policy(
+                    contactId: recipient.identityId,
+                    identityContext: bridge.localIdentityId,
+                    mode: selectedMode == V3HandshakeMode.maximum
+                        ? FsSecurityMode.strict
+                        : FsSecurityMode.advanced,
+                  ),
+        );
+    final export = await bridge.prepareOutbound(
       contact: recipient,
-      mode: _protocolV3ModeForContact(recipient),
+      mode: selectedMode,
       carrierMode: carrierMode,
       text: text,
       coverText: coverText,
       expireAfterUnixSeconds: expireAfter,
       deleteAfterRead: deleteAfterRead,
       backupExcluded: backupExcluded,
+      eligibilityPolicy: policy,
+      eligibilityForContact: _protocolV3EligibilityForContact,
     );
+    if (export.purpose == V3ChatOutboundPurpose.handshake) {
+      ref.read(fsRegistryVersionProvider.notifier).state++;
+    }
+    return export;
   }
 
   Future<void> markProtocolV3Exported(
@@ -303,6 +388,11 @@ class HomeController {
     bool selfCopy = false,
     bool maximumFsSetupOnly = false,
   }) async {
+    if (!selfCopy &&
+        ref.read(protocolV3MessagingEnabledProvider) &&
+        recipient.protocolVersion != V3PublicIdentityCodec.protocolVersion) {
+      throw const ProtocolV3ContactMigrationRequiredException();
+    }
     final identityManager = ref.read(identityManagerProvider);
     final local = await identityManager.getLocalIdentity();
     final privateKey = await _activePrivateKey();
@@ -906,6 +996,9 @@ class HomeController {
       hintContactId: hintContactId,
     );
     if (v3 != null) return v3;
+    if (ref.read(protocolV3MessagingEnabledProvider)) {
+      return const DecodeOutcome.noData();
+    }
 
     // ── 2. Try v2 binary format (fully encrypted, no LAYERGRAM| prefix) ────
     final v2 = await _tryDecodeV2(
@@ -932,6 +1025,21 @@ class HomeController {
         carrier: source,
         contacts: contacts,
         modeForContact: _protocolV3ModeForContact,
+        eligibilityForContact: _protocolV3EligibilityForContact,
+        ensureEligibilityForContact: (contact, mode) =>
+            ref.read(fsSecurityModeServiceProvider).ensureProtocolV3Policy(
+                  contactId: contact.identityId,
+                  identityContext: bridge.localIdentityId,
+                  mode: mode == V3HandshakeMode.maximum
+                      ? FsSecurityMode.strict
+                      : FsSecurityMode.advanced,
+                ),
+        pinMaximumDevice: (contact, remoteDeviceId) =>
+            ref.read(fsSecurityModeServiceProvider).pinProtocolV3MaximumDevice(
+                  contactId: contact.identityId,
+                  identityContext: bridge.localIdentityId,
+                  remoteDeviceId: remoteDeviceId,
+                ),
       );
     } on FormatException {
       return null;
@@ -941,6 +1049,12 @@ class HomeController {
     final response = inbound.response;
     if (contact != null && response != null) {
       _pendingV3Responses[contact.identityId] = response;
+    }
+    if (contact != null &&
+        (inbound.status == V3ChatInboundStatus.handshakeProgress ||
+            inbound.status == V3ChatInboundStatus.handshakeResponse ||
+            inbound.status == V3ChatInboundStatus.sessionEstablished)) {
+      ref.read(fsRegistryVersionProvider.notifier).state++;
     }
 
     switch (inbound.status) {
@@ -1865,6 +1979,17 @@ final homeControllerProvider = Provider<HomeController>((ref) {
   });
   return controller;
 });
+
+final protocolV3ContactSecurityStatusProvider = FutureProvider.autoDispose
+    .family<V3ChatContactSecurityStatus?, RemoteIdentity>((ref, contact) async {
+  ref.watch(fsRegistryVersionProvider);
+  ref.watch(activeIdentityIdProvider);
+  ref.watch(effectiveKeyTagProvider);
+  ref.watch(identityReloadTokenProvider);
+  ref.watch(passphraseProvider);
+  return ref.watch(homeControllerProvider).protocolV3SecurityStatus(contact);
+});
+
 final encodeRecipientProvider = StateProvider<RemoteIdentity?>((_) => null);
 
 /// Stores composer handoff state during narrow↔wide layout transitions.
