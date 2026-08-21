@@ -162,6 +162,25 @@ final class V3ApplicationMessageExport {
   }
 }
 
+/// Aggregate outcome of one scope-local retention maintenance pass.
+final class V3ApplicationRetentionMaintenanceResult {
+  const V3ApplicationRetentionMaintenanceResult({
+    required this.compactedSessions,
+    required this.collectedIncomingEffects,
+    required this.collectedOutgoingEffects,
+    required this.replayWindowEntries,
+    required this.examinedReceipts,
+    required this.retiredReceipts,
+  });
+
+  final int compactedSessions;
+  final int collectedIncomingEffects;
+  final int collectedOutgoingEffects;
+  final int replayWindowEntries;
+  final int examinedReceipts;
+  final int retiredReceipts;
+}
+
 enum V3ApplicationInboundStatus {
   notForThisInstallation,
   pending,
@@ -1202,6 +1221,76 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
 
   Future<V3SessionCompactionResult> compactSession(Uint8List sessionId) =>
       _serialized(() => _scope.compactSession(sessionId));
+
+  /// Opportunistically compacts durable effects and retires only proofs whose
+  /// local Normal/Maximum retention window has elapsed.
+  ///
+  /// The pass stores no global last-run marker, so opening a hidden passphrase
+  /// scope does not leave a new enumerable trace. Pending inbox fragments,
+  /// unacknowledged outbox frames, and exact ACK exports are never time-purged.
+  Future<V3ApplicationRetentionMaintenanceResult> maintainRetainedState({
+    required DateTime now,
+  }) {
+    return _serialized(() async {
+      final sessions = await _scope.handshakes.completedSessions();
+      final modeBySession = <String, V3HandshakeMode>{};
+      var compactedSessions = 0;
+      var collectedIncomingEffects = 0;
+      var collectedOutgoingEffects = 0;
+      var replayWindowEntries = 0;
+      for (final session in sessions) {
+        final existing = modeBySession[session.sessionId];
+        if (existing != null && existing != session.mode) {
+          throw const V3LmfPersistenceConflictException(
+            'Layergram v3 session has conflicting retention profiles',
+          );
+        }
+        modeBySession[session.sessionId] = session.mode;
+      }
+      final sessionKeys = modeBySession.keys.toList(growable: false)..sort();
+      for (final sessionKey in sessionKeys) {
+        final sessionId = _decodeCanonicalId(sessionKey, 16);
+        try {
+          final compacted = await _scope.compactSession(sessionId);
+          compactedSessions++;
+          collectedIncomingEffects += compacted.collectedIncomingEffects;
+          collectedOutgoingEffects += compacted.collectedOutgoingEffects;
+          replayWindowEntries += compacted.replayWindowEntries;
+        } finally {
+          _wipe(sessionId);
+        }
+      }
+
+      final candidates = await _scope.receiptRetentionCandidates();
+      var retiredReceipts = 0;
+      for (final candidate in candidates) {
+        final mode = modeBySession[candidate.sessionKey];
+        if (mode == null) {
+          throw const V3LmfPersistenceConflictException(
+            'Layergram v3 checkpoint has no completed handshake binding',
+          );
+        }
+        final result = await _scope.replaceEligibleCheckpointReceipt(
+          assemblyId: candidate.assemblyId,
+          policy: V3RetentionPolicy.forProfile(
+            mode == V3HandshakeMode.maximum
+                ? V3RetentionProfile.maximum
+                : V3RetentionProfile.normal,
+          ),
+          now: now,
+        );
+        if (result.checkpointWasReplaced) retiredReceipts++;
+      }
+      return V3ApplicationRetentionMaintenanceResult(
+        compactedSessions: compactedSessions,
+        collectedIncomingEffects: collectedIncomingEffects,
+        collectedOutgoingEffects: collectedOutgoingEffects,
+        replayWindowEntries: replayWindowEntries,
+        examinedReceipts: candidates.length,
+        retiredReceipts: retiredReceipts,
+      );
+    });
+  }
 
   Future<V3SessionReceiptRetirementResult> replaceEligibleCheckpointReceipt({
     required String assemblyId,

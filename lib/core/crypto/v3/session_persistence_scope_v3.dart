@@ -726,6 +726,14 @@ final class V3SessionPersistenceScope {
     });
   }
 
+  Future<List<V3SessionReceiptRetentionCandidate>>
+      receiptRetentionCandidates() {
+    return _serialized(() async {
+      _ensureReady();
+      return _controller.receiptRetentionCandidates();
+    });
+  }
+
   Future<V3SessionReceiptRetirementResult> replaceEligibleCheckpointReceipt({
     required String assemblyId,
     required V3RetentionPolicy policy,

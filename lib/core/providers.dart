@@ -394,13 +394,15 @@ final v3ApplicationSessionRuntimeProvider =
     await owner.closeCurrent();
     return null;
   }
-  return owner.open(
+  final runtime = await owner.open(
     recoveryIdentity: local,
     scopeToken: context.scopeToken,
     contextId:
         '${usePassphrase ? 'passphrase' : 'primary'}|$effectiveIdentityId|${context.scopeToken}',
     usePassphraseIdentity: usePassphrase,
   );
+  await runtime.maintainRetainedState(now: DateTime.now().toUtc());
+  return runtime;
 });
 
 final passphraseProvider =

@@ -922,7 +922,12 @@ Before this schedule can carry user messages, Layergram still requires:
   accepts every non-excluded same-mode session so delayed messages are not
   discarded. Maximum pins the first post-boundary remote device and rejects a
   different device until another explicit reset. Release-level retention and
-  localized migration UX verification remain activation gates;
+  localized migration UX verification remain activation gates. The inactive
+  production selector now runs one scope-local maintenance pass after restore:
+  it compacts only checkpoint-covered effects and retires compact proofs only
+  after the frozen Normal/Maximum local horizon. It stores no global last-run
+  marker and never time-purges pending inbox bytes, unacknowledged outbox bytes,
+  or exact acknowledgement exports;
 - full packaging, crash, migration, multi-device, passphrase, Maximum-mode,
   text, link, QR, and steganography tests;
 - independent protocol and implementation audit with no unresolved high or

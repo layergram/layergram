@@ -745,6 +745,90 @@ void main() {
     }
   });
 
+  test('scope maintenance compacts safely and honors the Normal horizon',
+      () async {
+    final aliceRuntime = await V3ApplicationSessionRuntime.open(
+      localIdentity: alice,
+      scopeToken: aliceScope,
+      sckaBackend: _InitialSckaBackend(),
+    );
+    final bobRuntime = await V3ApplicationSessionRuntime.open(
+      localIdentity: bob,
+      scopeToken: bobScope,
+      sckaBackend: _InitialSckaBackend(),
+    );
+    try {
+      final offer = await aliceRuntime.createOffer(
+        remoteIdentity: bob.publicIdentity,
+        mode: V3HandshakeMode.normal,
+      );
+      final reply = await bobRuntime.receiveOffer(
+        frames: offer.frames,
+        initiatorIdentity: alice.publicIdentity,
+        expectedMode: V3HandshakeMode.normal,
+      );
+      final confirmation = await aliceRuntime.receiveReply(
+        frames: reply.frames,
+        responderIdentity: bob.publicIdentity,
+      );
+      await bobRuntime.receiveConfirmation(
+        frames: confirmation.frames,
+        initiatorIdentity: alice.publicIdentity,
+      );
+
+      final recordedAt = DateTime.now().toUtc().add(const Duration(seconds: 1));
+      final outbound = await aliceRuntime.sendApplicationMessageToIdentity(
+        remoteIdentity: bob.publicIdentity,
+        expectedMode: V3HandshakeMode.normal,
+        text: 'retained until the local horizon',
+        timestampUnixSeconds:
+            recordedAt.millisecondsSinceEpoch ~/ Duration.millisecondsPerSecond,
+        persistedAt: recordedAt,
+      );
+      V3ApplicationMessageInboundResult? delivered;
+      for (final frame in outbound.frames.reversed) {
+        final result = await bobRuntime.receiveApplicationFrame(
+          frame: frame,
+          expectedMode: V3HandshakeMode.normal,
+          receivedAt: recordedAt.add(const Duration(seconds: 1)),
+        );
+        if (result.status == V3ApplicationInboundStatus.delivered) {
+          delivered = result;
+        }
+      }
+      expect(delivered?.acknowledgementFrame, isNotNull);
+      await aliceRuntime.receiveApplicationFrame(
+        frame: delivered!.acknowledgementFrame!,
+        receivedAt: recordedAt.add(const Duration(seconds: 2)),
+      );
+
+      final early = await aliceRuntime.maintainRetainedState(
+        now: recordedAt.add(const Duration(days: 100)),
+      );
+      expect(early.compactedSessions, 1);
+      expect(early.collectedOutgoingEffects, 1);
+      expect(early.examinedReceipts, 1);
+      expect(early.retiredReceipts, 0);
+
+      final mature = await aliceRuntime.maintainRetainedState(
+        now: recordedAt.add(const Duration(days: 366)),
+      );
+      expect(mature.compactedSessions, 1);
+      expect(mature.examinedReceipts, 1);
+      expect(mature.retiredReceipts, 1);
+      expect(await aliceRuntime.pendingMessageExports(), isEmpty);
+
+      final idempotent = await aliceRuntime.maintainRetainedState(
+        now: recordedAt.add(const Duration(days: 367)),
+      );
+      expect(idempotent.examinedReceipts, 0);
+      expect(idempotent.retiredReceipts, 0);
+    } finally {
+      await aliceRuntime.close();
+      await bobRuntime.close();
+    }
+  });
+
   test('Maximum mode rejects a reply from a device outside the durable pin',
       () async {
     final aliceRuntime = await V3ApplicationSessionRuntime.open(

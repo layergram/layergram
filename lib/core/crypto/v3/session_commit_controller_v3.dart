@@ -160,6 +160,18 @@ final class V3SessionCompactionResult {
   final int replayWindowEntries;
 }
 
+/// Non-secret pointer to one cumulative checkpoint receipt that may become
+/// eligible for conservative retirement.
+final class V3SessionReceiptRetentionCandidate {
+  const V3SessionReceiptRetentionCandidate({
+    required this.sessionKey,
+    required this.assemblyId,
+  });
+
+  final String sessionKey;
+  final String assemblyId;
+}
+
 /// Inactive single-authority coordinator for protocol-v3 session commits.
 ///
 /// One instance owns one [V3LmfAtomicCommitJournal] for an encrypted
@@ -1858,6 +1870,40 @@ final class V3SessionCommitController {
         collectedIncomingEffects: incomingCollected,
         collectedOutgoingEffects: outgoingCollected,
         replayWindowEntries: incomingCollected,
+      );
+    });
+  }
+
+  /// Lists current receipt identifiers without exposing checkpoint or ratchet
+  /// state. Eligibility is still recomputed by
+  /// [replaceEligibleCheckpointReceipt] immediately before any mutation.
+  Future<List<V3SessionReceiptRetentionCandidate>>
+      receiptRetentionCandidates() {
+    return _serialized(() async {
+      _ensureReady();
+      final checkpoints = _checkpointRepository;
+      if (checkpoints == null) {
+        throw StateError(
+          'Layergram v3 receipt retention is not configured',
+        );
+      }
+      final candidates = <V3SessionReceiptRetentionCandidate>[
+        for (final checkpoint in checkpoints.checkpoints(
+          authority: _checkpointAuthority,
+        ))
+          for (final receipt in checkpoint.receipts)
+            V3SessionReceiptRetentionCandidate(
+              sessionKey: checkpoint.sessionKey,
+              assemblyId: receipt.assemblyId,
+            ),
+      ]..sort((left, right) {
+          final bySession = left.sessionKey.compareTo(right.sessionKey);
+          return bySession != 0
+              ? bySession
+              : left.assemblyId.compareTo(right.assemblyId);
+        });
+      return List<V3SessionReceiptRetentionCandidate>.unmodifiable(
+        candidates,
       );
     });
   }
