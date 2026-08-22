@@ -15,6 +15,7 @@ import 'package:layergram/core/crypto/v3/application_transport_v3.dart';
 import 'package:layergram/core/crypto/v3/identity_v3_adapter.dart';
 import 'package:layergram/core/crypto/v3/key_schedule_v3.dart';
 import 'package:layergram/core/crypto/v3/lmf_v3.dart';
+import 'package:layergram/core/crypto/v3/lmf_v3_persistence.dart';
 import 'package:layergram/core/crypto/v3/local_identity_v3.dart';
 import 'package:layergram/core/crypto/v3/ml_kem_768.dart';
 import 'package:layergram/core/crypto/v3/sparse_pq_ratchet_v3.dart';
@@ -495,6 +496,160 @@ void main() {
     await bobRuntime.close();
   });
 
+  test('Normal mode never silently omits an established device', () async {
+    final aliceRuntime = await V3ApplicationSessionRuntime.open(
+      localIdentity: alice,
+      scopeToken: aliceScope,
+      sckaBackend: _InitialSckaBackend(),
+    );
+    final responders = <V3ApplicationSessionRuntime>[];
+    try {
+      for (var index = 0;
+          index <
+              V3ApplicationSessionRuntime.maxNormalDeviceTargetsPerMessage + 1;
+          index++) {
+        final responder = await V3ApplicationSessionRuntime.open(
+          localIdentity: bob,
+          scopeToken: 'bobdev${index.toString().padLeft(10, '0')}',
+          sckaBackend: _InitialSckaBackend(),
+        );
+        responders.add(responder);
+        final offer = await aliceRuntime.createOffer(
+          remoteIdentity: bob.publicIdentity,
+          mode: V3HandshakeMode.normal,
+        );
+        final reply = await responder.receiveOffer(
+          frames: offer.frames,
+          initiatorIdentity: alice.publicIdentity,
+          expectedMode: V3HandshakeMode.normal,
+        );
+        final confirmation = await aliceRuntime.receiveReply(
+          frames: reply.frames,
+          responderIdentity: bob.publicIdentity,
+        );
+        await responder.receiveConfirmation(
+          frames: confirmation.frames,
+          initiatorIdentity: alice.publicIdentity,
+        );
+      }
+
+      expect(
+        await aliceRuntime.sessionsForRemoteIdentity(bob.publicIdentity),
+        hasLength(
+          V3ApplicationSessionRuntime.maxNormalDeviceTargetsPerMessage + 1,
+        ),
+      );
+      await expectLater(
+        aliceRuntime.sendApplicationMessageToIdentity(
+          remoteIdentity: bob.publicIdentity,
+          expectedMode: V3HandshakeMode.normal,
+          text: 'must reach every established device',
+        ),
+        throwsA(isA<V3LmfPersistenceLimitException>()),
+      );
+      expect(await aliceRuntime.pendingMessageExports(), isEmpty);
+    } finally {
+      for (final responder in responders.reversed) {
+        await responder.close();
+      }
+      await aliceRuntime.close();
+    }
+  });
+
+  test('ACK capacity fails before an inbound session commit', () async {
+    final aliceRuntime = await V3ApplicationSessionRuntime.open(
+      localIdentity: alice,
+      scopeToken: aliceScope,
+      sckaBackend: _InitialSckaBackend(),
+    );
+    final bobRuntime = await V3ApplicationSessionRuntime.open(
+      localIdentity: bob,
+      scopeToken: bobScope,
+      sckaBackend: _InitialSckaBackend(),
+      maxAcknowledgementEntries: 1,
+    );
+    Uint8List? bobSessionId;
+    try {
+      final offer = await aliceRuntime.createOffer(
+        remoteIdentity: bob.publicIdentity,
+        mode: V3HandshakeMode.normal,
+      );
+      final reply = await bobRuntime.receiveOffer(
+        frames: offer.frames,
+        initiatorIdentity: alice.publicIdentity,
+        expectedMode: V3HandshakeMode.normal,
+      );
+      final confirmation = await aliceRuntime.receiveReply(
+        frames: reply.frames,
+        responderIdentity: bob.publicIdentity,
+      );
+      final bobBinding = await bobRuntime.receiveConfirmation(
+        frames: confirmation.frames,
+        initiatorIdentity: alice.publicIdentity,
+      );
+      bobSessionId = bobBinding.sessionIdBytes;
+
+      final first = await aliceRuntime.sendApplicationMessageToIdentity(
+        remoteIdentity: bob.publicIdentity,
+        expectedMode: V3HandshakeMode.normal,
+        text: 'first delivery',
+      );
+      V3ApplicationMessageInboundResult? firstDelivery;
+      for (final frame in first.frames) {
+        firstDelivery = await bobRuntime.receiveApplicationFrame(
+          frame: frame,
+          receivedAt: DateTime.utc(2026, 8, 20),
+        );
+      }
+      expect(firstDelivery?.status, V3ApplicationInboundStatus.delivered);
+      expect(await bobRuntime.pendingAcknowledgementFrames(), hasLength(1));
+      final afterFirst = await bobRuntime.snapshotForSession(bobSessionId);
+      final firstRevision = afterFirst.revision;
+      afterFirst.wipeSecrets();
+
+      final second = await aliceRuntime.sendApplicationMessageToIdentity(
+        remoteIdentity: bob.publicIdentity,
+        expectedMode: V3HandshakeMode.normal,
+        text: 'second delivery',
+      );
+      for (final frame in second.frames.take(second.frames.length - 1)) {
+        await bobRuntime.receiveApplicationFrame(
+          frame: frame,
+          receivedAt: DateTime.utc(2026, 8, 21),
+        );
+      }
+      await expectLater(
+        bobRuntime.receiveApplicationFrame(
+          frame: second.frames.last,
+          receivedAt: DateTime.utc(2026, 8, 21),
+        ),
+        throwsA(isA<V3LmfPersistenceLimitException>()),
+      );
+      final stillFirst = await bobRuntime.snapshotForSession(bobSessionId);
+      expect(stillFirst.revision, firstRevision);
+      stillFirst.wipeSecrets();
+
+      await bobRuntime.deleteAcknowledgementsOlderThan(
+        DateTime.utc(2026, 8, 21),
+      );
+      final recovered = await bobRuntime.receiveApplicationFrame(
+        frame: second.frames.last,
+        receivedAt: DateTime.utc(2026, 8, 21),
+      );
+      expect(recovered.status, V3ApplicationInboundStatus.delivered);
+      final afterRecovery = await bobRuntime.snapshotForSession(bobSessionId);
+      expect(afterRecovery.revision, firstRevision + 1);
+      afterRecovery.wipeSecrets();
+      expect(await bobRuntime.pendingAcknowledgementFrames(), hasLength(1));
+    } finally {
+      if (bobSessionId != null) {
+        bobSessionId.fillRange(0, bobSessionId.length, 0);
+      }
+      await aliceRuntime.close();
+      await bobRuntime.close();
+    }
+  });
+
   test('maximum-mode mismatch fails before a reply becomes exportable',
       () async {
     final aliceRuntime = await V3ApplicationSessionRuntime.open(
@@ -821,6 +976,8 @@ void main() {
       scopeToken: bobScope,
       sckaBackend: _InitialSckaBackend(),
     );
+    final aliceMessages = MessagesRepository();
+    V3ApplicationSessionRuntime? restoredAlice;
     try {
       final offer = await aliceRuntime.createOffer(
         remoteIdentity: bob.publicIdentity,
@@ -865,6 +1022,25 @@ void main() {
         frame: delivered!.acknowledgementFrame!,
         receivedAt: recordedAt.add(const Duration(seconds: 2)),
       );
+      expect(
+        (await aliceRuntime.reconcileMessageRepository(
+          messagesRepository: aliceMessages,
+          keyTag: 'retention-test',
+        ))
+            .insertedMessages,
+        1,
+      );
+      final projected = (await aliceMessages.getAllMessages()).single;
+      expect(
+        (await aliceRuntime.deleteProjectedMessage(
+          messagesRepository: aliceMessages,
+          messageRecordId: projected.id,
+          keyTag: 'retention-test',
+          deletedAt: recordedAt.add(const Duration(seconds: 3)),
+        ))
+            .removedMessages,
+        1,
+      );
 
       final early = await aliceRuntime.maintainRetainedState(
         now: recordedAt.add(const Duration(days: 100)),
@@ -873,6 +1049,7 @@ void main() {
       expect(early.collectedOutgoingEffects, 1);
       expect(early.examinedReceipts, 1);
       expect(early.retiredReceipts, 0);
+      expect(early.collectedDeletedApplicationRecords, 0);
 
       final mature = await aliceRuntime.maintainRetainedState(
         now: recordedAt.add(const Duration(days: 366)),
@@ -880,6 +1057,7 @@ void main() {
       expect(mature.compactedSessions, 1);
       expect(mature.examinedReceipts, 1);
       expect(mature.retiredReceipts, 1);
+      expect(mature.collectedDeletedApplicationRecords, 1);
       expect(await aliceRuntime.pendingMessageExports(), isEmpty);
 
       final idempotent = await aliceRuntime.maintainRetainedState(
@@ -887,7 +1065,22 @@ void main() {
       );
       expect(idempotent.examinedReceipts, 0);
       expect(idempotent.retiredReceipts, 0);
+      expect(idempotent.collectedDeletedApplicationRecords, 0);
+      await aliceRuntime.close();
+      restoredAlice = await V3ApplicationSessionRuntime.open(
+        localIdentity: alice,
+        scopeToken: aliceScope,
+        sckaBackend: _InitialSckaBackend(),
+      );
+      final afterRestart = await restoredAlice.reconcileMessageRepository(
+        messagesRepository: aliceMessages,
+        keyTag: 'retention-test',
+      );
+      expect(afterRestart.insertedMessages, 0);
+      expect(await aliceMessages.getAllMessages(), isEmpty);
     } finally {
+      aliceMessages.dispose();
+      await restoredAlice?.close();
       await aliceRuntime.close();
       await bobRuntime.close();
     }

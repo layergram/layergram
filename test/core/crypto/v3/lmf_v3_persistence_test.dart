@@ -305,6 +305,73 @@ void main() {
       );
     });
 
+    test(
+        'deferred continuations cannot permanently exhaust authenticated intake',
+        () async {
+      final store = _FaultStore();
+      final oldest = await _frames(
+        plaintext: _bytes(300, 0x22),
+        key: key,
+        epoch: 7,
+        messageStart: 0x81,
+      );
+      final newer = await _frames(
+        plaintext: _bytes(300, 0x42),
+        key: key,
+        epoch: 8,
+        messageStart: 0x91,
+      );
+      final current = await _frames(
+        plaintext: _bytes(300, 0x62),
+        key: key,
+        epoch: 9,
+        messageStart: 0xb1,
+      );
+      expect(oldest, hasLength(greaterThan(1)));
+      expect(
+        {
+          V3LmfFrameCodec.assemblyId(oldest.first),
+          V3LmfFrameCodec.assemblyId(newer.first),
+          V3LmfFrameCodec.assemblyId(current.first),
+        },
+        hasLength(3),
+      );
+      final inbox = V3LmfDurableInbox(
+        store: store,
+        maxPersistedFrames: 2,
+      );
+      await inbox.restore(keyResolver: (_) => null);
+      await inbox.persistDeferred(
+        frame: oldest.last,
+        receivedAt: DateTime.fromMillisecondsSinceEpoch(1, isUtc: true),
+      );
+      await inbox.persistDeferred(
+        frame: newer.last,
+        receivedAt: DateTime.fromMillisecondsSinceEpoch(2, isUtc: true),
+      );
+      await inbox.persistDeferred(
+        frame: current.last,
+        receivedAt: DateTime.fromMillisecondsSinceEpoch(3, isUtc: true),
+      );
+      expect(inbox.persistedFrameCount, 2);
+
+      await inbox.preflightAuthenticatedReceive(current.first);
+      final leading = await inbox.receive(
+        frame: current.first,
+        secretKey: key,
+      );
+      expect(leading.status, V3LmfInboxStatus.accepted);
+      final resumed = await inbox.resumeDeferred(
+        onlyAssemblyId: V3LmfFrameCodec.assemblyId(current.first),
+        keyResolver: (_) => key,
+      );
+      expect(resumed.deliveries, hasLength(1));
+      expect(
+        resumed.deliveries.single.plaintext,
+        orderedEquals(_bytes(300, 0x62)),
+      );
+    });
+
     test('concurrent receives serialize and close waits for queued persistence',
         () async {
       final store = _FaultStore();
@@ -336,10 +403,11 @@ Future<List<V3LmfFrame>> _frames({
   required SecretKey key,
   int nonceStart = 0x50,
   int epoch = 7,
+  int messageStart = 0x81,
 }) {
   if (plaintext.length <= V3LmfFrameCodec.fragmentPlaintextBytes) {
     return V3LmfAead.sealSingle(
-      metadata: _metadata(epoch: epoch),
+      metadata: _metadata(epoch: epoch, messageStart: messageStart),
       plaintext: plaintext,
       secretKey: key,
       nonce: _bytes(V3LmfFrameCodec.nonceBytes, nonceStart),
@@ -347,7 +415,7 @@ Future<List<V3LmfFrame>> _frames({
     ).then((frame) => <V3LmfFrame>[frame]);
   }
   return V3LmfAead.sealFragmented(
-    metadata: _metadata(epoch: epoch),
+    metadata: _metadata(epoch: epoch, messageStart: messageStart),
     plaintext: plaintext,
     secretKey: key,
     nonceForFragment: (index) =>
@@ -356,11 +424,15 @@ Future<List<V3LmfFrame>> _frames({
   );
 }
 
-V3LmfMessageMetadata _metadata({int epoch = 7}) => V3LmfMessageMetadata(
+V3LmfMessageMetadata _metadata({
+  int epoch = 7,
+  int messageStart = 0x81,
+}) =>
+    V3LmfMessageMetadata(
       kind: V3LmfFrameKind.application,
       senderBinding: _bytes(V3LmfFrameCodec.routingBindingBytes, 0x01),
       recipientBinding: _bytes(V3LmfFrameCodec.routingBindingBytes, 0x41),
-      messageId: _bytes(V3LmfFrameCodec.messageIdBytes, 0x81),
+      messageId: _bytes(V3LmfFrameCodec.messageIdBytes, messageStart),
       sessionId: _bytes(V3LmfFrameCodec.sessionIdBytes, 0xa1),
       epoch: epoch,
       messageCounter: 9,

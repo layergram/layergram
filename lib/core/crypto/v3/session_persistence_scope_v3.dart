@@ -161,6 +161,10 @@ final class V3SessionPersistenceScope {
     required V3SckaBackend sckaBackend,
     V3SessionSnapshotValidator? snapshotValidator,
     int maxSessions = 4096,
+    int maxInboxPersistedFrames = 256,
+    int maxInboxPersistedFrameBytes = 128 * 1024,
+    int maxAcknowledgementEntries = 4096,
+    int maxAcknowledgementTotalBytes = 4 * 1024 * 1024,
   }) async {
     if (!_isCanonicalScopeToken(scopeToken)) {
       throw ArgumentError.value(
@@ -195,14 +199,22 @@ final class V3SessionPersistenceScope {
       );
       final store = V3LmfAuxRecordStore(repository);
       final initialHandoffAuthority = V3InitialSessionHandoffAuthority();
-      final inbox = V3LmfDurableInbox(store: store);
+      final inbox = V3LmfDurableInbox(
+        store: store,
+        maxPersistedFrames: maxInboxPersistedFrames,
+        maxPersistedFrameBytes: maxInboxPersistedFrameBytes,
+      );
       final handshakeInbox = V3HandshakeFrameInbox(store: store);
       final handshakes = V3HandshakePersistenceController(
         repository: V3HandshakePendingRepository(store: store),
         initialHandoffAuthority: initialHandoffAuthority,
       );
       final sendGroups = V3ApplicationSendGroupJournal(store: store);
-      final acknowledgements = V3AcknowledgementOutbox(store: store);
+      final acknowledgements = V3AcknowledgementOutbox(
+        store: store,
+        maxEntries: maxAcknowledgementEntries,
+        maxTotalBytes: maxAcknowledgementTotalBytes,
+      );
       final presentation = V3ApplicationPresentationJournal(store: store);
       final controller = V3SessionCommitController(
         journal: V3LmfAtomicCommitJournal(store: store, inbox: inbox),
@@ -261,6 +273,10 @@ final class V3SessionPersistenceScope {
     required SecretKey auxStorageKey,
     V3SessionSnapshotValidator? snapshotValidator,
     int maxSessions = 4096,
+    int maxInboxPersistedFrames = 256,
+    int maxInboxPersistedFrameBytes = 128 * 1024,
+    int maxAcknowledgementEntries = 4096,
+    int maxAcknowledgementTotalBytes = 4 * 1024 * 1024,
   }) {
     return open(
       scopeToken: scopeToken,
@@ -268,6 +284,10 @@ final class V3SessionPersistenceScope {
       sckaBackend: V3SckaCandidateFfiBackend.openPackaged(),
       snapshotValidator: snapshotValidator,
       maxSessions: maxSessions,
+      maxInboxPersistedFrames: maxInboxPersistedFrames,
+      maxInboxPersistedFrameBytes: maxInboxPersistedFrameBytes,
+      maxAcknowledgementEntries: maxAcknowledgementEntries,
+      maxAcknowledgementTotalBytes: maxAcknowledgementTotalBytes,
     );
   }
 
@@ -410,6 +430,9 @@ final class V3SessionPersistenceScope {
           acknowledgement: replay.acknowledgement,
           delivery: null,
         );
+      }
+      if (frame.fragmentIndex == 0) {
+        await _inbox.preflightAuthenticatedReceive(frame);
       }
       final key = await _ratchetKeyResolver.resolve(
         frame,
@@ -677,6 +700,40 @@ final class V3SessionPersistenceScope {
       return _presentation.markDeleted(
         messageRecordId: messageRecordId,
         deletedAt: deletedAt,
+      );
+    });
+  }
+
+  Future<int> collectDeletedApplicationRecords() {
+    return _serialized(() async {
+      _ensureReady();
+      final states = await _presentation.states();
+      var deletedRecords = 0;
+      final deletedMessageIds = states.values
+          .where((state) => state.isDeleted)
+          .map((state) => state.messageRecordId)
+          .toList(growable: false)
+        ..sort();
+      for (final messageRecordId in deletedMessageIds) {
+        final result = await _controller.collectDeletedApplicationMessage(
+          messageRecordId,
+        );
+        deletedRecords += result.deletedRecords;
+        if (result.canForgetPresentationState) {
+          await _presentation.forgetDeleted(messageRecordId);
+        }
+      }
+      await _controller.collectObsoleteMaterializedDeletionProofs();
+      return deletedRecords;
+    });
+  }
+
+  /// Checks exact ACK capacity before the receive commit advances TR3/AR3.
+  Future<void> preflightAcknowledgementFor(V3LmfFrame targetFrame) {
+    return _serialized(() async {
+      _ensureReady();
+      await _acknowledgements.preflightGetOrCreate(
+        V3LmfFrameCodec.assemblyId(targetFrame),
       );
     });
   }

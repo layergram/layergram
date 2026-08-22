@@ -64,6 +64,40 @@ void main() {
     );
     await restored.close();
   });
+
+  test('preflight uses the exact ACK footprint before state may advance',
+      () async {
+    final store = _FaultStore();
+    final outbox = V3AcknowledgementOutbox(
+      store: store,
+      maxEntries: 1,
+      maxTotalBytes: V3AcknowledgementOutbox.acknowledgementFrameBytes,
+    );
+    await outbox.restore();
+    final firstTarget = _id(32, 0x21);
+    await outbox.preflightGetOrCreate(firstTarget);
+    await outbox.getOrCreate(
+      targetAssemblyId: firstTarget,
+      builder: _ackFrame,
+    );
+    await outbox.preflightGetOrCreate(firstTarget);
+    await expectLater(
+      outbox.preflightGetOrCreate(_id(32, 0x41)),
+      throwsA(isA<V3LmfPersistenceLimitException>()),
+    );
+    await outbox.close();
+
+    final byteLimited = V3AcknowledgementOutbox(
+      store: _FaultStore(),
+      maxTotalBytes: V3AcknowledgementOutbox.acknowledgementFrameBytes - 1,
+    );
+    await byteLimited.restore();
+    await expectLater(
+      byteLimited.preflightGetOrCreate(firstTarget),
+      throwsA(isA<V3LmfPersistenceLimitException>()),
+    );
+    await byteLimited.close();
+  });
 }
 
 Future<V3LmfFrame> _ackFrame(Uint8List messageId) async {

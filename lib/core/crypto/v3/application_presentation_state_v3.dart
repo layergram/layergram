@@ -192,6 +192,27 @@ final class V3ApplicationPresentationJournal {
     });
   }
 
+  Future<bool> forgetDeleted(String messageRecordId) {
+    return _serialized(() async {
+      _ensureReady();
+      final current = _states[messageRecordId];
+      if (current == null) return false;
+      if (!current.isDeleted) {
+        throw const V3LmfPersistenceConflictException(
+          'active v3 presentation state cannot be forgotten',
+        );
+      }
+      try {
+        await _store.delete(current.storageId);
+      } catch (_) {
+        _writeRecoveryRequired = true;
+        rethrow;
+      }
+      _states.remove(messageRecordId);
+      return true;
+    });
+  }
+
   Future<void> close() {
     return _serialized(() async {
       if (_closed) return;

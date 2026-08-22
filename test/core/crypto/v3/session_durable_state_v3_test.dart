@@ -66,6 +66,97 @@ void main() {
       _wipe(divergent);
     });
 
+    test('deletes only an exact unreferenced AR3 binding', () async {
+      final store = _Store();
+      final bytes = await _applicationRecord(messageStart: 0x39);
+      final materializer = V3CommittedRecordMaterializer(store: store);
+      await materializer.restore();
+      final record = await materializer.materialize(bytes);
+      await expectLater(
+        materializer.deleteExact(
+          stableRecordId: record.stableRecordId,
+          assemblyId: record.assemblyId,
+          sessionKey: record.sessionKey,
+          recordDigest: base64UrlEncode(_bytes(32, 0x91)).replaceAll('=', ''),
+        ),
+        throwsA(isA<V3LmfPersistenceConflictException>()),
+      );
+      expect(materializer.recordCount, 1);
+      expect(
+        await materializer.deleteExact(
+          stableRecordId: record.stableRecordId,
+          assemblyId: record.assemblyId,
+          sessionKey: record.sessionKey,
+          recordDigest: record.recordDigest,
+        ),
+        isTrue,
+      );
+      expect(materializer.recordCount, 0);
+      expect(store.records, isEmpty);
+      await materializer.close();
+
+      final restored = V3CommittedRecordMaterializer(store: store);
+      expect((await restored.restore()).records, isEmpty);
+      await restored.close();
+      _wipe(bytes);
+    });
+
+    test('restores and retires an exact AR3 deletion proof', () async {
+      final store = _Store();
+      final bytes = await _applicationRecord(messageStart: 0x3a);
+      final retirementStateDigest =
+          base64UrlEncode(_bytes(32, 0xa3)).replaceAll('=', '');
+      final materializer = V3CommittedRecordMaterializer(store: store);
+      await materializer.restore();
+      final record = await materializer.materialize(bytes);
+      expect(
+        await materializer.deleteExact(
+          stableRecordId: record.stableRecordId,
+          assemblyId: record.assemblyId,
+          sessionKey: record.sessionKey,
+          recordDigest: record.recordDigest,
+          retirementStateDigest: retirementStateDigest,
+          deletedAt: DateTime.utc(2026, 8, 16),
+        ),
+        isTrue,
+      );
+      expect(materializer.recordCount, 0);
+      expect(materializer.deletionCount, 1);
+      expect(store.records, hasLength(1));
+      await materializer.close();
+
+      final restored = V3CommittedRecordMaterializer(store: store);
+      expect((await restored.restore()).records, isEmpty);
+      final deletion = restored.deletions().single;
+      expect(deletion.stableRecordId, record.stableRecordId);
+      expect(deletion.retirementStateDigest, retirementStateDigest);
+      await expectLater(
+        restored.deleteDeletionExact(
+          stableRecordId: deletion.stableRecordId,
+          assemblyId: deletion.assemblyId,
+          sessionKey: deletion.sessionKey,
+          recordDigest: deletion.recordDigest,
+          retirementStateDigest:
+              base64UrlEncode(_bytes(32, 0xb3)).replaceAll('=', ''),
+        ),
+        throwsA(isA<V3LmfPersistenceConflictException>()),
+      );
+      expect(
+        await restored.deleteDeletionExact(
+          stableRecordId: deletion.stableRecordId,
+          assemblyId: deletion.assemblyId,
+          sessionKey: deletion.sessionKey,
+          recordDigest: deletion.recordDigest,
+          retirementStateDigest: deletion.retirementStateDigest,
+        ),
+        isTrue,
+      );
+      expect(restored.deletionCount, 0);
+      expect(store.records, isEmpty);
+      await restored.close();
+      _wipe(bytes);
+    });
+
     test('recovers an ambiguous durable write without writing twice', () async {
       final store = _Store()..durableThenThrow = true;
       final bytes = await _applicationRecord(messageStart: 0x41);

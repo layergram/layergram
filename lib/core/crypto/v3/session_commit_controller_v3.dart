@@ -16,6 +16,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'application_payload_v3.dart';
 import 'committed_record_materializer_v3.dart';
 import 'committed_record_v3.dart';
 import 'ec_double_ratchet_v3.dart';
@@ -170,6 +171,20 @@ final class V3SessionReceiptRetentionCandidate {
 
   final String sessionKey;
   final String assemblyId;
+}
+
+final class V3DeletedApplicationCollectionResult {
+  const V3DeletedApplicationCollectionResult({
+    required this.matchingRecords,
+    required this.deletedRecords,
+    required this.referencedRecords,
+  });
+
+  final int matchingRecords;
+  final int deletedRecords;
+  final int referencedRecords;
+
+  bool get canForgetPresentationState => referencedRecords == 0;
 }
 
 /// Inactive single-authority coordinator for protocol-v3 session commits.
@@ -847,6 +862,137 @@ final class V3SessionCommitController {
         }
         rethrow;
       }
+    });
+  }
+
+  /// Deletes only user-tombstoned AP3 material that no durable ratchet,
+  /// replay, send, checkpoint, or retirement proof still references.
+  Future<V3DeletedApplicationCollectionResult> collectDeletedApplicationMessage(
+      String messageRecordId) {
+    return _serialized(() async {
+      _ensureReady();
+      final materializer = _committedRecordMaterializer;
+      final checkpoints = _checkpointRepository;
+      if (materializer == null || checkpoints == null) {
+        throw StateError(
+            'Layergram v3 application collection is not configured');
+      }
+      _validateApplicationMessageRecordId(messageRecordId);
+      final matching = <V3MaterializedCommittedRecord>[];
+      for (final candidate in materializer.records(
+        authority: _materializerAuthority,
+      )) {
+        final record = candidate.decodeRecord();
+        Uint8List? content;
+        try {
+          if (record.kind != V3CommittedRecordKind.application) continue;
+          content = record.content;
+          V3ApplicationPayload payload;
+          try {
+            payload = V3ApplicationPayloadCodec.decode(content);
+          } on FormatException {
+            continue;
+          } on ArgumentError {
+            continue;
+          }
+          if ('${V3ApplicationPayloadCodec.messageRecordIdPrefix}'
+                  '${payload.stableMessageId}' ==
+              messageRecordId) {
+            matching.add(candidate);
+          }
+        } finally {
+          if (content != null) _wipe(content);
+          record.wipeContent();
+        }
+      }
+
+      var deleted = 0;
+      var referenced = 0;
+      for (final candidate in matching) {
+        final authorization =
+            _materializedRecordDeletionAuthorization(candidate);
+        if (authorization.blocked) {
+          referenced++;
+          continue;
+        }
+        if (await materializer.deleteExact(
+          stableRecordId: candidate.stableRecordId,
+          assemblyId: candidate.assemblyId,
+          sessionKey: candidate.sessionKey,
+          recordDigest: candidate.recordDigest,
+          retirementStateDigest: authorization.retirementStateDigest,
+          authority: _materializerAuthority,
+        )) {
+          deleted++;
+        }
+      }
+      return V3DeletedApplicationCollectionResult(
+        matchingRecords: matching.length,
+        deletedRecords: deleted,
+        referencedRecords: referenced,
+      );
+    });
+  }
+
+  /// Removes deletion proofs after no current checkpoint needs them to validate
+  /// a finalized retirement transition.
+  Future<int> collectObsoleteMaterializedDeletionProofs() {
+    return _serialized(() async {
+      _ensureReady();
+      final materializer = _committedRecordMaterializer;
+      final checkpoints = _checkpointRepository;
+      if (materializer == null || checkpoints == null) {
+        throw StateError(
+          'Layergram v3 application collection is not configured',
+        );
+      }
+      final retained = <String, V3CheckpointReceipt>{};
+      for (final checkpoint in checkpoints.checkpoints(
+        authority: _checkpointAuthority,
+      )) {
+        final transition = checkpoint.retirementTransition;
+        if (transition == null || !transition.isFinalized) continue;
+        final receipt = transition.retiredReceipt;
+        final previous = retained[receipt.stableRecordId];
+        if (previous != null &&
+            (previous.assemblyId != receipt.assemblyId ||
+                previous.sessionKey != receipt.sessionKey ||
+                previous.stateDigest != receipt.stateDigest)) {
+          throw const V3LmfPersistenceConflictException(
+            'v3 retained deletion proof authorization diverged',
+          );
+        }
+        retained[receipt.stableRecordId] = receipt;
+      }
+
+      var deleted = 0;
+      final deletions = materializer.deletions(
+        authority: _materializerAuthority,
+      );
+      for (final deletion in deletions) {
+        final receipt = retained[deletion.stableRecordId];
+        if (receipt != null) {
+          if (deletion.assemblyId != receipt.assemblyId ||
+              deletion.sessionKey != receipt.sessionKey ||
+              deletion.retirementStateDigest != receipt.stateDigest) {
+            throw const V3LmfPersistenceConflictException(
+              'v3 retained deletion proof differs from its checkpoint',
+            );
+          }
+          continue;
+        }
+        if (await materializer.deleteDeletionExact(
+          stableRecordId: deletion.stableRecordId,
+          assemblyId: deletion.assemblyId,
+          sessionKey: deletion.sessionKey,
+          recordDigest: deletion.recordDigest,
+          retirementStateDigest: deletion.retirementStateDigest,
+          authority: _materializerAuthority,
+        )) {
+          deleted++;
+        }
+      }
+      return deleted;
     });
   }
 
@@ -2192,6 +2338,84 @@ final class V3SessionCommitController {
     }
   }
 
+  ({bool blocked, String? retirementStateDigest})
+      _materializedRecordDeletionAuthorization(
+    V3MaterializedCommittedRecord materialized,
+  ) {
+    final checkpoints = _checkpointRepository!;
+    String? retirementStateDigest;
+    for (final checkpoint in checkpoints.checkpoints(
+      authority: _checkpointAuthority,
+    )) {
+      if (checkpoint.receipts.any(
+        (receipt) => receipt.stableRecordId == materialized.stableRecordId,
+      )) {
+        return (blocked: true, retirementStateDigest: null);
+      }
+      final transition = checkpoint.retirementTransition;
+      if (transition?.retiredReceipt.stableRecordId ==
+          materialized.stableRecordId) {
+        if (!transition!.isFinalized) {
+          return (blocked: true, retirementStateDigest: null);
+        }
+        final candidate = transition.retiredReceipt.stateDigest;
+        if (retirementStateDigest != null &&
+            retirementStateDigest != candidate) {
+          throw const V3LmfPersistenceConflictException(
+            'v3 materialized-record retirement authorization diverged',
+          );
+        }
+        retirementStateDigest = candidate;
+      }
+    }
+    if (_effectRevisions.containsKey(materialized.assemblyId) ||
+        _sendEffects.containsKey(materialized.assemblyId) ||
+        _journal.effectForAssembly(
+              materialized.assemblyId,
+              authority: _authority,
+            ) !=
+            null ||
+        _journal.replayWindowBindingForAssembly(
+              materialized.assemblyId,
+              authority: _authority,
+            ) !=
+            null) {
+      return (blocked: true, retirementStateDigest: null);
+    }
+    final sendJournal = _sendJournal;
+    if (sendJournal != null &&
+        (sendJournal.effectForAssembly(
+                  materialized.assemblyId,
+                  authority: _sendAuthority,
+                ) !=
+                null ||
+            sendJournal.completionBindingForAssembly(
+                  materialized.assemblyId,
+                  authority: _sendAuthority,
+                ) !=
+                null ||
+            _outbox!.entry(
+                  materialized.assemblyId,
+                  authority: _outboxAuthority,
+                ) !=
+                null)) {
+      return (blocked: true, retirementStateDigest: null);
+    }
+    final retirement = _retirementJournal;
+    if (retirement != null &&
+        retirement.plans(authority: _retirementAuthority).any(
+              (plan) =>
+                  plan.stableRecordId == materialized.stableRecordId ||
+                  plan.assemblyId == materialized.assemblyId,
+            )) {
+      return (blocked: true, retirementStateDigest: null);
+    }
+    return (
+      blocked: false,
+      retirementStateDigest: retirementStateDigest,
+    );
+  }
+
   _RetirementProof _retirementProofForReceipt(
     V3CheckpointReceipt receipt,
   ) {
@@ -2722,9 +2946,21 @@ final class V3SessionCommitController {
         receipt.stableRecordId,
         authority: _materializerAuthority,
       );
-      if (materialized == null ||
-          materialized.assemblyId != receipt.assemblyId ||
-          materialized.sessionKey != receipt.sessionKey ||
+      final materializedMatches = materialized != null &&
+          materialized.assemblyId == receipt.assemblyId &&
+          materialized.sessionKey == receipt.sessionKey;
+      final deletion = _committedRecordMaterializer.deletionForStableId(
+        receipt.stableRecordId,
+        authority: _materializerAuthority,
+      );
+      final finalizedDeletionMatches = retiredReceipt != null &&
+          checkpoint.retirementTransition!.isFinalized &&
+          receipt.assemblyId == retiredReceipt.assemblyId &&
+          deletion != null &&
+          deletion.assemblyId == receipt.assemblyId &&
+          deletion.sessionKey == receipt.sessionKey &&
+          deletion.retirementStateDigest == receipt.stateDigest;
+      if ((!materializedMatches && !finalizedDeletionMatches) ||
           receipt.sessionKey != checkpoint.sessionKey ||
           receipt.ratchetRevision > checkpoint.revision) {
         throw const V3LmfPersistenceConflictException(
@@ -3270,6 +3506,32 @@ String _sessionKey(Uint8List sessionId) {
     throw ArgumentError.value(sessionId, 'sessionId');
   }
   return base64UrlEncode(sessionId).replaceAll('=', '');
+}
+
+void _validateApplicationMessageRecordId(String value) {
+  if (!value.startsWith(V3ApplicationPayloadCodec.messageRecordIdPrefix)) {
+    throw const FormatException('Invalid Layergram v3 application record ID');
+  }
+  final armored = value.substring(
+    V3ApplicationPayloadCodec.messageRecordIdPrefix.length,
+  );
+  Uint8List? decoded;
+  try {
+    decoded = Uint8List.fromList(
+      base64Url.decode(base64Url.normalize(armored)),
+    );
+    if (decoded.length != V3ApplicationPayloadCodec.messageIdBytes ||
+        _isAllZero(decoded) ||
+        base64UrlEncode(decoded).replaceAll('=', '') != armored) {
+      throw const FormatException(
+        'Invalid Layergram v3 application record ID',
+      );
+    }
+  } on FormatException {
+    throw const FormatException('Invalid Layergram v3 application record ID');
+  } finally {
+    if (decoded != null) _wipe(decoded);
+  }
 }
 
 bool _snapshotBytesEqual(

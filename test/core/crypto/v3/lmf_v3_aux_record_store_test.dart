@@ -723,6 +723,63 @@ void main() {
       _wipe(secondPlaintext);
     }
   });
+
+  test('fragment-zero capacity is reserved before ratchet candidate work',
+      () async {
+    final backend = _ScopeDispatchSckaBackend();
+    final firstPair = await _scopeDispatchPairedSnapshots();
+    final secondPair = await _scopeDispatchPairedSnapshots(sessionStart: 0x41);
+    final firstPlaintext = _bytes(300, 0x25);
+    final secondPlaintext = _bytes(300, 0x65);
+    V3SessionPersistenceScope? scope;
+    try {
+      final firstFrames = await _scopeDispatchFrames(
+        sender: firstPair.alice,
+        backend: backend,
+        plaintext: firstPlaintext,
+      );
+      final secondFrames = await _scopeDispatchFrames(
+        sender: secondPair.alice,
+        backend: backend,
+        plaintext: secondPlaintext,
+      );
+      scope = await V3SessionPersistenceScope.open(
+        scopeToken: 'owned-preflight1',
+        auxStorageKey: auxiliaryKey,
+        sckaBackend: backend,
+        maxInboxPersistedFrames: 1,
+      );
+      await scope.restore(
+        checkpoints: <V3TripleRatchetState>[
+          firstPair.bob,
+          secondPair.bob,
+        ],
+      );
+      await scope.receiveFrame(
+        frame: firstFrames.first,
+        nowUnixSeconds: 7000,
+      );
+      expect(backend.receiveCandidateCalls, 1);
+
+      await expectLater(
+        scope.receiveFrame(
+          frame: secondFrames.first,
+          nowUnixSeconds: 7000,
+        ),
+        throwsA(isA<V3LmfPersistenceLimitException>()),
+      );
+      expect(backend.receiveCandidateCalls, 1);
+      expect(scope.pendingReceiveCandidateCount, 1);
+    } finally {
+      await scope?.close();
+      firstPair.alice.wipeSecrets();
+      firstPair.bob.wipeSecrets();
+      secondPair.alice.wipeSecrets();
+      secondPair.bob.wipeSecrets();
+      _wipe(firstPlaintext);
+      _wipe(secondPlaintext);
+    }
+  });
 }
 
 final class _ScopeSckaBackend implements V3SckaBackend {
@@ -787,6 +844,8 @@ final class _ScopeSckaBackend implements V3SckaBackend {
 }
 
 final class _ScopeDispatchSckaBackend implements V3SckaBackend {
+  int receiveCandidateCalls = 0;
+
   @override
   String get implementationId => 'layergram-test-scope-dispatch-scka/1';
 
@@ -875,6 +934,7 @@ final class _ScopeDispatchSckaBackend implements V3SckaBackend {
     required int expectedStateRevision,
     required V3SckaMessage message,
   }) async {
+    receiveCandidateCalls++;
     final currentEpoch = authenticatedState[17];
     final payload = message.nativePayload;
     if (payload.length != 1 || payload.single < currentEpoch) {

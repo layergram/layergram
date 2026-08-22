@@ -60,6 +60,26 @@ final class V3MaterializedCommittedRecord {
   void _close() => _wipe(_encodedRecord);
 }
 
+final class V3MaterializedRecordDeletion {
+  const V3MaterializedRecordDeletion._({
+    required this.storageId,
+    required this.stableRecordId,
+    required this.assemblyId,
+    required this.sessionKey,
+    required this.recordDigest,
+    required this.retirementStateDigest,
+    required this.deletedAt,
+  });
+
+  final String storageId;
+  final String stableRecordId;
+  final String assemblyId;
+  final String sessionKey;
+  final String recordDigest;
+  final String retirementStateDigest;
+  final DateTime deletedAt;
+}
+
 final class V3CommittedRecordMaterializerRestoreResult {
   const V3CommittedRecordMaterializerRestoreResult({
     required this.records,
@@ -85,25 +105,33 @@ final class V3CommittedRecordMaterializer {
   V3CommittedRecordMaterializer({
     required V3LmfRecordStore store,
     this.maxRecords = 4096,
+    this.maxDeletedRecords = 4096,
     this.maxTotalRecordBytes = 16 * 1024 * 1024,
     this.maxStoredRecords = 8192,
   }) : _store = store {
-    if (maxRecords <= 0 || maxTotalRecordBytes <= 0 || maxStoredRecords <= 0) {
+    if (maxRecords <= 0 ||
+        maxDeletedRecords <= 0 ||
+        maxTotalRecordBytes <= 0 ||
+        maxStoredRecords <= 0) {
       throw ArgumentError('Layergram v3 materializer limits are invalid');
     }
   }
 
   static const String recordKind = 'v3_application_record_v1';
+  static const String deletionRecordKind = 'v3_application_record_deleted_v1';
   static const int _recordVersion = 1;
   static const int _maxTimestampMillis = 253402300799999;
 
   final V3LmfRecordStore _store;
   final int maxRecords;
+  final int maxDeletedRecords;
   final int maxTotalRecordBytes;
   final int maxStoredRecords;
 
   final Map<String, V3MaterializedCommittedRecord> _records =
       <String, V3MaterializedCommittedRecord>{};
+  final Map<String, V3MaterializedRecordDeletion> _deletions =
+      <String, V3MaterializedRecordDeletion>{};
   Future<void> _operationTail = Future<void>.value();
   bool _restored = false;
   bool _closed = false;
@@ -112,6 +140,7 @@ final class V3CommittedRecordMaterializer {
   int _totalRecordBytes = 0;
 
   int get recordCount => _records.length;
+  int get deletionCount => _deletions.length;
   int get totalRecordBytes => _totalRecordBytes;
   bool get requiresRecovery => _writeRecoveryRequired;
 
@@ -123,11 +152,26 @@ final class V3CommittedRecordMaterializer {
     return _records[stableRecordId];
   }
 
+  V3MaterializedRecordDeletion? deletionForStableId(
+    String stableRecordId, {
+    V3CommittedRecordMaterializerAuthority? authority,
+  }) {
+    _ensureAuthority(authority);
+    return _deletions[stableRecordId];
+  }
+
   List<V3MaterializedCommittedRecord> records({
     V3CommittedRecordMaterializerAuthority? authority,
   }) {
     _ensureAuthority(authority);
     return List<V3MaterializedCommittedRecord>.unmodifiable(_records.values);
+  }
+
+  List<V3MaterializedRecordDeletion> deletions({
+    V3CommittedRecordMaterializerAuthority? authority,
+  }) {
+    _ensureAuthority(authority);
+    return List<V3MaterializedRecordDeletion>.unmodifiable(_deletions.values);
   }
 
   Future<V3CommittedRecordMaterializerAuthority>
@@ -161,18 +205,60 @@ final class V3CommittedRecordMaterializer {
       }
       final storedRecords = await _store.readAll();
       final relevant = storedRecords
-          .where((record) => record.payload['kind'] == recordKind)
+          .where(
+            (record) =>
+                record.payload['kind'] == recordKind ||
+                record.payload['kind'] == deletionRecordKind,
+          )
           .toList(growable: false);
       if (relevant.length > maxStoredRecords) {
         throw const V3LmfPersistenceLimitException(
           'physical v3 materialized-record limit exceeded',
         );
       }
+      var removed = 0;
+      final deletionGroups = <String, List<V3MaterializedRecordDeletion>>{};
+      for (final stored in relevant.where(
+        (record) => record.payload['kind'] == deletionRecordKind,
+      )) {
+        final deletion = _decodeDeletion(stored);
+        deletionGroups
+            .putIfAbsent(
+              deletion.stableRecordId,
+              () => <V3MaterializedRecordDeletion>[],
+            )
+            .add(deletion);
+      }
+      if (deletionGroups.length > maxDeletedRecords) {
+        throw const V3LmfPersistenceLimitException(
+          'v3 materialized-record deletion limit exceeded',
+        );
+      }
+      for (final candidates in deletionGroups.values) {
+        candidates.sort((left, right) {
+          final time = left.deletedAt.compareTo(right.deletedAt);
+          if (time != 0) return time;
+          return left.storageId.compareTo(right.storageId);
+        });
+        final canonical = candidates.first;
+        for (final duplicate in candidates.skip(1)) {
+          if (!_sameDeletion(canonical, duplicate)) {
+            throw const V3LmfPersistenceConflictException(
+              'divergent v3 deletion records share a stable ID',
+            );
+          }
+          await _deleteIgnoringFailure(duplicate.storageId);
+          removed++;
+        }
+        _deletions[canonical.stableRecordId] = canonical;
+      }
 
       final decoded = <V3MaterializedCommittedRecord>[];
       final grouped = <String, List<V3MaterializedCommittedRecord>>{};
       try {
-        for (final stored in relevant) {
+        for (final stored in relevant.where(
+          (record) => record.payload['kind'] == recordKind,
+        )) {
           final record = _decode(stored);
           decoded.add(record);
           grouped
@@ -188,7 +274,6 @@ final class V3CommittedRecordMaterializer {
           );
         }
 
-        var removed = 0;
         var totalBytes = 0;
         final selected = <String, V3MaterializedCommittedRecord>{};
         for (final candidates in grouped.values) {
@@ -258,6 +343,11 @@ final class V3CommittedRecordMaterializer {
           }
           return existing;
         }
+        if (_deletions.containsKey(stableRecordId)) {
+          throw const V3LmfPersistenceConflictException(
+            'deleted v3 application material cannot be rematerialized',
+          );
+        }
         if (_records.length >= maxRecords ||
             _totalRecordBytes + localBytes.length > maxTotalRecordBytes) {
           throw const V3LmfPersistenceLimitException(
@@ -307,6 +397,125 @@ final class V3CommittedRecordMaterializer {
     });
   }
 
+  Future<bool> deleteExact({
+    required String stableRecordId,
+    required String assemblyId,
+    required String sessionKey,
+    required String recordDigest,
+    String? retirementStateDigest,
+    DateTime? deletedAt,
+    V3CommittedRecordMaterializerAuthority? authority,
+  }) {
+    return _serialized(() async {
+      _ensureAuthority(authority);
+      _ensureReady();
+      if (retirementStateDigest != null &&
+          !_isCanonicalDigest(retirementStateDigest)) {
+        throw const FormatException(
+          'Invalid v3 materialized-record retirement digest',
+        );
+      }
+      var deletion = _deletions[stableRecordId];
+      if (deletion != null &&
+          (deletion.assemblyId != assemblyId ||
+              deletion.sessionKey != sessionKey ||
+              deletion.recordDigest != recordDigest ||
+              (retirementStateDigest != null &&
+                  deletion.retirementStateDigest != retirementStateDigest))) {
+        throw const V3LmfPersistenceConflictException(
+          'v3 materialized-record deletion proof diverged',
+        );
+      }
+      final existing = _records[stableRecordId];
+      if (existing == null) return false;
+      if (existing.assemblyId != assemblyId ||
+          existing.sessionKey != sessionKey ||
+          existing.recordDigest != recordDigest) {
+        throw const V3LmfPersistenceConflictException(
+          'v3 materialized-record deletion binding diverged',
+        );
+      }
+      if (deletion == null && retirementStateDigest != null) {
+        if (_deletions.length >= maxDeletedRecords) {
+          throw const V3LmfPersistenceLimitException(
+            'v3 materialized-record deletion capacity exceeded',
+          );
+        }
+        final timestamp =
+            _validatedTimestamp(deletedAt ?? DateTime.now().toUtc());
+        final payload = <String, dynamic>{
+          'kind': deletionRecordKind,
+          'version': _recordVersion,
+          'stableRecordId': stableRecordId,
+          'assemblyId': assemblyId,
+          'sessionId': sessionKey,
+          'recordDigest': recordDigest,
+          'retirementStateDigest': retirementStateDigest,
+          'deletedAt': timestamp.millisecondsSinceEpoch,
+          'reserved': 0,
+        };
+        try {
+          final storageId = await _store.write(payload);
+          deletion = V3MaterializedRecordDeletion._(
+            storageId: storageId,
+            stableRecordId: stableRecordId,
+            assemblyId: assemblyId,
+            sessionKey: sessionKey,
+            recordDigest: recordDigest,
+            retirementStateDigest: retirementStateDigest,
+            deletedAt: timestamp,
+          );
+          _deletions[stableRecordId] = deletion;
+        } catch (_) {
+          _writeRecoveryRequired = true;
+          rethrow;
+        }
+      }
+      try {
+        await _store.delete(existing.storageId);
+      } catch (_) {
+        _writeRecoveryRequired = true;
+        rethrow;
+      }
+      _records.remove(stableRecordId);
+      _totalRecordBytes -= existing.retainedBytes;
+      existing._close();
+      return true;
+    });
+  }
+
+  Future<bool> deleteDeletionExact({
+    required String stableRecordId,
+    required String assemblyId,
+    required String sessionKey,
+    required String recordDigest,
+    required String retirementStateDigest,
+    V3CommittedRecordMaterializerAuthority? authority,
+  }) {
+    return _serialized(() async {
+      _ensureAuthority(authority);
+      _ensureReady();
+      final existing = _deletions[stableRecordId];
+      if (existing == null) return false;
+      if (existing.assemblyId != assemblyId ||
+          existing.sessionKey != sessionKey ||
+          existing.recordDigest != recordDigest ||
+          existing.retirementStateDigest != retirementStateDigest) {
+        throw const V3LmfPersistenceConflictException(
+          'v3 materialized-record deletion proof binding diverged',
+        );
+      }
+      try {
+        await _store.delete(existing.storageId);
+      } catch (_) {
+        _writeRecoveryRequired = true;
+        rethrow;
+      }
+      _deletions.remove(stableRecordId);
+      return true;
+    });
+  }
+
   Future<void> close({
     V3CommittedRecordMaterializerAuthority? authority,
   }) {
@@ -318,6 +527,7 @@ final class V3CommittedRecordMaterializer {
         record._close();
       }
       _records.clear();
+      _deletions.clear();
       _totalRecordBytes = 0;
     });
   }
@@ -385,6 +595,65 @@ final class V3CommittedRecordMaterializer {
       record?.wipeContent();
       _wipe(encoded);
     }
+  }
+
+  V3MaterializedRecordDeletion _decodeDeletion(V3LmfStoredRecord stored) {
+    final payload = stored.payload;
+    const expectedKeys = <String>{
+      'kind',
+      'version',
+      'stableRecordId',
+      'assemblyId',
+      'sessionId',
+      'recordDigest',
+      'retirementStateDigest',
+      'deletedAt',
+      'reserved',
+    };
+    if (payload.length != expectedKeys.length ||
+        !payload.keys.every(expectedKeys.contains) ||
+        payload['kind'] != deletionRecordKind ||
+        payload['version'] != _recordVersion ||
+        payload['stableRecordId'] is! String ||
+        payload['assemblyId'] is! String ||
+        payload['sessionId'] is! String ||
+        payload['recordDigest'] is! String ||
+        payload['retirementStateDigest'] is! String ||
+        payload['deletedAt'] is! int ||
+        payload['reserved'] != 0) {
+      throw const FormatException(
+        'Invalid Layergram v3 materialized-record deletion',
+      );
+    }
+    final stableRecordId = payload['stableRecordId'] as String;
+    final assemblyId = payload['assemblyId'] as String;
+    final sessionKey = payload['sessionId'] as String;
+    final recordDigest = payload['recordDigest'] as String;
+    final retirementStateDigest = payload['retirementStateDigest'] as String;
+    final sessionId = _decodeBinary(sessionKey, 16);
+    try {
+      if (stableRecordId != 'v3:$assemblyId' ||
+          !_isCanonicalDigest(assemblyId) ||
+          sessionId.length != 16 ||
+          sessionId.every((byte) => byte == 0) ||
+          !_isCanonicalDigest(recordDigest) ||
+          !_isCanonicalDigest(retirementStateDigest)) {
+        throw const FormatException(
+          'Mismatched Layergram v3 materialized-record deletion',
+        );
+      }
+    } finally {
+      _wipe(sessionId);
+    }
+    return V3MaterializedRecordDeletion._(
+      storageId: stored.storageId,
+      stableRecordId: stableRecordId,
+      assemblyId: assemblyId,
+      sessionKey: sessionKey,
+      recordDigest: recordDigest,
+      retirementStateDigest: retirementStateDigest,
+      deletedAt: _timestampFromMillis(payload['deletedAt'] as int),
+    );
   }
 
   Future<void> _deleteIgnoringFailure(String storageId) async {
@@ -486,6 +755,16 @@ bool _isCanonicalDigest(String value) {
     if (decoded != null) _wipe(decoded);
   }
 }
+
+bool _sameDeletion(
+  V3MaterializedRecordDeletion left,
+  V3MaterializedRecordDeletion right,
+) =>
+    left.stableRecordId == right.stableRecordId &&
+    left.assemblyId == right.assemblyId &&
+    left.sessionKey == right.sessionKey &&
+    left.recordDigest == right.recordDigest &&
+    left.retirementStateDigest == right.retirementStateDigest;
 
 String _encodeBinary(Uint8List bytes) =>
     base64UrlEncode(bytes).replaceAll('=', '');

@@ -328,6 +328,25 @@ class V3LmfDurableInbox {
     });
   }
 
+  /// Ensures a first fragment can be persisted before the ratchet resolver
+  /// derives a candidate. The owning persistence scope serializes this call
+  /// with the subsequent [receive], so the capacity cannot be consumed by a
+  /// sibling receive in between.
+  Future<void> preflightAuthenticatedReceive(V3LmfFrame frame) {
+    return _serialized(() async {
+      _ensureReady();
+      final assemblyId = V3LmfFrameCodec.assemblyId(frame);
+      if (_committed.containsKey(assemblyId)) return;
+      final binary = V3LmfFrameCodec.encodeBinary(frame);
+      final existing = _recordsByDigest[_digest(binary)];
+      if (existing != null && _bytesEqual(existing.binary, binary)) return;
+      await _makeCapacityFor(
+        binary.length,
+        exceptAssemblyId: assemblyId,
+      );
+    });
+  }
+
   /// Makes higher-level digest binding mandatory for this inbox lifetime.
   ///
   /// The inactive atomic journal calls this during restore. It prevents an
@@ -550,7 +569,10 @@ class V3LmfDurableInbox {
         );
       }
 
-      _checkCapacityFor(binary.length);
+      await _makeCapacityFor(
+        binary.length,
+        exceptAssemblyId: assemblyId,
+      );
       final timestamp = (receivedAt ?? DateTime.now()).toUtc();
       final payload = <String, dynamic>{
         'kind': inboxRecordKind,
@@ -615,7 +637,10 @@ class V3LmfDurableInbox {
         );
       }
 
-      _checkCapacityFor(binary.length);
+      await _makeCapacityFor(
+        binary.length,
+        exceptAssemblyId: assemblyId,
+      );
       final timestamp = (receivedAt ?? DateTime.now()).toUtc();
       final payload = <String, dynamic>{
         'kind': inboxRecordKind,
@@ -1055,6 +1080,50 @@ class V3LmfDurableInbox {
         'persisted frame byte limit reached',
       );
     }
+  }
+
+  Future<void> _makeCapacityFor(
+    int binaryLength, {
+    required String exceptAssemblyId,
+  }) async {
+    while (_recordsByStorageId.length >= maxPersistedFrames ||
+        _persistedFrameBytes + binaryLength > maxPersistedFrameBytes) {
+      if (!await _evictOldestDeferredAssembly(
+        exceptAssemblyId: exceptAssemblyId,
+      )) {
+        _checkCapacityFor(binaryLength);
+      }
+    }
+  }
+
+  Future<bool> _evictOldestDeferredAssembly({
+    required String exceptAssemblyId,
+  }) async {
+    String? oldestAssemblyId;
+    _PersistedFrame? oldestFrame;
+    for (final entry in _recordIdsByAssembly.entries) {
+      final assemblyId = entry.key;
+      if (assemblyId == exceptAssemblyId ||
+          _ready.containsKey(assemblyId) ||
+          (_acceptedFramesByAssembly[assemblyId]?.isNotEmpty ?? false)) {
+        continue;
+      }
+      for (final storageId in entry.value) {
+        final candidate = _recordsByStorageId[storageId];
+        if (candidate == null) continue;
+        final isOlder = oldestFrame == null ||
+            candidate.receivedAt.isBefore(oldestFrame.receivedAt) ||
+            candidate.receivedAt == oldestFrame.receivedAt &&
+                candidate.storageId.compareTo(oldestFrame.storageId) < 0;
+        if (isOlder) {
+          oldestAssemblyId = assemblyId;
+          oldestFrame = candidate;
+        }
+      }
+    }
+    if (oldestAssemblyId == null) return false;
+    await _deleteAssemblyRecords(oldestAssemblyId);
+    return true;
   }
 
   void _indexPersisted(_PersistedFrame persisted) {

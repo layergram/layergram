@@ -71,6 +71,9 @@ final class V3AcknowledgementOutbox {
   static const String recordKind = 'v3_acknowledgement_outbox_v1';
   static const int _formatVersion = 1;
   static const int _maxTimestampMillis = 253402300799999;
+  static const int acknowledgementFrameBytes = V3LmfFrameCodec.headerBytes +
+      V3LmfAcknowledgementCodec.encodedBytes +
+      V3LmfFrameCodec.authenticationTagBytes;
 
   final V3LmfRecordStore _store;
   final Random _secureRandom;
@@ -86,6 +89,24 @@ final class V3AcknowledgementOutbox {
   int _totalBytes = 0;
 
   bool get requiresRecovery => _writeRecoveryRequired;
+
+  Future<void> preflightGetOrCreate(String targetAssemblyId) {
+    return _serialized(() async {
+      _ensureReady();
+      _validateArmoredId(targetAssemblyId, 32, 'targetAssemblyId');
+      if (_entries.containsKey(targetAssemblyId)) return;
+      if (_entries.length >= maxEntries) {
+        throw const V3LmfPersistenceLimitException(
+          'v3 ACK-outbox capacity exceeded',
+        );
+      }
+      if (_totalBytes + acknowledgementFrameBytes > maxTotalBytes) {
+        throw const V3LmfPersistenceLimitException(
+          'v3 ACK-outbox byte capacity exceeded',
+        );
+      }
+    });
+  }
 
   Future<V3AcknowledgementOutboxRestoreResult> restore() {
     return _serialized(() async {
@@ -186,6 +207,11 @@ final class V3AcknowledgementOutbox {
         _validateAcknowledgementFrame(frame, expectedMessageId: messageId);
         final encoded = V3LmfFrameCodec.encodeBinary(frame);
         try {
+          if (encoded.length != acknowledgementFrameBytes) {
+            throw const V3LmfPersistenceConflictException(
+              'v3 ACK frame size diverged from capacity reservation',
+            );
+          }
           if (_totalBytes + encoded.length > maxTotalBytes) {
             throw const V3LmfPersistenceLimitException(
               'v3 ACK-outbox byte capacity exceeded',

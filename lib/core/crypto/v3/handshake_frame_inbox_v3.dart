@@ -238,20 +238,10 @@ final class V3HandshakeFrameInbox {
           assembly: complete,
         );
       }
-      if (assembly == null && _pending.length >= maxPendingAssemblies) {
-        throw const V3LmfPersistenceLimitException(
-          'v3 handshake assembly capacity exceeded',
-        );
-      }
-      final frameCount = _pending.values.fold<int>(
-        0,
-        (total, value) => total + value.length,
+      await _makeCapacityFor(
+        assemblyId: assemblyId,
+        createsAssembly: assembly == null,
       );
-      if (frameCount >= maxPendingFrames) {
-        throw const V3LmfPersistenceLimitException(
-          'v3 handshake frame capacity exceeded',
-        );
-      }
       final timestamp = _validatedTimestamp(receivedAt ?? DateTime.now());
       try {
         final storageId = await _store.write(
@@ -344,6 +334,68 @@ final class V3HandshakeFrameInbox {
       _pending.clear();
       _committedStorageIds.clear();
     }, allowClosed: true);
+  }
+
+  Future<void> _makeCapacityFor({
+    required String assemblyId,
+    required bool createsAssembly,
+  }) async {
+    while (createsAssembly && _pending.length >= maxPendingAssemblies) {
+      if (!await _evictOldestIncomplete(exceptAssemblyId: assemblyId)) {
+        throw const V3LmfPersistenceLimitException(
+          'v3 handshake assembly capacity exceeded',
+        );
+      }
+    }
+    while (_pending.values.fold<int>(
+          0,
+          (total, value) => total + value.length,
+        ) >=
+        maxPendingFrames) {
+      if (!await _evictOldestIncomplete(exceptAssemblyId: assemblyId)) {
+        throw const V3LmfPersistenceLimitException(
+          'v3 handshake frame capacity exceeded',
+        );
+      }
+    }
+  }
+
+  Future<bool> _evictOldestIncomplete(
+      {required String exceptAssemblyId}) async {
+    MapEntry<String, Map<int, _StoredHandshakeFrame>>? oldest;
+    DateTime? oldestReceivedAt;
+    String? oldestStorageId;
+    for (final entry in _pending.entries) {
+      if (entry.key == exceptAssemblyId ||
+          _complete(entry.key, entry.value) != null) {
+        continue;
+      }
+      final first = entry.value.values.reduce((left, right) {
+        final compared = left.receivedAt.compareTo(right.receivedAt);
+        if (compared != 0) return compared < 0 ? left : right;
+        return left.storageId.compareTo(right.storageId) <= 0 ? left : right;
+      });
+      final isOlder = oldest == null ||
+          first.receivedAt.isBefore(oldestReceivedAt!) ||
+          first.receivedAt == oldestReceivedAt &&
+              first.storageId.compareTo(oldestStorageId!) < 0;
+      if (isOlder) {
+        oldest = entry;
+        oldestReceivedAt = first.receivedAt;
+        oldestStorageId = first.storageId;
+      }
+    }
+    if (oldest == null) return false;
+    final removed = _pending.remove(oldest.key)!;
+    try {
+      for (final stored in removed.values) {
+        await _store.delete(stored.storageId);
+      }
+      return true;
+    } catch (_) {
+      _writeRecoveryRequired = true;
+      rethrow;
+    }
   }
 
   V3HandshakeFrameAssembly? _complete(

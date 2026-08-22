@@ -71,6 +71,44 @@ void main() {
     );
     await inbox.close();
   });
+
+  test('old incomplete public assemblies cannot permanently exhaust intake',
+      () async {
+    final inbox = V3HandshakeFrameInbox(
+      store: store,
+      maxPendingAssemblies: 2,
+      maxPendingFrames: 64,
+    );
+    await inbox.restore();
+    final first = _withMessageId(frames, 0x31);
+    final second = _withMessageId(frames, 0x51);
+    final current = _withMessageId(frames, 0x71);
+    await inbox.receive(
+      frame: first.first,
+      receivedAt: DateTime.fromMillisecondsSinceEpoch(1, isUtc: true),
+    );
+    await inbox.receive(
+      frame: second.first,
+      receivedAt: DateTime.fromMillisecondsSinceEpoch(2, isUtc: true),
+    );
+    expect(
+      (await inbox.receive(
+        frame: current.first,
+        receivedAt: DateTime.fromMillisecondsSinceEpoch(3, isUtc: true),
+      ))
+          .status,
+      V3HandshakeFrameInboxStatus.accepted,
+    );
+
+    V3HandshakeFrameAssembly? completed;
+    for (final frame in current.skip(1)) {
+      completed = (await inbox.receive(frame: frame)).assembly ?? completed;
+    }
+    expect(completed, isNotNull);
+    expect(completed!.frames, hasLength(current.length));
+    expect(store.deletedRecords, 1);
+    await inbox.close();
+  });
 }
 
 Future<List<V3LmfFrame>> _frames() async {
@@ -91,6 +129,31 @@ Future<List<V3LmfFrame>> _frames() async {
   );
 }
 
+List<V3LmfFrame> _withMessageId(List<V3LmfFrame> source, int seed) => source
+    .map(
+      (frame) => V3LmfFrame(
+        metadata: V3LmfMessageMetadata(
+          kind: frame.metadata.kind,
+          senderBinding: frame.metadata.senderBinding,
+          recipientBinding: frame.metadata.recipientBinding,
+          messageId: _bytes(16, seed),
+          sessionId: frame.metadata.sessionId,
+          epoch: frame.metadata.epoch,
+          messageCounter: frame.metadata.messageCounter,
+          expiresAtUnixSeconds: frame.metadata.expiresAtUnixSeconds,
+          suite: frame.metadata.suite,
+          flags: frame.metadata.flags,
+        ),
+        fragmentIndex: frame.fragmentIndex,
+        fragmentCount: frame.fragmentCount,
+        assembledPlaintextLength: frame.assembledPlaintextLength,
+        nonce: frame.nonce,
+        ciphertext: frame.ciphertext,
+        authenticationTag: frame.authenticationTag,
+      ),
+    )
+    .toList(growable: false);
+
 Uint8List _bytes(int length, int seed) => Uint8List.fromList(
       List<int>.generate(length, (index) => (seed + index) & 0xff),
     );
@@ -98,6 +161,7 @@ Uint8List _bytes(int length, int seed) => Uint8List.fromList(
 final class _MemoryStore implements V3LmfRecordStore {
   final Map<String, Map<String, dynamic>> records = {};
   int _nextId = 0;
+  int deletedRecords = 0;
 
   @override
   Future<String> write(Map<String, dynamic> payload) async {
@@ -118,6 +182,6 @@ final class _MemoryStore implements V3LmfRecordStore {
 
   @override
   Future<void> delete(String storageId) async {
-    records.remove(storageId);
+    if (records.remove(storageId) != null) deletedRecords++;
   }
 }

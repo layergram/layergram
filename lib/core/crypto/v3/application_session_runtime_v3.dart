@@ -172,6 +172,7 @@ final class V3ApplicationRetentionMaintenanceResult {
     required this.replayWindowEntries,
     required this.examinedReceipts,
     required this.retiredReceipts,
+    required this.collectedDeletedApplicationRecords,
   });
 
   final int compactedSessions;
@@ -180,6 +181,7 @@ final class V3ApplicationRetentionMaintenanceResult {
   final int replayWindowEntries;
   final int examinedReceipts;
   final int retiredReceipts;
+  final int collectedDeletedApplicationRecords;
 }
 
 enum V3ApplicationInboundStatus {
@@ -237,6 +239,8 @@ final class V3ApplicationMessageInboundResult {
 /// deliberately does not own [localIdentity]; the process-level identity
 /// runtime closes that handle only after this runtime has drained.
 final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
+  static const int maxNormalDeviceTargetsPerMessage = 16;
+
   V3ApplicationSessionRuntime._({
     required this.localIdentity,
     required V3LocalDeviceHandle localDevice,
@@ -265,6 +269,8 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     Iterable<V3TripleRatchetState> bootstrapCheckpoints = const [],
     V3SessionSnapshotValidator? snapshotValidator,
     int maxSessions = 4096,
+    int maxAcknowledgementEntries = 4096,
+    int maxAcknowledgementTotalBytes = 4 * 1024 * 1024,
   }) =>
       _open(
         localIdentity: localIdentity,
@@ -273,6 +279,8 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
         bootstrapCheckpoints: bootstrapCheckpoints,
         snapshotValidator: snapshotValidator,
         maxSessions: maxSessions,
+        maxAcknowledgementEntries: maxAcknowledgementEntries,
+        maxAcknowledgementTotalBytes: maxAcknowledgementTotalBytes,
       );
 
   /// Opens the runtime with the signed candidate library embedded by the
@@ -287,6 +295,8 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     Iterable<V3TripleRatchetState> bootstrapCheckpoints = const [],
     V3SessionSnapshotValidator? snapshotValidator,
     int maxSessions = 4096,
+    int maxAcknowledgementEntries = 4096,
+    int maxAcknowledgementTotalBytes = 4 * 1024 * 1024,
   }) =>
       _open(
         localIdentity: localIdentity,
@@ -294,6 +304,8 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
         bootstrapCheckpoints: bootstrapCheckpoints,
         snapshotValidator: snapshotValidator,
         maxSessions: maxSessions,
+        maxAcknowledgementEntries: maxAcknowledgementEntries,
+        maxAcknowledgementTotalBytes: maxAcknowledgementTotalBytes,
       );
 
   static Future<V3ApplicationSessionRuntime> _open({
@@ -303,6 +315,8 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     required Iterable<V3TripleRatchetState> bootstrapCheckpoints,
     V3SessionSnapshotValidator? snapshotValidator,
     required int maxSessions,
+    required int maxAcknowledgementEntries,
+    required int maxAcknowledgementTotalBytes,
   }) async {
     if (localIdentity.isClosed) {
       throw StateError('Layergram v3 local identity is closed');
@@ -329,6 +343,8 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
               auxStorageKey: extractedKey,
               snapshotValidator: snapshotValidator,
               maxSessions: maxSessions,
+              maxAcknowledgementEntries: maxAcknowledgementEntries,
+              maxAcknowledgementTotalBytes: maxAcknowledgementTotalBytes,
             )
           : await V3SessionPersistenceScope.open(
               scopeToken: scopeToken,
@@ -336,6 +352,8 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
               sckaBackend: sckaBackend,
               snapshotValidator: snapshotValidator,
               maxSessions: maxSessions,
+              maxAcknowledgementEntries: maxAcknowledgementEntries,
+              maxAcknowledgementTotalBytes: maxAcknowledgementTotalBytes,
             );
       final restored = await scope.restore(
         checkpoints: bootstrapCheckpoints,
@@ -1028,6 +1046,7 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
         _wipe(plaintext);
       }
 
+      await _scope.preflightAcknowledgementFor(delivery.frames.first);
       await _scope.commitDelivery(
         delivery: delivery,
         persistedAt: receivedAt,
@@ -1160,7 +1179,9 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
         keyTag: keyTag,
       );
       try {
-        return await projector.reconcile();
+        final result = await projector.reconcile();
+        await _scope.collectDeletedApplicationRecords();
+        return result;
       } finally {
         projector.close();
       }
@@ -1381,6 +1402,8 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
         );
         if (result.checkpointWasReplaced) retiredReceipts++;
       }
+      final collectedDeletedApplicationRecords =
+          await _scope.collectDeletedApplicationRecords();
       return V3ApplicationRetentionMaintenanceResult(
         compactedSessions: compactedSessions,
         collectedIncomingEffects: collectedIncomingEffects,
@@ -1388,6 +1411,7 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
         replayWindowEntries: replayWindowEntries,
         examinedReceipts: candidates.length,
         retiredReceipts: retiredReceipts,
+        collectedDeletedApplicationRecords: collectedDeletedApplicationRecords,
       );
     });
   }
@@ -1719,8 +1743,10 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     final selected = newestByDevice.values.toList(growable: false)
       ..sort(
           (left, right) => left.remoteDeviceId.compareTo(right.remoteDeviceId));
-    if (selected.length > 16) {
-      selected.removeRange(16, selected.length);
+    if (selected.length > maxNormalDeviceTargetsPerMessage) {
+      throw const V3LmfPersistenceLimitException(
+        'v3 Normal-mode device capacity exceeded',
+      );
     }
     return List.unmodifiable(selected);
   }
