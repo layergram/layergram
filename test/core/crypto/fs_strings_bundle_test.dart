@@ -203,7 +203,7 @@ void main() {
     ];
 
     for (final file in _dartLibFiles()) {
-      final path = file.path;
+      final path = file.path.replaceAll('\\', '/');
       if (path.endsWith('lib/l10n/fs_strings_bundle.dart')) continue;
       final contents = file.readAsStringSync();
       for (final fragment in forbiddenRuntimeFragments) {
