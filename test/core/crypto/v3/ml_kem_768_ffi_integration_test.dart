@@ -43,6 +43,20 @@ void main() {
     );
   });
 
+  test('Windows packaged path is derived from the app executable', () {
+    final path = MlKem768FfiBackend.packagedWindowsLibraryPath(
+      executablePath: r'C:\Program Files\Layergram\layergram.exe',
+    );
+    if (Platform.isWindows) {
+      expect(
+        path,
+        r'C:\Program Files\Layergram\layergram_mlkem.dll',
+      );
+    } else {
+      expect(path, contains('layergram_mlkem.dll'));
+    }
+  });
+
   test('Dart calls the shipped ABI and passes upstream known-answer vectors',
       () async {
     const d =
@@ -58,7 +72,10 @@ void main() {
         '0b1b32be26247cbcbe0916f8b0b729699c32a96d51efa4a4cd5b289239c8207e';
 
     final backend = MlKem768FfiBackend.open(libraryPath: libraryPath!);
-    expect(backend.implementationId, contains('mlkem-native-v2.0.0'));
+    expect(
+      backend.implementationId,
+      MlKem768FfiBackend.approvedImplementationId,
+    );
     expect(backend.hasTestHooks, isTrue);
     expect(await backend.selfTest(), isTrue);
 
@@ -165,8 +182,12 @@ void main() {
 
   test('production ABI owns entropy and excludes deterministic test hooks',
       () async {
-    final backend = MlKem768FfiBackend.open(
+    final backend = MlKem768FfiBackend.openPackagedLibrary(
       libraryPath: productionLibraryPath!,
+    );
+    expect(
+      backend.implementationId,
+      MlKem768FfiBackend.approvedImplementationId,
     );
     expect(backend.hasTestHooks, isFalse);
     expect(await backend.selfTest(), isTrue);
@@ -194,6 +215,15 @@ void main() {
     encapsulation.wipeSharedSecret();
     decapsulated.fillRange(0, decapsulated.length, 0);
   }, skip: productionSkipReason);
+
+  test('packaged policy rejects a library containing test-only exports', () {
+    expect(
+      () => MlKem768FfiBackend.openPackagedLibrary(
+        libraryPath: libraryPath!,
+      ),
+      throwsStateError,
+    );
+  }, skip: skipReason);
 
   test('production backend restores the complete 24-word v3 identity vector',
       () async {
@@ -246,7 +276,7 @@ void main() {
   }, skip: productionSkipReason);
 
   test('packaged macOS framework traverses production ABI', () async {
-    final backend = MlKem768FfiBackend.open(
+    final backend = MlKem768FfiBackend.openPackagedLibrary(
       libraryPath: packagedMacOSLibraryPath!,
     );
     expect(backend.hasTestHooks, isFalse);

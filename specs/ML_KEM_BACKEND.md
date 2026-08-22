@@ -24,6 +24,12 @@ never loads it from the normal startup, identity, contact, or message paths.
 - Production encapsulation obtains 32 fresh bytes directly from the operating
   system CSPRNG. Dart cannot inject encapsulation entropy.
 - Deterministic encapsulation is exported only when `LG_MLKEM_TESTING` is set.
+- The packaged Dart loader admits only the exact pinned implementation ID and
+  ABI sizes, and rejects any production library exposing even a partial set of
+  test-only symbols.
+- Desktop packaged libraries are resolved from executable-owned absolute
+  locations; the generic explicit-path loader remains available only for
+  native engineering and known-answer tests.
 
 The BIP39-derived 64-byte `d || z` key-generation seed necessarily crosses the
 FFI boundary during identity restoration. Its native copy is wiped after the
@@ -72,11 +78,13 @@ been checked as follows:
   an absolute path derived from the application bundle. The packaged round
   trip and self-test pass in an unsigned Flutter app build.
 - The Windows release bundle contains an x64 `layergram_mlkem.dll` linked to
-  BCrypt and exporting exactly the 14 production functions. On Windows 11 ARM64
-  under Parallels, Windows' x64 execution layer passes the packaged Flutter
-  integration traversal, a release-process smoke test, and the native ABI,
-  negative, implicit-rejection, CSPRNG, lifecycle, and zeroization tests. The
-  generated Store-mode MSIX also contains the production DLL.
+  BCrypt and exporting exactly the 14 production functions. The loader derives
+  its absolute path from the running executable rather than using the ambient
+  DLL search order. On Windows 11 ARM64 under Parallels, Windows' x64 execution
+  layer passes the packaged Flutter integration traversal, a release-process
+  smoke test, and the native ABI, negative, implicit-rejection, CSPRNG,
+  lifecycle, and zeroization tests. The generated Store-mode MSIX also contains
+  the production DLL.
 - The Linux release bundle contains an x86-64 `liblayergram_mlkem.so` linked to
   glibc and exporting exactly the 14 versioned production functions. On Ubuntu
   22.04, the packaged Flutter integration traversal and a release-process smoke

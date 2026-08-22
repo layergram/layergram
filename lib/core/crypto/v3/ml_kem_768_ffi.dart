@@ -54,6 +54,27 @@ final class MlKem768FfiBackend implements MlKem768Backend {
     return MlKem768FfiBackend._(_MlKem768Bindings(library));
   }
 
+  factory MlKem768FfiBackend._fromPackagedLibrary(DynamicLibrary library) {
+    return MlKem768FfiBackend._(
+      _MlKem768Bindings(library),
+      requirePackagedAllowlist: true,
+    );
+  }
+
+  /// Opens one explicitly located production package and applies the same
+  /// fail-closed allowlist used by [openPackaged].
+  ///
+  /// Packaging verification tools use this factory before an artifact is
+  /// installed into its final app-bundle location. Protocol runtime code uses
+  /// [openPackaged] so the location itself is platform-owned as well.
+  factory MlKem768FfiBackend.openPackagedLibrary({
+    required String libraryPath,
+  }) {
+    return MlKem768FfiBackend._fromPackagedLibrary(
+      DynamicLibrary.open(libraryPath),
+    );
+  }
+
   /// Opens the production library packaged for the current Flutter target.
   ///
   /// iOS links the ABI into the signed application process. Android and Windows
@@ -63,25 +84,27 @@ final class MlKem768FfiBackend implements MlKem768Backend {
   /// protocol v3.
   factory MlKem768FfiBackend.openPackaged() {
     if (Platform.isIOS) {
-      return MlKem768FfiBackend.fromDynamicLibrary(DynamicLibrary.process());
+      return MlKem768FfiBackend._fromPackagedLibrary(
+        DynamicLibrary.process(),
+      );
     }
     if (Platform.isMacOS) {
-      return MlKem768FfiBackend.open(
+      return MlKem768FfiBackend.openPackagedLibrary(
         libraryPath: packagedMacOSLibraryPath(),
       );
     }
     if (Platform.isAndroid) {
-      return MlKem768FfiBackend.fromDynamicLibrary(
+      return MlKem768FfiBackend._fromPackagedLibrary(
         DynamicLibrary.open('liblayergram_mlkem.so'),
       );
     }
     if (Platform.isWindows) {
-      return MlKem768FfiBackend.fromDynamicLibrary(
-        DynamicLibrary.open('layergram_mlkem.dll'),
+      return MlKem768FfiBackend.openPackagedLibrary(
+        libraryPath: packagedWindowsLibraryPath(),
       );
     }
     if (Platform.isLinux) {
-      return MlKem768FfiBackend.open(
+      return MlKem768FfiBackend.openPackagedLibrary(
         libraryPath: packagedLinuxLibraryPath(),
       );
     }
@@ -111,9 +134,26 @@ final class MlKem768FfiBackend implements MlKem768Backend {
     return '${executable.parent.path}/lib/liblayergram_mlkem.so';
   }
 
-  MlKem768FfiBackend._(this._bindings) {
-    _bindings.validateAbi();
+  /// Resolves the Windows DLL from the executable-owned bundle directory.
+  static String packagedWindowsLibraryPath({String? executablePath}) {
+    final executable = File(executablePath ?? Platform.resolvedExecutable);
+    return '${executable.parent.path}${Platform.pathSeparator}'
+        'layergram_mlkem.dll';
   }
+
+  MlKem768FfiBackend._(
+    this._bindings, {
+    bool requirePackagedAllowlist = false,
+  }) {
+    if (requirePackagedAllowlist) {
+      _bindings.validatePackagedAllowlist();
+    } else {
+      _bindings.validateAbi();
+    }
+  }
+
+  static const String approvedImplementationId =
+      'mlkem-native-v2.0.0-d1b2fe782888bdb7+layergram-abi1';
 
   final _MlKem768Bindings _bindings;
 
@@ -400,24 +440,18 @@ final class _MlKem768Bindings {
       'lg_mlkem768_self_test',
     );
 
-    try {
-      _testEncapsulateFromSeed =
-          library.lookupFunction<_TestEncapsulateNative, _TestEncapsulateDart>(
-        'lg_mlkem768_test_encapsulate_from_seed',
-      );
-      _testDestroyedHandleCount =
-          library.lookupFunction<_Uint64Native, _Uint64Dart>(
-        'lg_mlkem768_test_destroyed_handle_count',
-      );
-      _testLastDestroyWasZero =
-          library.lookupFunction<_Int32Native, _Int32Dart>(
-        'lg_mlkem768_test_last_destroy_was_zero',
-      );
-    } on ArgumentError {
-      _testEncapsulateFromSeed = null;
-      _testDestroyedHandleCount = null;
-      _testLastDestroyWasZero = null;
-    }
+    _testEncapsulateFromSeed = _lookupOptionalTestEncapsulate(
+      library,
+      'lg_mlkem768_test_encapsulate_from_seed',
+    );
+    _testDestroyedHandleCount = _lookupOptionalUint64(
+      library,
+      'lg_mlkem768_test_destroyed_handle_count',
+    );
+    _testLastDestroyWasZero = _lookupOptionalInt32(
+      library,
+      'lg_mlkem768_test_last_destroy_was_zero',
+    );
   }
 
   late final _Uint32Dart abiVersion;
@@ -445,6 +479,11 @@ final class _MlKem768Bindings {
   bool get hasTestHooks =>
       _testEncapsulateFromSeed != null &&
       _testDestroyedHandleCount != null &&
+      _testLastDestroyWasZero != null;
+
+  bool get hasAnyTestHooks =>
+      _testEncapsulateFromSeed != null ||
+      _testDestroyedHandleCount != null ||
       _testLastDestroyWasZero != null;
 
   int testEncapsulateFromSeed(
@@ -527,6 +566,56 @@ final class _MlKem768Bindings {
         );
       }
     }
+  }
+
+  void validatePackagedAllowlist() {
+    validateAbi();
+    final actualImplementationId = implementationId();
+    if (actualImplementationId != MlKem768FfiBackend.approvedImplementationId) {
+      throw StateError(
+        'Unapproved Layergram ML-KEM implementation: '
+        '$actualImplementationId',
+      );
+    }
+    if (hasAnyTestHooks) {
+      throw StateError(
+        'Packaged Layergram ML-KEM exposes non-production test hooks',
+      );
+    }
+  }
+}
+
+_TestEncapsulateDart? _lookupOptionalTestEncapsulate(
+  DynamicLibrary library,
+  String symbol,
+) {
+  try {
+    return library
+        .lookupFunction<_TestEncapsulateNative, _TestEncapsulateDart>(symbol);
+  } on ArgumentError {
+    return null;
+  }
+}
+
+_Uint64Dart? _lookupOptionalUint64(
+  DynamicLibrary library,
+  String symbol,
+) {
+  try {
+    return library.lookupFunction<_Uint64Native, _Uint64Dart>(symbol);
+  } on ArgumentError {
+    return null;
+  }
+}
+
+_Int32Dart? _lookupOptionalInt32(
+  DynamicLibrary library,
+  String symbol,
+) {
+  try {
+    return library.lookupFunction<_Int32Native, _Int32Dart>(symbol);
+  } on ArgumentError {
+    return null;
   }
 }
 

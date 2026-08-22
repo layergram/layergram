@@ -931,6 +931,14 @@ void main() {
     expect(dartCandidate, contains('openPackaged'));
     expect(dartCandidate, contains('packagedWindowsLibraryPath'));
 
+    final mlKemDart = File(
+      'lib/core/crypto/v3/ml_kem_768_ffi.dart',
+    ).readAsStringSync();
+    expect(mlKemDart, contains('approvedImplementationId'));
+    expect(mlKemDart, contains('validatePackagedAllowlist'));
+    expect(mlKemDart, contains('packagedWindowsLibraryPath'));
+    expect(mlKemDart, contains('hasAnyTestHooks'));
+
     final entropySource = File(
       'native/layergram_scka/src/entropy.rs',
     ).readAsStringSync();

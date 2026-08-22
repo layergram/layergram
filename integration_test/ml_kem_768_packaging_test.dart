@@ -29,7 +29,10 @@ void main() {
 
   testWidgets('packaged production ML-KEM ABI traverses FFI', (tester) async {
     final backend = MlKem768FfiBackend.openPackaged();
-    expect(backend.implementationId, contains('mlkem-native-v2.0.0'));
+    expect(
+      backend.implementationId,
+      MlKem768FfiBackend.approvedImplementationId,
+    );
     expect(backend.hasTestHooks, isFalse);
     expect(await backend.selfTest(), isTrue);
 

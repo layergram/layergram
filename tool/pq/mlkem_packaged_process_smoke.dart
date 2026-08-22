@@ -10,7 +10,9 @@ Future<void> main() async {
         Platform.environment['LAYERGRAM_MLKEM_PACKAGED_MACOS_LIBRARY'];
     final backend = explicitLibraryPath == null
         ? MlKem768FfiBackend.openPackaged()
-        : MlKem768FfiBackend.open(libraryPath: explicitLibraryPath);
+        : MlKem768FfiBackend.openPackagedLibrary(
+            libraryPath: explicitLibraryPath,
+          );
     if (backend.hasTestHooks || !await backend.selfTest()) {
       throw StateError('Packaged ML-KEM production self-test failed');
     }
