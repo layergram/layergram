@@ -1,5 +1,17 @@
 # Post-quantum backend spikes
 
+Create a clean, commit-bound OSS source package for independent protocol and
+implementation review (without including the downstream Premium repository):
+
+```sh
+tool/pq/create_v3_audit_bundle.sh
+```
+
+The archive and its SHA-256 file are written below the ignored
+`.dart_tool/layergram_pq/audit/` directory. See
+`specs/PROTOCOL_V3_AUDIT_PACKAGE.md` for the mandatory review scope and the
+activation boundary.
+
 This directory records reproducible candidate decisions and platform
 verification commands. The pinned source is vendored under
 `third_party/mlkem-native`. Android, iOS, macOS, Windows x64, and Linux x64

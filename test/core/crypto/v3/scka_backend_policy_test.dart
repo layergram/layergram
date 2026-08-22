@@ -1036,6 +1036,7 @@ void main() {
     expect(mainEntry, isNot(contains('openPackagedScka')));
     expect(mainEntry, isNot(contains('scka_candidate_ffi')));
     for (final path in <String>[
+      'tool/pq/create_v3_audit_bundle.sh',
       'tool/pq/build_scka_packaged_apple.sh',
       'tool/pq/test_scka_packaged_apple.sh',
       'tool/pq/test_scka_packaged_ios.sh',
@@ -1048,6 +1049,22 @@ void main() {
     ]) {
       expect(File(path).existsSync(), isTrue, reason: '$path must be present');
     }
+
+    final auditTool =
+        File('tool/pq/create_v3_audit_bundle.sh').readAsStringSync();
+    final auditPolicy =
+        File('specs/PROTOCOL_V3_AUDIT_PACKAGE.md').readAsStringSync();
+    expect(auditTool, contains('git status --porcelain'));
+    expect(auditTool, contains('git archive --format=tar'));
+    expect(auditTool, contains('premium_repository_included=false'));
+    expect(auditTool, contains('protocol_v3_activated=false'));
+    expect(auditTool, contains('scka_production_registered=false'));
+    expect(auditTool, contains('SOURCE_SHA256SUMS.txt'));
+    expect(auditPolicy, contains('inactive engineering candidate'));
+    expect(
+        auditPolicy, contains('paid Premium repository is not an audit input'));
+    expect(auditPolicy, contains('No Layergram-authored test'));
+    expect(auditPolicy, contains('Production approval requires no unresolved'));
   });
 
   test('incremental ML-KEM remains internal behind candidate composition', () {
