@@ -9,7 +9,7 @@ void main() {
       executablePath: '/opt/layergram/layergram',
     );
     expect(path, '/opt/layergram/lib/liblayergram_scka.so');
-    expect(File(path).isAbsolute, isTrue);
+    expect(path.startsWith('/'), isTrue);
   });
 
   test(

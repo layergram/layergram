@@ -1078,7 +1078,7 @@ void main() {
   test('incremental ML-KEM remains internal behind candidate composition', () {
     final nativeEntry = File(
       'native/layergram_scka/src/lib.rs',
-    ).readAsStringSync();
+    ).readAsStringSync().replaceAll('\r\n', '\n');
     final source = File(
       'native/layergram_scka/src/incremental_mlkem.rs',
     ).readAsStringSync();
