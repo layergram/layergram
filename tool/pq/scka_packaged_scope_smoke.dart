@@ -33,6 +33,11 @@ Future<void> main() async {
     if (markerPath != null && markerPath.isNotEmpty) {
       await File(markerPath).writeAsString('$marker\n', flush: true);
     }
+    // devicectl attaches the physical iOS process standard streams directly.
+    // Write and flush there before the explicit process exit; release-mode
+    // Flutter logging alone can be dropped when the smoke terminates quickly.
+    stdout.writeln(marker);
+    await stdout.flush();
     // Flutter routes print through the Android engine log. Direct stdout is
     // retained by desktop runners but is not observable through Android ADB.
     // ignore: avoid_print

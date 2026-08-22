@@ -273,6 +273,16 @@ flutter test integration_test/ml_kem_768_packaging_test.dart \
   -d DEVICE_ID -r expanded
 ```
 
+For a physical iOS device connected wirelessly, use the integration driver so
+Flutter can publish the VM service port over mDNS:
+
+```sh
+flutter drive \
+  --driver=test_driver/integration_test.dart \
+  --target=integration_test/ml_kem_768_packaging_test.dart \
+  -d DEVICE_ID --publish-port
+```
+
 For the macOS embedded framework, the unit/integration traversal accepts its
 absolute binary path:
 
