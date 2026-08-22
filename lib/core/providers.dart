@@ -92,11 +92,14 @@ final activeIdentityIdProvider = StateProvider<IdentityId?>((_) => null);
 final identitiesRepositoryProvider = Provider<IdentitiesRepository>((ref) {
   final ownerId = ref.watch(activeIdentityIdProvider) ?? '';
   final repo = IdentitiesRepository(ownerIdentityId: ownerId);
-  ref.onDispose(repo.dispose);
+  var contextGeneration = 0;
+  var disposed = false;
+  final pendingUpdates = <Future<void>>{};
 
-  Future<void> updateStorageContext() async {
+  Future<void> updateStorageContext(int generation) async {
     final identityId = ref.read(activeIdentityIdProvider) ?? '';
     if (identityId.isEmpty) {
+      if (disposed || generation != contextGeneration) return;
       await repo.setActiveContext(
         scopeToken: null,
         encryptionKey: null,
@@ -108,27 +111,64 @@ final identitiesRepositoryProvider = Provider<IdentitiesRepository>((ref) {
     final context = await ref
         .read(localStorageSecurityProvider)
         .contextForIdentity(identityId);
-    final local = await ref.read(identityManagerProvider).getLocalIdentity();
-    final selfIdentity = local != null && local.identityId == identityId
-        ? RemoteIdentity(
-            identityId: local.identityId,
-            publicKeyBase64: local.publicKeyBase64,
-            fingerprint: local.fingerprint,
-            displayName: local.displayName,
-            verified: true,
-          )
-        : null;
+    try {
+      if (disposed || generation != contextGeneration) return;
+      final local = await ref.read(identityManagerProvider).getLocalIdentity();
+      if (disposed || generation != contextGeneration) return;
+      final selfIdentity = local != null && local.identityId == identityId
+          ? RemoteIdentity(
+              identityId: local.identityId,
+              publicKeyBase64: local.publicKeyBase64,
+              fingerprint: local.fingerprint,
+              displayName: local.displayName,
+              verified: true,
+              protocolVersion: local.protocolVersion,
+              publicIdentityBase64: local.publicIdentityBase64,
+            )
+          : null;
 
-    await repo.setActiveContext(
-      scopeToken: context?.scopeToken,
-      encryptionKey: context?.contactsKey,
-      selfIdentity: selfIdentity,
-    );
+      await repo.setActiveContext(
+        scopeToken: context?.scopeToken,
+        encryptionKey: context?.contactsKey,
+        selfIdentity: selfIdentity,
+      );
+    } finally {
+      context?.destroy();
+    }
   }
 
-  updateStorageContext();
+  void scheduleStorageContextUpdate() {
+    final generation = ++contextGeneration;
+    late final Future<void> pending;
+    pending = updateStorageContext(generation).catchError((_) async {
+      if (!disposed && generation == contextGeneration) {
+        await repo.setActiveContext(
+          scopeToken: null,
+          encryptionKey: null,
+          selfIdentity: null,
+        );
+      }
+    }).whenComplete(
+      () => pendingUpdates.remove(pending),
+    );
+    pendingUpdates.add(pending);
+  }
+
+  scheduleStorageContextUpdate();
+  ref.listen<IdentityId?>(activeIdentityIdProvider, (_, __) {
+    scheduleStorageContextUpdate();
+  });
   ref.listen<int>(identityReloadTokenProvider, (_, __) {
-    updateStorageContext();
+    scheduleStorageContextUpdate();
+  });
+  ref.onDispose(() {
+    disposed = true;
+    contextGeneration++;
+    unawaited(
+      Future.wait(pendingUpdates.toList(growable: false))
+          .then<void>((_) {}, onError: (_, __) {})
+          .whenComplete(repo.dispose),
+    );
   });
   return repo;
 });
@@ -152,10 +192,12 @@ final messagesRepositoryProvider = Provider<MessagesRepository>((ref) {
     final context = await ref
         .read(localStorageSecurityProvider)
         .contextForIdentity(identityId);
+    final scopeToken = context?.scopeToken;
+    context?.destroy();
     if (keyTag == null) {
       if (disposed || generation != contextGeneration) return;
       await repo.setActiveContext(
-        scopeToken: context?.scopeToken,
+        scopeToken: scopeToken,
         storageKey: null,
       );
       return;
@@ -171,7 +213,7 @@ final messagesRepositoryProvider = Provider<MessagesRepository>((ref) {
     if (privateKeyB64 == null) {
       if (disposed || generation != contextGeneration) return;
       await repo.setActiveContext(
-        scopeToken: context?.scopeToken,
+        scopeToken: scopeToken,
         storageKey: null,
       );
       return;
@@ -185,16 +227,16 @@ final messagesRepositoryProvider = Provider<MessagesRepository>((ref) {
       keyBytes.fillRange(0, keyBytes.length, 0);
     }
     if (disposed || generation != contextGeneration) {
-      if (storageKey is SecretKeyData) storageKey.destroy();
+      storageKey.destroy();
       return;
     }
     try {
       await repo.setActiveContext(
-        scopeToken: context?.scopeToken,
+        scopeToken: scopeToken,
         storageKey: storageKey,
       );
     } finally {
-      if (storageKey is SecretKeyData) storageKey.destroy();
+      storageKey.destroy();
     }
   }
 
@@ -238,26 +280,59 @@ final messagesRepositoryProvider = Provider<MessagesRepository>((ref) {
 final chatMetaRepositoryProvider = Provider<ChatMetaRepository>((ref) {
   final identityId = ref.watch(activeIdentityIdProvider) ?? '';
   final repo = ChatMetaRepository(identityId: identityId);
-  ref.onDispose(repo.dispose);
+  var contextGeneration = 0;
+  var disposed = false;
+  final pendingUpdates = <Future<void>>{};
 
-  Future<void> updateStorageContext() async {
+  Future<void> updateStorageContext(int generation) async {
     final activeId = ref.read(activeIdentityIdProvider) ?? '';
     if (activeId.isEmpty) {
+      if (disposed || generation != contextGeneration) return;
       await repo.setActiveContext(scopeToken: null, encryptionKey: null);
       return;
     }
     final context = await ref
         .read(localStorageSecurityProvider)
         .contextForIdentity(activeId);
-    await repo.setActiveContext(
-      scopeToken: context?.scopeToken,
-      encryptionKey: context?.chatMetaKey,
-    );
+    try {
+      if (disposed || generation != contextGeneration) return;
+      await repo.setActiveContext(
+        scopeToken: context?.scopeToken,
+        encryptionKey: context?.chatMetaKey,
+      );
+    } finally {
+      context?.destroy();
+    }
   }
 
-  updateStorageContext();
+  void scheduleStorageContextUpdate() {
+    final generation = ++contextGeneration;
+    late final Future<void> pending;
+    pending = updateStorageContext(generation).catchError((_) async {
+      if (!disposed && generation == contextGeneration) {
+        await repo.setActiveContext(scopeToken: null, encryptionKey: null);
+      }
+    }).whenComplete(
+      () => pendingUpdates.remove(pending),
+    );
+    pendingUpdates.add(pending);
+  }
+
+  scheduleStorageContextUpdate();
+  ref.listen<IdentityId?>(activeIdentityIdProvider, (_, __) {
+    scheduleStorageContextUpdate();
+  });
   ref.listen<int>(identityReloadTokenProvider, (_, __) {
-    updateStorageContext();
+    scheduleStorageContextUpdate();
+  });
+  ref.onDispose(() {
+    disposed = true;
+    contextGeneration++;
+    unawaited(
+      Future.wait(pendingUpdates.toList(growable: false))
+          .then<void>((_) {}, onError: (_, __) {})
+          .whenComplete(repo.dispose),
+    );
   });
   return repo;
 });
@@ -429,6 +504,8 @@ final v3ApplicationSessionRuntimeProvider =
     await owner.closeCurrent();
     return null;
   }
+  final scopeToken = context.scopeToken;
+  context.destroy();
 
   final usePassphrase = passphrase.isActive;
   final effectiveIdentityId =
@@ -439,9 +516,9 @@ final v3ApplicationSessionRuntimeProvider =
   }
   final runtime = await owner.open(
     recoveryIdentity: local,
-    scopeToken: context.scopeToken,
+    scopeToken: scopeToken,
     contextId:
-        '${usePassphrase ? 'passphrase' : 'primary'}|$effectiveIdentityId|${context.scopeToken}',
+        '${usePassphrase ? 'passphrase' : 'primary'}|$effectiveIdentityId|$scopeToken',
     usePassphraseIdentity: usePassphrase,
   );
   await runtime.maintainRetainedState(now: DateTime.now().toUtc());

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -29,6 +30,7 @@ class ChatMetaRepository {
   ChatMetaRepository({required this.identityId})
       : _box = Hive.box<Map>(LocalDatabase.chatMetaBoxName) {
     _loadFuture = _reloadFromBox();
+    _operationTail = _loadFuture;
   }
 
   /// Local identity id this repository instance is scoped to.
@@ -37,10 +39,13 @@ class ChatMetaRepository {
   final String identityId;
 
   final Box<Map> _box;
-  final _controller = StreamController<void>.broadcast();
+  final _controller =
+      StreamController<Map<String, Map<String, int>>>.broadcast();
   SecretKey? _encryptionKey;
   String? _scopeToken;
   Future<void> _loadFuture = Future.value();
+  Future<void> _operationTail = Future.value();
+  bool _disposeRequested = false;
 
   /// folderId -> (chatId -> pinnedAtSeconds)
   final Map<String, Map<String, int>> _pinnedByFolder = {};
@@ -53,13 +58,17 @@ class ChatMetaRepository {
   Future<void> setActiveContext({
     required String? scopeToken,
     required SecretKey? encryptionKey,
-  }) async {
-    _scopeToken = scopeToken;
-    _encryptionKey = encryptionKey;
-    _loadFuture = _reloadFromBox();
-    await _loadFuture;
-    _controller.add(null);
-  }
+  }) =>
+      _serialized(() async {
+        final detachedKey = await _detachEncryptionKey(encryptionKey);
+        final previousKey = _encryptionKey;
+        _scopeToken = scopeToken;
+        _encryptionKey = detachedKey;
+        _destroyEncryptionKey(previousKey);
+        _loadFuture = _reloadFromBox();
+        await _loadFuture;
+        _emitPinnedSnapshot();
+      });
 
   Future<void> _ensureLoaded() async {
     await _loadFuture;
@@ -150,67 +159,59 @@ class ChatMetaRepository {
     required String folderId,
     required String chatId,
     required bool pinned,
-  }) async {
-    await _ensureLoaded();
-    if (!_hasIdentityScope) return;
-
-    if (pinned) {
-      final pinnedAt = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-      (_pinnedByFolder[folderId] ??= <String, int>{})[chatId] = pinnedAt;
-      await _persist();
-      _controller.add(null);
-      return;
-    }
-
-    _pinnedByFolder[folderId]?.remove(chatId);
-    if ((_pinnedByFolder[folderId] ?? const <String, int>{}).isEmpty) {
-      _pinnedByFolder.remove(folderId);
-    }
-    await _persist();
-    _controller.add(null);
-  }
+  }) =>
+      _serialized(() async {
+        await _ensureLoaded();
+        await _setPinned(
+          folderId: folderId,
+          chatId: chatId,
+          pinned: pinned,
+        );
+      });
 
   Future<void> togglePinned(
-      {required String folderId, required String chatId}) {
-    final pinned = isPinned(folderId: folderId, chatId: chatId);
-    return setPinned(folderId: folderId, chatId: chatId, pinned: !pinned);
-  }
+          {required String folderId, required String chatId}) =>
+      _serialized(() async {
+        await _ensureLoaded();
+        final pinned = isPinned(folderId: folderId, chatId: chatId);
+        await _setPinned(
+          folderId: folderId,
+          chatId: chatId,
+          pinned: !pinned,
+        );
+      });
 
   Stream<Map<String, int>> watchPinnedChats({required String folderId}) async* {
-    await _ensureLoaded();
-    if (!_hasIdentityScope) {
-      yield const <String, int>{};
-      yield* _controller.stream.map((_) => const <String, int>{});
-      return;
-    }
-
-    yield Map.unmodifiable(_pinnedByFolder[folderId] ?? const <String, int>{});
+    final initial = await _serialized(() async {
+      await _ensureLoaded();
+      return _pinnedSnapshotFor(folderId);
+    });
+    yield initial;
     yield* _controller.stream.map(
-      (_) =>
-          Map.unmodifiable(_pinnedByFolder[folderId] ?? const <String, int>{}),
+      (snapshot) => Map<String, int>.unmodifiable(
+        snapshot[folderId] ?? const <String, int>{},
+      ),
     );
   }
 
-  Future<void> clearAll() async {
-    await _ensureLoaded();
-    _pinnedByFolder.clear();
-    _settingsByChatId.clear();
-    if (!_hasIdentityScope) {
-      _controller.add(null);
-      return;
-    }
-    await _box.delete(_storageKey);
-    _controller.add(null);
-  }
+  Future<void> clearAll() => _serialized(() async {
+        await _ensureLoaded();
+        _pinnedByFolder.clear();
+        _settingsByChatId.clear();
+        if (_hasIdentityScope) {
+          await _box.delete(_storageKey);
+        }
+        _emitPinnedSnapshot();
+      });
 
-  Future<Map<String, dynamic>?> getChatSettings(
-      {required String chatId}) async {
-    await _ensureLoaded();
-    if (!_hasIdentityScope) return null;
-    final settings = _settingsByChatId[chatId];
-    if (settings == null) return null;
-    return Map<String, dynamic>.from(settings);
-  }
+  Future<Map<String, dynamic>?> getChatSettings({required String chatId}) =>
+      _serialized(() async {
+        await _ensureLoaded();
+        if (!_hasIdentityScope) return null;
+        final settings = _settingsByChatId[chatId];
+        if (settings == null) return null;
+        return Map<String, dynamic>.from(settings);
+      });
 
   Future<void> saveChatSettings({
     required String chatId,
@@ -218,39 +219,114 @@ class ChatMetaRepository {
     required int? expiryMinutes,
     required bool deleteAfterRead,
     required bool excludeFromBackups,
-  }) async {
-    await _ensureLoaded();
-    if (!_hasIdentityScope) return;
-    _settingsByChatId[chatId] = {
-      'outputMode': outputMode,
-      'expiryMinutes': expiryMinutes,
-      'deleteAfterRead': deleteAfterRead,
-      'excludeFromBackups': excludeFromBackups,
-    };
-    await _persist();
-  }
+  }) =>
+      _serialized(() async {
+        await _ensureLoaded();
+        if (!_hasIdentityScope) return;
+        _settingsByChatId[chatId] = {
+          'outputMode': outputMode,
+          'expiryMinutes': expiryMinutes,
+          'deleteAfterRead': deleteAfterRead,
+          'excludeFromBackups': excludeFromBackups,
+        };
+        await _persist();
+      });
 
   Future<void> setExcludeFromBackups({
     required String chatId,
     required bool excludeFromBackups,
-  }) async {
-    await _ensureLoaded();
-    if (!_hasIdentityScope) return;
-    final current = _settingsByChatId[chatId] ?? const <String, dynamic>{};
-    _settingsByChatId[chatId] = {
-      'outputMode': (current['outputMode'] as String?) ?? 'text',
-      'expiryMinutes': current['expiryMinutes'] as int?,
-      'deleteAfterRead': (current['deleteAfterRead'] as bool?) ?? false,
-      'excludeFromBackups': excludeFromBackups,
-    };
-    await _persist();
-  }
+  }) =>
+      _serialized(() async {
+        await _ensureLoaded();
+        if (!_hasIdentityScope) return;
+        final current = _settingsByChatId[chatId] ?? const <String, dynamic>{};
+        _settingsByChatId[chatId] = {
+          'outputMode': (current['outputMode'] as String?) ?? 'text',
+          'expiryMinutes': current['expiryMinutes'] as int?,
+          'deleteAfterRead': (current['deleteAfterRead'] as bool?) ?? false,
+          'excludeFromBackups': excludeFromBackups,
+        };
+        await _persist();
+      });
 
   /// Clean up resources and close stream controller.
   ///
   /// This method should be called when the repository is no longer needed
   /// to prevent memory leaks from the stream controller.
   void dispose() {
-    _controller.close();
+    if (_disposeRequested) return;
+    _disposeRequested = true;
+    final pending = _operationTail;
+    unawaited(
+      pending.catchError((_) {}).whenComplete(() async {
+        final encryptionKey = _encryptionKey;
+        _encryptionKey = null;
+        _destroyEncryptionKey(encryptionKey);
+        if (!_controller.isClosed) await _controller.close();
+      }),
+    );
+  }
+
+  Future<void> _setPinned({
+    required String folderId,
+    required String chatId,
+    required bool pinned,
+  }) async {
+    if (!_hasIdentityScope) return;
+    if (pinned) {
+      final pinnedAt = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      (_pinnedByFolder[folderId] ??= <String, int>{})[chatId] = pinnedAt;
+    } else {
+      _pinnedByFolder[folderId]?.remove(chatId);
+      if ((_pinnedByFolder[folderId] ?? const <String, int>{}).isEmpty) {
+        _pinnedByFolder.remove(folderId);
+      }
+    }
+    await _persist();
+    _emitPinnedSnapshot();
+  }
+
+  Map<String, int> _pinnedSnapshotFor(String folderId) {
+    if (!_hasIdentityScope) return const <String, int>{};
+    return Map<String, int>.unmodifiable(
+      _pinnedByFolder[folderId] ?? const <String, int>{},
+    );
+  }
+
+  void _emitPinnedSnapshot() {
+    final snapshot = <String, Map<String, int>>{};
+    for (final entry in _pinnedByFolder.entries) {
+      snapshot[entry.key] = Map<String, int>.unmodifiable(entry.value);
+    }
+    _controller.add(Map<String, Map<String, int>>.unmodifiable(snapshot));
+  }
+
+  Future<SecretKeyData?> _detachEncryptionKey(SecretKey? key) async {
+    if (key == null) return null;
+    final extracted = Uint8List.fromList(await key.extractBytes());
+    final owned = Uint8List.fromList(extracted);
+    extracted.fillRange(0, extracted.length, 0);
+    return SecretKeyData(owned, overwriteWhenDestroyed: true);
+  }
+
+  void _destroyEncryptionKey(SecretKey? key) {
+    key?.destroy();
+  }
+
+  Future<T> _serialized<T>(Future<T> Function() operation) {
+    if (_disposeRequested) {
+      return Future<T>.error(StateError('ChatMetaRepository is disposed'));
+    }
+    final completer = Completer<T>();
+    final previous = _operationTail;
+    final next = previous.catchError((_) {}).then((_) async {
+      try {
+        completer.complete(await operation());
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+      }
+    });
+    _operationTail = next;
+    return completer.future;
   }
 }

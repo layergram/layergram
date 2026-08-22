@@ -456,11 +456,11 @@ class MessagesRepositoryCore {
     final extracted = Uint8List.fromList(await storageKey.extractBytes());
     final owned = Uint8List.fromList(extracted);
     extracted.fillRange(0, extracted.length, 0);
-    return SecretKeyData(owned);
+    return SecretKeyData(owned, overwriteWhenDestroyed: true);
   }
 
   void _destroyStorageKey(SecretKey? storageKey) {
-    if (storageKey is SecretKeyData) storageKey.destroy();
+    storageKey?.destroy();
   }
 
   Future<T> _serialized<T>(Future<T> Function() operation) {

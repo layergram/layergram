@@ -13,7 +13,7 @@ import 'local_identity_vault.dart';
 import 'secure_storage.dart';
 
 class LocalStorageContext {
-  const LocalStorageContext({
+  LocalStorageContext({
     required this.scopeToken,
     required this.contactsKey,
     required this.chatMetaKey,
@@ -22,6 +22,15 @@ class LocalStorageContext {
   final String scopeToken;
   final SecretKey contactsKey;
   final SecretKey chatMetaKey;
+
+  bool _destroyed = false;
+
+  void destroy() {
+    if (_destroyed) return;
+    _destroyed = true;
+    contactsKey.destroy();
+    chatMetaKey.destroy();
+  }
 }
 
 class LocalStorageSecurityService {
@@ -41,14 +50,15 @@ class LocalStorageSecurityService {
   Future<void> ensureCurrentLayout() async {
     final current = await _secureStorage.read(_layoutVersionKey);
     if (current == _layoutVersion) {
-      await _ensureMasterKeyBytes();
+      final masterKey = await _ensureMasterKeyBytes();
+      masterKey.fillRange(0, masterKey.length, 0);
       return;
     }
 
     final existingLocal = await _localIdentityVault.read();
     if (existingLocal == null) {
-      final legacyRaw =
-          Hive.box<Map>(LocalDatabase.identitiesBoxName).get('__local_identity__');
+      final legacyRaw = Hive.box<Map>(LocalDatabase.identitiesBoxName)
+          .get('__local_identity__');
       if (legacyRaw != null) {
         try {
           await _localIdentityVault.save(LocalIdentity.fromMap(legacyRaw));
@@ -58,25 +68,37 @@ class LocalStorageSecurityService {
 
     await LocalDatabase.clearAll();
     await _secureStorage.write(_layoutVersionKey, _layoutVersion);
-    await _ensureMasterKeyBytes();
+    final masterKey = await _ensureMasterKeyBytes();
+    masterKey.fillRange(0, masterKey.length, 0);
   }
 
   Future<LocalStorageContext?> contextForIdentity(String identityId) async {
     if (identityId.isEmpty) return null;
     final masterKey = await _ensureMasterKeyBytes();
-    return LocalStorageContext(
-      scopeToken: _scopeToken(masterKey, identityId),
-      contactsKey: await SealedMapCipher.deriveKey(
+    SecretKey? contactsKey;
+    try {
+      final scopeToken = _scopeToken(masterKey, identityId);
+      contactsKey = await SealedMapCipher.deriveKey(
         masterKey,
         scope: identityId,
         info: 'layergram-contacts-v1',
-      ),
-      chatMetaKey: await SealedMapCipher.deriveKey(
+      );
+      final chatMetaKey = await SealedMapCipher.deriveKey(
         masterKey,
         scope: identityId,
         info: 'layergram-chat-meta-v1',
-      ),
-    );
+      );
+      return LocalStorageContext(
+        scopeToken: scopeToken,
+        contactsKey: contactsKey,
+        chatMetaKey: chatMetaKey,
+      );
+    } catch (_) {
+      contactsKey?.destroy();
+      rethrow;
+    } finally {
+      masterKey.fillRange(0, masterKey.length, 0);
+    }
   }
 
   Future<Uint8List> _ensureMasterKeyBytes() async {

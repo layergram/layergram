@@ -252,15 +252,17 @@ class IdentitiesController {
   }
 
   Future<void> _writeVerified(RemoteIdentity identity, bool verified) {
-    return ref
-        .read(identitiesRepositoryProvider)
-        .upsertRemoteIdentity(identity.copyWith(verified: verified));
+    return ref.read(identitiesRepositoryProvider).setRemoteVerification(
+          expectedIdentity: identity,
+          verified: verified,
+        );
   }
 
   Future<void> setDisplayName(RemoteIdentity identity, String displayName) {
-    return ref
-        .read(identitiesRepositoryProvider)
-        .upsertRemoteIdentity(identity.copyWith(displayName: displayName));
+    return ref.read(identitiesRepositoryProvider).setRemoteDisplayName(
+          expectedIdentity: identity,
+          displayName: displayName,
+        );
   }
 
   Future<void> delete(String identityId) async {

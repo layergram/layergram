@@ -117,7 +117,7 @@ class HomeController {
             storageKey: storageKey,
           );
     } finally {
-      if (storageKey is SecretKeyData) storageKey.destroy();
+      storageKey?.destroy();
     }
   }
 

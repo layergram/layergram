@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 
@@ -13,16 +14,20 @@ void main() {
   late Directory tmpDir;
   final keyMaterial = Uint8List.fromList(List<int>.generate(32, (i) => i));
 
+  Future<SecretKey> deriveChatMetaKey(String keyScope) {
+    return SealedMapCipher.deriveKey(
+      keyMaterial,
+      scope: keyScope,
+      info: 'chat-meta-test',
+    );
+  }
+
   Future<void> initRepo(
     ChatMetaRepository repo,
     String scopeToken,
     String keyScope,
   ) async {
-    final key = await SealedMapCipher.deriveKey(
-      keyMaterial,
-      scope: keyScope,
-      info: 'chat-meta-test',
-    );
+    final key = await deriveChatMetaKey(keyScope);
     await repo.setActiveContext(
       scopeToken: scopeToken,
       encryptionKey: key,
@@ -130,5 +135,72 @@ void main() {
     );
 
     repo.dispose();
+  });
+
+  test('metadata writes stay bound to their queued identity context', () async {
+    final keyA = await deriveChatMetaKey('A');
+    final keyB = await deriveChatMetaKey('B');
+    final repo = ChatMetaRepository(identityId: 'owner');
+    await repo.setActiveContext(
+      scopeToken: 'scope-a',
+      encryptionKey: keyA,
+    );
+
+    final writeA = repo.saveChatSettings(
+      chatId: 'chat-a',
+      outputMode: 'text',
+      expiryMinutes: 15,
+      deleteAfterRead: false,
+      excludeFromBackups: false,
+    );
+    final switchToB = repo.setActiveContext(
+      scopeToken: 'scope-b',
+      encryptionKey: keyB,
+    );
+    final writeB = repo.saveChatSettings(
+      chatId: 'chat-b',
+      outputMode: 'cover',
+      expiryMinutes: 30,
+      deleteAfterRead: true,
+      excludeFromBackups: true,
+    );
+
+    await Future.wait([writeA, switchToB, writeB]);
+    repo.dispose();
+
+    final viewA = ChatMetaRepository(identityId: 'owner');
+    await initRepo(viewA, 'scope-a', 'A');
+    expect(
+      (await viewA.getChatSettings(chatId: 'chat-a'))?['outputMode'],
+      'text',
+    );
+    expect(await viewA.getChatSettings(chatId: 'chat-b'), isNull);
+    viewA.dispose();
+
+    final viewB = ChatMetaRepository(identityId: 'owner');
+    await initRepo(viewB, 'scope-b', 'B');
+    expect(
+      (await viewB.getChatSettings(chatId: 'chat-b'))?['outputMode'],
+      'cover',
+    );
+    expect(await viewB.getChatSettings(chatId: 'chat-a'), isNull);
+    viewB.dispose();
+  });
+
+  test('rejects metadata operations once disposal begins', () async {
+    final repo = ChatMetaRepository(identityId: 'owner');
+    await initRepo(repo, 'scope-a', 'A');
+    repo.dispose();
+
+    await expectLater(
+      repo.saveChatSettings(
+        chatId: 'late-chat',
+        outputMode: 'text',
+        expiryMinutes: null,
+        deleteAfterRead: false,
+        excludeFromBackups: false,
+      ),
+      throwsStateError,
+    );
   });
 }
