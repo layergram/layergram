@@ -3,7 +3,7 @@
 Status: **initialization and all revision-1 transitions 1-13 plus private
 authenticated LS3/LB3/BM3 composition implemented; engineering candidate ABI
 and durable coordinator connected, default ABI `NOT_READY`, no application
-packaging; protocol v3 inactive**
+activation; protocol v3 inactive**
 
 This document freezes the initial bounded slice of Layergram's independent
 Apache-2.0 implementation of the public-domain [ML-KEM Braid revision-1
@@ -343,9 +343,10 @@ epoch no-wrap behavior.
 `SCKA_AUTHENTICATED_COMPOSITION.md` freezes the private LS3/LB3/BM3 boundary,
 including exact sealed-candidate re-export, semantic inner validation,
 deterministic role-and-revision state nonces under nonce-misuse-resistant
-AES-256-GCM-SIV, and a sealed two-party epoch-key agreement test. It does not yet
-connect native candidates to the existing durable send/receive journals; that
-atomic LS3/TR3/outbox composition remains activation-blocking.
+AES-256-GCM-SIV, and a sealed two-party epoch-key agreement test. The inactive
+application integration connects native candidates to the durable send/receive
+journals with atomic LS3/TR3/outbox composition behind the false activation
+selector.
 
 ## 3. Entropy and licensing boundary
 
@@ -370,9 +371,9 @@ entropy policy is frozen in `ENTROPY_SOURCES.md`.
 Apache-2.0 path. Its applicable `cfg-if`, `libc`, `r-efi`, and `rand_core`
 dependencies also provide an Apache-2.0-compatible path. Exact versions and
 notices are frozen in `Cargo.lock`, `THIRD_PARTY_NOTICES.md`, and the machine
-receipt. These terms are compatible with both the public Layergram base and the
-separately distributed paid Premium application, subject to preserving the
-recorded notices.
+receipt. These terms are compatible with both the public Layergram base and
+commercial downstream distribution, subject to preserving the recorded
+notices.
 
 ## 4. Verification and remaining gates
 

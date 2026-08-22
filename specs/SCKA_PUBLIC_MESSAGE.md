@@ -13,8 +13,7 @@ Layergram-owned Apache-2.0 implementation is
 
 No source from Signal's AGPL implementation was copied, adapted, linked, or
 embedded. This codec adds no dependency and is suitable for the public
-Layergram base that is merged into the separately distributed paid Premium
-application.
+Layergram base and commercial downstream distribution.
 
 `BM3` is currently a private Rust module. Its Header, `Ek`, `EkCt1Ack`, `Ct1`,
 `Ct2`, and no-data constructors/accessors are used by the private transition

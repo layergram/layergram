@@ -7,9 +7,9 @@ protocol v3 inactive**
 
 Layergram needs an ML-KEM Braid revision-1 backend to provide the Sparse
 Continuous Key Agreement input to its inactive Triple Ratchet. This component
-belongs to the public Apache-2.0 protocol base, which is also merged into a
-separately distributed paid Premium application. Commercial redistribution and
-the public-to-Premium merge boundary are therefore mandatory selection gates.
+belongs to the public Apache-2.0 protocol base used by optional commercial
+downstream distributions. Commercial redistribution and public-to-downstream
+compatibility are therefore mandatory selection gates.
 
 This document records an engineering dependency decision, not legal advice.
 The machine-readable receipt is `tool/pq/scka_native_candidate.json`.
@@ -29,8 +29,8 @@ commit `fd320484dcec89004021e6fdc7481825f5f261fa`, declares
 `AGPL-3.0-only` in both its root license and Cargo package metadata.
 
 Layergram rejects that implementation for linking, embedding, adaptation, or
-vendoring in this codebase. The paid proprietary Premium binary cannot rely on
-an AGPL-only component under Layergram's current distribution model. This
+vendoring in this codebase. A proprietary commercial downstream binary cannot
+rely on an AGPL-only component under Layergram's current distribution model. This
 decision may be revisited only if the relevant rights holder supplies a
 separate compatible license and the exact use receives specific legal and
 engineering approval.
@@ -224,8 +224,8 @@ does not reference the packaged loader.
 
 Before any packaged use, Layergram must regenerate and verify the resolved
 target-specific graph for every release ABI and repeat the license/notice
-review. Store distribution, commercial use, source/notice obligations, and the
-proprietary Premium combination must all remain acceptable.
+review. Store distribution, commercial use, source/notice obligations, and any
+proprietary downstream combination must all remain acceptable.
 
 ## Authenticated state-envelope primitive, inactive internal adoption
 

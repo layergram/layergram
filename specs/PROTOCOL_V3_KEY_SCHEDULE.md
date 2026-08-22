@@ -1,6 +1,6 @@
 # Layergram Protocol v3 — Key Schedule and Durable State Draft
 
-Status: **normative research draft; inactive; not externally reviewed**
+Status: **normative implementation candidate; integrated but inactive; not externally reviewed**
 
 This document freezes the first testable Layergram-v3 key-expansion boundary,
 hybrid message-key combination, fragment nonce derivation, acknowledgement
@@ -111,8 +111,8 @@ It deliberately does not provide:
 - production activation of the contact/device bootstrap policy, durable
   coordinator, or AR3 projection path;
 - production activation in contacts, messaging, UI, backup, migration, or
-  Premium paths. The providers and UI seams described in Section 10 are
-  registered only behind the single fail-closed inactive selector.
+  downstream capability paths. The providers and UI seams described in Section
+  10 are registered only behind the single fail-closed inactive selector.
 
 Protocol-v3 cryptography remains isolated under `lib/core/crypto/v3/`; the
 inactive application seams live in their ordinary provider/UI layers. Protocol
@@ -813,7 +813,7 @@ The controller validates the canonical TR3 envelope and derives the stored
 X25519 public key from its private seed before accepting a checkpoint or
 candidate. Its optional backend validator is mandatory for future activation:
 without a reviewed implementation authenticating and semantically validating
-the opaque native SCKA export, the controller remains research-only. It does not
+the opaque native SCKA export, the controller remains inactive and unapproved. It does not
 prove that a caller-supplied hybrid candidate is cryptographically correct by
 revision shape alone; the reviewed EC/SCKA transition engines and validator
 must supply that proof.
@@ -903,35 +903,22 @@ Before this schedule can carry user messages, Layergram still requires:
   EC Double Ratchet construction;
 - a reviewed ML-KEM Braid backend implementing authenticated state
   export/import behind the frozen boundary;
-- independent review and production wiring of the inactive crash-consistent
-  send/receive coordinator, including the reviewed native-state validator;
-- production wiring that preserves the implemented scope-owned initial-session
-  and receive-dispatch capability topology and supplies its reviewed native
-  SCKA validator/backend;
-- message/UI repository projection, fail-closed provider lifecycle ownership,
-  and chat text/link/steganography send, receive, display, acknowledgement,
-  deletion, and read-once routing are implemented behind the inactive runtime
-  selector; the same-24-word/new-public-identity migration notice, legacy-v2
-  send/import cutoff, per-contact v3 status, explicit reset, and Normal/Maximum
-  selection are also wired behind that selector;
-- Normal/Maximum policy changes atomically and durably exclude the exact
-  pre-change pending and completed handshake IDs instead of trusting either
-  endpoint's wall clock. Historical bindings remain for delayed authenticated
-  ACKs and recovery. Normal sending chooses at most sixteen devices and the
-  lexicographically greatest shared handshake ID per device; inbound content
-  accepts every non-excluded same-mode session so delayed messages are not
-  discarded. Maximum pins the first post-boundary remote device and rejects a
-  different device until another explicit reset. Release-level retention and
-  localized migration UX verification remain activation gates. The inactive
-  production selector now runs one scope-local maintenance pass after restore:
-  it compacts only checkpoint-covered effects and retires compact proofs only
-  after the frozen Normal/Maximum local horizon. It stores no global last-run
-  marker and never time-purges pending inbox bytes, unacknowledged outbox bytes,
-  or exact acknowledgement exports;
-- full packaging, crash, migration, multi-device, passphrase, Maximum-mode,
-  text, link, QR, and steganography tests;
+- independent review of the integrated crash-consistent send/receive
+  coordinator, native-state validator, scope-owned initial-session and receive-
+  dispatch capability topology;
+- hosted CI and release-matrix verification of the gated repository/UI
+  projection, lifecycle ownership, migration cutoff, per-contact status,
+  explicit reset, and Normal/Maximum policy;
+- current supported physical-device and real external-carrier tests covering
+  loss, retry, fragmentation, text, deep links, the single static identity QR,
+  and steganography;
+- established signed distribution-artifact verification on the supported store
+  platforms;
+- full packaging, crash, migration, multiple-device, passphrase,
+  Maximum-mode, backup, and downstream-capability compatibility tests;
 - independent protocol and implementation audit with no unresolved high or
   critical findings.
 
-Until those gates pass, this is a developer-only research implementation and
-must not be described to users as active quantum-resistant messaging.
+Until those gates pass, this is an inactive implementation candidate and must
+not be described to users as active quantum-resistant messaging. See
+[Protocol v3 Migration](PROTOCOL_V3_MIGRATION.md).

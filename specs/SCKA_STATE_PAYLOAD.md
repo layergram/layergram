@@ -12,8 +12,7 @@ The state names and required values follow Signal's public-domain [ML-KEM Braid
 revision-1 specification](https://signal.org/docs/specifications/mlkembraid/).
 No source from Signal's AGPL implementation was copied, adapted, linked, or
 embedded. The codec introduces no dependency and is suitable for the public
-Layergram base that is merged into the separately distributed paid Premium
-application.
+Layergram base and commercial downstream distribution.
 
 The private authenticated composition implements `Send` and `Receive` across
 transitions 1-13 and uses the private OS-entropy boundary where required. The

@@ -2,7 +2,10 @@
 
 ## Overview
 
-Layergram derives the local X25519 identity private key from BIP39 seed material. This derivation is versioned so the application can preserve legacy identities exactly while introducing stronger, domain-separated derivation for newly created identities.
+Layergram derives local identity key material from BIP39 seed material. This
+derivation is versioned so the application can preserve legacy identities
+exactly while introducing stronger, domain-separated derivation for new
+protocol generations.
 
 ## Versions
 
@@ -30,15 +33,15 @@ For `v2`, Layergram uses explicit domain separation:
 
 This keeps identity derivation isolated from future key uses and from the passphrase-derived identity namespace.
 
-### v3 (research implementation, not active)
+### v3 (integrated candidate, not active)
 
 - Input: BIP39 seed bytes
 - KDF: HKDF-SHA256
 - Salt/context: `layergram/protocol-v3/identity-derivation`
 - X25519 seed output: 32 bytes
 - ML-KEM-768 key-generation seed output: 64 bytes (`d || z`)
-- Status: implemented for deterministic vectors and protocol-v3 development;
-  not the preferred production derivation
+- Status: implemented and connected to the fail-closed protocol-v3 application
+  seams; not the preferred production derivation until the release gates pass
 
 The labels are purpose- and algorithm-specific:
 
@@ -56,8 +59,9 @@ inside the native opaque handle and is destroyed when the local handle closes.
 
 For passphrase-scoped identities, the passphrase first participates in the
 standard BIP39 seed derivation and the result then uses Layergram's separate v3
-passphrase labels. Neither the passphrase nor the resulting local handle is
-persisted by this checkpoint.
+passphrase labels. The passphrase and expanded local handle are not persisted
+as a discoverable identity record; the handle exists only while that context is
+active.
 
 Public identities received from text, links, or QR must cross the separate
 `V3PublicIdentityValidator` boundary before use. A checksum-valid identity is
@@ -67,7 +71,7 @@ check must also pass. This validation still does not authenticate the owner.
 The 64-byte ML-KEM seed is never truncated for QR or link compactness. A native
 backend expands it into the complete FIPS 203 keypair. Until that backend and
 the complete protocol pass their release gates, `v2` remains the preferred
-application derivation.
+application derivation and v3 remains inactive.
 
 ## Storage Metadata
 
@@ -82,7 +86,10 @@ The application must never infer derivation version heuristically when metadata 
 
 ### New identity creation
 
-Newly created identities default to `v2`.
+While protocol v3 is inactive, newly created identities default to `v2`. After
+an explicit reviewed activation, the application must derive the v3 identity
+for the active recovery context without silently treating its v2 contact state
+as v3.
 
 ### Restore from raw mnemonic
 
@@ -115,3 +122,6 @@ The same rule applies to v3. Reusing the same 24 words produces deterministic
 but different v3 key material, identity ID, fingerprint, contact bindings, and
 sessions. A v3 migration therefore requires a new public-identity exchange and
 contact verification; it is never silent.
+
+The complete user-facing contract is defined in
+[Protocol v3 Migration](PROTOCOL_V3_MIGRATION.md).

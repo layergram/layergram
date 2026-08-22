@@ -113,22 +113,22 @@ not evidence for the future handshake or ratchet.
 ## Commercial distribution and dependency gate
 
 The open-source Layergram repository is the shared protocol and security base
-for a separately distributed paid Premium application. Every dependency added
-to this base or to a future native SCKA backend therefore requires an exact
+for optional downstream capability distributions. Every dependency added to
+this base or to a future native SCKA backend therefore requires an exact
 versioned license review before adoption. The recorded terms must permit:
 
 - commercial use and paid distribution;
 - distribution through desktop and mobile application stores;
-- linking, embedding, and combination with a proprietary downstream Premium
-  binary without forcing disclosure of unrelated Premium source code;
+- linking, embedding, and combination with a commercial downstream binary
+  without forcing disclosure of unrelated downstream source code;
 - preservation of the public Layergram source under its existing license; and
 - production redistribution of every transitive runtime artifact.
 
 The review must record the exact source/version, SPDX expression, transitive
 runtime dependencies, binary redistribution obligations, attribution, NOTICE,
 and source-offer duties. Non-commercial, field-of-use, unknown, or custom terms,
-and copyleft terms whose distribution obligations conflict with the Premium
-model, fail this engineering gate unless a specific legal review approves the
+and copyleft terms whose distribution obligations conflict with the downstream
+distribution model, fail this engineering gate unless a specific legal review approves the
 exact use. Required license and notice material must ship with every affected
 artifact. This is a release-engineering rule, not legal advice.
 
@@ -156,7 +156,7 @@ transitive license review, and packaging remain activation gates.
   validation.
 - Complete supply-chain inventory and independent implementation audit.
 - Approve the exact native SCKA dependency and its full transitive license
-  inventory for both public and paid Premium distribution.
+  inventory for both public and commercial downstream distribution.
 - Specify and review the authenticated hybrid handshake and sparse PQ ratchet.
 
 Until all gates pass, the backend must not be described to users as active or

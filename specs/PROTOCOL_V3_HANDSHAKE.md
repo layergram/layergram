@@ -1,6 +1,6 @@
 # Layergram Protocol v3 — Authenticated Hybrid Handshake Draft
 
-Status: **normative research draft; inactive; not externally reviewed**
+Status: **normative implementation candidate; integrated but inactive; not externally reviewed**
 
 This document freezes a falsifiable three-message handshake candidate for the
 inactive Layergram protocol v3. It does not enable protocol v3 and it is not a
@@ -42,19 +42,17 @@ This checkpoint defines and implements:
 - fixed size bounds, public codec vectors, negative tests, and native-backend
   integration tests.
 
-It deliberately does not define or enable:
+It deliberately does not, by itself:
 
-- the outer bootstrap encryption and LMF key-resolution mechanism;
-- the active contact/device coordinator, expiry, acknowledgement UI, or
-  garbage collection;
-- Maximum-mode device-pin policy or Normal-mode device caps;
-- a production/reviewed ML-KEM Braid transition backend;
-- application-content activation, migration, backup, Premium wiring, or UI;
-- a third-party-verifiable signature or a non-repudiation claim.
+- approve the ML-KEM Braid transition backend or custom possession proof;
+- activate the contact/device coordinator, application content, migration, or
+  downstream capability paths;
+- prove real external-carrier preservation or signed release packaging;
+- provide a third-party-verifiable signature or a non-repudiation claim.
 
-All implementation remains isolated under `lib/core/crypto/v3/`. The inactive
-session-persistence scope constructs the repository, but no active v2 provider,
-identity, contact, message, UI, backup, or Premium seam imports it.
+The cryptographic implementation remains under `lib/core/crypto/v3/`. Its
+ordinary application/provider seams are integrated only behind the single
+fail-closed selector, so the active v2 runtime cannot construct the v3 scope.
 
 ## 2. Participants and keys
 
@@ -72,10 +70,10 @@ Each participant has:
 - `EK`: one fresh 32-byte X25519 handshake-ephemeral key;
 - `RK`: one fresh 32-byte X25519 initial Double Ratchet key.
 
-The device key is not derived from BIP39. A second device or reinstall must
-create a new random device seed. Future integration must store that seed only
-inside the same identity/passphrase-scoped encrypted local boundary as other
-secret state.
+The device key is not derived from BIP39. A second device or reinstall creates
+a new random device seed. The inactive integration stores that seed only inside
+the same identity/passphrase-scoped encrypted local boundary as other secret
+state.
 
 ```text
 DID = first16(SHA-256(
@@ -93,8 +91,8 @@ Modes are fixed for the complete run:
 
 | Wire ID | Mode |
 |---:|---|
-| `0x01` | Normal, future independently authenticated per-device sessions |
-| `0x02` | Maximum, future explicitly pinned device pair |
+| `0x01` | Normal, independently authenticated per-device sessions |
+| `0x02` | Maximum, explicitly pinned device pair |
 
 The first candidate accepts exactly capability mask `0x0000001f`:
 
@@ -221,8 +219,8 @@ TH = H384(BASE
 
 Only after the appropriate proof verifies may each side call the mandatory
 hybrid `V3KeySchedule.deriveSession(CS, PS, TH)`. The result is still only an
-authenticated handoff to future ratchet initializers, not an active Layergram
-application session.
+authenticated handoff to the inactive ratchet initializers, not an active
+Layergram application session.
 
 ## 6. Symmetric hybrid proof schedule
 
@@ -350,8 +348,8 @@ An exact duplicate is not a second handshake. The inactive persistence
 controller keys pending state by handshake ID, retains the exact canonical
 offer or reply bytes for resend, and enforces a global and per-remote-identity
 pending cap before expensive handshake cryptography. The active contact/device
-coordinator must still apply the crossed-offer tie-break and Normal/Maximum
-device policy before activation.
+coordinator is integrated behind the false selector and applies the crossed-
+offer tie-break and Normal/Maximum device policy only after activation.
 
 Old offer/reply/confirmation tuples cannot be relabelled into a new run because
 the derived identifiers, ordered roles, complete records, KEM ciphertexts,
@@ -359,8 +357,8 @@ device keys, and proofs are bound into `T1`, `T2`, and `TH`.
 
 ## 9. Pending restart state
 
-The `HP3` codec stores only the canonical plaintext that a future encrypted,
-padded auxiliary repository needs:
+The `HP3` codec stores only the canonical plaintext that the encrypted, padded
+auxiliary repository needs:
 
 - initiator: exact offer, `EK_A_priv`, `SS_AB`;
 - responder: exact offer, exact reply, `CS`, `PS`, `RK_B_priv`.
@@ -421,10 +419,11 @@ or preparation-delete outcomes fail stopped until a fresh scope restore. For
 an initiator, the tombstone retains the exact confirmation without retaining
 HP3 secrets.
 
-This remains inactive bootstrap infrastructure: the production scope factory
-must preserve the unexposed capability topology, and the production SCKA
-backend, contact/device policy, transport wrapper, and application projection
-are still activation gates.
+This remains inactive bootstrap infrastructure. The integrated scope factory
+preserves the unexposed capability topology, contact/device policy, transport
+wrapper, and application projection behind the false selector. An approved
+SCKA backend, hosted/release verification, real carriers, and independent review
+remain activation gates.
 
 ## 10. Manual transport sizing
 
@@ -455,9 +454,9 @@ ML-KEM ciphertext to make the handshake shorter.
 | authenticated handoff | prepare exact TR3, checkpoint, tombstone HP3, collect preparation | implemented but inactive |
 | `ACTIVE` | only after ratchet/controller commit | allowed |
 
-Proof verification does not by itself make the application active. Future
-integration must atomically bind the final transcript, initial EC state,
-initial PQ state, device policy, and replay state before releasing content.
+Proof verification does not by itself make the application active. The gated
+integration atomically binds the final transcript, initial EC state, initial PQ
+state, device policy, and replay state before releasing content.
 
 ## 12. Remaining security gates
 
@@ -466,16 +465,18 @@ Before this candidate can be enabled:
 - independent cryptographic review must assess the custom interactive KEM
   possession proof, deniability, KCI, active-quantum, reflection, replay, and
   transcript construction;
-- the bootstrap encryption and LMF key-resolution design must prevent a
-  classical-only application fallback and bind exact outer records;
-- Normal and Maximum device policy must be enforced by the controller;
+- the implemented bootstrap encryption and LMF key-resolution design must pass
+  independent review and continue to prevent a classical-only application
+  fallback while binding exact outer records;
+- the implemented Normal and Maximum device policy must pass release-level
+  concurrency, loss, and migration tests;
 - the implemented EC, epoch-zero PQ, and native-SCKA initializers must run with
   an independently reviewed production SCKA backend; the current atomic handoff
   already composes and persists their exact initial `TR3`;
 - active construction must remain private behind the scope coordinator so no
   caller can bypass the preparation/checkpoint/tombstone ordering;
-- loss, reorder, duplicate, resend, text, link, steganography, QR-independent
-  identity, passphrase, multi-identity Premium, backup, and cross-platform
-  packaging tests must pass;
+- loss, reorder, duplicate, resend, text, link, steganography, complete static-
+  QR identity, passphrase, multiple-identity, backup, and cross-platform
+  packaging tests must pass on the release matrix;
 - the complete protocol and implementation must pass the activation gate in
   `PROTOCOL_V3_SECURITY_GOALS.md`.

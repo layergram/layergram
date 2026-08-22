@@ -4,7 +4,8 @@ Status: **canonical KDF and ratcheted authenticator implemented internally;
 initialization, header MAC, output-key derivation, ratcheting, and ciphertext
 generation/verification connected only to the private transition engine, whose
 revision-1 transitions 1-13 are implemented; public
-ABI connection not implemented; protocol v3 inactive**
+candidate ABI and durable integration connected, default ABI `NOT_READY`;
+protocol v3 inactive**
 
 This document freezes Layergram's implementation-defined domain and the
 ratcheted-authenticator primitives required by the public-domain [ML-KEM Braid
@@ -14,8 +15,8 @@ The Apache-2.0 implementation is
 
 No source from Signal's AGPL implementation was inspected, copied, adapted,
 linked, or embedded. This checkpoint uses the permissively licensed RustCrypto
-`hkdf`, `hmac`, and `sha2` crates and remains suitable for the public Layergram
-base that is merged into the separately distributed paid Premium application.
+`hkdf`, `hmac`, and `sha2` crates and remains suitable for Apache-2.0 and
+commercial downstream distribution when the recorded notices are preserved.
 
 The private transition slice now uses authenticator initialization, restore,
 header-MAC generation, persisted-header verification, `KDF_OK`, detached
@@ -179,10 +180,9 @@ success/failure behavior, domain separation, exact input sizes, signed-63 epoch
 bounds, detached successor semantics, restore length checks, and explicit wipe
 paths.
 
-Activation still requires approval of the complete private revision-1 engine,
-integration and review of the canonical `BM3` codec, authenticated outer
-framing and reconstruction, LS3/LB3 composition, atomic LS3/TR3 revision binding,
-independent cross-implementation vectors,
-fuzzing and sanitizers, panic containment, crash/restart/rollback/concurrency
-tests, packaged physical-device traversal, and independent cryptographic and
-implementation review.
+Activation still requires independent approval of the complete revision-1
+engine and authenticated composition, hosted/release-matrix checks, current
+physical-device and real-carrier traversal, and independent cryptographic and
+implementation review. The canonical BM3/LS3/LB3 composition, atomic LS3/TR3
+binding, hostile corpus, sanitizers, crash/restart, rollback, and concurrency
+coverage are integrated candidate evidence, not substitutes for that review.

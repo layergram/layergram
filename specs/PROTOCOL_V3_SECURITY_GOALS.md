@@ -1,6 +1,6 @@
 # Layergram Protocol v3 — Security Goals
 
-Status: **normative research baseline; protocol v3 is not enabled**
+Status: **normative activation baseline; integrated candidate is not enabled**
 
 This document defines the properties that a Layergram protocol-v3 design must
 demonstrate before it can replace protocol v2. If a later handshake, ratchet,
@@ -58,9 +58,9 @@ The design MUST address at least:
 - The same valid BIP39 mnemonic and optional BIP39 passphrase MUST reproduce the
   same complete v3 cryptographic identity on every supported platform.
 - Primary and passphrase-scoped identities MUST use distinct domain-separated
-  derivation labels. Each separately saved Premium identity MUST use its own
-  recovery material and the same public protocol contract.
-- The identity ID, fingerprint, and future SAS MUST bind the protocol version,
+  derivation labels. Each separately managed identity MUST use its own recovery
+  material and the same public protocol contract.
+- The identity ID, fingerprint, and v3 SAS MUST bind the protocol version,
   suite, flags, X25519 key, and ML-KEM key. Mutable display text MUST NOT affect
   the cryptographic identity.
 - Decoders MUST reject unknown suites or flags, non-canonical encodings,
@@ -74,8 +74,8 @@ The design MUST address at least:
 
 ## Handshake properties
 
-`PROTOCOL_V3_HANDSHAKE.md` freezes the current inactive research candidate.
-It is not approved for activation and any candidate MUST:
+`PROTOCOL_V3_HANDSHAKE.md` freezes the current inactive implementation
+candidate. It is not approved for activation and any candidate MUST:
 
 - bind both complete identities, both device identifiers and device keys,
   initiator/responder roles, protocol version, suite, capabilities, security
@@ -295,14 +295,16 @@ Protocol v3 may be called quantum-resistant only after all of the following:
 - every shipped ABI passes the primitive, parser, model, crash, transport, and
   cross-platform suites;
 - real QR, text, link, and steganographic tests pass on the supported matrix;
-- the public protocol and private Premium implementation pass compatibility
-  tests without a protocol fork;
+- the public protocol and every downstream capability implementation pass
+  compatibility tests without a protocol fork;
 - every runtime and native dependency has a versioned license inventory that
-  permits both open-source and paid proprietary Premium distribution;
+  permits both open-source and commercial downstream distribution;
 - an independent audit has no unresolved critical or high-severity finding.
 
-Until then, all v3 code and UI must remain developer-only, inactive, and labelled
-as research implementation.
+Until then, all v3 code and UI must remain inactive and must be labelled as an
+implementation candidate rather than active quantum-resistant messaging. The
+required incompatible user transition is defined in
+[Protocol v3 Migration](PROTOCOL_V3_MIGRATION.md).
 
 ## Primary references
 

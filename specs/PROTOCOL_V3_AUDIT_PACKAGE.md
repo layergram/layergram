@@ -14,10 +14,10 @@ text/link/steganographic carriers, the static identity QR, Normal/Maximum
 policy, passphrase scope isolation, application presentation, platform
 packaging, and every associated test and specification.
 
-The paid Premium repository is not an audit input and is never read or copied
-by the bundle tool. Premium must merge the audited OSS commit and run its own
-downstream contract and product tests without replacing protocol code or adding
-an incompatible dependency.
+Non-OSS downstream extension source is not an audit input and is never read or
+copied by the bundle tool. Any downstream distribution must consume the audited
+OSS commit and run compatibility tests without replacing protocol code or
+adding an incompatible dependency.
 
 ## 2. Reproducible creation
 
@@ -60,7 +60,7 @@ The independent reviewer must evaluate at least:
 6. Normal multi-device and Maximum device-pinned policy under delayed,
    duplicated, reordered, omitted, and replayed carrier messages;
 7. mnemonic restore, multiple identities, passphrase and plausible-deniability
-   scope isolation, plus the public/Premium repository boundary;
+   scope isolation, plus public/downstream capability boundaries;
 8. platform FFI ABI, release hardening, package contents, dependency provenance
    and commercial-license compatibility.
 
@@ -93,4 +93,4 @@ false, the SCKA candidate is not production-registered, the receipt still says
 protocol v3 is inactive, and at least one remaining gate is recorded. It never
 changes those values. Activation is a separate, reviewed commit after external
 audit, distribution signing/store verification, physical-device regression,
-Premium downstream verification, and explicit release authorization.
+downstream compatibility verification, and explicit release authorization.

@@ -1,12 +1,13 @@
 # Layergram Message Format v3 — Canonical Framing Draft
 
-Status: **normative research draft; inactive; not externally reviewed**
+Status: **normative implementation candidate; integrated but inactive; not externally reviewed**
 
 This document freezes the first testable candidate for Layergram protocol-v3
 binary framing, text/link armor, steganographic carriage, bounded fragment
 reassembly, cumulative acknowledgements, and crash-consistent sealed-frame
-storage. It does not enable protocol v3, define the handshake or ratchet key
-schedule, or establish a quantum-resistant product claim.
+storage. It does not enable protocol v3 or establish a quantum-resistant
+product claim; the separate handshake and key-schedule specifications complete
+the integrated candidate.
 
 `PROTOCOL_V3_SECURITY_GOALS.md` remains authoritative. This draft must change if
 the later handshake, ratchet, persistence design, or external review finds that
@@ -34,16 +35,15 @@ This checkpoint provides:
   length and digest authenticated on every continuation fragment;
 - public golden and adversarial parser tests.
 
-It deliberately does not provide:
+This framing specification deliberately does not, by itself:
 
-- the authenticated handshake transcript or sender proof;
-- a production ML-KEM Braid transition engine;
-- sender proof of possession or contact authentication;
-- reviewed native ML-KEM Braid state export/import;
-- atomicity for side effects written outside the v3 effect journal;
-- resend scheduling, erasure coding, notification, or progress UI;
-- erasure coding;
-- activation in identity, contact, messaging, UI, storage, or Premium paths.
+- authenticate a contact before the separate v3 handshake and SAS ceremony;
+- approve the candidate ML-KEM Braid construction or native state export;
+- make side effects outside the v3 effect journal atomic;
+- prove that real external carriers preserve every supported representation;
+- activate identity, contact, messaging, UI, storage, or downstream capability
+  paths;
+- replace independent cryptographic and implementation review.
 
 ## 2. Integer and canonicalization rules
 
@@ -641,20 +641,16 @@ m3.TE0zAwEBALQAGQECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gQUJDREVGR0hJSktMTU5PU
 
 ## 10. Activation boundary
 
-The implementation lives only under `lib/core/crypto/v3/`. Protocol v2 remains
-active. Nothing in this draft or codec changes identity import, message send,
-message decode, contact state, backups, migration, QR, UI, or Premium capability
-contracts.
+The cryptographic implementation lives under `lib/core/crypto/v3/`; its
+identity, contact, repository, and UI seams are integrated in their ordinary
+application layers only behind the single fail-closed activation selector.
+Protocol v2 remains active while that selector is false.
 
-Before activation, the native ML-KEM Braid engine must produce and consume the
-frozen message/state formats and validate every opaque export; the inactive
-crash-consistent send/receive coordinator and its recovery paths must pass
-independent review and production wiring; the application repository must
-project from the durable stable-ID AR3 source; checkpoint-backed restore,
-compaction, replay-window replacement, and the integrated retirement
-preparation, receipt-pruned/final checkpoints, exact compact-proof and plan
-deletion, rolling receipt compaction, and crash reconciliation must pass
-independent review;
-resend/progress UX and real loss recovery must pass; all three transports must
-pass real cross-app tests; and the complete design and implementation must pass
-independent review.
+Before activation, the native ML-KEM Braid engine and every opaque export must
+pass independent review; the crash-consistent coordinator and recovery paths
+must pass hosted and release-matrix checks; supported physical devices and real
+text/link/steganographic carrier workflows must pass; the established signed
+distribution-artifact flows must be verified; and the complete design and
+implementation must have no unresolved high or critical audit finding. See
+[Protocol v3 Migration](PROTOCOL_V3_MIGRATION.md) for the explicit incompatible
+user transition.

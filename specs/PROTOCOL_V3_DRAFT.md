@@ -1,10 +1,11 @@
 # Layergram Protocol v3 — Security and Identity Draft
 
-Status: **research implementation; not enabled for users; not a security claim**
+Status: **integrated implementation candidate; inactive; not a security claim**
 
-This document defines the first falsifiable invariants for the intentionally
-incompatible Layergram protocol v3. It does not declare the protocol complete
-or independently reviewed.
+This document defines the falsifiable invariants for the intentionally
+incompatible Layergram protocol v3 candidate. The application integration is
+complete behind a fail-closed selector, but the protocol is not activated or
+independently approved.
 
 The normative threat boundary and activation properties are defined in
 `PROTOCOL_V3_SECURITY_GOALS.md`. If this draft conflicts with those goals, the
@@ -109,17 +110,15 @@ wipes temporary seed buffers on both success and failure. Passphrase-scoped
 restoration uses both the BIP39 passphrase and the separate v3 passphrase
 derivation namespace.
 
-The factory is intentionally absent from `IdentityManager`, providers, storage,
-backup, UI, contact import, and messaging. It is not a migration or activation:
-v2 remains preferred. Its private fields are now consumed only by the inactive
-handshake library part described below; no active application seam can reach
-that code.
+The factory is reachable only through the inactive v3 lifecycle and provider
+seams. It is not an activation: v2 remains preferred and no active application
+path can construct the v3 runtime while the selector is false.
 
 Imported identities have a distinct `V3PublicIdentityValidator` boundary. It
 first applies the strict canonical codec, then requires the native backend
 self-test and the FIPS 203 public-key validity check. Its validated wrapper means
 only “structurally usable”; it never substitutes owner authentication or the
-future fingerprint/SAS ceremony.
+v3 fingerprint/SAS ceremony.
 
 ## Initial transport limitation
 
@@ -181,9 +180,9 @@ records now live in the real identity/passphrase-scoped encrypted Aux store:
 the exact offer/reply is persisted before first export, survives restart
 without repeating ML-KEM, and is replaced only after a checkpoint-bound
 completion tombstone is durable. Crossed offers use a clock-free deterministic
-tie-break, which the future active contact/device coordinator must enforce.
+tie-break, which the gated contact/device coordinator enforces after activation.
 
-The handshake and application runtime remain research candidates behind the
+The handshake and application runtime remain implementation candidates behind the
 inactive v3 boundary. They now compose canonical identity import, durable
 offer/reply/confirmation bootstrap, the exact initial-TR3 handoff, complete
 send/receive persistence authority, deferred continuation-key resolution,
@@ -192,12 +191,13 @@ multi-device send groups, Maximum-mode exclusivity, exact receiver-ACK retry,
 and per-frame text/link/steganography carriage. `APPLICATION_MESSAGE_V3.md`
 freezes that application boundary.
 
-This is library/runtime integration, not product activation. It is still absent
-from the active contact/message repositories, chat UI, backup projection, and
-Premium composition. The controller still depends on reviewed production
-native SCKA packaging and trusted candidate construction. Its initial
-registration/completion API is protected by one unexposed scope-created
-identity capability, including concurrent forged-claim rejection. Active
-repository projection, resend/progress UX, passphrase and plausible-deniability
-coverage, real cross-application loss tests, supported physical devices, and
-independent review remain activation gates.
+This is application/runtime integration, not product activation. Contact and
+message repositories, chat UI, migration, passphrase-scoped lifecycle, and
+downstream capability seams are connected only behind the false activation
+selector. The controller depends on an approved native SCKA candidate and
+trusted construction. Its initial registration/completion API is protected by
+one unexposed scope-created identity capability, including concurrent forged-
+claim rejection. Hosted CI, current physical devices, real cross-application
+loss/preservation tests, signed distribution-artifact verification, and
+independent review remain activation gates. The user consequences are defined
+in [Protocol v3 Migration](PROTOCOL_V3_MIGRATION.md).

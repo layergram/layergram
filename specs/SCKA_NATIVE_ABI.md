@@ -25,8 +25,7 @@ is not referenced by ordinary `lib/main.dart`, is not registered for
 production, and does not make Layergram quantum-resistant.
 
 The crate is Apache-2.0, pins Rust 1.87.0, and is suitable for the public
-repository that is merged into the separately distributed paid Premium
-application. Its inactive incremental primitive uses exact-version permissive
+repository and commercial downstream distribution. Its inactive incremental primitive uses exact-version permissive
 dependencies recorded in `native/layergram_scka/THIRD_PARTY_NOTICES.md` and the
 machine receipt. Every dependency change requires a new checksum, feature,
 transitive-license, notice, and target-specific review.

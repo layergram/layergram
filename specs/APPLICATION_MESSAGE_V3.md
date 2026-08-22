@@ -96,8 +96,9 @@ metadata and rejects a durable deletion tombstone.
 
 The AP3 codec, durable multi-device group, exact-byte ACK outbox, chat metadata
 projection, presentation journal, and text/link/steganography transport are
-currently reachable only through the inactive v3 runtime. Active provider/UI
-bootstrap, production native SCKA packaging, passphrase and plausible-
-deniability integration tests, supported platform and physical-carrier tests,
-migration UX, and independent audit remain mandatory before
+integrated only through the inactive v3 runtime. Provider/UI bootstrap,
+passphrase-scoped lifecycle, migration UX, and Normal/Maximum policy are wired
+behind the same fail-closed selector. Supported physical-device and real-
+carrier tests, hosted CI, established signed distribution-artifact checks, and
+independent audit remain mandatory before
 `ProtocolV3Activation.messaging` can become true.

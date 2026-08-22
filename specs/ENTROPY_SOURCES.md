@@ -80,6 +80,5 @@ obtain independent cryptographic and implementation review.
 dependency notices are retained in
 `native/layergram_scka/THIRD_PARTY_NOTICES.md`. Dart's secure-random API is
 part of the platform SDK and the existing `bip39` package remains MIT licensed.
-These choices permit use in the public Apache-2.0 Layergram base and in the
-separately distributed paid Premium product when the recorded notices are
-preserved.
+These choices permit use in the public Apache-2.0 Layergram base and commercial
+downstream products when the recorded notices are preserved.

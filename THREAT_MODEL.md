@@ -1,10 +1,10 @@
 # Layergram Threat Model
 
-> Protocol-v3 work is an inactive research implementation. Its stronger target
-> properties and activation gates are defined in
+> Protocol-v3 work is an integrated but inactive implementation candidate. Its
+> stronger target properties and activation gates are defined in
 > [Protocol v3 Security Goals](specs/PROTOCOL_V3_SECURITY_GOALS.md). Nothing in
-> the current application should yet be interpreted as a post-quantum security
-> claim; the active protocol remains v2.
+> a currently distributed Layergram build should yet be interpreted as a
+> post-quantum security claim; the active protocol remains v2.
 
 This document describes, in plain language, what Layergram is designed to protect against and — just as importantly — what it does **not** protect against. It is written for users, integrators and security researchers evaluating whether Layergram fits their threat model.
 
@@ -29,6 +29,11 @@ Layergram is an end-to-end encrypted messaging tool that is transport-agnostic: 
 - **Casual impersonation of a known contact.** When a contact has been verified via the in-app SAS (Short Authentication String) ceremony, any mismatch between the locally-stored public key and the key an attacker tries to substitute will cause the decrypt path to fail and the SAS code to change visibly.
 - **At-rest disclosure from a locked device.** Identity material, contacts and messages are held in the OS secure storage (Keychain / Keystore) and in an app-lock-gated local database. The app lock uses a KDF-derived PIN hash (not plaintext), with a constant-time comparison, random per-install salt, rate limiting, and exponential backoff on failed attempts.
 - **Silent identity-format drift.** Identity derivation is explicitly versioned (`v1` legacy sha256, `v2` HKDF-SHA256 with domain separation). Legacy identities are never silently upgraded, and a one-time localized notice informs users with `v1` identities that they should migrate.
+- **Silent v2-to-v3 trust promotion.** Reusing the same 24-word recovery phrase
+  derives different v3 X25519 and ML-KEM-768 keys. The resulting public
+  identity, fingerprint, contact binding, and sessions are new and require an
+  explicit complete-identity exchange and SAS/fingerprint verification. A v2
+  verification badge is never silently promoted to v3.
 - **Recovery-phrase-only compromise.** Knowledge of the mnemonic alone is enough to recreate identity keys by design — Layergram inherits the BIP39 semantics — but identity-scoped data in the encrypted vault and in session caches is never exposed until the device is unlocked.
 - **Limited deniability for passphrase-protected data.** When the optional passphrase feature is used, Layergram derives a separate identity/keyspace from the mnemonic+passphrase and keeps the passphrase-derived keys in memory only while active. If the user unlocks the app without activating the passphrase, the base vault remains visible while passphrase-scoped messages stay absent. This can provide a practical, limited form of plausible deniability against casual inspection.
 
@@ -41,6 +46,10 @@ Layergram is honest about its limits. The following concerns are explicitly out 
 - **Detection of a hidden message.** The zero-width steganography used to embed ciphertext into cover text is designed to resist casual observation and rendering issues. It is not designed to resist an adversary who explicitly looks for hidden codepoints. If your threat model requires hiding the *existence* of encrypted communication from a motivated adversary, zero-width stego alone is not sufficient. Direct text payloads and direct message links do not hide the existence of an opaque encrypted blob; links additionally expose the Layergram URI scheme.
 - **Cover-message content inspection.** Layergram does not generate cover messages for you in the open-source build. The authenticity and innocence of the cover text are the user's responsibility.
 - **Man-in-the-middle during the *initial* key exchange.** When Alice and Bob exchange identity links over a non-trusted transport (WhatsApp, Telegram, email), an attacker on that channel can substitute a key. Layergram mitigates this with an explicit, localized **SAS verification ceremony** that must be performed out-of-band (voice call, in person, or another channel believed to be MITM-free). Until that ceremony is completed, the contact is clearly marked "not verified" in the contact list and a persistent banner is shown in the chat view warning the user of this state.
+- **Authentication merely by publishing a v3 identity.** A text token, deep
+  link, static QR, social-profile post, sticker, or business card can carry the
+  complete public identity but cannot prove who controls it. V3 still requires
+  verification through an independent channel.
 - **Rubber-hose / coercion.** Layergram does not provide a formal duress PIN, panic mode, or a cryptographically separate decoy vault with strong anti-forensic guarantees. The optional passphrase can create a limited deniability layer because passphrase-derived keys are not present unless the user activates them, but this should not be treated as a strong guarantee against coercion, repeated questioning, device seizure, side-channel observation, or forensic correlation.
 - **Compromised or rooted device.** Layergram relies on the platform to enforce process isolation and on the OS keystore for hardware-backed key material. A device that is rooted, jailbroken, or compromised by malware running with screen-recording, input-injection or memory-dumping privileges can read or influence anything Layergram does while it is unlocked.
 - **Compromised recipient.** If the recipient's device is compromised, or if they share their recovery phrase, the content you sent them can be recovered. End-to-end encryption protects the transport, not the endpoint.
@@ -55,6 +64,12 @@ Layergram is honest about its limits. The following concerns are explicitly out 
 The full protocol and implementation hardening notes live in [specs/FORWARD_SECRECY.md](specs/FORWARD_SECRECY.md).
 
 **Forward Secrecy.** Layergram supports opportunistic Forward Secrecy for established device-to-device sessions. Forward Secrecy is negotiated inside ordinary Layergram messages and does not require users to redistribute their public contact keys. New contacts default to Advanced FS, which means compatible clients automatically attempt the upgrade as messages are exchanged. Until a compatible session is confirmed, Layergram continues to use the existing identity-based encryption model for compatibility. Once FS is active, user content is ratchet-only and is not duplicated in an identity-key fallback copy.
+
+This no-redistribution property describes the active v2 Forward Secrecy upgrade.
+The intentionally incompatible v3 migration is different: it derives a new
+complete hybrid public identity and therefore requires users to exchange and
+verify public identities again. See
+[Protocol v3 Migration](specs/PROTOCOL_V3_MIGRATION.md).
 
 **Initial negotiation limits.** FS control data is inside the authenticated encrypted envelope, so a transport attacker cannot remove only the `fs_init` / `fs_reply` / `fs_confirm` extension while leaving the same message valid. However, an active transport attacker can drop, delay, reorder, or replace whole messages. Before a contact has ever reached a confirmed FS session, Layergram cannot cryptographically distinguish an old client, a lost/unimported manual-transport message, and active suppression of the initial FS negotiation. Downgrade warnings are meaningful after a higher security level has been confirmed; before then, Advanced FS remains an opportunistic compatibility mode rather than a proof that no active suppression occurred.
 
@@ -85,6 +100,11 @@ The full protocol and implementation hardening notes live in [specs/FORWARD_SECR
 - **Adversary running a cover-text classifier / detector**: not mitigated by the stego layer alone.
 
 ## Cryptographic specifics
+
+The following list describes the active v2 protocol. The inactive v3 candidate
+uses the hybrid and ratcheting requirements in
+[Protocol v3 Security Goals](specs/PROTOCOL_V3_SECURITY_GOALS.md); listing the
+candidate here does not activate it.
 
 - **Identity keys (v2):** Ed25519/X25519-equivalent 32-byte keypairs derived from a BIP39 mnemonic via HKDF-SHA256 with domain-separated labels (`layergram-id-v2` / `layergram-passphrase-id-v2`). Version metadata is persisted so derivation remains stable across app upgrades.
 - **Identity keys (v1, legacy):** SHA-256 of the BIP39 seed. Preserved for users onboarded in early versions; never silently upgraded.

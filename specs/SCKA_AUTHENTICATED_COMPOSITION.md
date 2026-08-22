@@ -151,12 +151,13 @@ The candidate-only bridge now exercises the private Rust composition through
 the authority-side integration seam. Its Dart loader accepts only an explicit
 path and checks the exact implementation ID, ABI, protocol revision, state
 format, and every fixed size before admission. The normal Rust feature set
-still returns `NOT_READY`; the candidate is unregistered and absent from every
-app package. The application now has inactive text, link, and steganography
-routing through the scope-owned dispatcher, plus inactive migration/status UX
-and durable Normal/Maximum session-generation selection. Production
-registration, packaged candidate selection, complete localization/platform
-verification, and activation review remain gates.
+still returns `NOT_READY`; the candidate is unregistered by ordinary
+application bootstrap and is packaged only by the explicit verification path.
+The application now has inactive text, link, and steganography routing through
+the scope-owned dispatcher, plus inactive migration/status UX and durable
+Normal/Maximum session-generation selection. Production registration, current
+physical-device/real-carrier verification, signed release-artifact
+verification, independent review, and activation approval remain gates.
 
 ## 7. Verification and commercial boundary
 
@@ -197,5 +198,5 @@ recorded in `native/layergram_scka/THIRD_PARTY_NOTICES.md` and
 excluded; this is an independent implementation of the public-domain protocol
 specification.
 
-Protocol v3 remains inactive and Layergram must not claim post-quantum
-readiness from this checkpoint.
+Protocol v3 remains inactive and Layergram must not claim active post-quantum
+protection from this checkpoint.

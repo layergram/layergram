@@ -18,7 +18,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('SCKA candidate receipt excludes AGPL code from the Premium base', () {
+  test('SCKA candidate receipt excludes AGPL code from the OSS base', () {
     final receipt = jsonDecode(
       File('tool/pq/scka_native_candidate.json').readAsStringSync(),
     ) as Map<String, dynamic>;
@@ -1070,7 +1070,9 @@ void main() {
     expect(auditTool, contains('SOURCE_SHA256SUMS.txt'));
     expect(auditPolicy, contains('inactive engineering candidate'));
     expect(
-        auditPolicy, contains('paid Premium repository is not an audit input'));
+      auditPolicy,
+      contains('Non-OSS downstream extension source is not an audit input'),
+    );
     expect(auditPolicy, contains('No Layergram-authored test'));
     expect(auditPolicy, contains('Production approval requires no unresolved'));
   });
