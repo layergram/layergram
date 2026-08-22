@@ -17,6 +17,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app.dart';
+import 'core/legal/layergram_license_registry.dart';
 import 'core/storage/local_database.dart';
 import 'core/storage/local_identity_vault.dart';
 import 'core/storage/local_storage_security_service.dart';
@@ -27,6 +28,7 @@ Future<void> runLayergramApp({
   List<Override> providerOverrides = const <Override>[],
 }) async {
   WidgetsFlutterBinding.ensureInitialized();
+  LayergramLicenseRegistry.register();
   await EasyLocalization.ensureInitialized();
   await LocalDatabase.init();
   final secureStorage = SecureStorageService();
