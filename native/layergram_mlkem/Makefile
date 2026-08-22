@@ -17,6 +17,11 @@ COMMON_FLAGS := -std=c99 -O3 -fPIC -fvisibility=hidden -Wall -Wextra \
 	-DLG_MLKEM_BUILD=1
 LINK_FLAGS :=
 
+ifeq ($(shell uname -s),Linux)
+COMMON_FLAGS += -pthread
+LINK_FLAGS += -pthread
+endif
+
 ifeq ($(shell uname -s),Darwin)
 LINK_FLAGS += -framework Security
 endif

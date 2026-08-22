@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.13)
 
 project(layergram_mlkem LANGUAGES C)
 
+find_package(Threads REQUIRED)
+
 set(LAYERGRAM_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 set(LAYERGRAM_MLKEM_DIR "${LAYERGRAM_ROOT}/native/layergram_mlkem")
 set(LAYERGRAM_UPSTREAM_DIR "${LAYERGRAM_ROOT}/third_party/mlkem-native/mlkem")
@@ -23,6 +25,7 @@ set_target_properties(
   OUTPUT_NAME "layergram_mlkem"
 )
 target_compile_definitions(layergram_mlkem PRIVATE LG_MLKEM_BUILD=1)
+target_link_libraries(layergram_mlkem PRIVATE Threads::Threads)
 target_include_directories(
   layergram_mlkem
   PRIVATE

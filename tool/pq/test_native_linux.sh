@@ -17,6 +17,7 @@ set -- \
   -Wall -Wextra -Werror -Wpedantic -Wconversion -Wsign-conversion \
   -Wshadow -Wpointer-arith -Wmissing-prototypes \
   -fstack-protector-strong -D_FORTIFY_SOURCE=2 \
+  -pthread \
   -I"$NATIVE_DIR" -I"$UPSTREAM_DIR" -I"$UPSTREAM_TEST_DIR" \
   -DLG_MLKEM_BUILD=1
 

@@ -54,7 +54,8 @@ LG_MLKEM_EXPORT uint32_t lg_mlkem768_keygen_seed_bytes(void);
 LG_MLKEM_EXPORT uint32_t lg_mlkem768_encaps_seed_bytes(void);
 
 // The returned private-key handle owns native memory. The caller must destroy
-// it exactly once with lg_mlkem768_private_key_destroy().
+// it with lg_mlkem768_private_key_destroy(). Repeated or stale destroy calls are
+// ignored, and other operations reject a handle after its first destruction.
 LG_MLKEM_EXPORT int32_t lg_mlkem768_keypair_from_seed(
     const uint8_t *seed, uint64_t seed_len, uint8_t *public_key,
     uint64_t public_key_len, lg_mlkem768_private_key **private_key_out);
@@ -91,6 +92,7 @@ LG_MLKEM_EXPORT int32_t lg_mlkem768_test_encapsulate_from_seed(
     uint64_t shared_secret_len);
 LG_MLKEM_EXPORT uint64_t lg_mlkem768_test_destroyed_handle_count(void);
 LG_MLKEM_EXPORT int32_t lg_mlkem768_test_last_destroy_was_zero(void);
+LG_MLKEM_EXPORT uint64_t lg_mlkem768_test_live_handle_count(void);
 #endif
 
 #ifdef __cplusplus

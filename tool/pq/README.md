@@ -21,7 +21,7 @@ activates it and protocol v2 remains unchanged.
 ## Current candidate
 
 `mlkem_native_candidate.json` records the exact upstream release and commit
-tested on the development host. On 2026-08-13, upstream `make build` and
+tested on the development host. On 2026-08-22, upstream `make build` and
 `make test` completed successfully on macOS ARM64, including the upstream KAT,
 ACVP, Wycheproof, unit, allocation, RNG-failure, and ABI checks.
 
@@ -29,7 +29,9 @@ Layergram now also has a narrow C ABI and Dart FFI implementation. On macOS
 ARM64, `test_native_macos.sh` traverses upstream known-answer vectors through
 the actual wrapper, verifies opaque-handle lifecycle and zeroization, checks
 implicit rejection and invalid inputs, and confirms that the production ABI
-uses the OS CSPRNG while excluding deterministic test hooks.
+uses the OS CSPRNG while excluding deterministic test hooks. The opaque
+private-key registry rejects forged, stale, and repeated handles before
+dereference and serializes concurrent decapsulation and destruction.
 
 `scka_native_candidate.json` records the separate ML-KEM Braid/SCKA backend
 decision. The official Signal SPQR implementation is explicitly rejected for
