@@ -24,6 +24,8 @@ import 'public_identity_v3.dart';
 /// the X25519 component for narrow legacy UI/capability seams; protocol-v3
 /// cryptography must resolve [publicIdentityBase64] instead.
 abstract final class V3IdentityAdapter {
+  static const int maxShareBlockCharacters = 4096;
+
   static String encodePublicBundle(V3PublicIdentity identity) {
     return base64UrlEncode(V3PublicIdentityCodec.encodeBinary(identity))
         .replaceAll('=', '');
@@ -93,6 +95,9 @@ abstract final class V3IdentityAdapter {
   }
 
   static V3PublicIdentity decodeShareBlock(String text) {
+    if (text.isEmpty || text.length > maxShareBlockCharacters) {
+      throw const FormatException('Invalid Layergram v3 identity block');
+    }
     const start = '[Layergram Identity]';
     const end = '[/Layergram Identity]';
     final startIndex = text.indexOf(start);

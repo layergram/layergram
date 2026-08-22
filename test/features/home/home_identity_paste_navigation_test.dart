@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:base32/base32.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -140,12 +143,9 @@ void main() {
   testWidgets(
     'pasted identity link opens confirmed import in Contacts before saving',
     (tester) async {
-      const sourceIdentity = LocalIdentity(
-        identityId: 'alice-identity',
-        publicKeyBase64: 'alice-public-key',
-        fingerprint: 'AA-BB-CC-DD',
+      final sourceIdentity = _legacyIdentity(
         displayName: 'Alice',
-        mnemonic: 'not-used-by-link-encoding',
+        seed: 1,
       );
       final link = IdentityLinkCodec.encode(sourceIdentity);
       final repository = _FakeIdentitiesRepository();
@@ -170,7 +170,7 @@ void main() {
 
       expect(find.byType(AddIdentityView), findsNothing);
       expect(repository.upsertCount, 1);
-      expect(repository.contacts.single.identityId, 'alice-identity');
+      expect(repository.contacts.single.identityId, sourceIdentity.identityId);
       expect(find.text('Contacts'), findsWidgets);
       expect(find.text('Alice'), findsOneWidget);
 
@@ -183,15 +183,19 @@ void main() {
   testWidgets(
     'pasted identity text block opens the same confirmed Contacts import',
     (tester) async {
-      const identityBlock = '''
+      final sourceIdentity = _legacyIdentity(
+        displayName: 'Bob',
+        seed: 2,
+      );
+      final identityBlock = '''
 Some surrounding text
 [Layergram Identity]
 Protocol: layergram/1
 Name: Bob
-Identity ID: bob-identity
-Fingerprint: 11-22-33-44
+Identity ID: ${sourceIdentity.identityId}
+Fingerprint: ${sourceIdentity.fingerprint}
 Public Key (Base64):
-bob-public-key
+${sourceIdentity.publicKeyBase64}
 [/Layergram Identity]
 ''';
       final repository = _FakeIdentitiesRepository();
@@ -209,7 +213,7 @@ bob-public-key
       expect(find.byType(AddIdentityView), findsOneWidget);
       expect(find.text('Add contact'), findsOneWidget);
       expect(find.text('Bob'), findsOneWidget);
-      expect(find.text('ID: bob-identity'), findsOneWidget);
+      expect(find.text('ID: ${sourceIdentity.identityId}'), findsOneWidget);
       expect(repository.upsertCount, 0);
     },
   );
@@ -223,12 +227,9 @@ bob-public-key
         fingerprint: 'CC-DD-EE-FF',
         displayName: 'Charlie',
       );
-      const sourceIdentity = LocalIdentity(
-        identityId: 'alice-from-chat',
-        publicKeyBase64: 'alice-chat-public-key',
-        fingerprint: 'AA-11-BB-22',
+      final sourceIdentity = _legacyIdentity(
         displayName: 'Alice from chat',
-        mnemonic: 'not-used-by-link-encoding',
+        seed: 3,
       );
       final repository = _FakeIdentitiesRepository([existingContact]);
       addTearDown(repository.dispose);
@@ -265,6 +266,28 @@ bob-public-key
       expect(find.text('Contacts'), findsWidgets);
       expect(find.text('Alice from chat'), findsOneWidget);
     },
+  );
+}
+
+LocalIdentity _legacyIdentity({
+  required String displayName,
+  required int seed,
+}) {
+  final publicKey = Uint8List.fromList(
+    List<int>.generate(32, (index) => (seed + index) & 0xff),
+  );
+  final digest = sha256.convert(publicKey).bytes;
+  return LocalIdentity(
+    identityId: base32.encode(Uint8List.fromList(digest)).replaceAll('=', ''),
+    publicKeyBase64: base64Encode(publicKey),
+    fingerprint: digest
+        .take(8)
+        .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+        .join('-')
+        .toUpperCase(),
+    displayName: displayName,
+    mnemonic:
+        'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
   );
 }
 

@@ -19,6 +19,7 @@ import 'package:base32/base32.dart';
 import 'package:crypto/crypto.dart';
 
 import 'ml_kem_768.dart';
+import 'x25519_public_key_v3.dart';
 
 enum V3IdentitySuite {
   hybridX25519MlKem768(1);
@@ -47,9 +48,8 @@ class V3PublicIdentity {
     V3IdentitySuite suite = V3IdentitySuite.hybridX25519MlKem768,
     int flags = 0,
   }) {
-    final x25519 = _validatedKey(
+    final x25519 = V3X25519PublicKey.validatedCopy(
       x25519PublicKey,
-      V3PublicIdentityCodec.x25519PublicKeyBytes,
       'x25519PublicKey',
     );
     final mlKem = _validatedKey(
@@ -137,6 +137,8 @@ abstract final class V3PublicIdentityCodec {
   static const int maxBinaryBytes = _fixedBytes + maxDisplayNameBytes;
   static const int maxTokenCharacters =
       3 + ((maxBinaryBytes * 4 + 2) ~/ 3); // `v3.` + unpadded Base64URL
+  static const int maxLinkCharacters =
+      16 + maxTokenCharacters; // `layergram://i/` + token
   static const String tokenPrefix = 'v3.';
   static const String scheme = 'layergram';
   static const String host = 'i';
@@ -282,7 +284,11 @@ abstract final class V3PublicIdentityCodec {
   }
 
   static V3PublicIdentity decodeLink(String link) {
-    final uri = Uri.tryParse(link.trim());
+    final normalized = link.trim();
+    if (normalized.isEmpty || normalized.length > maxLinkCharacters) {
+      throw const FormatException('Invalid Layergram v3 identity link');
+    }
+    final uri = Uri.tryParse(normalized);
     if (uri == null ||
         uri.scheme != scheme ||
         uri.host != host ||
@@ -294,7 +300,7 @@ abstract final class V3PublicIdentityCodec {
       throw const FormatException('Invalid Layergram v3 identity link');
     }
     final identity = decodeToken(uri.pathSegments.single);
-    if (encodeLink(identity) != link.trim()) {
+    if (encodeLink(identity) != normalized) {
       throw const FormatException('Non-canonical Layergram v3 identity link');
     }
     return identity;

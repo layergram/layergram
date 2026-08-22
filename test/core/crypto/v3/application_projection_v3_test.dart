@@ -255,10 +255,16 @@ Uint8List _committed(Uint8List content, int seed) {
 }
 
 V3PublicIdentity _identity(int seed, String name) => V3PublicIdentity(
-      x25519PublicKey: _bytes(32, seed),
+      x25519PublicKey: _x25519Bytes(seed),
       mlKem768PublicKey: _bytes(MlKem768.publicKeyBytes, seed + 1),
       displayName: name,
     );
+
+Uint8List _x25519Bytes(int seed) {
+  final value = _bytes(32, seed);
+  value[31] &= 0x7f;
+  return value;
+}
 
 Uint8List _identityDigest(V3PublicIdentity identity) {
   final binding = identity.identityBindingBytes;

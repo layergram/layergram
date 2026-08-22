@@ -53,8 +53,8 @@ void main() {
       }
       final next = visChars[i + 1];
       var nextStart = cursor;
-      while (nextStart <= encoded.length &&
-          !encoded.startsWith(next, nextStart)) {
+      while (
+          nextStart <= encoded.length && !encoded.startsWith(next, nextStart)) {
         nextStart++;
       }
       expect(nextStart, lessThanOrEqualTo(encoded.length));
@@ -80,10 +80,30 @@ void main() {
   // ── V2 binary encode/decode tests ─────────────────────────────────────────
 
   group('V2 binary encodeBytes/decodeByteCandidates', () {
+    test('rejects oversized carriers before rune materialization', () {
+      final oversized = 'A' * (StegoDecoder.maxCarrierCodeUnits + 1);
+
+      expect(
+        () => StegoDecoder().decodeByteCandidates(oversized),
+        throwsFormatException,
+      );
+    });
+
+    test('rejects an excessive minimum output size', () {
+      expect(
+        () => StegoDecoder().decodeByteCandidates(
+          'visible carrier',
+          minBytes: StegoDecoder.maxDecodedBytes + 1,
+        ),
+        throwsFormatException,
+      );
+    });
+
     test('roundtrip preserves raw bytes', () {
       // Simulate nonce (12) + ciphertext+MAC (32) = 44 bytes
       final payload = Uint8List.fromList(List.generate(44, (i) => i));
-      const cover = 'This is a deliberately long cover message that keeps the first part fully visible before any hidden symbols are inserted into the suffix.';
+      const cover =
+          'This is a deliberately long cover message that keeps the first part fully visible before any hidden symbols are inserted into the suffix.';
 
       final encoded = StegoEncoder().encodeBytes(cover, payload);
       final candidates = StegoDecoder().decodeByteCandidates(encoded);
@@ -95,7 +115,8 @@ void main() {
 
     test('noise runes are present in encoded text but ignored by decoder', () {
       final payload = Uint8List.fromList(List.generate(44, (i) => i));
-      const cover = 'Cover message with enough visible characters to keep the preview clean while hiding the encrypted payload in the suffix only.';
+      const cover =
+          'Cover message with enough visible characters to keep the preview clean while hiding the encrypted payload in the suffix only.';
 
       final encoded = StegoEncoder().encodeBytes(cover, payload);
 
@@ -115,7 +136,8 @@ void main() {
 
     test('no trailing invisible chars after last visible char', () {
       final payload = Uint8List.fromList(List.generate(44, (i) => i));
-      const cover = 'Cover message with enough visible characters for the payload data to be distributed safely in later suffix slots.';
+      const cover =
+          'Cover message with enough visible characters for the payload data to be distributed safely in later suffix slots.';
 
       final encoded = StegoEncoder().encodeBytes(cover, payload);
 
@@ -127,7 +149,8 @@ void main() {
 
     test('no trailing space appended', () {
       final payload = Uint8List.fromList(List.generate(44, (i) => i));
-      const cover = 'Cover message with enough visible characters for the payload data to be distributed safely in later suffix slots.';
+      const cover =
+          'Cover message with enough visible characters for the payload data to be distributed safely in later suffix slots.';
 
       final encoded = StegoEncoder().encodeBytes(cover, payload);
 
@@ -245,7 +268,8 @@ void main() {
       );
       expect(StegoEncoder.canEmbedBytes(repairedCover, payload.length), isTrue);
       expect(
-        StegoEncoder.missingCoverCapacityForBytes(repairedCover, payload.length),
+        StegoEncoder.missingCoverCapacityForBytes(
+            repairedCover, payload.length),
         equals(0),
       );
       expect(
@@ -345,7 +369,8 @@ void main() {
 
     test('distributed encoding has no large consecutive zero-width blocks', () {
       final payload = Uint8List.fromList(List.generate(60, (i) => i));
-      const cover = 'Questo messaggio di copertura e abbastanza lungo per testare la distribuzione corretta nel suffisso mantenendo pulita tutta la parte iniziale della preview.';
+      const cover =
+          'Questo messaggio di copertura e abbastanza lungo per testare la distribuzione corretta nel suffisso mantenendo pulita tutta la parte iniziale della preview.';
 
       final encoded = StegoEncoder().encodeBytes(cover, payload);
 
@@ -369,24 +394,28 @@ void main() {
       expect(candidates[0], equals(payload));
     });
 
-    test('cover with decomposed accents and emoji only embeds in ASCII-safe slots', () {
+    test(
+        'cover with decomposed accents and emoji only embeds in ASCII-safe slots',
+        () {
       final payload = Uint8List.fromList(List.generate(44, (i) => i));
       const cover =
           'This cover message keeps enough plain ASCII text after the preview while mentioning cafe\u0301, man\u0303ana, and a smile 😄 near the visible suffix for Unicode safety checks.';
 
       final encoded = StegoEncoder().encodeBytes(cover, payload);
       final candidates = StegoDecoder().decodeByteCandidates(encoded);
-      final visChars = StegoEncoder.normalizeCoverText(cover).characters.toList();
+      final visChars =
+          StegoEncoder.normalizeCoverText(cover).characters.toList();
       final blocks = slotBlocks(cover, encoded);
 
-      expect(stripHiddenRunes(encoded), equals(StegoEncoder.normalizeCoverText(cover)));
+      expect(stripHiddenRunes(encoded),
+          equals(StegoEncoder.normalizeCoverText(cover)));
       expect(blocks, hasLength(visChars.length - 1));
       expect(candidates, isNotEmpty);
       expect(candidates[0], equals(payload));
 
       for (var i = 0; i < blocks.length; i++) {
-        final safe =
-            isCarrierSafeGrapheme(visChars[i]) && isCarrierSafeGrapheme(visChars[i + 1]);
+        final safe = isCarrierSafeGrapheme(visChars[i]) &&
+            isCarrierSafeGrapheme(visChars[i + 1]);
         if (!safe) {
           expect(blocks[i], isEmpty);
         }

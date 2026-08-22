@@ -22,6 +22,7 @@ import 'lmf_v3.dart';
 import 'local_identity_v3.dart';
 import 'triple_ratchet_binding_v3.dart';
 import 'triple_ratchet_state_v3.dart';
+import 'x25519_public_key_v3.dart';
 
 /// Canonical public header produced by one EC Double Ratchet send step.
 ///
@@ -1123,61 +1124,7 @@ Uint8List _validatedX25519PublicKey(Uint8List value, String name) {
 }
 
 void _ensureCanonicalX25519PublicKey(List<int> value, String name) {
-  if (value.length != 32) {
-    throw ArgumentError.value(
-      value.length,
-      '$name.length',
-      'must be exactly 32 bytes',
-    );
-  }
-  if (_isAllZero(value)) {
-    throw ArgumentError.value(value, name, 'must not be all zero');
-  }
-  // RFC 7748 encodes the field element little-endian. X25519 accepts some
-  // non-canonical aliases for interoperability, but ratchet public keys are
-  // protocol identifiers too; accepting aliases would make `(DH, N)` skipped
-  // key identity and changed-key detection ambiguous.
-  const fieldPrimeLittleEndian = <int>[
-    0xed,
-    0xff,
-    0xff,
-    0xff,
-    0xff,
-    0xff,
-    0xff,
-    0xff,
-    0xff,
-    0xff,
-    0xff,
-    0xff,
-    0xff,
-    0xff,
-    0xff,
-    0xff,
-    0xff,
-    0xff,
-    0xff,
-    0xff,
-    0xff,
-    0xff,
-    0xff,
-    0xff,
-    0xff,
-    0xff,
-    0xff,
-    0xff,
-    0xff,
-    0xff,
-    0xff,
-    0x7f,
-  ];
-  for (var index = 31; index >= 0; index--) {
-    if (value[index] < fieldPrimeLittleEndian[index]) return;
-    if (value[index] > fieldPrimeLittleEndian[index]) {
-      throw ArgumentError.value(value, name, 'must be canonical X25519');
-    }
-  }
-  throw ArgumentError.value(value, name, 'must be canonical X25519');
+  V3X25519PublicKey.validate(value, name);
 }
 
 Uint8List _validatedBytes(

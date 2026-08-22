@@ -17,6 +17,8 @@ import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:layergram/core/crypto/v3/ml_kem_768.dart';
+import 'package:layergram/core/crypto/v3/public_identity_v3.dart';
 import 'package:layergram/features/contact_verification/contact_sas_service.dart';
 
 // Canonical base64 encodings of 32-byte vectors. These are only used as
@@ -87,7 +89,8 @@ void main() {
       expect(first.emojiIndices, second.emojiIndices);
     });
 
-    test('is symmetric: Alice viewing Bob derives the same SAS as Bob viewing Alice',
+    test(
+        'is symmetric: Alice viewing Bob derives the same SAS as Bob viewing Alice',
         () async {
       final aliceView = await service.derive(
         localPublicKeyBase64: _aliceKey,
@@ -135,14 +138,16 @@ void main() {
       expect(seenDigits.length, greaterThan(28));
     });
 
-    test('accepts base64url-encoded public keys equivalently to standard base64',
+    test(
+        'accepts base64url-encoded public keys equivalently to standard base64',
         () async {
       final standard = await service.derive(
         localPublicKeyBase64: _aliceKey,
         peerPublicKeyBase64: _bobKey,
       );
       final url = await service.derive(
-        localPublicKeyBase64: _aliceKey.replaceAll('+', '-').replaceAll('/', '_'),
+        localPublicKeyBase64:
+            _aliceKey.replaceAll('+', '-').replaceAll('/', '_'),
         peerPublicKeyBase64: _bobKey.replaceAll('+', '-').replaceAll('/', '_'),
       );
 
@@ -169,15 +174,87 @@ void main() {
   });
 
   group('ContactSasService.emojiPalette', () {
-    test('has exactly 64 entries, as the derivation relies on 6-bit indices', () {
+    test('has exactly 64 entries, as the derivation relies on 6-bit indices',
+        () {
       expect(ContactSasService.emojiPalette, hasLength(64));
     });
 
-    test('contains unique glyphs so different indices map to different emoji', () {
+    test('contains unique glyphs so different indices map to different emoji',
+        () {
       final asSet = ContactSasService.emojiPalette.toSet();
       expect(asSet.length, ContactSasService.emojiPalette.length);
     });
   });
+
+  group('ContactSasService.deriveV3', () {
+    test('is symmetric over the complete hybrid identity binding', () async {
+      final alice = _v3Identity(1, 7);
+      final bob = _v3Identity(2, 11);
+
+      final aliceView = await service.deriveV3(
+        localIdentity: alice,
+        peerIdentity: bob,
+      );
+      final bobView = await service.deriveV3(
+        localIdentity: bob,
+        peerIdentity: alice,
+      );
+
+      expect(aliceView.digits, bobView.digits);
+      expect(aliceView.emojiIndices, bobView.emojiIndices);
+    });
+
+    test('changes when either hybrid public-key component changes', () async {
+      final local = _v3Identity(1, 7);
+      final peer = _v3Identity(2, 11);
+      final changedX = _v3Identity(3, 11);
+      final changedPq = _v3Identity(2, 12);
+
+      final baseline = await service.deriveV3(
+        localIdentity: local,
+        peerIdentity: peer,
+      );
+      final xMutation = await service.deriveV3(
+        localIdentity: local,
+        peerIdentity: changedX,
+      );
+      final pqMutation = await service.deriveV3(
+        localIdentity: local,
+        peerIdentity: changedPq,
+      );
+
+      expect(
+        xMutation.digits == baseline.digits &&
+            const ListEquality<int>().equals(
+              xMutation.emojiIndices,
+              baseline.emojiIndices,
+            ),
+        isFalse,
+      );
+      expect(
+        pqMutation.digits == baseline.digits &&
+            const ListEquality<int>().equals(
+              pqMutation.emojiIndices,
+              baseline.emojiIndices,
+            ),
+        isFalse,
+      );
+    });
+  });
+}
+
+V3PublicIdentity _v3Identity(int xOffset, int pqOffset) {
+  return V3PublicIdentity(
+    x25519PublicKey: Uint8List.fromList(
+      List<int>.generate(32, (index) => index + xOffset),
+    ),
+    mlKem768PublicKey: Uint8List.fromList(
+      List<int>.generate(
+        MlKem768.publicKeyBytes,
+        (index) => ((index + pqOffset) % 251) + 1,
+      ),
+    ),
+  );
 }
 
 Future<String> _freshX25519PublicKeyBase64() async {

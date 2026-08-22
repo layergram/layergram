@@ -16,9 +16,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/crypto/models.dart';
+import '../../core/crypto/v3/identity_v3_adapter.dart';
+import '../../core/crypto/v3/public_identity_v3.dart';
 import '../../core/providers.dart';
 import '../../l10n/app_strings.dart';
 import '../identities/identities_controller.dart';
+import '../my_identity/my_identity_controller.dart';
 import 'contact_sas_service.dart';
 
 /// Opens the contact verification ceremony.
@@ -80,6 +83,24 @@ class _ContactVerificationViewState
 
   Future<ContactSasCode> _loadCode() async {
     final sas = ref.read(contactSasServiceProvider);
+    if (widget.contact.protocolVersion ==
+        V3PublicIdentityCodec.protocolVersion) {
+      if (!ref.read(protocolV3IdentityEnabledProvider)) {
+        throw StateError('Layergram v3 identity verification is unavailable');
+      }
+      final local =
+          await ref.read(myIdentityControllerProvider).getActiveIdentity();
+      if (local == null ||
+          local.protocolVersion != V3PublicIdentityCodec.protocolVersion ||
+          local.publicIdentityBase64 == null) {
+        throw StateError('Active Layergram v3 identity is unavailable');
+      }
+      return sas.deriveV3(
+        localIdentity:
+            V3IdentityAdapter.decodePublicBundle(local.publicIdentityBase64!),
+        peerIdentity: V3IdentityAdapter.fromRemoteIdentity(widget.contact),
+      );
+    }
     final local = await ref.read(identityManagerProvider).getLocalIdentity();
     if (local == null) {
       throw StateError('Local identity not initialized');

@@ -27,17 +27,26 @@ class ProtocolV3IdentityRequiredException implements Exception {
   const ProtocolV3IdentityRequiredException();
 }
 
+class ProtocolV3IdentityUnavailableException implements Exception {
+  const ProtocolV3IdentityUnavailableException();
+}
+
 class IdentitiesController {
   IdentitiesController(this.ref);
 
   final Ref ref;
+  static const int maxIdentityImportCharacters = 4096;
 
   Stream<List<RemoteIdentity>> watchAll() {
     return ref.read(identitiesRepositoryProvider).watchRemote();
   }
 
   RemoteIdentity parseIdentityFromLink(String link) {
+    if (link.isEmpty || link.length > maxIdentityImportCharacters) {
+      throw ArgumentError('Invalid identity link');
+    }
     if (link.trim().startsWith('layergram://i/v3.')) {
+      _ensureProtocolV3ImportEnabled();
       return _validateImportedProtocol(
         V3IdentityAdapter.toRemoteIdentity(
           V3PublicIdentityCodec.decodeLink(link),
@@ -57,7 +66,11 @@ class IdentitiesController {
   }
 
   RemoteIdentity parseIdentityFromText(String text) {
+    if (text.isEmpty || text.length > maxIdentityImportCharacters) {
+      throw ArgumentError('Invalid identity text block');
+    }
     if (text.contains('Protocol: layergram/3')) {
+      _ensureProtocolV3ImportEnabled();
       return _validateImportedProtocol(
         V3IdentityAdapter.toRemoteIdentity(
           V3IdentityAdapter.decodeShareBlock(text),
@@ -66,6 +79,7 @@ class IdentitiesController {
     }
     final trimmed = text.trim();
     if (trimmed.startsWith(V3PublicIdentityCodec.tokenPrefix)) {
+      _ensureProtocolV3ImportEnabled();
       return _validateImportedProtocol(
         V3IdentityAdapter.toRemoteIdentity(
           V3PublicIdentityCodec.decodeToken(trimmed),
@@ -80,6 +94,9 @@ class IdentitiesController {
   }
 
   RemoteIdentity parseIdentityImport(String input) {
+    if (input.isEmpty || input.length > maxIdentityImportCharacters) {
+      throw ArgumentError('Invalid identity import');
+    }
     final normalized = input.trim();
     if (normalized.toLowerCase().startsWith('layergram://i/')) {
       return parseIdentityFromLink(normalized);
@@ -94,12 +111,16 @@ class IdentitiesController {
 
   RemoteIdentity parseIdentityFromQrPayload(Object data) {
     if (data is Uint8List) {
+      if (data.length > V3PublicIdentityCodec.maxBinaryBytes) {
+        throw ArgumentError('Invalid QR identity payload');
+      }
       final isV3Binary = data.length >= V3PublicIdentityCodec.magic.length &&
           List<int>.generate(
             V3PublicIdentityCodec.magic.length,
             (index) => index,
           ).every((index) => data[index] == V3PublicIdentityCodec.magic[index]);
       if (isV3Binary) {
+        _ensureProtocolV3ImportEnabled();
         return _validateImportedProtocol(
           V3IdentityAdapter.toRemoteIdentity(
             V3PublicIdentityCodec.decodeBinary(data),
@@ -117,8 +138,12 @@ class IdentitiesController {
     if (data is! String) {
       throw ArgumentError('Invalid QR payload type');
     }
+    if (data.isEmpty || data.length > maxIdentityImportCharacters) {
+      throw ArgumentError('Invalid QR identity payload');
+    }
     final normalized = data.trim();
     if (normalized.startsWith(V3PublicIdentityCodec.tokenPrefix)) {
+      _ensureProtocolV3ImportEnabled();
       return _validateImportedProtocol(
         V3IdentityAdapter.toRemoteIdentity(
           V3PublicIdentityCodec.decodeToken(normalized),
@@ -126,13 +151,23 @@ class IdentitiesController {
       );
     }
     if (normalized.startsWith('layergram://i/v3.')) {
+      _ensureProtocolV3ImportEnabled();
       return _validateImportedProtocol(
         V3IdentityAdapter.toRemoteIdentity(
           V3PublicIdentityCodec.decodeLink(normalized),
         ),
       );
     }
-    final parsed = jsonDecode(data) as Map<String, dynamic>;
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(data);
+    } on FormatException {
+      throw ArgumentError('Invalid QR identity payload');
+    }
+    if (decoded is! Map<String, dynamic>) {
+      throw ArgumentError('Invalid QR identity payload');
+    }
+    final parsed = decoded;
     if (parsed['type'] != 'identity') {
       throw ArgumentError('Invalid QR payload type');
     }
@@ -140,12 +175,12 @@ class IdentitiesController {
     if (protocol != null && !protocol.startsWith('layergram/')) {
       throw ArgumentError('Invalid protocol marker');
     }
-    final identity = RemoteIdentity(
+    final identity = IdentityLinkCodec.validateLegacyIdentity(RemoteIdentity(
       identityId: (parsed['identityId'] as String?) ?? '',
       publicKeyBase64: (parsed['publicKey'] as String?) ?? '',
       fingerprint: (parsed['fingerprint'] as String?) ?? '',
       displayName: (parsed['displayName'] as String?) ?? 'Unknown',
-    );
+    ));
     if (identity.identityId.isEmpty || identity.publicKeyBase64.isEmpty) {
       throw ArgumentError('Invalid QR identity payload');
     }
@@ -158,22 +193,45 @@ class IdentitiesController {
   }
 
   Future<void> saveIdentity(RemoteIdentity identity) async {
-    _validateImportedProtocol(identity);
+    identity = _validateImportedProtocol(identity);
     if (identity.protocolVersion == V3PublicIdentityCodec.protocolVersion) {
       final publicIdentity = V3IdentityAdapter.fromRemoteIdentity(identity);
       await ref
           .read(v3IdentityRuntimeProvider)
           .validateRemotePublicIdentity(publicIdentity);
+    } else {
+      identity = IdentityLinkCodec.validateLegacyIdentity(identity);
     }
-    await ref.read(identitiesRepositoryProvider).upsertRemoteIdentity(identity);
+    final repository = ref.read(identitiesRepositoryProvider);
+    final existing = await repository.getRemoteById(identity.identityId);
+    if (existing != null) {
+      if (existing.publicKeyBase64 != identity.publicKeyBase64 ||
+          existing.protocolVersion != identity.protocolVersion ||
+          existing.publicIdentityBase64 != identity.publicIdentityBase64) {
+        throw StateError('Identity key change requires explicit verification');
+      }
+      identity = identity.copyWith(verified: existing.verified);
+    }
+    await repository.upsertRemoteIdentity(identity);
   }
 
   RemoteIdentity _validateImportedProtocol(RemoteIdentity identity) {
-    if (ref.read(protocolV3IdentityEnabledProvider) &&
+    final enabled = ref.read(protocolV3IdentityEnabledProvider);
+    if (!enabled &&
+        identity.protocolVersion == V3PublicIdentityCodec.protocolVersion) {
+      throw const ProtocolV3IdentityUnavailableException();
+    }
+    if (enabled &&
         identity.protocolVersion != V3PublicIdentityCodec.protocolVersion) {
       throw const ProtocolV3IdentityRequiredException();
     }
     return identity;
+  }
+
+  void _ensureProtocolV3ImportEnabled() {
+    if (!ref.read(protocolV3IdentityEnabledProvider)) {
+      throw const ProtocolV3IdentityUnavailableException();
+    }
   }
 
   /// Mark a contact as verified.

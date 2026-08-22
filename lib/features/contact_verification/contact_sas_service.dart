@@ -17,6 +17,8 @@ import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 
+import '../../core/crypto/v3/public_identity_v3.dart';
+
 /// Short Authentication String representation used to verify a contact.
 ///
 /// The value is derived deterministically from the two long-term identity
@@ -57,19 +59,77 @@ class ContactSasService {
   /// Fixed HKDF salt. Keeping it stable across devices is required so that
   /// two peers derive the same SAS.
   static const sasSaltLabel = 'layergram-sas-salt-v1';
+  static const v3SasInfoLabel = 'layergram-sas-v3-hybrid';
+  static const v3SasSaltLabel = 'layergram-sas-salt-v3';
 
   /// Exactly 64 visually distinct, widely-rendered emoji glyphs.
   /// Keep this list append-only and never reorder: changing it would
   /// change every previously displayed SAS without touching any key.
   static const List<String> emojiPalette = <String>[
-    '🐶', '🐱', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁',
-    '🐮', '🐷', '🐸', '🐵', '🐔', '🐧', '🦅', '🦉',
-    '🐝', '🐢', '🐠', '🐬', '🐳', '🦋', '🌵', '🌲',
-    '🌴', '🌻', '🌹', '🌈', '🍎', '🍋', '🍒', '🍉',
-    '🍇', '🍍', '🥕', '🌽', '🍕', '🍔', '🚗', '🚲',
-    '🚀', '🏠', '🌊', '⚽', '🎸', '🎹', '🎨', '📱',
-    '💻', '📷', '💡', '🔑', '🔒', '🎁', '🎈', '🎂',
-    '💎', '🎯', '🧩', '🌟', '⭐', '🔥', '🌙', '☀',
+    '🐶',
+    '🐱',
+    '🦊',
+    '🐻',
+    '🐼',
+    '🐨',
+    '🐯',
+    '🦁',
+    '🐮',
+    '🐷',
+    '🐸',
+    '🐵',
+    '🐔',
+    '🐧',
+    '🦅',
+    '🦉',
+    '🐝',
+    '🐢',
+    '🐠',
+    '🐬',
+    '🐳',
+    '🦋',
+    '🌵',
+    '🌲',
+    '🌴',
+    '🌻',
+    '🌹',
+    '🌈',
+    '🍎',
+    '🍋',
+    '🍒',
+    '🍉',
+    '🍇',
+    '🍍',
+    '🥕',
+    '🌽',
+    '🍕',
+    '🍔',
+    '🚗',
+    '🚲',
+    '🚀',
+    '🏠',
+    '🌊',
+    '⚽',
+    '🎸',
+    '🎹',
+    '🎨',
+    '📱',
+    '💻',
+    '📷',
+    '💡',
+    '🔑',
+    '🔒',
+    '🎁',
+    '🎈',
+    '🎂',
+    '💎',
+    '🎯',
+    '🧩',
+    '🌟',
+    '⭐',
+    '🔥',
+    '🌙',
+    '☀',
   ];
 
   /// Derives the SAS for the [localPublicKeyBase64] / [peerPublicKeyBase64]
@@ -84,18 +144,42 @@ class ContactSasService {
     if (local.isEmpty || peer.isEmpty) {
       throw ArgumentError('Public key inputs must not be empty');
     }
-    return _deriveFromKeyBytes(Uint8List.fromList(local), Uint8List.fromList(peer));
+    return _deriveFromKeyBytes(
+      Uint8List.fromList(local),
+      Uint8List.fromList(peer),
+      saltLabel: sasSaltLabel,
+      infoLabel: sasInfoLabel,
+    );
   }
 
-  Future<ContactSasCode> _deriveFromKeyBytes(Uint8List a, Uint8List b) async {
+  /// Derives a symmetric SAS over the complete canonical protocol-v3 identity
+  /// bindings, including suite, flags, X25519, and ML-KEM public material.
+  Future<ContactSasCode> deriveV3({
+    required V3PublicIdentity localIdentity,
+    required V3PublicIdentity peerIdentity,
+  }) {
+    return _deriveFromKeyBytes(
+      localIdentity.identityBindingBytes,
+      peerIdentity.identityBindingBytes,
+      saltLabel: v3SasSaltLabel,
+      infoLabel: v3SasInfoLabel,
+    );
+  }
+
+  Future<ContactSasCode> _deriveFromKeyBytes(
+    Uint8List a,
+    Uint8List b, {
+    required String saltLabel,
+    required String infoLabel,
+  }) async {
     final ordered = _canonicalOrder(a, b);
     final material = _concat(ordered.$1, ordered.$2);
 
     final hkdf = Hkdf(hmac: Hmac.sha256(), outputLength: 8);
     final derived = await hkdf.deriveKey(
       secretKey: SecretKey(material),
-      nonce: utf8.encode(sasSaltLabel),
-      info: utf8.encode(sasInfoLabel),
+      nonce: utf8.encode(saltLabel),
+      info: utf8.encode(infoLabel),
     );
     final out = Uint8List.fromList(await derived.extractBytes());
 
@@ -137,7 +221,8 @@ class ContactSasService {
   String _digitsFromBytes(Uint8List bytes) {
     // Use the top 32 bits of the HKDF output; any 20+ bits suffice for 6
     // decimal digits, 32 makes the modulo bias negligible at 10^6.
-    final value = (bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3];
+    final value =
+        (bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3];
     final sixDigits = value % 1000000;
     return sixDigits.toString().padLeft(6, '0');
   }

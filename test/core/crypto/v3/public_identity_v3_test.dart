@@ -168,4 +168,25 @@ void main() {
       throwsArgumentError,
     );
   });
+
+  test('rejects non-canonical X25519 field aliases', () {
+    final prime = Uint8List.fromList([
+      0xed,
+      ...List<int>.filled(30, 0xff),
+      0x7f,
+    ]);
+    final abovePrime = Uint8List.fromList(prime)..[0] = 0xee;
+    final highBitAlias = Uint8List.fromList(prime)..[31] = 0xff;
+    final pq = identity().mlKem768PublicKey;
+
+    for (final alias in [prime, abovePrime, highBitAlias]) {
+      expect(
+        () => V3PublicIdentity(
+          x25519PublicKey: alias,
+          mlKem768PublicKey: pq,
+        ),
+        throwsArgumentError,
+      );
+    }
+  });
 }

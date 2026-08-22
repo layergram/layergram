@@ -1,5 +1,8 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:base32/base32.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:layergram/core/crypto/identity_link_codec.dart';
@@ -17,7 +20,11 @@ void main() {
   late V3PublicIdentity identity;
 
   setUp(() {
-    container = ProviderContainer();
+    container = ProviderContainer(
+      overrides: [
+        protocolV3IdentityEnabledProvider.overrideWithValue(true),
+      ],
+    );
     addTearDown(container.dispose);
     controller = container.read(identitiesControllerProvider);
     identity = V3PublicIdentity(
@@ -31,6 +38,31 @@ void main() {
         ),
       ),
       displayName: 'Alice',
+    );
+  });
+
+  test('inactive v3 migration rejects every v3 import carrier', () {
+    final inactive = ProviderContainer();
+    addTearDown(inactive.dispose);
+    final inactiveController = inactive.read(identitiesControllerProvider);
+
+    expect(
+      () => inactiveController.parseIdentityFromText(
+        V3IdentityAdapter.encodeShareBlock(identity),
+      ),
+      throwsA(isA<ProtocolV3IdentityUnavailableException>()),
+    );
+    expect(
+      () => inactiveController.parseIdentityFromLink(
+        V3PublicIdentityCodec.encodeLink(identity),
+      ),
+      throwsA(isA<ProtocolV3IdentityUnavailableException>()),
+    );
+    expect(
+      () => inactiveController.parseIdentityFromQrPayload(
+        V3PublicIdentityCodec.encodeBinary(identity),
+      ),
+      throwsA(isA<ProtocolV3IdentityUnavailableException>()),
     );
   });
 
@@ -68,14 +100,7 @@ void main() {
     );
     addTearDown(active.dispose);
     final activeController = active.read(identitiesControllerProvider);
-    const legacy = LocalIdentity(
-      identityId: 'legacy-contact',
-      publicKeyBase64: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
-      fingerprint: 'AA-BB-CC-DD',
-      displayName: 'Legacy',
-      mnemonic:
-          'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
-    );
+    final legacy = _legacyIdentity();
 
     expect(
       () => activeController.parseIdentityFromLink(
@@ -115,6 +140,24 @@ void main() {
       throwsFormatException,
     );
   });
+}
+
+LocalIdentity _legacyIdentity() {
+  final publicKey =
+      Uint8List.fromList(List<int>.generate(32, (index) => index + 1));
+  final digest = sha256.convert(publicKey).bytes;
+  return LocalIdentity(
+    identityId: base32.encode(Uint8List.fromList(digest)).replaceAll('=', ''),
+    publicKeyBase64: base64Encode(publicKey),
+    fingerprint: digest
+        .take(8)
+        .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+        .join('-')
+        .toUpperCase(),
+    displayName: 'Legacy',
+    mnemonic:
+        'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+  );
 }
 
 final class _RejectingMlKemBackend implements MlKem768Backend {

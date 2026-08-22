@@ -28,9 +28,11 @@ import '../../core/crypto/fs_opportunistic_controller.dart';
 import '../../core/crypto/fs_security_mode.dart';
 import '../../core/crypto/lmf_v2_decoder.dart';
 import '../../core/crypto/fs_session_manager.dart';
+import '../../core/crypto/identity_link_codec.dart';
 import '../../core/crypto/message_record_cipher.dart';
 import '../../core/crypto/models.dart';
 import '../../core/crypto/passphrase_service.dart';
+import '../../core/crypto/stego_decoder.dart';
 import '../../core/crypto/v3/application_chat_bridge_v3.dart';
 import '../../core/crypto/v3/local_identity_v3.dart';
 import '../../core/crypto/v3/public_identity_v3.dart';
@@ -59,6 +61,10 @@ class ProtocolV3ContactMigrationRequiredException implements Exception {
   const ProtocolV3ContactMigrationRequiredException();
 }
 
+class ProtocolV3OutboundRequiredException implements Exception {
+  const ProtocolV3OutboundRequiredException();
+}
+
 class HomeController {
   HomeController(this.ref);
 
@@ -74,6 +80,7 @@ class HomeController {
   static const int _minRawMessageBytes = 28;
   static const int _minDirectPayloadChars = 38;
   static const int _maxDirectPayloadChars = 65536;
+  static const int _maxIdentityImportCharacters = 4096;
   static final RegExp _directPayloadPattern = RegExp(r'^[A-Za-z0-9_-]+={0,2}$');
 
   // ── Passphrase helpers ──────────────────────────────────────────────────
@@ -388,9 +395,10 @@ class HomeController {
     bool selfCopy = false,
     bool maximumFsSetupOnly = false,
   }) async {
-    if (!selfCopy &&
-        ref.read(protocolV3MessagingEnabledProvider) &&
-        recipient.protocolVersion != V3PublicIdentityCodec.protocolVersion) {
+    if (!selfCopy && ref.read(protocolV3MessagingEnabledProvider)) {
+      if (recipient.protocolVersion == V3PublicIdentityCodec.protocolVersion) {
+        throw const ProtocolV3OutboundRequiredException();
+      }
       throw const ProtocolV3ContactMigrationRequiredException();
     }
     final identityManager = ref.read(identityManagerProvider);
@@ -736,6 +744,11 @@ class HomeController {
     required MessageRecord message,
     required RemoteIdentity contact,
   }) async {
+    if (message.direction == 'incoming' &&
+        message.deleteAfterRead &&
+        message.readAt != null) {
+      return null;
+    }
     if (message.text != null) return message.text;
     if (message.isV3Encrypted) {
       final bridge = await _protocolV3Bridge();
@@ -980,6 +993,9 @@ class HomeController {
     String source, {
     String? hintContactId,
   }) async {
+    if (source.length > StegoDecoder.maxCarrierCodeUnits) {
+      return const DecodeOutcome.noData();
+    }
     final normalizedSource = source.trim();
     final identityManager = ref.read(identityManagerProvider);
     final local = await identityManager.getLocalIdentity();
@@ -1592,17 +1608,20 @@ class HomeController {
   }
 
   RemoteIdentity parseIdentityBlock(String text) {
+    if (text.isEmpty || text.length > _maxIdentityImportCharacters) {
+      throw ArgumentError('Invalid identity text block');
+    }
     final scoped = _withinIdentityBlock(text);
     final name = _extract(scoped, 'Name:') ?? 'Unknown';
     final identityId = _extract(scoped, 'Identity ID:') ?? '';
     final fp = _extract(scoped, 'Fingerprint:') ?? '';
     final key = _extractAfter(scoped, 'Public Key (Base64):') ?? '';
-    return RemoteIdentity(
+    return IdentityLinkCodec.validateLegacyIdentity(RemoteIdentity(
       identityId: identityId,
       publicKeyBase64: key.trim(),
       fingerprint: fp,
       displayName: name,
-    );
+    ));
   }
 
   String _withinIdentityBlock(String text) {
