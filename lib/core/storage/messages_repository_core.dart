@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -13,6 +14,7 @@ class MessagesRepositoryCore {
   MessagesRepositoryCore()
       : _box = Hive.box<Map>(LocalDatabase.messagesBoxName) {
     _loadFuture = _reloadFromBox();
+    _operationTail = _loadFuture;
   }
 
   final Box<Map> _box;
@@ -22,6 +24,8 @@ class MessagesRepositoryCore {
   SecretKey? _storageKey;
   String? _scopeToken;
   Future<void> _loadFuture = Future.value();
+  Future<void> _operationTail = Future.value();
+  bool _disposeRequested = false;
   int _reloadGeneration = 0;
   String? _visibleRecordKey;
 
@@ -32,15 +36,19 @@ class MessagesRepositoryCore {
   Future<void> setActiveContext({
     required String? scopeToken,
     required SecretKey? storageKey,
-  }) async {
-    _scopeToken = scopeToken;
-    _storageKey = storageKey;
-    _loadFuture = _reloadFromBox();
-    final generation = _reloadGeneration;
-    await _loadFuture;
-    if (generation != _reloadGeneration) return;
-    _controller.add(List.unmodifiable(_messages));
-  }
+  }) =>
+      _serialized(() async {
+        final detachedKey = await _detachStorageKey(storageKey);
+        final previousKey = _storageKey;
+        _scopeToken = scopeToken;
+        _storageKey = detachedKey;
+        _destroyStorageKey(previousKey);
+        _loadFuture = _reloadFromBox();
+        final generation = _reloadGeneration;
+        await _loadFuture;
+        if (generation != _reloadGeneration) return;
+        _controller.add(List.unmodifiable(_messages));
+      });
 
   bool get _hasScope => (_scopeToken ?? '').isNotEmpty;
 
@@ -225,155 +233,160 @@ class MessagesRepositoryCore {
     return 'r${base64Url.encode(bytes).replaceAll('=', '')}';
   }
 
-  Future<void> add(MessageRecord message, {SecretKey? storageKey}) async {
-    await _ensureLoaded();
-    final effectiveStorageKey = storageKey ?? _storageKey;
-    if (_hasScope && effectiveStorageKey == null) {
-      throw StateError('Storage context not initialized');
-    }
-    if (effectiveStorageKey != null) {
-      _storageKey = effectiveStorageKey;
-    }
-    if (_messages.any((m) => _isDuplicateIncomingMessage(m, message))) {
-      return;
-    }
-    _messages.removeWhere((m) => m.id == message.id);
-    _messages.add(message);
-    _sortAndPrune();
-    await _persistAll();
-    _controller.add(List.unmodifiable(_messages));
-  }
+  Future<void> add(MessageRecord message, {SecretKey? storageKey}) =>
+      _serialized(() async {
+        await _ensureLoaded();
+        if (storageKey != null) {
+          final detachedKey = await _detachStorageKey(storageKey);
+          final previousKey = _storageKey;
+          _storageKey = detachedKey;
+          _destroyStorageKey(previousKey);
+        }
+        if (_hasScope && _storageKey == null) {
+          throw StateError('Storage context not initialized');
+        }
+        if (_messages.any((m) => _isDuplicateIncomingMessage(m, message))) {
+          return;
+        }
+        _messages.removeWhere((m) => m.id == message.id);
+        _messages.add(message);
+        _sortAndPrune();
+        await _persistAll();
+        _controller.add(List.unmodifiable(_messages));
+      });
 
-  Future<void> clearAll() async {
-    _messages.clear();
-    _hiddenPersistedRecords.clear();
-    _visibleRecordKey = null;
-    if (!_hasScope) {
-      _controller.add(const []);
-      return;
-    }
+  Future<void> clearAll() => _serialized(() async {
+        _messages.clear();
+        _hiddenPersistedRecords.clear();
+        _visibleRecordKey = null;
+        if (!_hasScope) {
+          _controller.add(const []);
+          return;
+        }
 
-    final keysToDelete = _box.keys.where(_isScopedKey).toList();
-    for (final key in keysToDelete) {
-      await _box.delete(key);
-    }
-    _controller.add(const []);
-  }
+        final keysToDelete = _box.keys.where(_isScopedKey).toList();
+        for (final key in keysToDelete) {
+          await _box.delete(key);
+        }
+        _controller.add(const []);
+      });
 
-  Future<void> markRead(String id) async {
-    await _ensureLoaded();
-    final idx = _messages.indexWhere((m) => m.id == id);
-    if (idx < 0) return;
+  Future<void> markRead(String id) => _serialized(() async {
+        await _ensureLoaded();
+        final idx = _messages.indexWhere((m) => m.id == id);
+        if (idx < 0) return;
 
-    final current = _messages[idx];
-    final updated = current.copyWith(readAt: _now);
-    _messages[idx] = updated;
-    await _persistAll();
-    _controller.add(List.unmodifiable(_messages));
-  }
+        final current = _messages[idx];
+        final updated = current.copyWith(readAt: _now);
+        _messages[idx] = updated;
+        await _persistAll();
+        _controller.add(List.unmodifiable(_messages));
+      });
 
-  Future<void> delete(String id) async {
-    await _ensureLoaded();
-    _messages.removeWhere((m) => m.id == id);
-    _sortAndPrune();
-    await _persistAll();
-    _controller.add(List.unmodifiable(_messages));
-  }
+  Future<void> delete(String id) => _serialized(() async {
+        await _ensureLoaded();
+        _messages.removeWhere((m) => m.id == id);
+        _sortAndPrune();
+        await _persistAll();
+        _controller.add(List.unmodifiable(_messages));
+      });
 
-  Future<void> deleteAllForContact(String contactId) async {
-    await _ensureLoaded();
-    _messages.removeWhere(
-        (m) => m.senderId == contactId || m.recipientId == contactId);
-    _sortAndPrune();
-    await _persistAll();
-    _controller.add(List.unmodifiable(_messages));
-  }
+  Future<void> deleteAllForContact(String contactId) => _serialized(() async {
+        await _ensureLoaded();
+        _messages.removeWhere(
+            (m) => m.senderId == contactId || m.recipientId == contactId);
+        _sortAndPrune();
+        await _persistAll();
+        _controller.add(List.unmodifiable(_messages));
+      });
 
   Future<void> deleteForContactByKeyFilter(
     String contactId, {
     required String? effectiveTag,
-  }) async {
-    await _ensureLoaded();
-    _messages.removeWhere((m) {
-      if (m.senderId != contactId && m.recipientId != contactId) return false;
-      return _matchesKeyFilter(m, effectiveTag);
-    });
-    _sortAndPrune();
-    await _persistAll();
-    _controller.add(List.unmodifiable(_messages));
-  }
+  }) =>
+      _serialized(() async {
+        await _ensureLoaded();
+        _messages.removeWhere((m) {
+          if (m.senderId != contactId && m.recipientId != contactId) {
+            return false;
+          }
+          return _matchesKeyFilter(m, effectiveTag);
+        });
+        _sortAndPrune();
+        await _persistAll();
+        _controller.add(List.unmodifiable(_messages));
+      });
 
   Future<void> deleteByKeyFilter({
     required String? effectiveTag,
-  }) async {
-    await _ensureLoaded();
-    _messages.removeWhere(
-      (m) => _matchesKeyFilter(m, effectiveTag),
-    );
-    _sortAndPrune();
-    await _persistAll();
-    _controller.add(List.unmodifiable(_messages));
-  }
+  }) =>
+      _serialized(() async {
+        await _ensureLoaded();
+        _messages.removeWhere(
+          (m) => _matchesKeyFilter(m, effectiveTag),
+        );
+        _sortAndPrune();
+        await _persistAll();
+        _controller.add(List.unmodifiable(_messages));
+      });
 
   static bool _matchesKeyFilter(MessageRecord m, String? effectiveTag) {
     if (effectiveTag == null) return true;
     return m.keyTag == effectiveTag;
   }
 
-  Future<void> purgeReadDeleteAfterReadFor(String peerId) async {
-    await _ensureLoaded();
-    final hasMatches = _messages.any((m) =>
-        m.deleteAfterRead &&
-        m.readAt != null &&
-        (m.senderId == peerId || m.recipientId == peerId));
-    if (!hasMatches) return;
-    _messages.removeWhere((m) =>
-        m.deleteAfterRead &&
-        m.readAt != null &&
-        (m.senderId == peerId || m.recipientId == peerId));
-    _sortAndPrune();
-    await _persistAll();
-    _controller.add(List.unmodifiable(_messages));
-  }
+  Future<void> purgeReadDeleteAfterReadFor(String peerId) =>
+      _serialized(() async {
+        await _ensureLoaded();
+        final hasMatches = _messages.any((m) =>
+            m.deleteAfterRead &&
+            m.readAt != null &&
+            (m.senderId == peerId || m.recipientId == peerId));
+        if (!hasMatches) return;
+        _messages.removeWhere((m) =>
+            m.deleteAfterRead &&
+            m.readAt != null &&
+            (m.senderId == peerId || m.recipientId == peerId));
+        _sortAndPrune();
+        await _persistAll();
+        _controller.add(List.unmodifiable(_messages));
+      });
 
   Stream<List<MessageRecord>> watchAll() async* {
-    await _ensureLoaded();
-    final hadPrunableMessages = _hasPrunableMessages();
-    _sortAndPrune();
-    if (hadPrunableMessages) {
-      await _persistAll();
-    }
-    yield List.unmodifiable(_messages);
+    final initial = await _serialized(() async {
+      await _ensureLoaded();
+      final hadPrunableMessages = _hasPrunableMessages();
+      _sortAndPrune();
+      if (hadPrunableMessages) {
+        await _persistAll();
+      }
+      return List<MessageRecord>.unmodifiable(_messages);
+    });
+    yield initial;
     yield* _controller.stream;
   }
 
-  Future<List<MessageRecord>> getThread(String contactId) async {
-    await _ensureLoaded();
-    _sortAndPrune();
-    final thread = _messages
-        .where((m) => m.senderId == contactId || m.recipientId == contactId)
-        .toList();
-    thread.sort(_compareNewestFirst);
-    return thread;
-  }
+  Future<List<MessageRecord>> getThread(String contactId) =>
+      _serialized(() async {
+        await _ensureLoaded();
+        _sortAndPrune();
+        final thread = _messages
+            .where((m) => m.senderId == contactId || m.recipientId == contactId)
+            .toList();
+        thread.sort(_compareNewestFirst);
+        return thread;
+      });
 
-  Future<List<MessageRecord>> getAllMessages() async {
-    await _ensureLoaded();
-    _sortAndPrune();
-    return List.unmodifiable(_messages);
-  }
+  Future<List<MessageRecord>> getAllMessages() => _serialized(() async {
+        await _ensureLoaded();
+        _sortAndPrune();
+        return List<MessageRecord>.unmodifiable(_messages);
+      });
 
   Stream<List<MessageRecord>> watchThread(String contactId,
       {int limit = 50}) async* {
-    await _ensureLoaded();
-    final hadPrunableMessages = _hasPrunableMessages();
-    _sortAndPrune();
-    if (hadPrunableMessages) {
-      await _persistAll();
-    }
-
-    List<MessageRecord> getFiltered() {
-      final thread = _messages
+    List<MessageRecord> getFiltered(List<MessageRecord> messages) {
+      final thread = messages
           .where((m) => m.senderId == contactId || m.recipientId == contactId)
           .toList()
         ..sort(_compareNewestFirst);
@@ -383,10 +396,19 @@ class MessagesRepositoryCore {
       return thread;
     }
 
-    yield List.unmodifiable(getFiltered());
+    final initial = await _serialized(() async {
+      await _ensureLoaded();
+      final hadPrunableMessages = _hasPrunableMessages();
+      _sortAndPrune();
+      if (hadPrunableMessages) {
+        await _persistAll();
+      }
+      return List<MessageRecord>.unmodifiable(_messages);
+    });
+    yield List<MessageRecord>.unmodifiable(getFiltered(initial));
 
-    await for (final _ in _controller.stream) {
-      yield List.unmodifiable(getFiltered());
+    await for (final messages in _controller.stream) {
+      yield List<MessageRecord>.unmodifiable(getFiltered(messages));
     }
   }
 
@@ -399,23 +421,64 @@ class MessagesRepositoryCore {
   /// legacy messages will be re-decrypted on demand (same keys), while FS
   /// messages will fail inner-layer decryption (ratchet gone) and show a
   /// placeholder.
-  Future<void> stripEncryptedPlaintext() async {
-    await _ensureLoaded();
-    var changed = false;
-    for (var i = 0; i < _messages.length; i++) {
-      final m = _messages[i];
-      if (m.text != null && m.ciphertextBase64 != null) {
-        _messages[i] = m.copyWith(clearText: true);
-        changed = true;
-      }
-    }
-    if (changed) {
-      await _persistAll();
-      _controller.add(List.unmodifiable(_messages));
-    }
-  }
+  Future<void> stripEncryptedPlaintext() => _serialized(() async {
+        await _ensureLoaded();
+        var changed = false;
+        for (var i = 0; i < _messages.length; i++) {
+          final m = _messages[i];
+          if (m.text != null && m.ciphertextBase64 != null) {
+            _messages[i] = m.copyWith(clearText: true);
+            changed = true;
+          }
+        }
+        if (changed) {
+          await _persistAll();
+          _controller.add(List.unmodifiable(_messages));
+        }
+      });
 
   void dispose() {
-    _controller.close();
+    if (_disposeRequested) return;
+    _disposeRequested = true;
+    final pending = _operationTail;
+    unawaited(
+      pending.catchError((_) {}).whenComplete(() async {
+        final storageKey = _storageKey;
+        _storageKey = null;
+        _destroyStorageKey(storageKey);
+        if (!_controller.isClosed) await _controller.close();
+      }),
+    );
+  }
+
+  Future<SecretKeyData?> _detachStorageKey(SecretKey? storageKey) async {
+    if (storageKey == null) return null;
+    final extracted = Uint8List.fromList(await storageKey.extractBytes());
+    final owned = Uint8List.fromList(extracted);
+    extracted.fillRange(0, extracted.length, 0);
+    return SecretKeyData(owned);
+  }
+
+  void _destroyStorageKey(SecretKey? storageKey) {
+    if (storageKey is SecretKeyData) storageKey.destroy();
+  }
+
+  Future<T> _serialized<T>(Future<T> Function() operation) {
+    if (_disposeRequested) {
+      return Future<T>.error(
+        StateError('MessagesRepository is disposed'),
+      );
+    }
+    final completer = Completer<T>();
+    final previous = _operationTail;
+    final next = previous.catchError((_) {}).then((_) async {
+      try {
+        completer.complete(await operation());
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+      }
+    });
+    _operationTail = next;
+    return completer.future;
   }
 }

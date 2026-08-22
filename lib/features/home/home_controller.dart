@@ -102,7 +102,23 @@ class HomeController {
     final keyTag = await currentKeyTag();
     if (keyTag == null) return null;
     final keyBytes = Uint8List.fromList(base64Decode(privateKeyB64));
-    return MessageRecordCipher.deriveKey(keyBytes, keyTag: keyTag);
+    try {
+      return await MessageRecordCipher.deriveKey(keyBytes, keyTag: keyTag);
+    } finally {
+      keyBytes.fillRange(0, keyBytes.length, 0);
+    }
+  }
+
+  Future<void> persistMessageRecord(MessageRecord message) async {
+    final storageKey = await currentStorageKey();
+    try {
+      await ref.read(messagesRepositoryProvider).add(
+            message,
+            storageKey: storageKey,
+          );
+    } finally {
+      if (storageKey is SecretKeyData) storageKey.destroy();
+    }
   }
 
   /// The keyTag for the currently active key (passphrase or original).
@@ -1273,7 +1289,6 @@ class HomeController {
     final recordTs = payload.timestamp > nowTs ? payload.timestamp : nowTs;
     final recordId = DateTime.now().microsecondsSinceEpoch.toString();
     final keyTag = await currentKeyTag();
-    final storageKey = await currentStorageKey();
 
     // §12.3: FS plaintext must NOT be stored in MessageRecord.text.
     // Instead, persist it as an opaque encrypted auxiliary record.
@@ -1294,26 +1309,25 @@ class HomeController {
       );
     }
 
-    await ref.read(messagesRepositoryProvider).add(
-          MessageRecord(
-            id: recordId,
-            senderId: payload.senderId,
-            recipientId: payload.recipientId,
-            direction: 'incoming',
-            timestamp: recordTs,
-            text: isFsEncrypted ? null : payload.text,
-            ciphertextBase64: encryptedMessage.ciphertextBase64,
-            nonceBase64: encryptedMessage.nonceBase64,
-            rawSource: rawSource,
-            expireAfter: payload.expireAfter,
-            deleteAfterRead: payload.deleteAfterRead,
-            backupExcluded: payload.backupExcluded,
-            keyTag: keyTag,
-            isFsEncrypted: isFsEncrypted,
-            fsClassification: classification,
-          ),
-          storageKey: storageKey,
-        );
+    await persistMessageRecord(
+      MessageRecord(
+        id: recordId,
+        senderId: payload.senderId,
+        recipientId: payload.recipientId,
+        direction: 'incoming',
+        timestamp: recordTs,
+        text: isFsEncrypted ? null : payload.text,
+        ciphertextBase64: encryptedMessage.ciphertextBase64,
+        nonceBase64: encryptedMessage.nonceBase64,
+        rawSource: rawSource,
+        expireAfter: payload.expireAfter,
+        deleteAfterRead: payload.deleteAfterRead,
+        backupExcluded: payload.backupExcluded,
+        keyTag: keyTag,
+        isFsEncrypted: isFsEncrypted,
+        fsClassification: classification,
+      ),
+    );
 
     if (payload.deleteAfterRead) {
       await ref.read(messagesRepositoryProvider).markRead(recordId);

@@ -1703,7 +1703,6 @@ class ChatViewState extends ConsumerState<ChatView> {
       };
 
       final keyTag = await controller.currentKeyTag();
-      final storageKey = await controller.currentStorageKey();
       final recordId = DateTime.now().microsecondsSinceEpoch.toString();
       final sentText = maximumSetupOnly ? '' : _secretCtrl.text;
       final sentExpireAfter = maximumSetupOnly ? null : expireAfter;
@@ -1735,26 +1734,25 @@ class ChatViewState extends ConsumerState<ChatView> {
           _cachedThread.isEmpty ? nowSec : _cachedThread.last.timestamp;
       final outgoingTs = max(nowSec, latestInThread);
 
-      await ref.read(messagesRepositoryProvider).add(
-            MessageRecord(
-              id: recordId,
-              senderId: 'me',
-              recipientId: recipient.identityId,
-              direction: 'outgoing',
-              timestamp: outgoingTs,
-              text: encResult.isFsEncrypted ? null : sentText,
-              ciphertextBase64: encrypted.ciphertextBase64,
-              nonceBase64: encrypted.nonceBase64,
-              rawSource: output,
-              expireAfter: sentExpireAfter,
-              deleteAfterRead: sentDeleteAfterRead,
-              backupExcluded: sentBackupExcluded,
-              keyTag: keyTag,
-              isFsEncrypted: encResult.isFsEncrypted,
-              fsClassification: encResult.classification,
-            ),
-            storageKey: storageKey,
-          );
+      await controller.persistMessageRecord(
+        MessageRecord(
+          id: recordId,
+          senderId: 'me',
+          recipientId: recipient.identityId,
+          direction: 'outgoing',
+          timestamp: outgoingTs,
+          text: encResult.isFsEncrypted ? null : sentText,
+          ciphertextBase64: encrypted.ciphertextBase64,
+          nonceBase64: encrypted.nonceBase64,
+          rawSource: output,
+          expireAfter: sentExpireAfter,
+          deleteAfterRead: sentDeleteAfterRead,
+          backupExcluded: sentBackupExcluded,
+          keyTag: keyTag,
+          isFsEncrypted: encResult.isFsEncrypted,
+          fsClassification: encResult.classification,
+        ),
+      );
 
       if (!mounted) return null;
       setState(() {

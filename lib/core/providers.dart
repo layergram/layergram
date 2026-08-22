@@ -188,10 +188,14 @@ final messagesRepositoryProvider = Provider<MessagesRepository>((ref) {
       if (storageKey is SecretKeyData) storageKey.destroy();
       return;
     }
-    await repo.setActiveContext(
-      scopeToken: context?.scopeToken,
-      storageKey: storageKey,
-    );
+    try {
+      await repo.setActiveContext(
+        scopeToken: context?.scopeToken,
+        storageKey: storageKey,
+      );
+    } finally {
+      if (storageKey is SecretKeyData) storageKey.destroy();
+    }
   }
 
   void scheduleStorageContextUpdate() {

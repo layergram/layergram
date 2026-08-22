@@ -579,5 +579,95 @@ void main() {
       expect(messages.map((m) => m.id).toSet(), {'incoming-1', 'incoming-2'});
       repo.dispose();
     });
+
+    test('serializes writes across active identity context changes', () async {
+      final keyA = await deriveStorageKey('identity-a');
+      final keyB = await deriveStorageKey('identity-b');
+      final repo = MessagesRepository();
+      await initRepo(
+        repo,
+        scopeToken: 'opaque-scope-a',
+        storageKey: keyA,
+      );
+
+      final writeA = repo.add(
+        const MessageRecord(
+          id: 'identity-a-message',
+          senderId: 'me',
+          recipientId: 'contact-a',
+          direction: 'outgoing',
+          timestamp: 1,
+          text: 'identity a',
+          keyTag: 'identity-a',
+        ),
+      );
+      final switchToB = repo.setActiveContext(
+        scopeToken: 'opaque-scope-b',
+        storageKey: keyB,
+      );
+      final writeB = repo.add(
+        const MessageRecord(
+          id: 'identity-b-message',
+          senderId: 'me',
+          recipientId: 'contact-b',
+          direction: 'outgoing',
+          timestamp: 2,
+          text: 'identity b',
+          keyTag: 'identity-b',
+        ),
+      );
+
+      await Future.wait([writeA, switchToB, writeB]);
+      repo.dispose();
+
+      final viewA = MessagesRepository();
+      await initRepo(
+        viewA,
+        scopeToken: 'opaque-scope-a',
+        storageKey: keyA,
+      );
+      expect(
+        (await viewA.getAllMessages()).map((message) => message.id),
+        ['identity-a-message'],
+      );
+      viewA.dispose();
+
+      final viewB = MessagesRepository();
+      await initRepo(
+        viewB,
+        scopeToken: 'opaque-scope-b',
+        storageKey: keyB,
+      );
+      expect(
+        (await viewB.getAllMessages()).map((message) => message.id),
+        ['identity-b-message'],
+      );
+      viewB.dispose();
+    });
+
+    test('rejects new operations once disposal begins', () async {
+      final storageKey = await deriveStorageKey('orig');
+      final repo = MessagesRepository();
+      await initRepo(
+        repo,
+        scopeToken: 'opaque-scope-alpha',
+        storageKey: storageKey,
+      );
+
+      repo.dispose();
+
+      await expectLater(
+        repo.add(
+          const MessageRecord(
+            id: 'late-message',
+            senderId: 'me',
+            recipientId: 'contact',
+            direction: 'outgoing',
+            timestamp: 1,
+          ),
+        ),
+        throwsStateError,
+      );
+    });
   });
 }
