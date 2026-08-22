@@ -18,6 +18,7 @@ import 'package:layergram/core/crypto/v3/lmf_v3.dart';
 import 'package:layergram/core/crypto/v3/local_identity_v3.dart';
 import 'package:layergram/core/crypto/v3/ml_kem_768.dart';
 import 'package:layergram/core/crypto/v3/sparse_pq_ratchet_v3.dart';
+import 'package:layergram/core/storage/aux_record_repository.dart';
 import 'package:layergram/core/storage/local_database.dart';
 import 'package:layergram/core/storage/messages_repository.dart';
 
@@ -576,6 +577,69 @@ void main() {
     }
   });
 
+  test('v3 contact policy restores only inside its effective identity scope',
+      () async {
+    var runtime = await V3ApplicationSessionRuntime.open(
+      localIdentity: alice,
+      scopeToken: aliceScope,
+      sckaBackend: _InitialSckaBackend(),
+    );
+    try {
+      final initial = await runtime.ensureProtocolV3ContactPolicy(
+        remoteIdentity: bob.publicIdentity,
+        mode: FsSecurityMode.advanced,
+      );
+      expect(initial.isValid, isTrue);
+      expect(
+        runtime.protocolV3ModeForIdentity(bob.publicIdentity),
+        FsSecurityMode.advanced,
+      );
+      await runtime.setProtocolV3ContactMode(
+        remoteIdentity: bob.publicIdentity,
+        mode: FsSecurityMode.strict,
+      );
+    } finally {
+      await runtime.close();
+    }
+
+    final unrelatedRepository = AuxRecordRepository()
+      ..setActiveContext(
+        scopeToken: aliceScope,
+        auxStorageKey: SecretKey(_testBytes(32, 0xe1)),
+      );
+    for (final entry in unrelatedRepository.getAllAuxRecordIds().entries) {
+      expect(
+        await unrelatedRepository.read(
+          storageId: entry.key,
+          recordId: entry.value,
+        ),
+        isNull,
+      );
+    }
+    unrelatedRepository.setActiveContext(
+      scopeToken: null,
+      auxStorageKey: null,
+    );
+
+    runtime = await V3ApplicationSessionRuntime.open(
+      localIdentity: alice,
+      scopeToken: aliceScope,
+      sckaBackend: _InitialSckaBackend(),
+    );
+    try {
+      expect(
+        runtime.protocolV3ModeForIdentity(bob.publicIdentity),
+        FsSecurityMode.strict,
+      );
+      final restored =
+          runtime.protocolV3EligibilityForIdentity(bob.publicIdentity);
+      expect(restored, isNotNull);
+      expect(restored!.isValid, isTrue);
+    } finally {
+      await runtime.close();
+    }
+  });
+
   test('delayed message from an older non-excluded session is accepted',
       () async {
     final aliceRuntime = await V3ApplicationSessionRuntime.open(
@@ -905,6 +969,185 @@ void main() {
     }
   });
 
+  test('chat recovery rehydrates handshake message and ACK exports', () async {
+    var aliceRuntime = await V3ApplicationSessionRuntime.open(
+      localIdentity: alice,
+      scopeToken: aliceScope,
+      sckaBackend: _InitialSckaBackend(),
+    );
+    var bobRuntime = await V3ApplicationSessionRuntime.open(
+      localIdentity: bob,
+      scopeToken: bobScope,
+      sckaBackend: _InitialSckaBackend(),
+    );
+    final aliceMessages = MessagesRepository();
+    final bobMessages = MessagesRepository();
+    await aliceMessages.setActiveContext(
+      scopeToken: aliceScope,
+      storageKey: SecretKey(_testBytes(32, 0xa2)),
+    );
+    await bobMessages.setActiveContext(
+      scopeToken: bobScope,
+      storageKey: SecretKey(_testBytes(32, 0xc2)),
+    );
+    final aliceContact = V3IdentityAdapter.toRemoteIdentity(
+      alice.publicIdentity,
+      verified: true,
+    );
+    final bobContact = V3IdentityAdapter.toRemoteIdentity(
+      bob.publicIdentity,
+      verified: true,
+    );
+
+    try {
+      await aliceRuntime.ensureProtocolV3ContactPolicy(
+        remoteIdentity: bob.publicIdentity,
+        mode: FsSecurityMode.advanced,
+      );
+      await bobRuntime.ensureProtocolV3ContactPolicy(
+        remoteIdentity: alice.publicIdentity,
+        mode: FsSecurityMode.advanced,
+      );
+      final offer = await aliceRuntime.createOffer(
+        remoteIdentity: bob.publicIdentity,
+        mode: V3HandshakeMode.normal,
+      );
+      final reply = await bobRuntime.receiveOffer(
+        frames: offer.frames,
+        initiatorIdentity: alice.publicIdentity,
+        expectedMode: V3HandshakeMode.normal,
+      );
+      await aliceRuntime.receiveReply(
+        frames: reply.frames,
+        responderIdentity: bob.publicIdentity,
+      );
+
+      await aliceRuntime.close();
+      aliceRuntime = await V3ApplicationSessionRuntime.open(
+        localIdentity: alice,
+        scopeToken: aliceScope,
+        sckaBackend: _InitialSckaBackend(),
+      );
+      var aliceBridge = V3ApplicationChatBridge(
+        runtime: aliceRuntime,
+        messagesRepository: aliceMessages,
+        keyTag: 'alice-recovery',
+      );
+      var bobBridge = V3ApplicationChatBridge(
+        runtime: bobRuntime,
+        messagesRepository: bobMessages,
+        keyTag: 'bob-recovery',
+      );
+
+      final recoveredHandshake = (await aliceBridge.pendingExportsForContact(
+        contact: bobContact,
+        carrierMode: V3ChatCarrierMode.link,
+      ))
+          .firstWhere(
+        (export) => export.purpose == V3ChatOutboundPurpose.handshake,
+      );
+      expect(recoveredHandshake.restored, isTrue);
+      expect(
+        recoveredHandshake.parts,
+        everyElement(startsWith('layergram://m/')),
+      );
+      expect(
+        (await bobBridge.receiveCarrier(
+          carrier: recoveredHandshake.bundledText,
+          contacts: [aliceContact],
+          modeForContact: bobBridge.modeForContact,
+          eligibilityForContact: bobBridge.eligibilityForContact,
+        ))
+            .status,
+        V3ChatInboundStatus.sessionEstablished,
+      );
+
+      final outgoing = await aliceBridge.prepareOutbound(
+        contact: bobContact,
+        mode: V3HandshakeMode.normal,
+        carrierMode: V3ChatCarrierMode.link,
+        text: 'durable restart recovery',
+        timestampUnixSeconds: 2000002000,
+        eligibilityPolicy: aliceBridge.eligibilityForContact(bobContact),
+      );
+      final outgoingFrames = outgoing.parts
+          .map(V3ApplicationTransport.decodeLink)
+          .toList(growable: false);
+      await expectLater(
+        bobBridge.markExported(outgoing),
+        throwsStateError,
+      );
+
+      await aliceRuntime.close();
+      aliceRuntime = await V3ApplicationSessionRuntime.open(
+        localIdentity: alice,
+        scopeToken: aliceScope,
+        sckaBackend: _InitialSckaBackend(),
+      );
+      aliceBridge = V3ApplicationChatBridge(
+        runtime: aliceRuntime,
+        messagesRepository: aliceMessages,
+        keyTag: 'alice-recovery',
+      );
+      final recoveredMessage = (await aliceBridge.pendingExportsForContact(
+        contact: bobContact,
+        carrierMode: V3ChatCarrierMode.link,
+      ))
+          .firstWhere(
+        (export) => export.purpose == V3ChatOutboundPurpose.application,
+      );
+      _expectExactFrames(
+        outgoingFrames,
+        recoveredMessage.parts
+            .map(V3ApplicationTransport.decodeLink)
+            .toList(growable: false),
+      );
+
+      final delivered = await bobBridge.receiveCarrier(
+        carrier: recoveredMessage.bundledText,
+        contacts: [aliceContact],
+        modeForContact: bobBridge.modeForContact,
+        eligibilityForContact: bobBridge.eligibilityForContact,
+        nowUnixSeconds: 2000002001,
+      );
+      expect(delivered.status, V3ChatInboundStatus.delivered);
+      final acknowledgementFrames = delivered.response!.parts
+          .map(V3ApplicationTransport.decodeLink)
+          .toList(growable: false);
+
+      await bobRuntime.close();
+      bobRuntime = await V3ApplicationSessionRuntime.open(
+        localIdentity: bob,
+        scopeToken: bobScope,
+        sckaBackend: _InitialSckaBackend(),
+      );
+      bobBridge = V3ApplicationChatBridge(
+        runtime: bobRuntime,
+        messagesRepository: bobMessages,
+        keyTag: 'bob-recovery',
+      );
+      final recoveredAcknowledgement =
+          (await bobBridge.pendingExportsForContact(
+        contact: aliceContact,
+        carrierMode: V3ChatCarrierMode.link,
+      ))
+              .firstWhere(
+        (export) => export.purpose == V3ChatOutboundPurpose.acknowledgement,
+      );
+      _expectExactFrames(
+        acknowledgementFrames,
+        recoveredAcknowledgement.parts
+            .map(V3ApplicationTransport.decodeLink)
+            .toList(growable: false),
+      );
+    } finally {
+      aliceMessages.dispose();
+      bobMessages.dispose();
+      await aliceRuntime.close();
+      await bobRuntime.close();
+    }
+  });
+
   test('chat bridge preserves text link and stego carrier workflows', () async {
     final aliceRuntime = await V3ApplicationSessionRuntime.open(
       localIdentity: alice,
@@ -1083,6 +1326,10 @@ void main() {
       expect(deliveredLink.payload?.text, 'messaggio quantum-safe via link');
       expect(deliveredLink.response, isNotNull);
       expect(
+        deliveredLink.response!.parts,
+        everyElement(startsWith('layergram://m/')),
+      );
+      expect(
         (await aliceBridge.receiveCarrier(
           carrier: deliveredLink.response!.bundledText,
           contacts: <RemoteIdentity>[bobContact],
@@ -1122,8 +1369,12 @@ void main() {
       expect(deliveredStego?.status, V3ChatInboundStatus.delivered);
       expect(deliveredStego?.payload?.text, 'risposta quantum-safe nascosta');
       expect(
+        deliveredStego!.response!.parts,
+        everyElement(startsWith('Ci vediamo domani')),
+      );
+      expect(
         (await bobBridge.receiveCarrier(
-          carrier: deliveredStego!.response!.bundledText,
+          carrier: deliveredStego.response!.bundledText,
           contacts: <RemoteIdentity>[aliceContact],
           modeForContact: (_) => V3HandshakeMode.normal,
         ))

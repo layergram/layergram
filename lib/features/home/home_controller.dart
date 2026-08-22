@@ -136,38 +136,6 @@ class HomeController {
     );
   }
 
-  V3HandshakeMode _protocolV3ModeForContact(RemoteIdentity contact) {
-    final identityContext = _protocolV3PolicyContextId;
-    if (identityContext == null) return V3HandshakeMode.normal;
-    final mode = ref.read(fsSecurityModeServiceProvider).getModeSync(
-          contactId: contact.identityId,
-          identityContext: identityContext,
-        );
-    return mode == FsSecurityMode.strict
-        ? V3HandshakeMode.maximum
-        : V3HandshakeMode.normal;
-  }
-
-  V3SessionEligibilityPolicy? _protocolV3EligibilityForContact(
-    RemoteIdentity contact,
-  ) {
-    final identityContext = _protocolV3PolicyContextId;
-    if (identityContext == null) return null;
-    return ref.read(fsSecurityModeServiceProvider).getV3SessionEligibilitySync(
-          contactId: contact.identityId,
-          identityContext: identityContext,
-        );
-  }
-
-  String? get _protocolV3PolicyContextId {
-    final passphrase = ref.read(passphraseProvider);
-    if (passphrase.isActive && (passphrase.v3IdentityId?.isNotEmpty ?? false)) {
-      return passphrase.v3IdentityId;
-    }
-    final active = ref.read(activeIdentityIdProvider);
-    return active == null || active.isEmpty ? null : active;
-  }
-
   Future<V3ChatContactSecurityStatus?> protocolV3SecurityStatus(
     RemoteIdentity contact,
   ) async {
@@ -176,8 +144,8 @@ class HomeController {
     if (bridge == null) return null;
     return bridge.securityStatus(
       contact: contact,
-      selectedMode: _protocolV3ModeForContact(contact),
-      eligibilityPolicy: _protocolV3EligibilityForContact(contact),
+      selectedMode: bridge.modeForContact(contact),
+      eligibilityPolicy: bridge.eligibilityForContact(contact),
       requireEligibilityPolicy: true,
     );
   }
@@ -196,16 +164,7 @@ class HomeController {
     final fsController = ref.read(
       fsOpportunisticControllerProvider(contact.identityId),
     );
-    await bridge.commitContactPolicyBoundary(
-      contact: contact,
-      persist: (handshakeIds) =>
-          ref.read(fsSecurityModeServiceProvider).setProtocolV3Mode(
-                contactId: contact.identityId,
-                identityContext: bridge.localIdentityId,
-                mode: mode,
-                existingHandshakeIds: handshakeIds,
-              ),
-    );
+    await bridge.setContactSecurityMode(contact, mode);
     fsController.securityMode = mode;
     ref.read(fsRegistryVersionProvider.notifier).state++;
   }
@@ -226,20 +185,10 @@ class HomeController {
     if (bridge == null) {
       throw StateError('Layergram v3 runtime is not available');
     }
-    final selectedMode = _protocolV3ModeForContact(recipient);
-    final existingPolicy = _protocolV3EligibilityForContact(recipient);
+    final selectedMode = bridge.modeForContact(recipient);
+    final existingPolicy = bridge.eligibilityForContact(recipient);
     final policy = existingPolicy ??
-        await bridge.initializeContactPolicy(
-          contact: recipient,
-          persist: () =>
-              ref.read(fsSecurityModeServiceProvider).ensureProtocolV3Policy(
-                    contactId: recipient.identityId,
-                    identityContext: bridge.localIdentityId,
-                    mode: selectedMode == V3HandshakeMode.maximum
-                        ? FsSecurityMode.strict
-                        : FsSecurityMode.advanced,
-                  ),
-        );
+        await bridge.ensureContactPolicy(recipient, selectedMode);
     final export = await bridge.prepareOutbound(
       contact: recipient,
       mode: selectedMode,
@@ -250,7 +199,7 @@ class HomeController {
       deleteAfterRead: deleteAfterRead,
       backupExcluded: backupExcluded,
       eligibilityPolicy: policy,
-      eligibilityForContact: _protocolV3EligibilityForContact,
+      eligibilityForContact: bridge.eligibilityForContact,
     );
     if (export.purpose == V3ChatOutboundPurpose.handshake) {
       ref.read(fsRegistryVersionProvider.notifier).state++;
@@ -269,6 +218,21 @@ class HomeController {
 
   V3ChatOutboundExport? takePendingProtocolV3Response(String contactId) {
     return _pendingV3Responses.remove(contactId);
+  }
+
+  Future<List<V3ChatOutboundExport>> restorePendingProtocolV3Exports({
+    required RemoteIdentity contact,
+    required V3ChatCarrierMode carrierMode,
+    String coverText = '',
+  }) async {
+    if (!isProtocolV3Contact(contact)) return const [];
+    final bridge = await _protocolV3Bridge();
+    if (bridge == null) return const [];
+    return bridge.pendingExportsForContact(
+      contact: contact,
+      carrierMode: carrierMode,
+      coverText: coverText,
+    );
   }
 
   Future<void> markMessageRead(MessageRecord message) async {
@@ -1040,22 +1004,10 @@ class HomeController {
       inbound = await bridge.receiveCarrier(
         carrier: source,
         contacts: contacts,
-        modeForContact: _protocolV3ModeForContact,
-        eligibilityForContact: _protocolV3EligibilityForContact,
-        ensureEligibilityForContact: (contact, mode) =>
-            ref.read(fsSecurityModeServiceProvider).ensureProtocolV3Policy(
-                  contactId: contact.identityId,
-                  identityContext: bridge.localIdentityId,
-                  mode: mode == V3HandshakeMode.maximum
-                      ? FsSecurityMode.strict
-                      : FsSecurityMode.advanced,
-                ),
-        pinMaximumDevice: (contact, remoteDeviceId) =>
-            ref.read(fsSecurityModeServiceProvider).pinProtocolV3MaximumDevice(
-                  contactId: contact.identityId,
-                  identityContext: bridge.localIdentityId,
-                  remoteDeviceId: remoteDeviceId,
-                ),
+        modeForContact: bridge.modeForContact,
+        eligibilityForContact: bridge.eligibilityForContact,
+        ensureEligibilityForContact: bridge.ensureContactPolicy,
+        pinMaximumDevice: bridge.pinMaximumDevice,
       );
     } on FormatException {
       return null;
@@ -1080,7 +1032,7 @@ class HomeController {
           return const DecodeOutcome.notForMe();
         }
         final classification =
-            _protocolV3ModeForContact(contact) == V3HandshakeMode.maximum
+            bridge.modeForContact(contact) == V3HandshakeMode.maximum
                 ? FsMessageClassification.strictFs
                 : FsMessageClassification.fsOnly;
         return DecodeOutcome.success(

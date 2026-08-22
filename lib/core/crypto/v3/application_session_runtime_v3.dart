@@ -23,6 +23,7 @@ import 'package:cryptography/cryptography.dart';
 import '../../storage/aux_record_repository.dart';
 import '../../storage/messages_repository_core.dart';
 import '../fs_message_classification.dart';
+import '../fs_security_mode.dart';
 import 'application_payload_v3.dart';
 import 'application_projection_v3.dart';
 import 'application_runtime_owner_v3.dart';
@@ -240,9 +241,15 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     required this.localIdentity,
     required V3LocalDeviceHandle localDevice,
     required V3SessionPersistenceScope scope,
+    required AuxRecordRepository contactPolicyRepository,
+    required SecretKeyData contactPolicyStorageKey,
+    required FsSecurityModeService contactPolicyService,
     required this.restoreResult,
   })  : _localDevice = localDevice,
-        _scope = scope;
+        _scope = scope,
+        _contactPolicyRepository = contactPolicyRepository,
+        _contactPolicyStorageKey = contactPolicyStorageKey,
+        _contactPolicyService = contactPolicyService;
 
   /// Opens the real encrypted Aux scope and restores all durable state.
   ///
@@ -306,6 +313,8 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     final deviceRepository = AuxRecordRepository();
     V3LocalDeviceHandle? device;
     V3SessionPersistenceScope? scope;
+    AuxRecordRepository? contactPolicyRepository;
+    SecretKeyData? contactPolicyStorageKey;
     try {
       deviceRepository.setActiveContext(
         scopeToken: scopeToken,
@@ -331,13 +340,31 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
       final restored = await scope.restore(
         checkpoints: bootstrapCheckpoints,
       );
+      contactPolicyStorageKey = extractedKey.copy();
+      contactPolicyRepository = AuxRecordRepository()
+        ..setActiveContext(
+          scopeToken: scopeToken,
+          auxStorageKey: contactPolicyStorageKey,
+        );
+      final contactPolicyService = FsSecurityModeService(
+        auxRepository: contactPolicyRepository,
+      );
+      await contactPolicyService.rebuildIndex();
       return V3ApplicationSessionRuntime._(
         localIdentity: localIdentity,
         localDevice: device,
         scope: scope,
+        contactPolicyRepository: contactPolicyRepository,
+        contactPolicyStorageKey: contactPolicyStorageKey,
+        contactPolicyService: contactPolicyService,
         restoreResult: restored,
       );
     } catch (_) {
+      contactPolicyRepository?.setActiveContext(
+        scopeToken: null,
+        auxStorageKey: null,
+      );
+      contactPolicyStorageKey?.destroy();
       await scope?.close();
       device?.close();
       rethrow;
@@ -356,6 +383,9 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
   final V3LocalIdentityHandle localIdentity;
   final V3LocalDeviceHandle _localDevice;
   final V3SessionPersistenceScope _scope;
+  final AuxRecordRepository _contactPolicyRepository;
+  final SecretKeyData _contactPolicyStorageKey;
+  final FsSecurityModeService _contactPolicyService;
   final V3SessionPersistenceRestoreResult restoreResult;
 
   Future<void> _operationTail = Future<void>.value();
@@ -622,7 +652,15 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     Set<String> excludedHandshakeIds = const <String>{},
   }) {
     return _serialized(() async {
-      final outbound = await _scope.handshakes.latestPendingOutboundForPeer(
+      var outbound = await _scope.handshakes.latestPendingOutboundForPeer(
+        localIdentity: localIdentity,
+        localDevice: _localDevice,
+        remoteIdentity: remoteIdentity,
+        mode: mode,
+        excludedHandshakeIds:
+            _effectiveExcludedHandshakeIds(excludedHandshakeIds),
+      );
+      outbound ??= await _scope.handshakes.latestCompletedConfirmationForPeer(
         localIdentity: localIdentity,
         localDevice: _localDevice,
         remoteIdentity: remoteIdentity,
@@ -679,6 +717,68 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
       }
       return persist();
     });
+  }
+
+  FsSecurityMode protocolV3ModeForIdentity(V3PublicIdentity remoteIdentity) {
+    return _contactPolicyService.getModeSync(
+      contactId: remoteIdentity.identityId,
+      identityContext: localIdentity.publicIdentity.identityId,
+    );
+  }
+
+  V3SessionEligibilityPolicy? protocolV3EligibilityForIdentity(
+    V3PublicIdentity remoteIdentity,
+  ) {
+    return protocolV3EligibilityForIdentityId(remoteIdentity.identityId);
+  }
+
+  V3SessionEligibilityPolicy? protocolV3EligibilityForIdentityId(
+    String remoteIdentityId,
+  ) {
+    return _contactPolicyService.getV3SessionEligibilitySync(
+      contactId: remoteIdentityId,
+      identityContext: localIdentity.publicIdentity.identityId,
+    );
+  }
+
+  Future<V3SessionEligibilityPolicy> ensureProtocolV3ContactPolicy({
+    required V3PublicIdentity remoteIdentity,
+    required FsSecurityMode mode,
+  }) {
+    return initializeContactPolicy(
+      remoteIdentity: remoteIdentity,
+      persist: () => _contactPolicyService.ensureProtocolV3Policy(
+        contactId: remoteIdentity.identityId,
+        identityContext: localIdentity.publicIdentity.identityId,
+        mode: mode,
+      ),
+    );
+  }
+
+  Future<void> setProtocolV3ContactMode({
+    required V3PublicIdentity remoteIdentity,
+    required FsSecurityMode mode,
+  }) {
+    return commitContactPolicyBoundary<void>(
+      remoteIdentity: remoteIdentity,
+      persist: (handshakeIds) => _contactPolicyService.setProtocolV3Mode(
+        contactId: remoteIdentity.identityId,
+        identityContext: localIdentity.publicIdentity.identityId,
+        mode: mode,
+        existingHandshakeIds: handshakeIds,
+      ),
+    );
+  }
+
+  Future<V3SessionEligibilityPolicy> pinProtocolV3MaximumDevice({
+    required V3PublicIdentity remoteIdentity,
+    required String remoteDeviceId,
+  }) {
+    return _contactPolicyService.pinProtocolV3MaximumDevice(
+      contactId: remoteIdentity.identityId,
+      identityContext: localIdentity.publicIdentity.identityId,
+      remoteDeviceId: remoteDeviceId,
+    );
   }
 
   /// Resolves only non-secret handshake routing metadata for a session frame.
@@ -1313,7 +1413,15 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
       try {
         await _scope.close();
       } finally {
-        _localDevice.close();
+        try {
+          _contactPolicyRepository.setActiveContext(
+            scopeToken: null,
+            auxStorageKey: null,
+          );
+          _contactPolicyStorageKey.destroy();
+        } finally {
+          _localDevice.close();
+        }
       }
     }, allowClosed: true);
   }

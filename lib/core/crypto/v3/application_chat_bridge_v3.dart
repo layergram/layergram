@@ -18,6 +18,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart' as crypto;
 
 import '../stego_encoder.dart';
+import '../stego_decoder.dart';
 import '../../storage/messages_repository_core.dart';
 import '../fs_security_mode.dart';
 import '../models.dart';
@@ -71,6 +72,10 @@ final class V3ChatOutboundExport {
   V3ChatOutboundExport._({
     required this.purpose,
     required Iterable<String> parts,
+    required this.localIdentityId,
+    required this.remoteIdentityId,
+    required this.carrierMode,
+    required this.policyRevision,
     Iterable<_V3ChatApplicationPart?>? applicationParts,
     this.handshakeId,
     this.messageExport,
@@ -81,6 +86,11 @@ final class V3ChatOutboundExport {
         ) {
     if (this.parts.isEmpty) {
       throw ArgumentError('Layergram v3 export must contain at least one part');
+    }
+    if (localIdentityId.isEmpty ||
+        remoteIdentityId.isEmpty ||
+        policyRevision < 0) {
+      throw ArgumentError('Layergram v3 export context binding is invalid');
     }
     if (this.parts.any(
           (part) => part.length > V3LmfFrameCodec.portableShareCharacterLimit,
@@ -95,6 +105,10 @@ final class V3ChatOutboundExport {
 
   final V3ChatOutboundPurpose purpose;
   final List<String> parts;
+  final String localIdentityId;
+  final String remoteIdentityId;
+  final V3ChatCarrierMode carrierMode;
+  final int policyRevision;
   final String? handshakeId;
   final V3ApplicationMessageExport? messageExport;
   final bool restored;
@@ -173,6 +187,53 @@ final class V3ApplicationChatBridge {
 
   String get localIdentityId =>
       _runtime.localIdentity.publicIdentity.identityId;
+
+  V3HandshakeMode modeForContact(RemoteIdentity contact) {
+    final mode = _runtime.protocolV3ModeForIdentity(
+      V3IdentityAdapter.fromRemoteIdentity(contact),
+    );
+    return mode == FsSecurityMode.strict
+        ? V3HandshakeMode.maximum
+        : V3HandshakeMode.normal;
+  }
+
+  V3SessionEligibilityPolicy? eligibilityForContact(RemoteIdentity contact) {
+    return _runtime.protocolV3EligibilityForIdentity(
+      V3IdentityAdapter.fromRemoteIdentity(contact),
+    );
+  }
+
+  Future<V3SessionEligibilityPolicy> ensureContactPolicy(
+    RemoteIdentity contact,
+    V3HandshakeMode mode,
+  ) {
+    return _runtime.ensureProtocolV3ContactPolicy(
+      remoteIdentity: V3IdentityAdapter.fromRemoteIdentity(contact),
+      mode: mode == V3HandshakeMode.maximum
+          ? FsSecurityMode.strict
+          : FsSecurityMode.advanced,
+    );
+  }
+
+  Future<void> setContactSecurityMode(
+    RemoteIdentity contact,
+    FsSecurityMode mode,
+  ) {
+    return _runtime.setProtocolV3ContactMode(
+      remoteIdentity: V3IdentityAdapter.fromRemoteIdentity(contact),
+      mode: mode,
+    );
+  }
+
+  Future<V3SessionEligibilityPolicy> pinMaximumDevice(
+    RemoteIdentity contact,
+    String remoteDeviceId,
+  ) {
+    return _runtime.pinProtocolV3MaximumDevice(
+      remoteIdentity: V3IdentityAdapter.fromRemoteIdentity(contact),
+      remoteDeviceId: remoteDeviceId,
+    );
+  }
 
   Future<V3ChatContactSecurityStatus> securityStatus({
     required RemoteIdentity contact,
@@ -326,6 +387,8 @@ final class V3ApplicationChatBridge {
           );
       return _handshakeExport(
         pending,
+        remoteIdentityId: contact.identityId,
+        policyRevision: eligibilityPolicy?.revision ?? 0,
         carrierMode: carrierMode,
         coverText: coverText,
       );
@@ -351,6 +414,10 @@ final class V3ApplicationChatBridge {
     );
     return V3ChatOutboundExport._(
       purpose: V3ChatOutboundPurpose.application,
+      localIdentityId: localIdentityId,
+      remoteIdentityId: contact.identityId,
+      carrierMode: carrierMode,
+      policyRevision: eligibilityPolicy?.revision ?? 0,
       parts: _encodeFrames(
         message.frames,
         carrierMode: carrierMode,
@@ -372,6 +439,16 @@ final class V3ApplicationChatBridge {
     V3ChatOutboundExport export, {
     int? partIndex,
   }) async {
+    if (export.localIdentityId != localIdentityId) {
+      throw StateError('Layergram v3 export belongs to another local context');
+    }
+    final currentPolicy = _runtime.protocolV3EligibilityForIdentityId(
+      export.remoteIdentityId,
+    );
+    if (currentPolicy != null &&
+        currentPolicy.revision != export.policyRevision) {
+      throw StateError('Layergram v3 export policy was superseded');
+    }
     final message = export.messageExport;
     if (message == null) return;
     if (partIndex == null) {
@@ -390,6 +467,108 @@ final class V3ApplicationChatBridge {
     );
   }
 
+  /// Rehydrates exact durable setup, message, and ACK frames for one contact.
+  /// Carrier encoding is deliberately reapplied from the sealed bytes, so a
+  /// restart never requires regenerating handshake or ratchet cryptography.
+  Future<List<V3ChatOutboundExport>> pendingExportsForContact({
+    required RemoteIdentity contact,
+    required V3ChatCarrierMode carrierMode,
+    String coverText = '',
+  }) async {
+    _preflightCarrier(carrierMode, coverText);
+    final remote = V3IdentityAdapter.fromRemoteIdentity(contact);
+    final mode = modeForContact(contact);
+    final policy = eligibilityForContact(contact);
+    if (policy?.isValid == false) {
+      throw StateError('Layergram v3 contact policy requires recovery');
+    }
+    final exports = <V3ChatOutboundExport>[];
+
+    final acknowledgementFrames = <V3LmfFrame>[];
+    final remoteDigestBytes = _identityDigest(remote);
+    try {
+      final remoteDigest = _armored(remoteDigestBytes);
+      for (final frame in await _runtime.pendingAcknowledgementFrames()) {
+        final session = await _runtime.completedSessionForFrame(frame);
+        if (session?.remoteIdentityDigest == remoteDigest) {
+          acknowledgementFrames.add(frame);
+        }
+      }
+    } finally {
+      _wipe(remoteDigestBytes);
+    }
+    if (acknowledgementFrames.isNotEmpty) {
+      exports.add(
+        V3ChatOutboundExport._(
+          purpose: V3ChatOutboundPurpose.acknowledgement,
+          localIdentityId: localIdentityId,
+          remoteIdentityId: contact.identityId,
+          carrierMode: carrierMode,
+          policyRevision: policy?.revision ?? 0,
+          parts: _encodeFrames(
+            acknowledgementFrames,
+            carrierMode: carrierMode,
+            coverText: coverText,
+          ),
+          restored: true,
+        ),
+      );
+    }
+
+    final handshake = await _runtime.pendingHandshakeForRemoteIdentity(
+      remoteIdentity: remote,
+      mode: mode,
+      excludedHandshakeIds: policy?.excludedHandshakeIds ?? const <String>{},
+    );
+    if (handshake != null) {
+      exports.add(
+        _handshakeExport(
+          handshake,
+          remoteIdentityId: contact.identityId,
+          policyRevision: policy?.revision ?? 0,
+          carrierMode: carrierMode,
+          coverText: coverText,
+        ),
+      );
+    }
+
+    final sessions = await _runtime.sessionsForRemoteIdentity(remote);
+    final sessionIds = sessions.map((session) => session.sessionId).toSet();
+    for (final message in await _runtime.pendingMessageExports()) {
+      if (message.targets.isEmpty ||
+          !message.targets.every(
+            (target) => sessionIds.contains(target.sessionId),
+          )) {
+        continue;
+      }
+      exports.add(
+        V3ChatOutboundExport._(
+          purpose: V3ChatOutboundPurpose.application,
+          localIdentityId: localIdentityId,
+          remoteIdentityId: contact.identityId,
+          carrierMode: carrierMode,
+          policyRevision: policy?.revision ?? 0,
+          parts: _encodeFrames(
+            message.frames,
+            carrierMode: carrierMode,
+            coverText: coverText,
+          ),
+          messageExport: message,
+          restored: true,
+          applicationParts: [
+            for (final target in message.targets)
+              for (final frame in target.frames)
+                _V3ChatApplicationPart(
+                  assemblyId: target.assemblyId,
+                  fragmentIndex: frame.fragmentIndex,
+                ),
+          ],
+        ),
+      );
+    }
+    return List<V3ChatOutboundExport>.unmodifiable(exports);
+  }
+
   Future<V3ChatInboundResult> receiveCarrier({
     required String carrier,
     required Iterable<RemoteIdentity> contacts,
@@ -397,12 +576,20 @@ final class V3ApplicationChatBridge {
     V3SessionEligibilityResolver? eligibilityForContact,
     V3SessionEligibilityEnsurer? ensureEligibilityForContact,
     V3MaximumDevicePinCommit? pinMaximumDevice,
-    V3ChatCarrierMode responseCarrierMode = V3ChatCarrierMode.text,
+    V3ChatCarrierMode? responseCarrierMode,
     String acknowledgementCoverText = '',
     DateTime? receivedAt,
     int? nowUnixSeconds,
   }) async {
-    _preflightCarrier(responseCarrierMode, acknowledgementCoverText);
+    final decodedCarrier = _decodeCarrierFrames(carrier);
+    final effectiveResponseMode = responseCarrierMode ?? decodedCarrier.mode;
+    final effectiveAcknowledgementCover = acknowledgementCoverText.isNotEmpty
+        ? acknowledgementCoverText
+        : decodedCarrier.visibleCoverText ?? '';
+    _preflightCarrier(
+      effectiveResponseMode,
+      effectiveAcknowledgementCover,
+    );
     final v3Contacts = <({RemoteIdentity model, V3PublicIdentity public})>[];
     for (final contact in contacts) {
       if (contact.protocolVersion != V3PublicIdentityCodec.protocolVersion) {
@@ -419,7 +606,7 @@ final class V3ApplicationChatBridge {
         continue;
       }
     }
-    final frames = _decodeCarrierFrames(carrier);
+    final frames = decodedCarrier.frames;
     V3ChatInboundResult? selected;
     var shouldReconcile = false;
     for (final frame in frames) {
@@ -477,8 +664,10 @@ final class V3ApplicationChatBridge {
             ? null
             : _handshakeExport(
                 inbound.outbound!,
-                carrierMode: responseCarrierMode,
-                coverText: acknowledgementCoverText,
+                remoteIdentityId: contact.model.identityId,
+                policyRevision: eligibility?.revision ?? 0,
+                carrierMode: effectiveResponseMode,
+                coverText: effectiveAcknowledgementCover,
               );
         selected = _preferInboundResult(
           selected,
@@ -538,10 +727,14 @@ final class V3ApplicationChatBridge {
           ? null
           : V3ChatOutboundExport._(
               purpose: V3ChatOutboundPurpose.acknowledgement,
+              localIdentityId: localIdentityId,
+              remoteIdentityId: routedContact.model.identityId,
+              carrierMode: effectiveResponseMode,
+              policyRevision: eligibility?.revision ?? 0,
               parts: _encodeFrames(
                 [inbound.acknowledgementFrame!],
-                carrierMode: responseCarrierMode,
-                coverText: acknowledgementCoverText,
+                carrierMode: effectiveResponseMode,
+                coverText: effectiveAcknowledgementCover,
               ),
             );
       final status = switch (inbound.status) {
@@ -594,11 +787,17 @@ final class V3ApplicationChatBridge {
 
   V3ChatOutboundExport _handshakeExport(
     V3ApplicationHandshakeExport export, {
+    required String remoteIdentityId,
+    required int policyRevision,
     required V3ChatCarrierMode carrierMode,
     required String coverText,
   }) {
     return V3ChatOutboundExport._(
       purpose: V3ChatOutboundPurpose.handshake,
+      localIdentityId: localIdentityId,
+      remoteIdentityId: remoteIdentityId,
+      carrierMode: carrierMode,
+      policyRevision: policyRevision,
       parts: _encodeFrames(
         export.frames,
         carrierMode: carrierMode,
@@ -739,7 +938,11 @@ List<String> _encodeFrames(
       .toList(growable: false);
 }
 
-List<V3LmfFrame> _decodeCarrierFrames(String carrier) {
+({
+  List<V3LmfFrame> frames,
+  V3ChatCarrierMode mode,
+  String? visibleCoverText,
+}) _decodeCarrierFrames(String carrier) {
   final normalized = carrier.trim();
   if (normalized.isEmpty ||
       normalized.length >
@@ -764,15 +967,23 @@ List<V3LmfFrame> _decodeCarrierFrames(String carrier) {
     if (lines.length > V3LmfFrameCodec.maxFragments) {
       throw const FormatException('Too many Layergram v3 carrier parts');
     }
-    return lines
-        .map(
-          isTextBundle
-              ? V3ApplicationTransport.decodeText
-              : V3ApplicationTransport.decodeLink,
-        )
-        .toList(growable: false);
+    return (
+      frames: lines
+          .map(
+            isTextBundle
+                ? V3ApplicationTransport.decodeText
+                : V3ApplicationTransport.decodeLink,
+          )
+          .toList(growable: false),
+      mode: isTextBundle ? V3ChatCarrierMode.text : V3ChatCarrierMode.link,
+      visibleCoverText: null,
+    );
   }
-  return [V3ApplicationTransport.decode(carrier).frame];
+  return (
+    frames: [V3ApplicationTransport.decodeStego(carrier)],
+    mode: V3ChatCarrierMode.steganography,
+    visibleCoverText: StegoDecoder.visibleCoverText(carrier),
+  );
 }
 
 Uint8List _routingBinding(V3PublicIdentity identity) => Uint8List.fromList(

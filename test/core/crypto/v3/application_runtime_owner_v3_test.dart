@@ -110,7 +110,7 @@ void main() {
     await identityRuntime.close();
   });
 
-  test('concurrent expulsion waits for an opening runtime and then drains it',
+  test('concurrent expulsion prevents an opening runtime from escaping',
       () async {
     final identityRuntime = V3IdentityRuntime(
       seedService: SeedService(),
@@ -147,11 +147,66 @@ void main() {
     expect(session.identity.isClosed, isFalse);
 
     allowFactory.complete();
-    expect(await opening, same(session));
+    await expectLater(
+      opening,
+      throwsA(isA<V3ApplicationRuntimeContextSuperseded>()),
+    );
     await expulsion;
     expect(session.isClosed, isTrue);
     expect(session.identityWasOpenWhenClosed, isTrue);
     expect(session.identity.isClosed, isTrue);
+
+    await owner.close();
+    await identityRuntime.close();
+  });
+
+  test('a newer context request prevents a stale runtime from reopening',
+      () async {
+    final identityRuntime = V3IdentityRuntime(
+      seedService: SeedService(),
+      backendLoader: _OwnerMlKemBackend.new,
+    );
+    final firstStarted = Completer<void>();
+    final allowFirst = Completer<void>();
+    final opened = <_FakeApplicationRuntime>[];
+    var factoryCalls = 0;
+    final owner = V3ApplicationRuntimeOwner<_FakeApplicationRuntime>(
+      identityRuntime: identityRuntime,
+      runtimeFactory: ({required localIdentity, required scopeToken}) async {
+        final runtime = _FakeApplicationRuntime(localIdentity);
+        opened.add(runtime);
+        if (factoryCalls++ == 0) {
+          firstStarted.complete();
+          await allowFirst.future;
+        }
+        return runtime;
+      },
+    );
+
+    final stale = owner.open(
+      recoveryIdentity: local('legacy-a'),
+      scopeToken: 'primary-scope001',
+      contextId: 'primary|legacy-a|primary-scope001',
+      usePassphraseIdentity: false,
+    );
+    await firstStarted.future;
+    final latest = owner.open(
+      recoveryIdentity: local('legacy-a'),
+      scopeToken: 'primary-scope002',
+      contextId: 'primary|legacy-a|primary-scope002',
+      usePassphraseIdentity: false,
+    );
+    allowFirst.complete();
+
+    await expectLater(
+      stale,
+      throwsA(isA<V3ApplicationRuntimeContextSuperseded>()),
+    );
+    final active = await latest;
+    expect(opened, hasLength(2));
+    expect(opened.first.isClosed, isTrue);
+    expect(active, same(opened.last));
+    expect(owner.current, same(active));
 
     await owner.close();
     await identityRuntime.close();

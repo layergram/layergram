@@ -18,6 +18,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
+import 'package:cryptography/cryptography.dart';
 
 import 'capabilities/chat_folders_capability.dart';
 import 'capabilities/layergram_capabilities.dart';
@@ -133,14 +134,17 @@ final identitiesRepositoryProvider = Provider<IdentitiesRepository>((ref) {
 });
 
 final messagesRepositoryProvider = Provider<MessagesRepository>((ref) {
-  ref.watch(activeIdentityIdProvider);
   final repo = MessagesRepository();
-  ref.onDispose(repo.dispose);
+  var contextGeneration = 0;
+  var disposed = false;
+  final pendingUpdates = <Future<void>>{};
 
-  Future<void> updateStorageContext() async {
+  Future<void> updateStorageContext(int generation) async {
     final identityId = ref.read(activeIdentityIdProvider) ?? '';
     final keyTag = ref.read(effectiveKeyTagProvider);
+    final pp = ref.read(passphraseProvider);
     if (identityId.isEmpty) {
+      if (disposed || generation != contextGeneration) return;
       await repo.setActiveContext(scopeToken: null, storageKey: null);
       return;
     }
@@ -148,8 +152,8 @@ final messagesRepositoryProvider = Provider<MessagesRepository>((ref) {
     final context = await ref
         .read(localStorageSecurityProvider)
         .contextForIdentity(identityId);
-    final pp = ref.read(passphraseProvider);
     if (keyTag == null) {
+      if (disposed || generation != contextGeneration) return;
       await repo.setActiveContext(
         scopeToken: context?.scopeToken,
         storageKey: null,
@@ -165,6 +169,7 @@ final messagesRepositoryProvider = Provider<MessagesRepository>((ref) {
           await ref.read(identityManagerProvider).getLocalPrivateKeyBase64();
     }
     if (privateKeyB64 == null) {
+      if (disposed || generation != contextGeneration) return;
       await repo.setActiveContext(
         scopeToken: context?.scopeToken,
         storageKey: null,
@@ -172,21 +177,55 @@ final messagesRepositoryProvider = Provider<MessagesRepository>((ref) {
       return;
     }
     final keyBytes = Uint8List.fromList(base64Decode(privateKeyB64));
-    final storageKey =
-        await MessageRecordCipher.deriveKey(keyBytes, keyTag: keyTag);
+    late final SecretKey storageKey;
+    try {
+      storageKey =
+          await MessageRecordCipher.deriveKey(keyBytes, keyTag: keyTag);
+    } finally {
+      keyBytes.fillRange(0, keyBytes.length, 0);
+    }
+    if (disposed || generation != contextGeneration) {
+      if (storageKey is SecretKeyData) storageKey.destroy();
+      return;
+    }
     await repo.setActiveContext(
       scopeToken: context?.scopeToken,
       storageKey: storageKey,
     );
   }
 
-  updateStorageContext();
+  void scheduleStorageContextUpdate() {
+    final generation = ++contextGeneration;
+    late final Future<void> pending;
+    pending = updateStorageContext(generation).catchError((_) async {
+      if (!disposed && generation == contextGeneration) {
+        await repo.setActiveContext(scopeToken: null, storageKey: null);
+      }
+    }).whenComplete(
+      () => pendingUpdates.remove(pending),
+    );
+    pendingUpdates.add(pending);
+  }
 
+  scheduleStorageContextUpdate();
+
+  ref.listen<IdentityId?>(activeIdentityIdProvider, (_, __) {
+    scheduleStorageContextUpdate();
+  });
   ref.listen<String?>(effectiveKeyTagProvider, (_, next) {
-    updateStorageContext();
+    scheduleStorageContextUpdate();
   });
   ref.listen<int>(identityReloadTokenProvider, (_, __) {
-    updateStorageContext();
+    scheduleStorageContextUpdate();
+  });
+  ref.onDispose(() {
+    disposed = true;
+    contextGeneration++;
+    unawaited(
+      Future.wait(pendingUpdates.toList(growable: false))
+          .then<void>((_) {}, onError: (_, __) {})
+          .whenComplete(repo.dispose),
+    );
   });
 
   return repo;

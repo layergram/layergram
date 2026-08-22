@@ -29,6 +29,23 @@ class StegoDecoder {
 
   /// V2 payload alphabet: exact runes only, no aliases.
   static const Map<int, int> _runeToVal = StegoAlphabetV2.payloadRuneToValue;
+  static final Set<int> _reservedRunes = <int>{
+    ...StegoAlphabetV2.payloadRuneToValue.keys,
+    ...StegoAlphabetV2.noiseRunes,
+  };
+
+  static String visibleCoverText(String carrier) {
+    if (carrier.length > maxCarrierCodeUnits) {
+      throw const FormatException('Invalid Layergram steganographic carrier');
+    }
+    final visible = StringBuffer();
+    for (final rune in carrier.runes) {
+      if (!_reservedRunes.contains(rune)) {
+        visible.writeCharCode(rune);
+      }
+    }
+    return visible.toString();
+  }
 
   // ── V2 binary decode ────────────────────────────────────────────────────────
 

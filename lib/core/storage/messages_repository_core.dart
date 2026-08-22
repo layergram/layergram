@@ -36,7 +36,9 @@ class MessagesRepositoryCore {
     _scopeToken = scopeToken;
     _storageKey = storageKey;
     _loadFuture = _reloadFromBox();
+    final generation = _reloadGeneration;
     await _loadFuture;
+    if (generation != _reloadGeneration) return;
     _controller.add(List.unmodifiable(_messages));
   }
 

@@ -1111,6 +1111,60 @@ final class V3HandshakePersistenceController {
     });
   }
 
+  /// Returns the newest retained initiator confirmation for one peer/mode.
+  /// The exact public record remains retryable because a manual carrier can
+  /// lose the confirmation even after the initiator committed its session.
+  Future<V3DurableHandshakeOutbound?> latestCompletedConfirmationForPeer({
+    required V3LocalIdentityHandle localIdentity,
+    required V3LocalDeviceHandle localDevice,
+    required V3PublicIdentity remoteIdentity,
+    required V3HandshakeMode mode,
+    Set<String> excludedHandshakeIds = const <String>{},
+  }) {
+    return _serialized(() async {
+      _ensureReady();
+      if (localIdentity.isClosed || localDevice.isClosed) {
+        throw StateError('Layergram v3 identity/device handle is closed');
+      }
+      final localDigest = _identityDigest(localIdentity.publicIdentity);
+      final remoteDigest = _identityDigest(remoteIdentity);
+      final localDeviceId = localDevice.deviceId;
+      try {
+        final matches = _repository
+            .completions(authority: _authority)
+            .where(
+              (completion) =>
+                  completion.role == V3SessionRole.initiator &&
+                  completion.localIdentityDigest == localDigest.armored &&
+                  completion.remoteIdentityDigest == remoteDigest.armored &&
+                  completion.localDeviceId == _id(localDeviceId) &&
+                  completion.mode == mode &&
+                  !excludedHandshakeIds.contains(completion.handshakeId),
+            )
+            .toList(growable: false)
+          ..sort((left, right) {
+            final byCompleted = right.completedAt.compareTo(left.completedAt);
+            if (byCompleted != 0) return byCompleted;
+            return right.handshakeId.compareTo(left.handshakeId);
+          });
+        if (matches.isEmpty) return null;
+        final completion = matches.first;
+        return V3DurableHandshakeOutbound(
+          handshakeId: completion.handshakeId,
+          kind: V3HandshakeRecordKind.confirmation,
+          messageId: completion.terminalMessageId,
+          stateDigest: completion.pendingStateDigest,
+          outboundRecord: completion.terminalRecord,
+          restored: true,
+        );
+      } finally {
+        _wipe(localDigest.bytes);
+        _wipe(remoteDigest.bytes);
+        _wipe(localDeviceId);
+      }
+    });
+  }
+
   /// Returns non-secret pending handshake IDs for one peer. The application
   /// policy coordinator uses this under the same serialized runtime boundary
   /// as mode reset so delayed setup frames cannot cross that boundary.

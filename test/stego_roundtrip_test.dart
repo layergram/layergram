@@ -111,6 +111,10 @@ void main() {
       expect(candidates, isNotEmpty);
       // Alignment 0 should produce the correct bytes.
       expect(candidates[0], equals(payload));
+      expect(
+        StegoDecoder.visibleCoverText(encoded),
+        StegoEncoder.normalizeCoverText(cover),
+      );
     });
 
     test('noise runes are present in encoded text but ignored by decoder', () {

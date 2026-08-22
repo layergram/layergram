@@ -216,8 +216,15 @@ class ChatViewState extends ConsumerState<ChatView> {
   }
 
   void _stageProtocolV3Output(V3ChatOutboundExport export) {
-    if (!mounted) return;
+    if (!mounted || export.remoteIdentityId != widget.contact.identityId) {
+      return;
+    }
     setState(() {
+      _outputMode = switch (export.carrierMode) {
+        V3ChatCarrierMode.steganography => MessageOutputMode.cover,
+        V3ChatCarrierMode.text => MessageOutputMode.text,
+        V3ChatCarrierMode.link => MessageOutputMode.link,
+      };
       _v3OutboundExport = export;
       _v3OutputParts = export.parts;
       _v3OutputPartIndex = 0;
@@ -246,6 +253,24 @@ class ChatViewState extends ConsumerState<ChatView> {
         .takePendingProtocolV3Response(widget.contact.identityId);
     if (response != null) {
       _stageProtocolV3Output(response);
+    }
+  }
+
+  Future<void> _restorePendingProtocolV3Output() async {
+    if (!_usesProtocolV3 || _hasPreparedOutput) return;
+    try {
+      final exports = await ref
+          .read(homeControllerProvider)
+          .restorePendingProtocolV3Exports(
+            contact: widget.contact,
+            carrierMode: _v3CarrierMode,
+            coverText: _coverCtrl.text,
+          );
+      if (!mounted || _hasPreparedOutput || exports.isEmpty) return;
+      _stageProtocolV3Output(exports.first);
+    } on V3ChatCoverCapacityException {
+      // A durable steganographic retry remains available after the user adds
+      // a sufficiently long cover message or selects text/link output.
     }
   }
 
@@ -954,6 +979,7 @@ class ChatViewState extends ConsumerState<ChatView> {
         return;
       }
       _takePendingProtocolV3Response();
+      unawaited(_restorePendingProtocolV3Output());
       unawaited(
         ref
             .read(homeControllerProvider)

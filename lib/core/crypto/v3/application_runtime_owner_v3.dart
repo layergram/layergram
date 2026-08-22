@@ -29,6 +29,10 @@ typedef V3ApplicationRuntimeFactory<T extends V3ApplicationRuntimeSession>
   required String scopeToken,
 });
 
+final class V3ApplicationRuntimeContextSuperseded implements Exception {
+  const V3ApplicationRuntimeContextSuperseded();
+}
+
 /// Serializes one protocol-v3 application runtime across identity contexts.
 ///
 /// The owner closes the old primary/passphrase scope before opening the next
@@ -53,6 +57,7 @@ final class V3ApplicationRuntimeOwner<T extends V3ApplicationRuntimeSession> {
   T? _current;
   V3LocalIdentityHandle? _currentIdentity;
   String? _currentContextId;
+  int _requestedContextGeneration = 0;
   bool _closed = false;
 
   T? get current => _current;
@@ -64,8 +69,10 @@ final class V3ApplicationRuntimeOwner<T extends V3ApplicationRuntimeSession> {
     required String contextId,
     required bool usePassphraseIdentity,
   }) {
+    final requestGeneration = ++_requestedContextGeneration;
     return _serialized(() async {
       _ensureOpen();
+      _ensureCurrentRequest(requestGeneration);
       final current = _current;
       if (current != null && _currentContextId == contextId) {
         return current;
@@ -82,6 +89,12 @@ final class V3ApplicationRuntimeOwner<T extends V3ApplicationRuntimeSession> {
           localIdentity: identity,
           scopeToken: scopeToken,
         );
+        if (_closed || requestGeneration != _requestedContextGeneration) {
+          await opened.close();
+          _currentIdentity = null;
+          _currentContextId = null;
+          throw const V3ApplicationRuntimeContextSuperseded();
+        }
         _current = opened;
         return opened;
       } catch (_) {
@@ -93,24 +106,31 @@ final class V3ApplicationRuntimeOwner<T extends V3ApplicationRuntimeSession> {
   }
 
   /// Drains the current scope without destroying the identity runtime.
-  Future<void> closeCurrent() => _serialized(_closeCurrent);
+  Future<void> closeCurrent() {
+    _requestedContextGeneration++;
+    return _serialized(_closeCurrent);
+  }
 
-  Future<void> close() => _serialized(() async {
-        if (_closed) return;
-        try {
-          await _closeCurrent();
-        } finally {
-          _identityRuntime.unregisterHandleEvictionHandler(
-            _evictionRegistration,
-          );
-          _closed = true;
-        }
-      }, allowClosed: true);
+  Future<void> close() {
+    _requestedContextGeneration++;
+    return _serialized(() async {
+      if (_closed) return;
+      try {
+        await _closeCurrent();
+      } finally {
+        _identityRuntime.unregisterHandleEvictionHandler(
+          _evictionRegistration,
+        );
+        _closed = true;
+      }
+    }, allowClosed: true);
+  }
 
   Future<void> _evictIdentityHandle(V3LocalIdentityHandle identity) {
     if (!identical(_currentIdentity, identity)) {
       return Future<void>.value();
     }
+    _requestedContextGeneration++;
     return _serialized(() async {
       if (identical(_currentIdentity, identity)) {
         await _closeCurrent();
@@ -148,6 +168,12 @@ final class V3ApplicationRuntimeOwner<T extends V3ApplicationRuntimeSession> {
   void _ensureOpen() {
     if (_closed) {
       throw StateError('Layergram v3 application runtime owner is closed');
+    }
+  }
+
+  void _ensureCurrentRequest(int requestGeneration) {
+    if (requestGeneration != _requestedContextGeneration) {
+      throw const V3ApplicationRuntimeContextSuperseded();
     }
   }
 }
