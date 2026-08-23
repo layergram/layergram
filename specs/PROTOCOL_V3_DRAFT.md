@@ -63,9 +63,11 @@ values, not from reducing cryptographic material.
 
 The maximum 1,270-byte binary identity can be constructed as one static QR at
 error-correction level H, where it occupies QR version 40 (177 x 177 modules).
-That is a codec/capacity result only: reliable scanning at realistic printed
-sizes, displays, cameras, quiet zones, and with the current logo overlay remains
-an activation-gate test rather than an established UX claim.
+The branded renderer reserves a four-module quiet zone and limits the centered
+Layergram logo to 7.5% of the symbol side. Native byte-exact decoding of the
+maximum identity passes with Android ML Kit and Apple Vision at 1,024 and 768
+pixels. Representative physical cameras, printed sizes, lighting, damage, and
+display conditions remain release tests rather than implied by codec capacity.
 
 ## Required identity invariants
 
@@ -88,8 +90,7 @@ preferred derivation or appear as quantum-resistant until all of these pass:
 - reviewed sender proof/handshake and Triple Ratchet specification;
 - complete text, link, QR, and steganographic transport tests;
 - migration, passphrase, multi-device, Maximum mode, backup, and crash tests;
-- independent protocol and implementation audit with no unresolved high or
-  critical findings.
+- documented security review with no unresolved high or critical findings.
 
 The native wrapper and inactive packaging now traverse the production ABI on
 an Android arm64 emulator, an iOS arm64 simulator, a macOS arm64 app, and a
@@ -98,7 +99,8 @@ Windows x64 app running on Windows 11 ARM64, plus a Linux x64 app on Ubuntu
 release architectures. This is an engineering checkpoint, not the
 production-native-backend gate: physical devices, distribution signing, any
 distributed Linux ARM64 or native Windows ARM64 build, complete per-ABI
-vectors, and independent review remain. See `ML_KEM_BACKEND.md`.
+vectors, and representative physical QR/carrier tests remain. See
+`ML_KEM_BACKEND.md`.
 
 ## Inactive complete local-identity checkpoint
 

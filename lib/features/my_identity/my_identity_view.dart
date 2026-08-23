@@ -134,7 +134,7 @@ class _MyIdentityViewState extends ConsumerState<MyIdentityView> {
       builder: (sheetContext) {
         final t = AppStrings.t;
         return SafeArea(
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -146,6 +146,19 @@ class _MyIdentityViewState extends ConsumerState<MyIdentityView> {
                 ),
                 const SizedBox(height: 8),
                 Text(t(sheetContext, 'identityQrActionsSubtitle')),
+                if (data is Uint8List) ...[
+                  const SizedBox(height: 16),
+                  Center(
+                    child: IdentityQrCode(
+                      data: data,
+                      size: (MediaQuery.sizeOf(sheetContext).width - 32)
+                          .clamp(160.0, identityQrV3MaxPreviewSize)
+                          .toDouble(),
+                      color: Colors.black,
+                      backgroundColor: Colors.white,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 ListTile(
                   leading: const Icon(Icons.file_download_outlined),
@@ -281,6 +294,14 @@ class _MyIdentityViewState extends ConsumerState<MyIdentityView> {
                             final Uint8List value => value.isNotEmpty,
                             _ => false,
                           };
+                          final qrColumnWidth = isWide
+                              ? (constraints.maxWidth - 16) / 2
+                              : constraints.maxWidth;
+                          final qrSize = data is Uint8List
+                              ? (qrColumnWidth - 16)
+                                  .clamp(160.0, identityQrV3MaxPreviewSize)
+                                  .toDouble()
+                              : 220.0;
                           return Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -303,11 +324,15 @@ class _MyIdentityViewState extends ConsumerState<MyIdentityView> {
                                       padding: const EdgeInsets.all(8),
                                       child: IdentityQrCode(
                                         data: data,
-                                        size: 220,
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.onSurface,
-                                        backgroundColor: Colors.transparent,
+                                        size: qrSize,
+                                        color: data is Uint8List
+                                            ? Colors.black
+                                            : Theme.of(
+                                                context,
+                                              ).colorScheme.onSurface,
+                                        backgroundColor: data is Uint8List
+                                            ? Colors.white
+                                            : Colors.transparent,
                                       ),
                                     ),
                                   ),

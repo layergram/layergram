@@ -34,7 +34,7 @@ The migration is deliberately explicit:
   material, so the v3 public identity, ID, fingerprint, contacts, and sessions
   are different from v2;
 - every user must share their complete new public identity by text, deep link,
-  or one static QR code and verify contacts again;
+  or one branded static QR code and verify contacts again;
 - v2 identities and sessions are not silently treated as v3, and v2 message
   sending will be blocked after a contact migrates.
 
@@ -78,7 +78,7 @@ be shared with a contact.
 ### Core Functionality
 - **Compose and share** encrypted messages over any text-based channel
 - **Decode** received messages by pasting them into the app
-- **Identity management** — create, export, and import public identities via QR code, deep link, or text block
+- **Identity management** — create, export, and import public identities via a branded static QR code, deep link, or text block
 - **Local chat history** — encrypted archive of sent and received messages
 - **Pin / search / delete** conversations
 - **Self-destructing messages** — optional expiration and delete-after-read

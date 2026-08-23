@@ -20,6 +20,9 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 const identityQrLogoAsset = 'assets/icons/app_icon.png';
 const identityQrLogoScale = 0.20;
+const identityQrV3LogoScale = 0.075;
+const identityQrV3QuietZoneModules = 4;
+const identityQrV3MaxPreviewSize = 420.0;
 const identityQrErrorCorrectionLevel = QrErrorCorrectLevel.H;
 
 class IdentityQrCode extends StatelessWidget {
@@ -45,19 +48,44 @@ class IdentityQrCode extends StatelessWidget {
         data: binary,
         errorCorrectLevel: identityQrErrorCorrectionLevel,
       );
+      final quietZone = _quietZoneForSize(size, qr.moduleCount);
+      final qrSize = size - (quietZone * 2);
       return SizedBox.square(
         dimension: size,
-        child: CustomPaint(
-          painter: QrPainter.withQr(
-            qr: qr,
-            gapless: true,
-            eyeStyle: QrEyeStyle(
-              eyeShape: QrEyeShape.square,
-              color: color,
-            ),
-            dataModuleStyle: QrDataModuleStyle(
-              dataModuleShape: QrDataModuleShape.square,
-              color: color,
+        child: ColoredBox(
+          color: backgroundColor == Colors.transparent
+              ? Colors.white
+              : backgroundColor,
+          child: Padding(
+            padding: EdgeInsets.all(quietZone),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                CustomPaint(
+                  painter: QrPainter.withQr(
+                    qr: qr,
+                    gapless: true,
+                    eyeStyle: QrEyeStyle(
+                      eyeShape: QrEyeShape.square,
+                      color: color,
+                    ),
+                    dataModuleStyle: QrDataModuleStyle(
+                      dataModuleShape: QrDataModuleShape.square,
+                      color: color,
+                    ),
+                  ),
+                ),
+                Center(
+                  child: SizedBox.square(
+                    key: const ValueKey('identity-v3-qr-logo'),
+                    dimension: qrSize * identityQrV3LogoScale,
+                    child: Image.asset(
+                      identityQrLogoAsset,
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -90,13 +118,28 @@ Future<Uint8List?> renderIdentityQrPng(
   ui.Image? logoImage;
 
   try {
+    final logoData =
+        await (assetBundle ?? rootBundle).load(identityQrLogoAsset);
+    final logoBytes = logoData.buffer.asUint8List(
+      logoData.offsetInBytes,
+      logoData.lengthInBytes,
+    );
+    codec = await ui.instantiateImageCodec(logoBytes);
+    final frame = await codec.getNextFrame();
+    logoImage = frame.image;
+
     late final QrPainter painter;
+    var quietZone = 0.0;
+    var qrPixelSize = pixelSize.toDouble();
     if (data case final Uint8List binary) {
+      final qr = QrCode.fromUint8List(
+        data: binary,
+        errorCorrectLevel: identityQrErrorCorrectionLevel,
+      );
+      quietZone = _quietZoneForSize(pixelSize.toDouble(), qr.moduleCount);
+      qrPixelSize -= quietZone * 2;
       painter = QrPainter.withQr(
-        qr: QrCode.fromUint8List(
-          data: binary,
-          errorCorrectLevel: identityQrErrorCorrectionLevel,
-        ),
+        qr: qr,
         gapless: true,
         eyeStyle: const QrEyeStyle(
           eyeShape: QrEyeShape.square,
@@ -106,17 +149,12 @@ Future<Uint8List?> renderIdentityQrPng(
           dataModuleShape: QrDataModuleShape.square,
           color: Colors.black,
         ),
+        embeddedImage: logoImage,
+        embeddedImageStyle: QrEmbeddedImageStyle(
+          size: Size.square(qrPixelSize * identityQrV3LogoScale),
+        ),
       );
     } else {
-      final logoData =
-          await (assetBundle ?? rootBundle).load(identityQrLogoAsset);
-      final logoBytes = logoData.buffer.asUint8List(
-        logoData.offsetInBytes,
-        logoData.lengthInBytes,
-      );
-      codec = await ui.instantiateImageCodec(logoBytes);
-      final frame = await codec.getNextFrame();
-      logoImage = frame.image;
       painter = QrPainter(
         data: data as String,
         version: QrVersions.auto,
@@ -140,7 +178,10 @@ Future<Uint8List?> renderIdentityQrPng(
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
     canvas.drawRect(Offset.zero & size, Paint()..color = Colors.white);
-    painter.paint(canvas, size);
+    canvas.save();
+    canvas.translate(quietZone, quietZone);
+    painter.paint(canvas, Size.square(qrPixelSize));
+    canvas.restore();
     final picture = recorder.endRecording();
     final image = await picture.toImage(pixelSize, pixelSize);
     try {
@@ -154,4 +195,10 @@ Future<Uint8List?> renderIdentityQrPng(
     logoImage?.dispose();
     codec?.dispose();
   }
+}
+
+double _quietZoneForSize(double size, int moduleCount) {
+  return size *
+      identityQrV3QuietZoneModules /
+      (moduleCount + (identityQrV3QuietZoneModules * 2));
 }

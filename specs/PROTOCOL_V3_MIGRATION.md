@@ -18,8 +18,8 @@ must not be described as post-quantum protected.
 - Message export remains available as direct text, a `layergram://` deep link,
   or zero-width steganography.
 - Public identity sharing remains available as a complete direct-text token, a
-  deep link, or one static QR code suitable for a screen, printed card, sticker,
-  or social profile.
+  deep link, or one branded static QR code suitable for a screen, printed card,
+  sticker, or social profile.
 
 The recovery phrase and optional passphrase are private recovery secrets. They
 are entered only into the user's own Layergram installation and must never be
@@ -71,12 +71,14 @@ verification reference or an online lookup key:
 |---|---|---|
 | Direct text | Complete canonical v3 public identity | Copy/paste and social profiles |
 | Deep link | `layergram://` prefix plus the same complete text identity | One-tap import where links are supported |
-| Static QR | Complete canonical binary v3 public identity | Screens, print, stickers, and business cards |
+| Branded static QR | Complete canonical binary v3 public identity | Screens, print, stickers, and business cards |
 
 The QR is deliberately a single, non-animated symbol. Compact encoding removes
 redundant representation data but never truncates X25519 or ML-KEM-768 public
 material. Its maximum form may require a large version-40 QR and an adequate
-printed/displayed size for reliable scanning.
+printed/displayed size for reliable scanning. Layergram keeps a four-module
+quiet zone and a deliberately small centered logo; users should share the
+full-size preview or high-resolution PNG rather than a compressed thumbnail.
 
 ## Messages and unreliable external delivery
 
@@ -145,9 +147,9 @@ not reinterpret old v2 ciphertext as v3.
 ## Activation and release boundary
 
 The current implementation is behind a single fail-closed activation selector.
-Public review, hosted CI, independent cryptographic review, supported physical-
-device and real-carrier tests, and verification of established signed store
-artifact flows must pass before the selector can be changed.
+Public review, hosted CI, documented security review, supported physical-device
+and real-carrier tests, and verification of established signed store artifact
+flows must pass before the selector can be changed.
 
 A public Draft PR means Layergram is visibly preparing post-quantum protocol v3.
 It is not evidence that a currently installed release already provides v3
