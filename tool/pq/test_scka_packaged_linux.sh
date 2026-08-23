@@ -7,21 +7,41 @@ CRATE_DIR="$REPO_ROOT/native/layergram_scka"
 PACKAGE_ROOT=${LAYERGRAM_SCKA_LINUX_PACKAGE_DIR:-$REPO_ROOT/.dart_tool/layergram_pq/scka-package/linux}
 TARGET_DIR="$PACKAGE_ROOT/target"
 SYMBOLS="$SCRIPT_DIR/scka_expected_symbols.txt"
+BUNDLE=${LAYERGRAM_LINUX_BUNDLE:-$REPO_ROOT/build/linux/x64/release/bundle}
+BUNDLE_BACKUP_DIR=
+BUNDLE_EXISTED=false
 
 fail() {
   printf '%s\n' "$1" >&2
   exit 1
 }
 
+cleanup() {
+  if [ -n "$BUNDLE_BACKUP_DIR" ]; then
+    rm -rf "$BUNDLE"
+    if [ "$BUNDLE_EXISTED" = true ]; then
+      mkdir -p "$(dirname "$BUNDLE")"
+      mv "$BUNDLE_BACKUP_DIR/bundle" "$BUNDLE"
+    fi
+    rmdir "$BUNDLE_BACKUP_DIR" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT
+
 [ "$(uname -s)" = Linux ] || fail 'Linux packaging requires Linux'
 [ "$(rustc --version | awk '{ print $2 }')" = 1.87.0 ] ||
   fail 'Layergram SCKA packaging requires Rust 1.87.0'
+mkdir -p "$PACKAGE_ROOT"
+BUNDLE_BACKUP_DIR=$(mktemp -d "$PACKAGE_ROOT/bundle-backup.XXXXXX")
+if [ -d "$BUNDLE" ]; then
+  mv "$BUNDLE" "$BUNDLE_BACKUP_DIR/bundle"
+  BUNDLE_EXISTED=true
+fi
 RUSTFLAGS='-C link-arg=-Wl,-z,relro -C link-arg=-Wl,-z,now' \
   cargo build --release --locked --offline --features candidate-ffi \
   --manifest-path "$CRATE_DIR/Cargo.toml" --target-dir "$TARGET_DIR"
 flutter build linux --release -t tool/pq/scka_packaged_scope_smoke.dart
 
-BUNDLE=${LAYERGRAM_LINUX_BUNDLE:-$REPO_ROOT/build/linux/x64/release/bundle}
 LIBRARY="$BUNDLE/lib/liblayergram_scka.so"
 install -m 755 "$TARGET_DIR/release/liblayergram_scka.so" "$LIBRARY"
 actual="$PACKAGE_ROOT/symbols.txt"

@@ -100,8 +100,7 @@ AddressSanitizer on macOS/Linux. The official-repository workflow schedules the
 same locked harness daily on Linux x64 with a persistent public fuzz corpus,
 least-privilege read-only access, pinned official actions, bounded runtime, and
 failure-reproducer retention. Its configuration is not yet hosted-run evidence
-and is not a substitute for monitoring, physical-device testing, or an
-independent audit.
+and is not a substitute for monitoring or physical-device testing.
 
 ## 2. Stable state-sealing key
 
@@ -129,7 +128,7 @@ identity/passphrase scope. The defensive Dart adapter supplies temporary copies
 of the key and exact expected TR3 revision to every backend operation, wipes
 them afterward, and rejects a candidate unless it reports the immediately next
 revision. The scaffold self-test remains `NOT_READY`; provider registration is
-still forbidden until the remaining implementation and audit gates pass.
+still forbidden until the remaining implementation and activation gates pass.
 
 ## 3. Canonical `LS3` authenticated state export
 

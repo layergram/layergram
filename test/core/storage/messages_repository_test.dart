@@ -645,6 +645,35 @@ void main() {
       viewB.dispose();
     });
 
+    test('rejects a write key from a different active identity scope',
+        () async {
+      final keyA = await deriveStorageKey('identity-a');
+      final keyB = await deriveStorageKey('identity-b');
+      final repo = MessagesRepository();
+      await initRepo(
+        repo,
+        scopeToken: 'opaque-scope-a',
+        storageKey: keyA,
+      );
+
+      await expectLater(
+        repo.add(
+          const MessageRecord(
+            id: 'cross-scope-message',
+            senderId: 'me',
+            recipientId: 'contact-b',
+            direction: 'outgoing',
+            timestamp: 1,
+          ),
+          storageKey: keyB,
+        ),
+        throwsStateError,
+      );
+      expect(await repo.getAllMessages(), isEmpty);
+      expect(Hive.box<Map>(LocalDatabase.messagesBoxName).values, isEmpty);
+      repo.dispose();
+    });
+
     test('rejects new operations once disposal begins', () async {
       final storageKey = await deriveStorageKey('orig');
       final repo = MessagesRepository();

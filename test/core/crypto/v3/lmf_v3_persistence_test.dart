@@ -157,6 +157,47 @@ void main() {
       expect(completed.delivery!.plaintext, orderedEquals(plaintext));
     });
 
+    test('terminal deferred resolver failures are discarded per record',
+        () async {
+      final store = _FaultStore();
+      final rejected =
+          (await _frames(plaintext: _bytes(24, 0x22), key: key)).single;
+      final valid = (await _frames(
+        plaintext: _bytes(24, 0x42),
+        key: key,
+        nonceStart: 0x70,
+        messageStart: 0xa0,
+      ))
+          .single;
+      final rejectedAssemblyId = V3LmfFrameCodec.assemblyId(rejected);
+      final inbox = V3LmfDurableInbox(store: store);
+      await inbox.restore(keyResolver: (_) => null);
+      await inbox.persistDeferred(
+        frame: rejected,
+        receivedAt: DateTime.fromMillisecondsSinceEpoch(1, isUtc: true),
+      );
+      await inbox.persistDeferred(
+        frame: valid,
+        receivedAt: DateTime.fromMillisecondsSinceEpoch(2, isUtc: true),
+      );
+
+      final resumed = await inbox.resumeDeferred(
+        keyResolver: (frame) {
+          if (V3LmfFrameCodec.assemblyId(frame) == rejectedAssemblyId) {
+            throw const FormatException('terminal candidate rejection');
+          }
+          return key;
+        },
+      );
+
+      expect(resumed.discardedCorruptRecords, 1);
+      expect(resumed.deferredFrames, 0);
+      expect(resumed.deliveries, hasLength(1));
+      expect(
+          resumed.deliveries.single.plaintext, orderedEquals(_bytes(24, 0x42)));
+      expect(inbox.persistedFrameCount, 1);
+    });
+
     test(
         'unauthenticated competing frame is removed without poisoning valid set',
         () async {

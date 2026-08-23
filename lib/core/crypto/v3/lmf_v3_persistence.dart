@@ -674,6 +674,7 @@ class V3LmfDurableInbox {
     return _serialized(() async {
       _ensureReady();
       var deferred = 0;
+      var discarded = 0;
       final deliveries = <V3LmfDurableDelivery>[];
       final pending = _recordsByDigest.values.toList(growable: false)
         ..sort((left, right) {
@@ -692,12 +693,12 @@ class V3LmfDurableInbox {
         )) {
           continue;
         }
-        final key = await keyResolver(persisted.frame);
-        if (key == null) {
-          deferred++;
-          continue;
-        }
         try {
+          final key = await keyResolver(persisted.frame);
+          if (key == null) {
+            deferred++;
+            continue;
+          }
           final outcome = await _acceptPersisted(persisted, key);
           if (outcome.delivery != null &&
               !deliveries.any(
@@ -709,12 +710,21 @@ class V3LmfDurableInbox {
         } on SecretBoxAuthenticationError {
           await _removePersisted(persisted);
           await onAuthenticationFailure?.call(persisted.frame);
+          discarded++;
+        } on FormatException {
+          await _removePersisted(persisted);
+          await onAuthenticationFailure?.call(persisted.frame);
+          discarded++;
+        } on ArgumentError {
+          await _removePersisted(persisted);
+          await onAuthenticationFailure?.call(persisted.frame);
+          discarded++;
         }
       }
       return V3LmfInboxRestoreResult(
         deliveries: List<V3LmfDurableDelivery>.unmodifiable(deliveries),
         deferredFrames: deferred,
-        discardedCorruptRecords: 0,
+        discardedCorruptRecords: discarded,
         suppressedCommittedFrames: 0,
       );
     });

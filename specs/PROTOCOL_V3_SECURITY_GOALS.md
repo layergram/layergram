@@ -299,7 +299,8 @@ Protocol v3 may be called quantum-resistant only after all of the following:
   compatibility tests without a protocol fork;
 - every runtime and native dependency has a versioned license inventory that
   permits both open-source and commercial downstream distribution;
-- an independent audit has no unresolved critical or high-severity finding.
+- every security review completed for the release has no unresolved critical
+  or high-severity finding.
 
 Until then, all v3 code and UI must remain inactive and must be labelled as an
 implementation candidate rather than active quantum-resistant messaging. The

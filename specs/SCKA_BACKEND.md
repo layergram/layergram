@@ -265,7 +265,7 @@ AGPL, LGPL, non-commercial, or field-of-use term is selected.
 `SCKA_AUTHENTICATOR.md` freezes the exact ASCII Layergram protocol domain and
 independent golden outputs. RustCrypto HMAC verification supplies the
 constant-time tag comparison. This is an inactive primitive checkpoint, not an
-independent cryptographic audit or approval of the eventual state machine.
+approval of the eventual state machine.
 
 ## Independent revision-1 conformance vector
 

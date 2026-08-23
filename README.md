@@ -69,6 +69,7 @@ be shared with a contact.
 - **End-to-end encryption (active v2)** — X25519 key agreement + AES-GCM-256
 - **Forward Secrecy** — Advanced opportunistic FS and Maximum device-bound FS with Double Ratchet message keys, without a Layergram server or public-key redistribution
 - **Post-quantum v3 candidate (inactive)** — mandatory hybrid X25519 + ML-KEM-768 handshake and EC + sparse-PQ ratcheting, with no classical-only v3 fallback
+- **Passphrase identities and plausible deniability** — an optional passphrase derives a separate identity and encrypted keyspace that remain unavailable while the passphrase is inactive, providing practical but limited plausible deniability (not a guarantee against coercion, forensic correlation, or a compromised device)
 - **Steganographic encoding** — encrypted payloads hidden inside zero-width Unicode characters, with direct text and deep-link fallbacks for transports that don't support invisible characters
 - **App lock** — biometric unlock with PIN fallback support
 - **Secure local storage** — sensitive state protected at rest

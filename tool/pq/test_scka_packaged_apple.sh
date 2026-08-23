@@ -10,14 +10,47 @@ SIGN_IDENTITY=${LAYERGRAM_SCKA_MACOS_SIGN_IDENTITY:-}
 APP="$DERIVED_DATA/Build/Products/Release/Layergram.app"
 EXECUTABLE="$APP/Contents/MacOS/Layergram"
 LIBRARY="$PACKAGE_ROOT/macos/liblayergram_scka.a"
+GENERATED_CONFIG="$REPO_ROOT/macos/Flutter/ephemeral/Flutter-Generated.xcconfig"
+GENERATED_ENV="$REPO_ROOT/macos/Flutter/ephemeral/flutter_export_environment.sh"
+CONFIG_BACKUP_DIR=
+GENERATED_CONFIG_EXISTED=false
+GENERATED_ENV_EXISTED=false
 
 fail() {
   printf '%s\n' "$1" >&2
   exit 1
 }
 
+cleanup() {
+  if [ -z "$CONFIG_BACKUP_DIR" ]; then
+    return
+  fi
+  rm -f "$GENERATED_CONFIG" "$GENERATED_ENV"
+  if [ "$GENERATED_CONFIG_EXISTED" = true ]; then
+    mkdir -p "$(dirname "$GENERATED_CONFIG")"
+    mv "$CONFIG_BACKUP_DIR/Flutter-Generated.xcconfig" "$GENERATED_CONFIG"
+  fi
+  if [ "$GENERATED_ENV_EXISTED" = true ]; then
+    mkdir -p "$(dirname "$GENERATED_ENV")"
+    mv "$CONFIG_BACKUP_DIR/flutter_export_environment.sh" "$GENERATED_ENV"
+  fi
+  rmdir "$CONFIG_BACKUP_DIR" 2>/dev/null || true
+}
+trap cleanup EXIT
+
 "$SCRIPT_DIR/build_scka_packaged_apple.sh"
 [ -f "$LIBRARY" ] || fail "Missing packaged static library: $LIBRARY"
+
+mkdir -p "$PACKAGE_ROOT"
+CONFIG_BACKUP_DIR=$(mktemp -d "$PACKAGE_ROOT/macos-config-backup.XXXXXX")
+if [ -f "$GENERATED_CONFIG" ]; then
+  cp -p "$GENERATED_CONFIG" "$CONFIG_BACKUP_DIR/Flutter-Generated.xcconfig"
+  GENERATED_CONFIG_EXISTED=true
+fi
+if [ -f "$GENERATED_ENV" ]; then
+  cp -p "$GENERATED_ENV" "$CONFIG_BACKUP_DIR/flutter_export_environment.sh"
+  GENERATED_ENV_EXISTED=true
+fi
 
 linker_flags="\$(inherited) -Wl,-force_load,$LIBRARY"
 while IFS= read -r symbol; do

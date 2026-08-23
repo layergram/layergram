@@ -243,6 +243,8 @@ final class V3ApplicationChatBridge {
   }) async {
     final remote = V3IdentityAdapter.fromRemoteIdentity(contact);
     final sessions = await _runtime.sessionsForRemoteIdentity(remote);
+    final maximumPinMissing = selectedMode == V3HandshakeMode.maximum &&
+        eligibilityPolicy?.maximumRemoteDeviceId == null;
     if (requireEligibilityPolicy &&
         eligibilityPolicy == null &&
         sessions.isNotEmpty) {
@@ -253,12 +255,21 @@ final class V3ApplicationChatBridge {
         hasSessionsInAnotherMode: true,
       );
     }
+    if (maximumPinMissing &&
+        sessions.any((session) => session.mode == selectedMode)) {
+      return V3ChatContactSecurityStatus(
+        phase: V3ChatContactSecurityPhase.recoveryRequired,
+        selectedMode: selectedMode,
+        activeSessionCount: 0,
+        hasSessionsInAnotherMode:
+            sessions.any((session) => session.mode != selectedMode),
+      );
+    }
     final matchingSessions = sessions
         .where(
           (session) =>
               session.mode == selectedMode &&
               (selectedMode != V3HandshakeMode.maximum ||
-                  eligibilityPolicy?.maximumRemoteDeviceId == null ||
                   session.remoteDeviceId ==
                       eligibilityPolicy!.maximumRemoteDeviceId) &&
               (eligibilityPolicy == null ||
@@ -361,11 +372,17 @@ final class V3ApplicationChatBridge {
     }
     final remote = V3IdentityAdapter.fromRemoteIdentity(contact);
     final sessions = await _runtime.sessionsForRemoteIdentity(remote);
+    final maximumPinMissing = mode == V3HandshakeMode.maximum &&
+        eligibilityPolicy?.maximumRemoteDeviceId == null;
+    if (maximumPinMissing && sessions.any((session) => session.mode == mode)) {
+      throw StateError(
+        'Maximum-mode Layergram v3 device pin requires recovery',
+      );
+    }
     final hasSelectedModeSession = sessions.any(
       (session) =>
           session.mode == mode &&
           (mode != V3HandshakeMode.maximum ||
-              eligibilityPolicy?.maximumRemoteDeviceId == null ||
               session.remoteDeviceId ==
                   eligibilityPolicy!.maximumRemoteDeviceId) &&
           (eligibilityPolicy == null ||

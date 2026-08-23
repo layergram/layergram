@@ -174,16 +174,16 @@ final identitiesRepositoryProvider = Provider<IdentitiesRepository>((ref) {
 });
 
 final messagesRepositoryProvider = Provider<MessagesRepository>((ref) {
+  final ownerIdentityId = ref.watch(activeIdentityIdProvider) ?? '';
   final repo = MessagesRepository();
   var contextGeneration = 0;
   var disposed = false;
   final pendingUpdates = <Future<void>>{};
 
   Future<void> updateStorageContext(int generation) async {
-    final identityId = ref.read(activeIdentityIdProvider) ?? '';
     final keyTag = ref.read(effectiveKeyTagProvider);
     final pp = ref.read(passphraseProvider);
-    if (identityId.isEmpty) {
+    if (ownerIdentityId.isEmpty) {
       if (disposed || generation != contextGeneration) return;
       await repo.setActiveContext(scopeToken: null, storageKey: null);
       return;
@@ -191,7 +191,7 @@ final messagesRepositoryProvider = Provider<MessagesRepository>((ref) {
 
     final context = await ref
         .read(localStorageSecurityProvider)
-        .contextForIdentity(identityId);
+        .contextForIdentity(ownerIdentityId);
     final scopeToken = context?.scopeToken;
     context?.destroy();
     if (keyTag == null) {
@@ -255,9 +255,6 @@ final messagesRepositoryProvider = Provider<MessagesRepository>((ref) {
 
   scheduleStorageContextUpdate();
 
-  ref.listen<IdentityId?>(activeIdentityIdProvider, (_, __) {
-    scheduleStorageContextUpdate();
-  });
   ref.listen<String?>(effectiveKeyTagProvider, (_, next) {
     scheduleStorageContextUpdate();
   });

@@ -610,14 +610,25 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
         );
       }
 
-      final processed = await _processHandshakeAssembly(
-        assembly: assembly,
-        remoteIdentity: remoteIdentity,
-        expectedMode: expectedMode,
-        excludedHandshakeIds: excluded,
-        maximumRemoteDeviceId: pinnedDeviceId,
-        receivedAt: receivedAt,
-      );
+      late final ({
+        V3ApplicationHandshakeExport? outbound,
+        V3ApplicationSessionBinding? session,
+      }) processed;
+      try {
+        processed = await _processHandshakeAssembly(
+          assembly: assembly,
+          remoteIdentity: remoteIdentity,
+          expectedMode: expectedMode,
+          excludedHandshakeIds: excluded,
+          maximumRemoteDeviceId: pinnedDeviceId,
+          receivedAt: receivedAt,
+        );
+      } catch (error) {
+        if (_isTerminalHandshakeCandidateFailure(error)) {
+          await _scope.handshakeInbox.discard(assembly.assemblyId);
+        }
+        rethrow;
+      }
       final established = processed.session;
       if (established != null && onSessionEstablished != null) {
         final sessionId = established.sessionIdBytes;
@@ -1716,9 +1727,12 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
       throw StateError('Layergram v3 contact requires a completed handshake');
     }
     if (expectedMode == V3HandshakeMode.maximum) {
-      final deviceId = maximumRemoteDeviceId ??
-          (eligible.map((session) => session.remoteDeviceId).toList()..sort())
-              .first;
+      final deviceId = maximumRemoteDeviceId;
+      if (deviceId == null) {
+        throw StateError(
+          'Maximum-mode Layergram v3 device pin is unavailable',
+        );
+      }
       final deviceSessions = eligible
           .where((session) => session.remoteDeviceId == deviceId)
           .toList(growable: false);
@@ -1763,6 +1777,7 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
       return false;
     }
     if (expectedMode == V3HandshakeMode.normal) return true;
+    if (maximumRemoteDeviceId == null) return false;
     final eligibleDeviceIds = samePeer
         .where(
           (session) =>
@@ -1774,8 +1789,7 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
         .toList(growable: false)
       ..sort();
     if (eligibleDeviceIds.isEmpty) return false;
-    final deviceId = maximumRemoteDeviceId ?? eligibleDeviceIds.first;
-    return target.remoteDeviceId == deviceId;
+    return target.remoteDeviceId == maximumRemoteDeviceId;
   }
 
   Future<V3ApplicationMessageExport> _resumeSendGroup(
@@ -1929,6 +1943,18 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     } finally {
       _wipe(remoteDeviceId);
     }
+  }
+
+  bool _isTerminalHandshakeCandidateFailure(Object error) {
+    if (error is FormatException ||
+        error is ArgumentError ||
+        error is SecretBoxAuthenticationError) {
+      return true;
+    }
+    if (error is! StateError) return false;
+    final message = error.message;
+    return message == 'Layergram v3 initiator pending state was not found' ||
+        message == 'Layergram v3 responder pending state was not found';
   }
 }
 

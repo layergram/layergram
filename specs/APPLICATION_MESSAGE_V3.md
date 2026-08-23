@@ -100,5 +100,5 @@ integrated only through the inactive v3 runtime. Provider/UI bootstrap,
 passphrase-scoped lifecycle, migration UX, and Normal/Maximum policy are wired
 behind the same fail-closed selector. Supported physical-device and real-
 carrier tests, hosted CI, established signed distribution-artifact checks, and
-independent audit remain mandatory before
+an explicit no-known-critical/high release decision remain mandatory before
 `ProtocolV3Activation.messaging` can become true.

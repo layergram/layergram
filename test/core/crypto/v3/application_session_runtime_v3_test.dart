@@ -1162,6 +1162,171 @@ void main() {
     }
   });
 
+  test('rejected complete handshake assemblies are not durable after restart',
+      () async {
+    final sourceRuntime = await V3ApplicationSessionRuntime.open(
+      localIdentity: alice,
+      scopeToken: 'aliceSourceReply',
+      sckaBackend: _InitialSckaBackend(),
+    );
+    final targetScope = 'aliceEmptyReply0';
+    var targetRuntime = await V3ApplicationSessionRuntime.open(
+      localIdentity: alice,
+      scopeToken: targetScope,
+      sckaBackend: _InitialSckaBackend(),
+    );
+    final bobRuntime = await V3ApplicationSessionRuntime.open(
+      localIdentity: bob,
+      scopeToken: bobScope,
+      sckaBackend: _InitialSckaBackend(),
+    );
+    try {
+      final offer = await sourceRuntime.createOffer(
+        remoteIdentity: bob.publicIdentity,
+        mode: V3HandshakeMode.normal,
+      );
+      final reply = await bobRuntime.receiveOffer(
+        frames: offer.frames,
+        initiatorIdentity: alice.publicIdentity,
+        expectedMode: V3HandshakeMode.normal,
+      );
+      for (final frame in reply.frames.take(reply.frames.length - 1)) {
+        await targetRuntime.receiveHandshakeFrame(
+          frame: frame,
+          remoteIdentity: bob.publicIdentity,
+          expectedMode: V3HandshakeMode.normal,
+        );
+      }
+      await expectLater(
+        targetRuntime.receiveHandshakeFrame(
+          frame: reply.frames.last,
+          remoteIdentity: bob.publicIdentity,
+          expectedMode: V3HandshakeMode.normal,
+        ),
+        throwsStateError,
+      );
+
+      await targetRuntime.close();
+      targetRuntime = await V3ApplicationSessionRuntime.open(
+        localIdentity: alice,
+        scopeToken: targetScope,
+        sckaBackend: _InitialSckaBackend(),
+      );
+      expect(targetRuntime.restoreResult.handshakeInbox.deferredFrames, 0);
+      expect(
+        targetRuntime.restoreResult.handshakeInbox.completeAssemblies,
+        isEmpty,
+      );
+    } finally {
+      await sourceRuntime.close();
+      await targetRuntime.close();
+      await bobRuntime.close();
+    }
+  });
+
+  test('Maximum sessions fail closed until the device pin is available',
+      () async {
+    final aliceRuntime = await V3ApplicationSessionRuntime.open(
+      localIdentity: alice,
+      scopeToken: aliceScope,
+      sckaBackend: _InitialSckaBackend(),
+    );
+    final bobRuntime = await V3ApplicationSessionRuntime.open(
+      localIdentity: bob,
+      scopeToken: bobScope,
+      sckaBackend: _InitialSckaBackend(),
+    );
+    final aliceMessages = MessagesRepository();
+    await aliceMessages.setActiveContext(
+      scopeToken: aliceScope,
+      storageKey: SecretKey(_testBytes(32, 0xa5)),
+    );
+    try {
+      final offer = await aliceRuntime.createOffer(
+        remoteIdentity: bob.publicIdentity,
+        mode: V3HandshakeMode.maximum,
+      );
+      final reply = await bobRuntime.receiveOffer(
+        frames: offer.frames,
+        initiatorIdentity: alice.publicIdentity,
+        expectedMode: V3HandshakeMode.maximum,
+      );
+      final confirmation = await aliceRuntime.receiveReply(
+        frames: reply.frames,
+        responderIdentity: bob.publicIdentity,
+      );
+      await bobRuntime.receiveConfirmation(
+        frames: confirmation.frames,
+        initiatorIdentity: alice.publicIdentity,
+      );
+
+      await expectLater(
+        aliceRuntime.sendApplicationMessageToIdentity(
+          remoteIdentity: bob.publicIdentity,
+          expectedMode: V3HandshakeMode.maximum,
+          text: 'must remain blocked without a durable pin',
+        ),
+        throwsStateError,
+      );
+
+      final aliceBridge = V3ApplicationChatBridge(
+        runtime: aliceRuntime,
+        messagesRepository: aliceMessages,
+        keyTag: 'alice-primary',
+      );
+      final bobContact = V3IdentityAdapter.toRemoteIdentity(
+        bob.publicIdentity,
+        verified: true,
+      );
+      final missingPinPolicy = V3SessionEligibilityPolicy(
+        isValid: true,
+        revision: 1,
+        excludedHandshakeIds: const <String>{},
+      );
+      expect(
+        (await aliceBridge.securityStatus(
+          contact: bobContact,
+          selectedMode: V3HandshakeMode.maximum,
+          eligibilityPolicy: missingPinPolicy,
+        ))
+            .phase,
+        V3ChatContactSecurityPhase.recoveryRequired,
+      );
+      await expectLater(
+        aliceBridge.prepareOutbound(
+          contact: bobContact,
+          mode: V3HandshakeMode.maximum,
+          carrierMode: V3ChatCarrierMode.text,
+          text: 'also blocked by the official bridge',
+          eligibilityPolicy: missingPinPolicy,
+        ),
+        throwsStateError,
+      );
+
+      final bobSession =
+          (await bobRuntime.sessionsForRemoteIdentity(alice.publicIdentity))
+              .single;
+      final outbound = await bobRuntime.sendApplicationMessageToIdentity(
+        remoteIdentity: alice.publicIdentity,
+        expectedMode: V3HandshakeMode.maximum,
+        text: 'must not be accepted without the local pin',
+        maximumRemoteDeviceId: bobSession.remoteDeviceId,
+      );
+      expect(
+        (await aliceRuntime.receiveApplicationFrame(
+          frame: outbound.frames.first,
+          expectedMode: V3HandshakeMode.maximum,
+        ))
+            .status,
+        V3ApplicationInboundStatus.notForThisInstallation,
+      );
+    } finally {
+      aliceMessages.dispose();
+      await aliceRuntime.close();
+      await bobRuntime.close();
+    }
+  });
+
   test('chat recovery rehydrates handshake message and ACK exports', () async {
     var aliceRuntime = await V3ApplicationSessionRuntime.open(
       localIdentity: alice,

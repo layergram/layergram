@@ -110,12 +110,13 @@ class HomeController {
   }
 
   Future<void> persistMessageRecord(MessageRecord message) async {
+    final messagesRepository = ref.read(messagesRepositoryProvider);
     final storageKey = await currentStorageKey();
     try {
-      await ref.read(messagesRepositoryProvider).add(
-            message,
-            storageKey: storageKey,
-          );
+      await messagesRepository.add(
+        message,
+        storageKey: storageKey,
+      );
     } finally {
       storageKey?.destroy();
     }

@@ -7,12 +7,32 @@ PACKAGE_ROOT=${LAYERGRAM_SCKA_ANDROID_PACKAGE_DIR:-$REPO_ROOT/.dart_tool/layergr
 APK=${LAYERGRAM_SCKA_ANDROID_APK:-$REPO_ROOT/build/app/outputs/flutter-apk/app-release.apk}
 SYMBOLS="$SCRIPT_DIR/scka_expected_symbols.txt"
 ANDROID_SDK=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}
+ARTIFACT_BACKUP_DIR=
+APK_EXISTED=false
 
 fail() {
   printf '%s\n' "$1" >&2
   exit 1
 }
 
+cleanup() {
+  if [ -n "$ARTIFACT_BACKUP_DIR" ]; then
+    rm -f "$APK"
+    if [ "$APK_EXISTED" = true ]; then
+      mkdir -p "$(dirname "$APK")"
+      mv "$ARTIFACT_BACKUP_DIR/app-release.apk" "$APK"
+    fi
+    rmdir "$ARTIFACT_BACKUP_DIR" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT
+
+mkdir -p "$PACKAGE_ROOT"
+ARTIFACT_BACKUP_DIR=$(mktemp -d "$PACKAGE_ROOT/apk-backup.XXXXXX")
+if [ -f "$APK" ]; then
+  mv "$APK" "$ARTIFACT_BACKUP_DIR/app-release.apk"
+  APK_EXISTED=true
+fi
 "$SCRIPT_DIR/prepare_scka_packaged_android.sh"
 ORG_GRADLE_PROJECT_layergramSckaCandidatePackage=true \
   flutter build apk --release -t tool/pq/scka_packaged_scope_smoke.dart

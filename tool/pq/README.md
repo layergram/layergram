@@ -404,8 +404,8 @@ official GitHub Actions, a 600-second default per target, a 900-second manual
 ceiling, a one-hour job limit, an evolving cache containing only fuzz corpus
 inputs, and 30-day failure-reproducer retention. Pull requests and pushes do
 not execute the workflow. A hosted green run has not yet been collected from
-this branch, so recurring-run monitoring, failure triage, and the independent
-audit remain required before production registration.
+this branch, so recurring-run monitoring and failure triage remain release
+tasks before production registration.
 
 For the macOS packaged-scope smoke, `LAYERGRAM_SCKA_MACOS_SIGN_IDENTITY=-`
 applies an ad-hoc signature without Hardened Runtime because an ad-hoc identity
@@ -428,5 +428,5 @@ This is cross-platform packaging evidence, not production approval. The
 backend still requires any Linux ARM64 or native Windows ARM64 build that is
 actually distributed, physical-device and signed-distribution validation,
 equivalent validation on every shipped ABI, full ACVP/Wycheproof traversal
-through the wrapper, supply-chain review, and an independent audit. See
+through the wrapper, supply-chain review, and explicit release approval. See
 `specs/ML_KEM_BACKEND.md`.

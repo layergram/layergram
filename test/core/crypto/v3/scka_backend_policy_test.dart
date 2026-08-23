@@ -1071,10 +1071,13 @@ void main() {
     expect(auditPolicy, contains('inactive engineering candidate'));
     expect(
       auditPolicy,
-      contains('Non-OSS downstream extension source is not an audit input'),
+      contains('Non-OSS downstream extension source is not a review input'),
     );
-    expect(auditPolicy, contains('No Layergram-authored test'));
-    expect(auditPolicy, contains('Production approval requires no unresolved'));
+    expect(auditPolicy, contains('Layergram-authored tests'));
+    expect(
+      auditPolicy,
+      contains('high-severity finding reported by a completed review'),
+    );
   });
 
   test('incremental ML-KEM remains internal behind candidate composition', () {

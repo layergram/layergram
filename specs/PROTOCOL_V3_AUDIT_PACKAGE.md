@@ -1,4 +1,4 @@
-# Layergram protocol v3 — external audit package
+# Layergram protocol v3 — independent review package
 
 Status: **audit input for an inactive engineering candidate**. Creating or
 reviewing this package does not activate protocol v3, register the native SCKA
@@ -14,10 +14,10 @@ text/link/steganographic carriers, the static identity QR, Normal/Maximum
 policy, passphrase scope isolation, application presentation, platform
 packaging, and every associated test and specification.
 
-Non-OSS downstream extension source is not an audit input and is never read or
-copied by the bundle tool. Any downstream distribution must consume the audited
-OSS commit and run compatibility tests without replacing protocol code or
-adding an incompatible dependency.
+Non-OSS downstream extension source is not a review input and is never read or
+copied by the bundle tool. Any downstream distribution must consume the exact
+reviewed OSS commit and run compatibility tests without replacing protocol
+code or adding an incompatible dependency.
 
 ## 2. Reproducible creation
 
@@ -64,10 +64,12 @@ The independent reviewer must evaluate at least:
 8. platform FFI ABI, release hardening, package contents, dependency provenance
    and commercial-license compatibility.
 
-No Layergram-authored test, vector, receipt, policy assertion, or security scan
-is a substitute for this independent analysis. Findings must identify the exact
-commit, affected surface, severity, proof or counterevidence, and remediation
-status. Production approval requires no unresolved critical or high finding.
+Layergram-authored tests, vectors, receipts, policy assertions, and security
+scans are evidence for an independent reviewer, not assumptions the reviewer
+must accept. Findings must identify the exact commit, affected surface,
+severity, proof or counterevidence, and remediation status. Any critical or
+high-severity finding reported by a completed review must be resolved before
+release.
 
 ## 4. Evidence expected alongside the package
 

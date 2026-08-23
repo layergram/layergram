@@ -10,6 +10,8 @@ SYMBOLS="$SCRIPT_DIR/scka_expected_symbols.txt"
 ANDROID_SDK=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}
 GRADLE_CACHE=${GRADLE_USER_HOME:-$HOME/.gradle}/caches/modules-2/files-2.1
 BUNDLETOOL_RUNTIME=
+ARTIFACT_BACKUP_DIR=
+AAB_EXISTED=false
 
 fail() {
   printf '%s\n' "$1" >&2
@@ -20,6 +22,14 @@ cleanup() {
   if [ -n "$BUNDLETOOL_RUNTIME" ] && [ -d "$BUNDLETOOL_RUNTIME" ]; then
     find "$BUNDLETOOL_RUNTIME" -type l -delete 2>/dev/null || true
     rmdir "$BUNDLETOOL_RUNTIME" 2>/dev/null || true
+  fi
+  if [ -n "$ARTIFACT_BACKUP_DIR" ]; then
+    rm -f "$AAB"
+    if [ "$AAB_EXISTED" = true ]; then
+      mkdir -p "$(dirname "$AAB")"
+      mv "$ARTIFACT_BACKUP_DIR/app-release.aab" "$AAB"
+    fi
+    rmdir "$ARTIFACT_BACKUP_DIR" 2>/dev/null || true
   fi
 }
 trap cleanup EXIT
@@ -45,6 +55,11 @@ java_major=$(java -version 2>&1 |
   fail 'Android bundle verification requires Java 17 or later'
 command -v jarsigner >/dev/null 2>&1 || fail 'JDK jarsigner is required'
 
+ARTIFACT_BACKUP_DIR=$(mktemp -d "$PACKAGE_ROOT/aab-backup.XXXXXX")
+if [ -f "$AAB" ]; then
+  mv "$AAB" "$ARTIFACT_BACKUP_DIR/app-release.aab"
+  AAB_EXISTED=true
+fi
 "$SCRIPT_DIR/prepare_scka_packaged_android.sh"
 ORG_GRADLE_PROJECT_layergramSckaCandidatePackage=true \
 ORG_GRADLE_PROJECT_layergramSckaPhysicalSmoke=true \

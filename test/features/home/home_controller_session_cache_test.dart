@@ -275,6 +275,13 @@ Future<_Fixture> _createFixture() async {
       messagesRepositoryProvider.overrideWithValue(messagesRepository),
     ],
   );
+  final messageStorageKey =
+      await container.read(homeControllerProvider).currentStorageKey();
+  await messagesRepository.setActiveContext(
+    scopeToken: 'home-controller-cache-test',
+    storageKey: messageStorageKey,
+  );
+  messageStorageKey?.destroy();
   final auxStorageKey = await AuxRecordCipher.deriveAuxStorageKey(
     base64Decode(localKeys.privateKeyBase64),
   );
@@ -338,6 +345,13 @@ Future<_Fixture> _createFixtureFor({
       messagesRepositoryProvider.overrideWithValue(messagesRepository),
     ],
   );
+  final messageStorageKey =
+      await container.read(homeControllerProvider).currentStorageKey();
+  await messagesRepository.setActiveContext(
+    scopeToken: 'home-controller-cache-test-$localIdentityId',
+    storageKey: messageStorageKey,
+  );
+  messageStorageKey?.destroy();
   final auxStorageKey = await AuxRecordCipher.deriveAuxStorageKey(
     base64Decode(localKeys.privateKeyBase64),
   );

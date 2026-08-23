@@ -7,10 +7,16 @@ CRATE_DIR="$REPO_ROOT/native/layergram_scka"
 DEVICE_ID=${LAYERGRAM_SCKA_IOS_PHYSICAL_DEVICE_ID:-}
 TARGET_DIR=${LAYERGRAM_SCKA_IOS_PHYSICAL_TARGET_DIR:-$REPO_ROOT/.dart_tool/layergram_pq/scka-physical-ios/target}
 DERIVED_DATA=${LAYERGRAM_SCKA_IOS_PHYSICAL_DERIVED_DATA:-$REPO_ROOT/.dart_tool/layergram_pq/scka-physical-ios/DerivedData}
+CONFIG_BACKUP_ROOT=${LAYERGRAM_SCKA_IOS_PHYSICAL_CONFIG_BACKUP_DIR:-$REPO_ROOT/.dart_tool/layergram_pq/scka-physical-ios}
 SYMBOLS="$SCRIPT_DIR/scka_expected_symbols.txt"
 BUNDLE_ID=app.layergram.app
 LAUNCH_TIMEOUT=${LAYERGRAM_SCKA_IOS_PHYSICAL_TIMEOUT_SECONDS:-60}
 INSTALLED_BY_SCRIPT=false
+GENERATED_CONFIG="$REPO_ROOT/ios/Flutter/Generated.xcconfig"
+GENERATED_ENV="$REPO_ROOT/ios/Flutter/flutter_export_environment.sh"
+CONFIG_BACKUP_DIR=
+GENERATED_CONFIG_EXISTED=false
+GENERATED_ENV_EXISTED=false
 
 fail() {
   printf '%s\n' "$1" >&2
@@ -22,8 +28,18 @@ cleanup() {
     xcrun devicectl device uninstall app --device "$DEVICE_ID" \
       "$BUNDLE_ID" >/dev/null 2>&1 || true
   fi
-  flutter build ios --release --config-only --no-codesign \
-    -t lib/main.dart >/dev/null 2>&1 || true
+  if [ -n "$CONFIG_BACKUP_DIR" ]; then
+    rm -f "$GENERATED_CONFIG" "$GENERATED_ENV"
+    if [ "$GENERATED_CONFIG_EXISTED" = true ]; then
+      mkdir -p "$(dirname "$GENERATED_CONFIG")"
+      mv "$CONFIG_BACKUP_DIR/Generated.xcconfig" "$GENERATED_CONFIG"
+    fi
+    if [ "$GENERATED_ENV_EXISTED" = true ]; then
+      mkdir -p "$(dirname "$GENERATED_ENV")"
+      mv "$CONFIG_BACKUP_DIR/flutter_export_environment.sh" "$GENERATED_ENV"
+    fi
+    rmdir "$CONFIG_BACKUP_DIR" 2>/dev/null || true
+  fi
 }
 trap cleanup EXIT
 
@@ -62,7 +78,16 @@ command -v xcrun >/dev/null 2>&1 || fail 'Xcode tools are required'
 [ "$(rustc --version | awk '{ print $2 }')" = 1.87.0 ] ||
   fail 'Layergram SCKA packaging requires Rust 1.87.0'
 
-mkdir -p "$TARGET_DIR" "$DERIVED_DATA"
+mkdir -p "$TARGET_DIR" "$DERIVED_DATA" "$CONFIG_BACKUP_ROOT"
+CONFIG_BACKUP_DIR=$(mktemp -d "$CONFIG_BACKUP_ROOT/ios-config-backup.XXXXXX")
+if [ -f "$GENERATED_CONFIG" ]; then
+  cp -p "$GENERATED_CONFIG" "$CONFIG_BACKUP_DIR/Generated.xcconfig"
+  GENERATED_CONFIG_EXISTED=true
+fi
+if [ -f "$GENERATED_ENV" ]; then
+  cp -p "$GENERATED_ENV" "$CONFIG_BACKUP_DIR/flutter_export_environment.sh"
+  GENERATED_ENV_EXISTED=true
+fi
 apps_before="$DERIVED_DATA/apps-before.json"
 record_apps "$apps_before"
 if contains_layergram "$apps_before"; then

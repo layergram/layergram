@@ -172,7 +172,7 @@ sealed-state mutation, bounded arbitrary message/state shapes, disjoint memory
 ranges, scalar alignment, guard bytes, and non-`OK` output scrubbing. The full
 candidate suite plus this corpus passes AddressSanitizer on macOS arm64 and
 Linux x64 using pinned test-only nightly `2026-08-16`. This evidence does not
-replace prolonged coverage-guided fuzzing or an independent audit.
+replace prolonged coverage-guided fuzzing and monitored failure triage.
 
 Dart real-Aux tests additionally cover continuation-before-fragment-zero,
 process restart, scope-owned candidate derivation, exact plaintext recovery,

@@ -13,6 +13,8 @@ LAUNCH_TIMEOUT=${LAYERGRAM_SCKA_ANDROID_PHYSICAL_TIMEOUT_SECONDS:-60}
 SYMBOLS="$SCRIPT_DIR/scka_expected_symbols.txt"
 ANDROID_SDK=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}
 LOGCAT_PID=
+ARTIFACT_BACKUP_DIR=
+APK_EXISTED=false
 
 fail() {
   printf '%s\n' "$1" >&2
@@ -26,6 +28,14 @@ cleanup() {
   fi
   if [ -n "$DEVICE_ID" ]; then
     adb -s "$DEVICE_ID" uninstall "$PACKAGE_ID" >/dev/null 2>&1 || true
+  fi
+  if [ -n "$ARTIFACT_BACKUP_DIR" ]; then
+    rm -f "$APK"
+    if [ "$APK_EXISTED" = true ]; then
+      mkdir -p "$(dirname "$APK")"
+      mv "$ARTIFACT_BACKUP_DIR/app-release.apk" "$APK"
+    fi
+    rmdir "$ARTIFACT_BACKUP_DIR" 2>/dev/null || true
   fi
 }
 trap cleanup EXIT
@@ -82,6 +92,12 @@ if package_installed "$PACKAGE_ID"; then
     fail 'Could not remove a stale Layergram SCKA smoke package'
 fi
 
+mkdir -p "$PACKAGE_ROOT"
+ARTIFACT_BACKUP_DIR=$(mktemp -d "$PACKAGE_ROOT/physical-apk-backup.XXXXXX")
+if [ -f "$APK" ]; then
+  mv "$APK" "$ARTIFACT_BACKUP_DIR/app-release.apk"
+  APK_EXISTED=true
+fi
 "$SCRIPT_DIR/prepare_scka_packaged_android.sh"
 ORG_GRADLE_PROJECT_layergramSckaCandidatePackage=true \
 ORG_GRADLE_PROJECT_layergramSckaPhysicalSmoke=true \

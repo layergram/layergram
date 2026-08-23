@@ -237,10 +237,11 @@ class MessagesRepositoryCore {
       _serialized(() async {
         await _ensureLoaded();
         if (storageKey != null) {
-          final detachedKey = await _detachStorageKey(storageKey);
-          final previousKey = _storageKey;
-          _storageKey = detachedKey;
-          _destroyStorageKey(previousKey);
+          if (!_hasScope || !await _matchesStorageKey(storageKey)) {
+            throw StateError(
+              'Message storage key does not match the active scope',
+            );
+          }
         }
         if (_hasScope && _storageKey == null) {
           throw StateError('Storage context not initialized');
@@ -457,6 +458,24 @@ class MessagesRepositoryCore {
     final owned = Uint8List.fromList(extracted);
     extracted.fillRange(0, extracted.length, 0);
     return SecretKeyData(owned, overwriteWhenDestroyed: true);
+  }
+
+  Future<bool> _matchesStorageKey(SecretKey candidate) async {
+    final current = _storageKey;
+    if (current == null) return false;
+    final currentBytes = Uint8List.fromList(await current.extractBytes());
+    final candidateBytes = Uint8List.fromList(await candidate.extractBytes());
+    try {
+      if (currentBytes.length != candidateBytes.length) return false;
+      var difference = 0;
+      for (var index = 0; index < currentBytes.length; index++) {
+        difference |= currentBytes[index] ^ candidateBytes[index];
+      }
+      return difference == 0;
+    } finally {
+      currentBytes.fillRange(0, currentBytes.length, 0);
+      candidateBytes.fillRange(0, candidateBytes.length, 0);
+    }
   }
 
   void _destroyStorageKey(SecretKey? storageKey) {
