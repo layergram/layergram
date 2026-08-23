@@ -459,5 +459,7 @@
   "excludeFromBackupsShort": "Tämän keskustelun uusia viestejä ei sisällytetä Layergram-varmuuskopioihin virallisissa asiakkaissa.",
   "excludeFromBackupsCaveat": "Ei estä kuvakaappauksia, näytön tallennuksia, muokattuja asiakkaita tai ulkoisia kopioita.",
   "touchComposerExcludeFromBackupsOn": "Varmuuskopioista poissulku käytössä",
-  "touchComposerExcludeFromBackupsOff": "Varmuuskopioista poissulku pois käytöstä"
+  "touchComposerExcludeFromBackupsOff": "Varmuuskopioista poissulku pois käytöstä",
+  "copyIdentityAsText": "Kopioi identiteetti tekstinä",
+  "identityTextCopied": "Identiteettiteksti kopioitu"
 }

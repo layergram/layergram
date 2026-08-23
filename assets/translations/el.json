@@ -459,5 +459,7 @@
   "excludeFromBackupsShort": "Τα νέα μηνύματα αυτής της συνομιλίας δεν θα περιλαμβάνονται στα αντίγραφα ασφαλείας Layergram σε επίσημους πελάτες.",
   "excludeFromBackupsCaveat": "Δεν εμποδίζει στιγμιότυπα οθόνης, εγγραφές οθόνης, τροποποιημένους πελάτες ή εξωτερικά αντίγραφα.",
   "touchComposerExcludeFromBackupsOn": "Η εξαίρεση από αντίγραφα ενεργοποιήθηκε",
-  "touchComposerExcludeFromBackupsOff": "Η εξαίρεση από αντίγραφα απενεργοποιήθηκε"
+  "touchComposerExcludeFromBackupsOff": "Η εξαίρεση από αντίγραφα απενεργοποιήθηκε",
+  "copyIdentityAsText": "Αντιγραφή ταυτότητας ως κείμενο",
+  "identityTextCopied": "Το κείμενο ταυτότητας αντιγράφηκε"
 }

@@ -496,10 +496,12 @@ final class V3SessionPersistenceScope {
   /// handler: both belong to this scope's pinned backend and controller.
   Future<V3LmfInboxRestoreResult> resumeDeferred({
     int? nowUnixSeconds,
+    String? onlyAssemblyId,
   }) {
     return _serialized(() async {
       _ensureReady();
       return _inbox.resumeDeferred(
+        onlyAssemblyId: onlyAssemblyId,
         keyResolver: (frame) => _ratchetKeyResolver.resolve(
           frame,
           nowUnixSeconds: nowUnixSeconds,

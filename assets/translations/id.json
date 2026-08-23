@@ -459,5 +459,7 @@
   "excludeFromBackupsShort": "Pesan baru dalam percakapan ini tidak akan disertakan dalam cadangan Layergram di klien resmi.",
   "excludeFromBackupsCaveat": "Tidak mencegah tangkapan layar, rekaman layar, klien yang dimodifikasi, atau salinan eksternal.",
   "touchComposerExcludeFromBackupsOn": "Pengecualian cadangan aktif",
-  "touchComposerExcludeFromBackupsOff": "Pengecualian cadangan nonaktif"
+  "touchComposerExcludeFromBackupsOff": "Pengecualian cadangan nonaktif",
+  "copyIdentityAsText": "Salin identitas sebagai teks",
+  "identityTextCopied": "Teks identitas disalin"
 }

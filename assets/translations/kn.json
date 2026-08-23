@@ -459,5 +459,7 @@
   "excludeFromBackupsShort": "ಈ ಸಂಭಾಷಣೆಯ ಹೊಸ ಸಂದೇಶಗಳು ಅಧಿಕೃತ ಕ್ಲೈಂಟ್‌ಗಳ Layergram ಬ್ಯಾಕಪ್‌ಗಳಲ್ಲಿ ಸೇರಿಸಲಾಗುವುದಿಲ್ಲ.",
   "excludeFromBackupsCaveat": "ಸ್ಕ್ರೀನ್‌ಶಾಟ್‌ಗಳು, ಪರದೆ ದಾಖಲಿಕೆಗಳು, ಬದಲಿಸಿದ ಕ್ಲೈಂಟ್‌ಗಳು ಅಥವಾ ಹೊರಗಿನ ಪ್ರತಿಗಳನ್ನು ತಡೆಯುವುದಿಲ್ಲ.",
   "touchComposerExcludeFromBackupsOn": "ಬ್ಯಾಕಪ್ ಹೊರತುಪಡಿಕೆ ಸಕ್ರಿಯವಾಗಿದೆ",
-  "touchComposerExcludeFromBackupsOff": "ಬ್ಯಾಕಪ್ ಹೊರತುಪಡಿಕೆ ನಿಷ್ಕ್ರಿಯವಾಗಿದೆ"
+  "touchComposerExcludeFromBackupsOff": "ಬ್ಯಾಕಪ್ ಹೊರತುಪಡಿಕೆ ನಿಷ್ಕ್ರಿಯವಾಗಿದೆ",
+  "copyIdentityAsText": "ಗುರುತನ್ನು ಪಠ್ಯವಾಗಿ ನಕಲಿಸಿ",
+  "identityTextCopied": "ಗುರುತಿನ ಪಠ್ಯ ನಕಲಿಸಲಾಗಿದೆ"
 }

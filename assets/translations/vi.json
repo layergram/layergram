@@ -459,5 +459,7 @@
   "excludeFromBackupsShort": "Tin nhắn mới trong cuộc trò chuyện này sẽ không được đưa vào bản sao lưu Layergram trên các ứng dụng chính thức.",
   "excludeFromBackupsCaveat": "Không ngăn ảnh chụp màn hình, ghi màn hình, ứng dụng đã sửa đổi hoặc bản sao bên ngoài.",
   "touchComposerExcludeFromBackupsOn": "Đã bật loại trừ khỏi sao lưu",
-  "touchComposerExcludeFromBackupsOff": "Đã tắt loại trừ khỏi sao lưu"
+  "touchComposerExcludeFromBackupsOff": "Đã tắt loại trừ khỏi sao lưu",
+  "copyIdentityAsText": "Sao chép danh tính dưới dạng văn bản",
+  "identityTextCopied": "Đã sao chép văn bản danh tính"
 }

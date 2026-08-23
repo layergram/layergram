@@ -459,5 +459,7 @@
   "excludeFromBackupsShort": "በዚህ ውይይት ያሉ አዲስ መልእክቶች በኦፊሴላዊ ክላይንቶች ላይ በLayergram ምትኬዎች ውስጥ አይካተቱም።",
   "excludeFromBackupsCaveat": "ስክሪንሾት፣ ስክሪን ቀረጻ፣ የተቀየሩ ክላይንቶች ወይም ውጫዊ ቅጂዎችን አያግድም።",
   "touchComposerExcludeFromBackupsOn": "ከምትኬ ማስወገድ ነቅቷል",
-  "touchComposerExcludeFromBackupsOff": "ከምትኬ ማስወገድ ተሰናክሏል"
+  "touchComposerExcludeFromBackupsOff": "ከምትኬ ማስወገድ ተሰናክሏል",
+  "copyIdentityAsText": "ማንነቱን እንደ ጽሑፍ ቅዳ",
+  "identityTextCopied": "የማንነት ጽሑፍ ተቀድቷል"
 }

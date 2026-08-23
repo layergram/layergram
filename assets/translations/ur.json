@@ -459,5 +459,7 @@
   "excludeFromBackupsShort": "اس گفتگو کے نئے پیغامات سرکاری کلائنٹس پر Layergram بیک اپ میں شامل نہیں ہوں گے۔",
   "excludeFromBackupsCaveat": "یہ اسکرین شاٹس، اسکرین ریکارڈنگ، تبدیل شدہ کلائنٹس یا بیرونی نقول کو نہیں روکتا۔",
   "touchComposerExcludeFromBackupsOn": "بیک اپ سے اخراج فعال",
-  "touchComposerExcludeFromBackupsOff": "بیک اپ سے اخراج غیر فعال"
+  "touchComposerExcludeFromBackupsOff": "بیک اپ سے اخراج غیر فعال",
+  "copyIdentityAsText": "شناخت کو متن کے طور پر کاپی کریں",
+  "identityTextCopied": "شناخت کا متن کاپی ہو گیا"
 }

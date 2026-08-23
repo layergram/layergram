@@ -459,5 +459,7 @@
   "excludeFromBackupsShort": "இந்த உரையாடலின் புதிய செய்திகள் அதிகாரப்பூர்வ கிளையன்ட்களில் Layergram காப்புப்பிரதிகளில் சேர்க்கப்படாது.",
   "excludeFromBackupsCaveat": "ஸ்கிரீன்ஷாட்கள், திரை பதிவுகள், மாற்றியமைக்கப்பட்ட கிளையன்ட்கள் அல்லது வெளிப்புற நகல்களைத் தடுக்காது.",
   "touchComposerExcludeFromBackupsOn": "காப்புப்பிரதி விலக்கு இயக்கப்பட்டது",
-  "touchComposerExcludeFromBackupsOff": "காப்புப்பிரதி விலக்கு முடக்கப்பட்டது"
+  "touchComposerExcludeFromBackupsOff": "காப்புப்பிரதி விலக்கு முடக்கப்பட்டது",
+  "copyIdentityAsText": "அடையாளத்தை உரையாக நகலெடு",
+  "identityTextCopied": "அடையாள உரை நகலெடுக்கப்பட்டது"
 }

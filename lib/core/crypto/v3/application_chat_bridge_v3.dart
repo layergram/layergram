@@ -641,12 +641,13 @@ final class V3ApplicationChatBridge {
         var eligibility = eligibilityForContact?.call(contact.model);
         final selectedMode = modeForContact(contact.model);
         if (eligibility == null && ensureEligibilityForContact != null) {
-          eligibility = await _runtime.initializeContactPolicy(
-            remoteIdentity: contact.public,
-            persist: () => ensureEligibilityForContact(
-              contact.model,
-              selectedMode,
-            ),
+          // The ensurer owns the runtime's atomic policy-initialization
+          // boundary. Wrapping it in initializeContactPolicy again would
+          // enqueue a serialized runtime operation from inside the same
+          // operation and deadlock the first inbound handshake.
+          eligibility = await ensureEligibilityForContact(
+            contact.model,
+            selectedMode,
           );
         }
         if (eligibility?.isValid == false) {
@@ -682,7 +683,15 @@ final class V3ApplicationChatBridge {
             : _handshakeExport(
                 inbound.outbound!,
                 remoteIdentityId: contact.model.identityId,
-                policyRevision: eligibility?.revision ?? 0,
+                // Completing a Maximum-mode reply pins the peer device inside
+                // receiveHandshakeFrame. That durable pin advances the policy
+                // revision before the confirmation becomes exportable, so bind
+                // the export to the post-transition policy rather than the
+                // snapshot taken before processing the frame.
+                policyRevision:
+                    eligibilityForContact?.call(contact.model)?.revision ??
+                        eligibility?.revision ??
+                        0,
                 carrierMode: effectiveResponseMode,
                 coverText: effectiveAcknowledgementCover,
               );

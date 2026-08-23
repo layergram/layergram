@@ -459,5 +459,7 @@
   "excludeFromBackupsShort": "Mesej baharu dalam perbualan ini tidak akan disertakan dalam sandaran Layergram pada klien rasmi.",
   "excludeFromBackupsCaveat": "Tidak menghalang tangkapan skrin, rakaman skrin, klien yang diubah suai atau salinan luaran.",
   "touchComposerExcludeFromBackupsOn": "Pengecualian sandaran diaktifkan",
-  "touchComposerExcludeFromBackupsOff": "Pengecualian sandaran dinyahaktifkan"
+  "touchComposerExcludeFromBackupsOff": "Pengecualian sandaran dinyahaktifkan",
+  "copyIdentityAsText": "Salin identiti sebagai teks",
+  "identityTextCopied": "Teks identiti disalin"
 }

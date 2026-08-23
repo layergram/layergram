@@ -459,5 +459,7 @@
   "excludeFromBackupsShort": "આ વાતચીતના નવા સંદેશાઓ સત્તાવાર ક્લાયન્ટ પર Layergram બેકઅપમાં સામેલ નહીં થાય.",
   "excludeFromBackupsCaveat": "સ્ક્રીનશોટ, સ્ક્રીન રેકોર્ડિંગ, બદલાયેલા ક્લાયન્ટ અથવા બહારની નકલો અટકાવતું નથી.",
   "touchComposerExcludeFromBackupsOn": "બેકઅપમાંથી બહાર રાખવું સક્રિય",
-  "touchComposerExcludeFromBackupsOff": "બેકઅપમાંથી બહાર રાખવું નિષ્ક્રિય"
+  "touchComposerExcludeFromBackupsOff": "બેકઅપમાંથી બહાર રાખવું નિષ્ક્રિય",
+  "copyIdentityAsText": "ઓળખને લખાણ તરીકે કૉપિ કરો",
+  "identityTextCopied": "ઓળખનું લખાણ કૉપિ થયું"
 }

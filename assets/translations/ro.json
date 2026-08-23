@@ -459,5 +459,7 @@
   "excludeFromBackupsShort": "Mesajele noi din această conversație nu vor fi incluse în backupurile Layergram pe clienții oficiali.",
   "excludeFromBackupsCaveat": "Nu împiedică capturile de ecran, înregistrările ecranului, clienții modificați sau copiile externe.",
   "touchComposerExcludeFromBackupsOn": "Excluderea din backupuri activată",
-  "touchComposerExcludeFromBackupsOff": "Excluderea din backupuri dezactivată"
+  "touchComposerExcludeFromBackupsOff": "Excluderea din backupuri dezactivată",
+  "copyIdentityAsText": "Copiază identitatea ca text",
+  "identityTextCopied": "Textul identității a fost copiat"
 }

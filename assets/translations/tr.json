@@ -459,5 +459,7 @@
   "excludeFromBackupsShort": "Bu konuşmadaki yeni mesajlar resmi istemcilerde Layergram yedeklerine dahil edilmeyecek.",
   "excludeFromBackupsCaveat": "Ekran görüntülerini, ekran kayıtlarını, değiştirilmiş istemcileri veya harici kopyaları engellemez.",
   "touchComposerExcludeFromBackupsOn": "Yedekten hariç tutma etkin",
-  "touchComposerExcludeFromBackupsOff": "Yedekten hariç tutma devre dışı"
+  "touchComposerExcludeFromBackupsOff": "Yedekten hariç tutma devre dışı",
+  "copyIdentityAsText": "Kimliği metin olarak kopyala",
+  "identityTextCopied": "Kimlik metni kopyalandı"
 }

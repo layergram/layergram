@@ -459,5 +459,7 @@
   "excludeFromBackupsShort": "Nieuwe berichten in dit gesprek worden op officiële clients niet opgenomen in Layergram-back-ups.",
   "excludeFromBackupsCaveat": "Voorkomt geen screenshots, schermopnamen, aangepaste clients of externe kopieën.",
   "touchComposerExcludeFromBackupsOn": "Back-upuitsluiting ingeschakeld",
-  "touchComposerExcludeFromBackupsOff": "Back-upuitsluiting uitgeschakeld"
+  "touchComposerExcludeFromBackupsOff": "Back-upuitsluiting uitgeschakeld",
+  "copyIdentityAsText": "Identiteit als tekst kopiëren",
+  "identityTextCopied": "Identiteitstekst gekopieerd"
 }

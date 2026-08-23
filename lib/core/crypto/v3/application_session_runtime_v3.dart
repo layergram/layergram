@@ -1008,7 +1008,31 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
         receivedAt: receivedAt,
         nowUnixSeconds: nowUnixSeconds,
       );
-      final delivery = accepted.delivery;
+      var delivery = accepted.delivery;
+      var inboxStatus = accepted.status;
+      if (delivery == null &&
+          accepted.status != V3LmfInboxStatus.committedReplay) {
+        final assemblyId = V3LmfFrameCodec.assemblyId(frame);
+        // After a restart, persisted continuations can sort before the sealed
+        // fragment zero that recreates their in-memory ratchet candidate. The
+        // first pass restores that candidate; the second accepts any earlier
+        // continuations. Scope the retries to this carrier assembly so an
+        // unrelated delayed message is never surfaced by the wrong GUI action.
+        for (var pass = 0; pass < 2 && delivery == null; pass++) {
+          final resumed = await _scope.resumeDeferred(
+            nowUnixSeconds: nowUnixSeconds,
+            onlyAssemblyId: assemblyId,
+          );
+          for (final candidate in resumed.deliveries) {
+            if (candidate.assemblyId == assemblyId) {
+              delivery = candidate;
+              inboxStatus = V3LmfInboxStatus.complete;
+              break;
+            }
+          }
+          if (resumed.deferredFrames == 0) break;
+        }
+      }
       if (delivery == null) {
         V3LmfFrame? acknowledgementFrame;
         if (accepted.status == V3LmfInboxStatus.committedReplay &&
@@ -1023,7 +1047,7 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
           status: accepted.status == V3LmfInboxStatus.committedReplay
               ? V3ApplicationInboundStatus.committedReplay
               : V3ApplicationInboundStatus.pending,
-          inboxStatus: accepted.status,
+          inboxStatus: inboxStatus,
           acknowledgementFrame: acknowledgementFrame,
         );
       }
@@ -1072,7 +1096,7 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
           status: payloadDecoded
               ? V3ApplicationInboundStatus.identityMismatch
               : V3ApplicationInboundStatus.invalidPayload,
-          inboxStatus: accepted.status,
+          inboxStatus: inboxStatus,
           acknowledgementFrame: acknowledgementFrame,
         );
       }
@@ -1084,7 +1108,7 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
         status: expired
             ? V3ApplicationInboundStatus.expired
             : V3ApplicationInboundStatus.delivered,
-        inboxStatus: accepted.status,
+        inboxStatus: inboxStatus,
         payload: expired ? null : payload,
         acknowledgementFrame: acknowledgementFrame,
       );

@@ -459,5 +459,7 @@
   "excludeFromBackupsShort": "Sabbin saƙonni a wannan tattaunawar ba za su shiga ajiyar kwafin Layergram a kan abokan ciniki na hukuma ba.",
   "excludeFromBackupsCaveat": "Ba ya hana hoton allo, rikodin allo, abokan ciniki da aka gyara, ko kwafe na waje.",
   "touchComposerExcludeFromBackupsOn": "Cirewa daga ajiyar kwafi ya kunna",
-  "touchComposerExcludeFromBackupsOff": "Cirewa daga ajiyar kwafi ya kashe"
+  "touchComposerExcludeFromBackupsOff": "Cirewa daga ajiyar kwafi ya kashe",
+  "copyIdentityAsText": "Kwafi shaida a matsayin rubutu",
+  "identityTextCopied": "An kwafi rubutun shaida"
 }

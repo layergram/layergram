@@ -389,6 +389,28 @@ class _MyIdentityViewState extends ConsumerState<MyIdentityView> {
                             ],
                           ),
                           const SizedBox(height: 8),
+                          OutlinedButton.icon(
+                            onPressed: () async {
+                              final messenger = ScaffoldMessenger.of(context);
+                              final block = await ref
+                                  .read(myIdentityControllerProvider)
+                                  .identityShareBlock();
+                              await ref
+                                  .read(clipboardServiceProvider)
+                                  .writeText(block);
+                              if (!context.mounted) return;
+                              messenger.showSnackBar(
+                                SnackBar(
+                                  content: Text(AppStrings.t(
+                                      context, 'identityTextCopied')),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.content_copy_outlined),
+                            label: Text(
+                                AppStrings.t(context, 'copyIdentityAsText')),
+                          ),
+                          const SizedBox(height: 8),
                           Text(
                             AppStrings.t(context, 'recoveryPhraseWarning1'),
                             textAlign: TextAlign.center,

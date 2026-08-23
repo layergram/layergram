@@ -459,5 +459,7 @@
   "excludeFromBackupsShort": "Ang mga bagong mensahe sa pag-uusap na ito ay hindi isasama sa mga Layergram backup sa mga opisyal na client.",
   "excludeFromBackupsCaveat": "Hindi nito pinipigilan ang screenshots, screen recording, binagong client, o panlabas na kopya.",
   "touchComposerExcludeFromBackupsOn": "Naka-enable ang pagbubukod sa backup",
-  "touchComposerExcludeFromBackupsOff": "Naka-disable ang pagbubukod sa backup"
+  "touchComposerExcludeFromBackupsOff": "Naka-disable ang pagbubukod sa backup",
+  "copyIdentityAsText": "Kopyahin ang identidad bilang teksto",
+  "identityTextCopied": "Nakopya ang teksto ng identidad"
 }

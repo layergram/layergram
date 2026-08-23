@@ -459,5 +459,7 @@
   "excludeFromBackupsShort": "Nye meldinger i denne samtalen blir ikke inkludert i Layergram-sikkerhetskopier på offisielle klienter.",
   "excludeFromBackupsCaveat": "Hindrer ikke skjermbilder, skjermopptak, modifiserte klienter eller eksterne kopier.",
   "touchComposerExcludeFromBackupsOn": "Utelatelse fra sikkerhetskopi aktivert",
-  "touchComposerExcludeFromBackupsOff": "Utelatelse fra sikkerhetskopi deaktivert"
+  "touchComposerExcludeFromBackupsOff": "Utelatelse fra sikkerhetskopi deaktivert",
+  "copyIdentityAsText": "Kopier identitet som tekst",
+  "identityTextCopied": "Identitetstekst kopiert"
 }

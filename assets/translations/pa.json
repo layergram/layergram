@@ -459,5 +459,7 @@
   "excludeFromBackupsShort": "ਇਸ ਗੱਲਬਾਤ ਦੇ ਨਵੇਂ ਸੁਨੇਹੇ ਅਧਿਕਾਰਕ ਕਲਾਇੰਟਾਂ ਉੱਤੇ Layergram ਬੈਕਅੱਪਾਂ ਵਿੱਚ ਸ਼ਾਮਲ ਨਹੀਂ ਕੀਤੇ ਜਾਣਗੇ।",
   "excludeFromBackupsCaveat": "ਇਹ ਸਕ੍ਰੀਨਸ਼ਾਟ, ਸਕ੍ਰੀਨ ਰਿਕਾਰਡਿੰਗ, ਬਦਲੇ ਹੋਏ ਕਲਾਇੰਟ ਜਾਂ ਬਾਹਰੀ ਕਾਪੀਆਂ ਨੂੰ ਨਹੀਂ ਰੋਕਦਾ।",
   "touchComposerExcludeFromBackupsOn": "ਬੈਕਅੱਪ ਤੋਂ ਬਾਹਰ ਰੱਖਣਾ ਚਾਲੂ",
-  "touchComposerExcludeFromBackupsOff": "ਬੈਕਅੱਪ ਤੋਂ ਬਾਹਰ ਰੱਖਣਾ ਬੰਦ"
+  "touchComposerExcludeFromBackupsOff": "ਬੈਕਅੱਪ ਤੋਂ ਬਾਹਰ ਰੱਖਣਾ ਬੰਦ",
+  "copyIdentityAsText": "ਪਛਾਣ ਨੂੰ ਲਿਖਤ ਵਜੋਂ ਕਾਪੀ ਕਰੋ",
+  "identityTextCopied": "ਪਛਾਣ ਲਿਖਤ ਕਾਪੀ ਹੋ ਗਈ"
 }

@@ -459,5 +459,7 @@
   "excludeFromBackupsShort": "이 대화의 새 메시지는 공식 클라이언트의 Layergram 백업에 포함되지 않습니다.",
   "excludeFromBackupsCaveat": "스크린샷, 화면 녹화, 수정된 클라이언트 또는 외부 복사를 막지는 못합니다.",
   "touchComposerExcludeFromBackupsOn": "백업 제외가 활성화됨",
-  "touchComposerExcludeFromBackupsOff": "백업 제외가 비활성화됨"
+  "touchComposerExcludeFromBackupsOff": "백업 제외가 비활성화됨",
+  "copyIdentityAsText": "신원을 텍스트로 복사",
+  "identityTextCopied": "신원 텍스트를 복사했습니다"
 }

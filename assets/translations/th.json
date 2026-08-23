@@ -459,5 +459,7 @@
   "excludeFromBackupsShort": "ข้อความใหม่ในบทสนทนานี้จะไม่ถูกรวมในข้อมูลสำรอง Layergram บนไคลเอนต์ทางการ",
   "excludeFromBackupsCaveat": "ไม่ป้องกันภาพหน้าจอ การบันทึกหน้าจอ ไคลเอนต์ที่ดัดแปลง หรือสำเนาภายนอก",
   "touchComposerExcludeFromBackupsOn": "เปิดการไม่รวมในการสำรองข้อมูลแล้ว",
-  "touchComposerExcludeFromBackupsOff": "ปิดการไม่รวมในการสำรองข้อมูลแล้ว"
+  "touchComposerExcludeFromBackupsOff": "ปิดการไม่รวมในการสำรองข้อมูลแล้ว",
+  "copyIdentityAsText": "คัดลอกข้อมูลประจำตัวเป็นข้อความ",
+  "identityTextCopied": "คัดลอกข้อความข้อมูลประจำตัวแล้ว"
 }

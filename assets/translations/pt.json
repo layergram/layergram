@@ -459,5 +459,7 @@
   "excludeFromBackupsShort": "Novas mensagens desta conversa não serão incluídas nos backups do Layergram em clientes oficiais.",
   "excludeFromBackupsCaveat": "Não impede capturas de tela, gravações de tela, clientes modificados ou cópias externas.",
   "touchComposerExcludeFromBackupsOn": "Exclusão de backup ativada",
-  "touchComposerExcludeFromBackupsOff": "Exclusão de backup desativada"
+  "touchComposerExcludeFromBackupsOff": "Exclusão de backup desativada",
+  "copyIdentityAsText": "Copiar identidade como texto",
+  "identityTextCopied": "Texto da identidade copiado"
 }

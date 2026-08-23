@@ -459,5 +459,7 @@
   "excludeFromBackupsShort": "ఈ సంభాషణలోని కొత్త సందేశాలు అధికారిక క్లయింట్లలో Layergram బ్యాకప్‌లలో చేర్చబడవు.",
   "excludeFromBackupsCaveat": "స్క్రీన్‌షాట్‌లు, స్క్రీన్ రికార్డింగ్‌లు, మార్చిన క్లయింట్లు లేదా బాహ్య కాపీలను ఆపదు.",
   "touchComposerExcludeFromBackupsOn": "బ్యాకప్ మినహాయింపు సక్రియమైంది",
-  "touchComposerExcludeFromBackupsOff": "బ్యాకప్ మినహాయింపు నిష్క్రియమైంది"
+  "touchComposerExcludeFromBackupsOff": "బ్యాకప్ మినహాయింపు నిష్క్రియమైంది",
+  "copyIdentityAsText": "గుర్తింపును పాఠ్యంగా కాపీ చేయండి",
+  "identityTextCopied": "గుర్తింపు పాఠ్యం కాపీ చేయబడింది"
 }

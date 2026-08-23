@@ -459,5 +459,7 @@
   "excludeFromBackupsShort": "এই কথোপকথনের নতুন বার্তাগুলো অফিসিয়াল ক্লায়েন্টে Layergram ব্যাকআপে অন্তর্ভুক্ত হবে না।",
   "excludeFromBackupsCaveat": "স্ক্রিনশট, স্ক্রিন রেকর্ডিং, পরিবর্তিত ক্লায়েন্ট বা বাহ্যিক কপি ঠেকায় না।",
   "touchComposerExcludeFromBackupsOn": "ব্যাকআপ থেকে বাদ দেওয়া চালু",
-  "touchComposerExcludeFromBackupsOff": "ব্যাকআপ থেকে বাদ দেওয়া বন্ধ"
+  "touchComposerExcludeFromBackupsOff": "ব্যাকআপ থেকে বাদ দেওয়া বন্ধ",
+  "copyIdentityAsText": "পরিচয় টেক্সট হিসেবে কপি করুন",
+  "identityTextCopied": "পরিচয়ের টেক্সট কপি হয়েছে"
 }

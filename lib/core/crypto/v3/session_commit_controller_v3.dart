@@ -2300,26 +2300,37 @@ final class V3SessionCommitController {
           throw StateError(
               'Layergram v3 outgoing retirement is not configured');
         }
+        final outboxEntry = outbox.entry(
+          receipt.assemblyId,
+          authority: _outboxAuthority,
+        );
         final proof = sendJournal.completionBindingForAssembly(
           receipt.assemblyId,
           authority: _sendAuthority,
         );
-        if (proof == null ||
-            proof.stableRecordId != receipt.stableRecordId ||
+        if (proof == null) {
+          if (outboxEntry == null) {
+            throw const V3LmfPersistenceConflictException(
+              'v3 outgoing retirement lost both pending send and completion proof',
+            );
+          }
+          return policy.evaluateOutgoingCompletion(
+            fullyAcknowledged: false,
+            outboxEntryAbsent: false,
+            completedAt: outboxEntry.updatedAt,
+            now: now,
+          );
+        }
+        if (proof.stableRecordId != receipt.stableRecordId ||
             proof.sessionKey != receipt.sessionKey ||
             proof.ratchetRevision != receipt.ratchetRevision) {
           throw const V3LmfPersistenceConflictException(
             'v3 outgoing retirement lost its completion proof',
           );
         }
-        final outboxAbsent = outbox.entry(
-              receipt.assemblyId,
-              authority: _outboxAuthority,
-            ) ==
-            null;
         return policy.evaluateOutgoingCompletion(
           fullyAcknowledged: true,
-          outboxEntryAbsent: outboxAbsent,
+          outboxEntryAbsent: outboxEntry == null,
           completedAt: proof.completedAt,
           now: now,
         );

@@ -459,5 +459,7 @@
   "excludeFromBackupsShort": "Awọn ifiranṣẹ tuntun ninu ibaraẹnisọrọ yii kii yoo wa ninu awọn afẹyinti Layergram lori awọn alabara osise.",
   "excludeFromBackupsCaveat": "Ko dena sikirinisoti, gbigbasilẹ iboju, awọn alabara ti a ti yipada, tabi awọn ẹda ita.",
   "touchComposerExcludeFromBackupsOn": "Yiyọ kuro ninu afẹyinti ti ṣiṣẹ",
-  "touchComposerExcludeFromBackupsOff": "Yiyọ kuro ninu afẹyinti ti wa ni pipa"
+  "touchComposerExcludeFromBackupsOff": "Yiyọ kuro ninu afẹyinti ti wa ni pipa",
+  "copyIdentityAsText": "Daakọ idanimọ gẹgẹbi ọrọ",
+  "identityTextCopied": "A ti daakọ ọrọ idanimọ"
 }

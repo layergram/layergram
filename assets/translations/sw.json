@@ -459,5 +459,7 @@
   "excludeFromBackupsShort": "Ujumbe mpya katika mazungumzo haya hautajumuishwa katika nakala rudufu za Layergram kwenye wateja rasmi.",
   "excludeFromBackupsCaveat": "Haizuii picha za skrini, kurekodi skrini, wateja waliobadilishwa au nakala za nje.",
   "touchComposerExcludeFromBackupsOn": "Kuondoa kwenye nakala rudufu kumewashwa",
-  "touchComposerExcludeFromBackupsOff": "Kuondoa kwenye nakala rudufu kumezimwa"
+  "touchComposerExcludeFromBackupsOff": "Kuondoa kwenye nakala rudufu kumezimwa",
+  "copyIdentityAsText": "Nakili utambulisho kama maandishi",
+  "identityTextCopied": "Maandishi ya utambulisho yamenakiliwa"
 }

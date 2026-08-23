@@ -459,5 +459,7 @@
   "excludeFromBackupsShort": "New messages in this conversation will not be included in Layergram backups on official clients.",
   "excludeFromBackupsCaveat": "Does not prevent screenshots, screen recordings, modified clients, or external copies.",
   "touchComposerExcludeFromBackupsOn": "Backup exclusion enabled",
-  "touchComposerExcludeFromBackupsOff": "Backup exclusion disabled"
+  "touchComposerExcludeFromBackupsOff": "Backup exclusion disabled",
+  "copyIdentityAsText": "Copy identity as text",
+  "identityTextCopied": "Identity text copied"
 }

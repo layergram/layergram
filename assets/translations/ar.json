@@ -459,5 +459,7 @@
   "excludeFromBackupsShort": "لن تُدرج الرسائل الجديدة في هذه المحادثة ضمن نسخ Layergram الاحتياطية على العملاء الرسميين.",
   "excludeFromBackupsCaveat": "لا يمنع لقطات الشاشة أو تسجيل الشاشة أو العملاء المعدّلين أو النسخ الخارجية.",
   "touchComposerExcludeFromBackupsOn": "تم تفعيل الاستبعاد من النسخ الاحتياطية",
-  "touchComposerExcludeFromBackupsOff": "تم إيقاف الاستبعاد من النسخ الاحتياطية"
+  "touchComposerExcludeFromBackupsOff": "تم إيقاف الاستبعاد من النسخ الاحتياطية",
+  "copyIdentityAsText": "نسخ الهوية كنص",
+  "identityTextCopied": "تم نسخ نص الهوية"
 }

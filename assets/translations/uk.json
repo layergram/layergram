@@ -459,5 +459,7 @@
   "excludeFromBackupsShort": "Нові повідомлення в цій розмові не включатимуться до резервних копій Layergram в офіційних клієнтах.",
   "excludeFromBackupsCaveat": "Не запобігає знімкам екрана, записам екрана, зміненим клієнтам або зовнішнім копіям.",
   "touchComposerExcludeFromBackupsOn": "Виключення з резервних копій увімкнено",
-  "touchComposerExcludeFromBackupsOff": "Виключення з резервних копій вимкнено"
+  "touchComposerExcludeFromBackupsOff": "Виключення з резервних копій вимкнено",
+  "copyIdentityAsText": "Копіювати ідентичність як текст",
+  "identityTextCopied": "Текст ідентичності скопійовано"
 }
