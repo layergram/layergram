@@ -100,6 +100,9 @@ void main() {
     AppStrings.registerStrings({
       'en': {
         'premiumTag': 'Premium',
+        'settingsSectionMessaging': 'Messaging',
+        'settingsSectionInformation': 'Information',
+        'settingsSectionDanger': 'Danger zone',
         'premiumNotAvailable': 'Not available',
         'premiumFeatures': 'Premium features',
         'premiumBackupTitle': 'Cloud backup',
@@ -129,6 +132,14 @@ void main() {
     expect(find.text('Cloud backup', skipOffstage: false), findsNothing);
     expect(find.text('AI cover messages', skipOffstage: false), findsNothing);
     expect(find.text('Multiple identities', skipOffstage: false), findsNothing);
+    expect(
+      find.byKey(const ValueKey('settings-section-premium')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('settings-section-security')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('SettingsView reveals available optional capabilities',
@@ -151,7 +162,16 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    expect(find.text('Premium features', skipOffstage: false), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('settings-section-premium')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Premium features'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('settings-section-premium')),
+      findsOneWidget,
+    );
 
     await tester.scrollUntilVisible(
       find.text('Cloud backup'),

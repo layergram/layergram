@@ -24,6 +24,7 @@ class PremiumTile extends ConsumerWidget {
     required this.titleKey,
     required this.subtitleKey,
     required this.onTap,
+    this.title,
   });
 
   final bool isAvailable;
@@ -31,15 +32,16 @@ class PremiumTile extends ConsumerWidget {
   final String titleKey;
   final String subtitleKey;
   final VoidCallback onTap;
+  final String? title;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = AppStrings.t;
-    
+
     return ListTile(
       enabled: isAvailable,
       leading: Icon(icon),
-      title: Text(t(context, titleKey)),
+      title: Text(title ?? t(context, titleKey)),
       subtitle: Text(
         isAvailable ? t(context, subtitleKey) : t(context, 'premiumTag'),
       ),

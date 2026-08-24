@@ -52,7 +52,9 @@ class AppLockSettings extends ConsumerWidget {
 
     String describeTimeout(BuildContext context, int seconds) {
       if (seconds == 0) return AppStrings.t(context, 'timeoutNow');
-      if (seconds < 60) return AppStrings.t(context, 'timeoutSeconds').replaceAll('{s}', seconds.toString());
+      if (seconds < 60) {
+        return AppStrings.t(context, 'timeoutSeconds').replaceAll('{s}', seconds.toString());
+      }
       final mins = (seconds / 60).round();
       return AppStrings.t(context, 'timeoutMinutes').replaceAll('{m}', mins.toString());
     }
@@ -103,7 +105,8 @@ class AppLockSettings extends ConsumerWidget {
             }
           },
         ),
-        FutureBuilder<bool>(
+        if (lockEnabled)
+          FutureBuilder<bool>(
           future: lockService.isBiometricSupported(),
           builder: (context, snapshot) {
             final supported = snapshot.data ?? false;
@@ -125,7 +128,7 @@ class AppLockSettings extends ConsumerWidget {
                   : null,
             );
           },
-        ),
+          ),
         if (lockEnabled) ...[
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
