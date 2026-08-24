@@ -1,10 +1,9 @@
 # Layergram Threat Model
 
-> Protocol-v3 work is an integrated but inactive implementation candidate. Its
-> stronger target properties and activation gates are defined in
-> [Protocol v3 Security Goals](specs/PROTOCOL_V3_SECURITY_GOALS.md). Nothing in
-> a currently distributed Layergram build should yet be interpreted as a
-> post-quantum security claim; the active protocol remains v2.
+> Protocol v3 is active in Layergram 2.0.0 and later. Its hybrid post-quantum
+> properties and release invariants are defined in
+> [Protocol v3 Security Goals](specs/PROTOCOL_V3_SECURITY_GOALS.md). Earlier
+> Layergram releases remain protocol v2 and are not post-quantum protected.
 
 This document describes, in plain language, what Layergram is designed to protect against and — just as importantly — what it does **not** protect against. It is written for users, integrators and security researchers evaluating whether Layergram fits their threat model.
 
@@ -101,10 +100,10 @@ verify public identities again. See
 
 ## Cryptographic specifics
 
-The following list describes the active v2 protocol. The inactive v3 candidate
-uses the hybrid and ratcheting requirements in
-[Protocol v3 Security Goals](specs/PROTOCOL_V3_SECURITY_GOALS.md); listing the
-candidate here does not activate it.
+Layergram 2.0.0 and later use the hybrid identity, handshake, key schedule,
+ratcheting, and persistence requirements in
+[Protocol v3 Security Goals](specs/PROTOCOL_V3_SECURITY_GOALS.md). The v2
+details below apply only to earlier releases and retained historical data.
 
 - **Identity keys (v2):** Ed25519/X25519-equivalent 32-byte keypairs derived from a BIP39 mnemonic via HKDF-SHA256 with domain-separated labels (`layergram-id-v2` / `layergram-passphrase-id-v2`). Version metadata is persisted so derivation remains stable across app upgrades.
 - **Identity keys (v1, legacy):** SHA-256 of the BIP39 seed. Preserved for users onboarded in early versions; never silently upgraded.

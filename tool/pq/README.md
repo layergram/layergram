@@ -1,4 +1,4 @@
-# Post-quantum backend spikes
+# Post-quantum backend and release verification
 
 Create a clean, commit-bound OSS source package for independent protocol and
 implementation review (without including the downstream Premium repository):
@@ -10,15 +10,15 @@ tool/pq/create_v3_audit_bundle.sh
 The archive and its SHA-256 file are written below the ignored
 `.dart_tool/layergram_pq/audit/` directory. See
 `specs/PROTOCOL_V3_AUDIT_PACKAGE.md` for the mandatory review scope and the
-activation boundary.
+active-release boundary.
 
-This directory records reproducible candidate decisions and platform
+This directory records reproducible implementation decisions and platform
 verification commands. The pinned source is vendored under
 `third_party/mlkem-native`. Android, iOS, macOS, Windows x64, and Linux x64
-builds package the backend, but normal application code never loads or
-activates it and protocol v2 remains unchanged.
+builds package the backend. Layergram 2.0 loads it only through the complete
+fail-closed activation policy; earlier releases remain protocol v2.
 
-## Current candidate
+## Current production selection
 
 `mlkem_native_candidate.json` records the exact upstream release and commit
 tested on the development host. On 2026-08-22, upstream `make build` and
@@ -37,22 +37,22 @@ dereference and serializes concurrent decapsulation and destruction.
 decision. The official Signal SPQR implementation is explicitly rejected for
 embedding because it is AGPL-3.0-only; no code from it is imported. The receipt
 selects a specification-first Layergram-owned Apache-2.0 implementation path.
-The exact commercially compatible `libcrux-ml-kem` candidate is now pinned only
-inside the inactive native crate. Opt-in verification scripts link it only into
-generated, ignored candidate packages; ordinary application bootstrap does not
-load it.
+The exact commercially compatible `libcrux-ml-kem` dependency is pinned only
+inside the native crate. Official release scripts link it into generated,
+ignored platform artifacts and the application admits only the exact build.
 
-`native/layergram_scka` is an Apache-2.0 Rust scaffold with exact pinned
+`native/layergram_scka` is an Apache-2.0 Rust backend with exact pinned
 permissive dependencies and notices. Its default build deliberately returns
-`NOT_READY`. An explicit engineering-only `candidate-ffi` build exposes the
+`NOT_READY`. An explicit exact-build-allowlisted `candidate-ffi` build exposes the
 outer `LS3` AES-256-GCM-SIV composition through the frozen C ABI and an
 exact-build-allowlisted Dart FFI loader. Reproducible opt-in packaging scripts
-exercise the candidate build through a scope-owned loader, while the default
-build and ordinary `lib/main.dart` remain disconnected. The crate also contains
+exercise the production build through a scope-owned loader, while the default
+build remains disconnected. The crate also contains
 Layergram-owned erasure-code and incremental-ML-KEM boundary modules specified
 by `specs/SCKA_ERASURE_CODE.md` and `specs/SCKA_INCREMENTAL_MLKEM.md`. Its
-private transition engine uses both modules. Only the candidate build connects
-them to the C ABI; production registration remains disconnected. The private
+internal transition engine uses both modules. Only the allowlisted build
+connects them to the C ABI; production registration is owned by the v3
+lifecycle. The internal
 `LB3` codec freezes
 the canonical plaintext representation for all 11 revision-1 states as
 specified by `specs/SCKA_STATE_PAYLOAD.md`, and the transition engine persists
@@ -80,20 +80,19 @@ export. Transition 13 now continues exact authenticated Ct2 symbols across
 loss/restart and switches roles only on the immediately following authenticated
 Braid epoch. All revision-1 transitions 1-13 are implemented privately. The
 explicit candidate build connects them to the frozen C ABI for integration
-tests, while the default ABI and ordinary application packages remain
+tests and official application packages, while the default ABI remains
 disconnected.
 The private composition specified by
 `specs/SCKA_AUTHENTICATED_COMPOSITION.md` now opens and semantically validates
 exact LS3/LB3 state, dispatches canonical BM3, checks revision-plus-one
 successors, derives injective role-and-revision state nonces, uses RFC 8452
 nonce-misuse-resistant state sealing, and returns immutable exact sealed
-candidates. The engineering-only candidate is callable through an explicit
+candidates. The allowlisted implementation is callable through an explicit
 library path or deterministic generated package location from Dart and is
 exercised with the durable session journals, TR3, LMF, and the encrypted Aux
-store. The packaged smoke constructs it through
-`V3SessionPersistenceScope.openPackagedScka`; there is no ordinary application
-bootstrap call, production registration, or protocol activation, and the
-default ABI remains `NOT_READY`.
+store. The packaged smoke and official lifecycle construct it through
+`V3SessionPersistenceScope.openPackagedScka`; the default ABI remains
+`NOT_READY` so unsupported builds fail closed.
 
 ## Reproducible checks
 
@@ -201,7 +200,7 @@ LAYERGRAM_MLKEM_SANITIZE=1 \
   tool/pq/test_native_linux.sh
 ```
 
-Run the inactive SCKA scaffold contract on POSIX hosts, all Apple compilation
+Run the SCKA default/production contract on POSIX hosts, all Apple compilation
 targets, or Windows x64 respectively:
 
 ```sh

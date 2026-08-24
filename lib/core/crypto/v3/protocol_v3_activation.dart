@@ -14,14 +14,14 @@
 
 /// Single fail-closed activation policy for protocol v3 application seams.
 ///
-/// Individual components may be integrated and tested while these values stay
-/// false. Production activation is a final, reviewed change: identity sharing
-/// must never move ahead of the messaging/session owner, otherwise users could
-/// distribute identities that the active app cannot yet use.
+/// The three reviewed production decisions remain separate constants so a
+/// future partial edit fails closed. Identity sharing must never move ahead of
+/// the messaging/session owner, otherwise users could distribute identities
+/// that the active app cannot use.
 abstract final class ProtocolV3Activation {
-  static const bool identitySharing = false;
-  static const bool messaging = false;
-  static const bool productionApproved = false;
+  static const bool identitySharing = true;
+  static const bool messaging = true;
+  static const bool productionApproved = true;
 
   static const bool isActive =
       identitySharing && messaging && productionApproved;

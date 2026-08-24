@@ -1,7 +1,7 @@
 // Copyright 2026 Layergram
 // SPDX-License-Identifier: Apache-2.0
 
-//! Inactive authenticated `LS3` state envelope.
+//! Authenticated `LS3` state envelope.
 //!
 //! This module freezes and enforces the outer AES-256-GCM-SIV container described
 //! in `specs/SCKA_NATIVE_ABI.md`. It deliberately does not define the inner

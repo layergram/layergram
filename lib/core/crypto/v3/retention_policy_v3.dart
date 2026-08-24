@@ -16,7 +16,7 @@ import 'dart:typed_data';
 
 import 'triple_ratchet_state_v3.dart';
 
-/// Local retention profile for the inactive protocol-v3 ratchets.
+/// Local retention profile for protocol-v3 ratchets.
 ///
 /// Normal mode favors long, manually transported conversations. Maximum mode
 /// retains out-of-order message keys for less time, reducing the lifetime of

@@ -22,7 +22,7 @@ import '../stego_alphabet_v2.dart';
 import '../stego_encoder.dart';
 import 'hybrid_ratchet_header_v3.dart';
 
-/// Inactive protocol-v3 suite identifier used by the research wire format.
+/// Protocol-v3 suite identifier used by the production wire format.
 enum V3LmfSuite {
   hybridX25519MlKem768Aes256Gcm(1);
 
@@ -273,7 +273,7 @@ class V3LmfFrame {
   bool get isFragmented => fragmentCount > 1;
 }
 
-/// Canonical binary, text, link, and steganographic codec for inactive LMF v3.
+/// Canonical binary, text, link, and steganographic codec for LMF v3.
 abstract final class V3LmfFrameCodec {
   static const int protocolVersion = 3;
   static const List<int> magic = <int>[0x4c, 0x4d, 0x33]; // "LM3"
@@ -1015,7 +1015,7 @@ class V3LmfReassemblyConflictException implements Exception {
 
 /// Bounded, duplicate-aware reassembler for authenticated LMF v3 fragments.
 ///
-/// Persistence remains outside this cryptographic primitive. The inactive
+/// Persistence remains outside this cryptographic primitive. The
 /// durable inbox wraps it by storing each sealed frame before calling [accept];
 /// callers that use this class directly receive no crash-recovery guarantee.
 class V3LmfReassembler {

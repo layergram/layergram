@@ -1,10 +1,9 @@
 # Layergram Protocol v3 — Application Message
 
-Status: **inactive implementation candidate; not enabled for users**
+Status: **active protocol-v3 application message in Layergram 2.0 and later**
 
 This document freezes the canonical user-message plaintext and its unreliable
-carrier behavior. It does not activate protocol v3 or make a production
-post-quantum claim.
+carrier behavior.
 
 ## AP3 canonical plaintext
 
@@ -92,13 +91,13 @@ retained AR3 replay proof cannot resurrect a user-deleted message or lose a
 delete-after-read decision. Plaintext lookup also requires current visible
 metadata and rejects a durable deletion tombstone.
 
-## Activation boundary
+## Active runtime boundary
 
 The AP3 codec, durable multi-device group, exact-byte ACK outbox, chat metadata
 projection, presentation journal, and text/link/steganography transport are
-integrated only through the inactive v3 runtime. Provider/UI bootstrap,
+integrated only through the v3 runtime. Provider/UI bootstrap,
 passphrase-scoped lifecycle, migration UX, and Normal/Maximum policy are wired
 behind the same fail-closed selector. Supported physical-device and real-
 carrier tests, hosted CI, established signed distribution-artifact checks, and
-an explicit no-known-critical/high release decision remain mandatory before
-`ProtocolV3Activation.messaging` can become true.
+an explicit no-known-critical/high release decision remain mandatory while
+`ProtocolV3Activation.messaging` is true in official packages.

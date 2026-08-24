@@ -4,7 +4,7 @@
 //! Layergram-owned systematic Reed-Solomon erasure coding for ML-KEM Braid.
 //!
 //! This module freezes only the public-message erasure-code representation. It
-//! is deliberately not connected to the C ABI or the inactive SCKA state
+//! is deliberately reached only through the authenticated SCKA state
 //! machine. Public messages are authenticated by ML-KEM Braid above this layer;
 //! this code detects malformed shapes and conflicting duplicates, but it is not
 //! an authenticity primitive.

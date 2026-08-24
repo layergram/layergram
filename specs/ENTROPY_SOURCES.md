@@ -1,7 +1,6 @@
 # Layergram entropy sources
 
-Status: **active identity generation hardened; native protocol-v3 entropy
-boundary implemented privately; protocol v3 inactive**
+Status: **active identity and protocol-v3 operating-system entropy boundaries**
 
 Cryptographic randomness is a trust boundary, not a property that an
 application-level statistical test can prove. Layergram therefore specifies
@@ -32,7 +31,7 @@ words, passphrase identities, or the keys derived from an existing identity.
 
 ## 2. Native ML-KEM Braid entropy
 
-The inactive Rust SCKA implementation obtains each exact 64-byte ML-KEM key
+The active Rust SCKA implementation obtains each exact 64-byte ML-KEM key
 generation seed through `getrandom::fill`. The call succeeds with the complete
 buffer or the transition fails without exposing a candidate; partially filled
 secret storage is zeroized.

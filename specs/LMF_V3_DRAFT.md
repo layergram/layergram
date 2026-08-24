@@ -1,13 +1,12 @@
-# Layergram Message Format v3 — Canonical Framing Draft
+# Layergram Message Format v3 — Canonical Framing
 
-Status: **normative implementation candidate; integrated but inactive; not externally reviewed**
+Status: **normative active implementation in Layergram 2.0 and later**
 
-This document freezes the first testable candidate for Layergram protocol-v3
+This document freezes the Layergram protocol-v3
 binary framing, text/link armor, steganographic carriage, bounded fragment
 reassembly, cumulative acknowledgements, and crash-consistent sealed-frame
-storage. It does not enable protocol v3 or establish a quantum-resistant
-product claim; the separate handshake and key-schedule specifications complete
-the integrated candidate.
+storage. The separate handshake and key-schedule specifications complete the
+active hybrid protocol.
 
 `PROTOCOL_V3_SECURITY_GOALS.md` remains authoritative. This draft must change if
 the later handshake, ratchet, persistence design, or external review finds that
@@ -24,10 +23,10 @@ This checkpoint provides:
 - steganographic transport of the exact same binary frame;
 - HR3-authenticated, bounded fragmentation and duplicate-aware reassembly;
 - a canonical cumulative ACK payload with no ACK-of-ACK loops;
-- inactive encrypted inbox/outbox persistence with write-before-delete recovery;
-- an inactive atomic-effect journal binding one application/control record and
+- encrypted inbox/outbox persistence with write-before-delete recovery;
+- an atomic-effect journal binding one application/control record and
   its matching ratchet snapshot to the inbox replay tombstone;
-- an inactive transcript-bound session expansion, mandatory hybrid EC/PQ
+- a transcript-bound session expansion, mandatory hybrid EC/PQ
   message schedule, deterministic fragment nonces, and directional ACK
   schedule;
 - canonical committed application/control and Triple Ratchet snapshot codecs;
@@ -211,7 +210,7 @@ reassembler. A caller that uses the reassembler directly has no persistence
 guarantee.
 
 A continuation fragment may arrive before fragment zero. The durable inbox
-retains its exact sealed bytes, while the inactive session key resolver returns
+retains its exact sealed bytes, while the session key resolver returns
 no guessed key until it has the HR3 and corresponding EC+Sparse-PQ candidate.
 It then resumes deferred records and verifies every deterministic nonce and HR3
 binding. If AEAD rejects a deferred fragment zero, the inbox notifies the
@@ -272,7 +271,7 @@ peer.
 
 ### 7.2 Inbox commit order
 
-The inactive durable inbox performs these steps in order:
+The durable inbox performs these steps in order:
 
 1. persist the exact still-sealed canonical frame in an outer-encrypted local
    auxiliary record;
@@ -294,16 +293,16 @@ cleanup did not finish. On restore, a tombstone with an effect digest but no
 matching journal record, a journal effect paired with an unbound tombstone, or
 any digest mismatch is a fail-closed persistence conflict.
 
-Within this inactive boundary, the stable application record ID is derived from
+Within this boundary, the stable application record ID is derived from
 the assembly ID, so replay cannot allocate a second record. The encrypted Aux
 materializer now persists the exact canonical AR3 bytes idempotently under that
 stable ID and rejects divergent content. Exactly-once visible UI effects are
 still not claimed: the active message/UI repository must project from this
-durable source without allocating a replacement ID. The inactive canonical
-`AR3` and `TR3` codecs provide the exact journal byte strings. The inactive
+durable source without allocating a replacement ID. The canonical `AR3` and
+`TR3` codecs provide the exact journal byte strings. The
 receive-commit controller claims
 the journal before restore, validates AR3/TR3/session/routing bindings, and
-applies revision CAS before its candidate builder runs. The inactive resolver
+applies revision CAS before its candidate builder runs. The resolver
 now binds an exact candidate snapshot into that controller after complete LMF
 authentication. A clean commit failure is retryable only while the controller
 still exposes the candidate's expected revision; a concurrently superseded
@@ -325,7 +324,7 @@ for the same assembly index wipe and reject the pending assembly.
 
 ### 7.3 Outbox and resend order
 
-The inactive durable outbox persists a complete canonical set of exact sealed
+The durable outbox persists a complete canonical set of exact sealed
 frames before first export. When attached to the session coordinator it is a
 materialized view of the send journal, whose single effect binds the exact
 sealed frame set, canonical outgoing AR3 record, prior ratchet revision, and
@@ -393,7 +392,7 @@ storage under the active identity/passphrase scope. The record kind, assembly
 ID, ACK state, effect/receipt/checkpoint digests, application state, ratchet
 snapshot, frame bytes, and timestamps are not global cleartext markers.
 
-The inactive `V3SessionPersistenceScope` is the real-storage construction
+`V3SessionPersistenceScope` is the real-storage construction
 boundary for these components. It creates a dedicated `AuxRecordRepository`
 view pinned to the canonical 16-character base64url identity namespace and to
 an owned copy of exactly one primary- or passphrase-derived Aux key. Rejecting
@@ -457,14 +456,14 @@ not deadlock compaction merely because the checkpoint digest advanced.
 
 ### 7.5 Durable AR3 materialization and TR3 checkpoint invariants
 
-The inactive materializer stores one exact canonical AR3 byte string under its
+The materializer stores one exact canonical AR3 byte string under its
 assembly-derived stable record ID. Exact replay returns the existing record; a
 different byte string for the same ID is a persistence conflict. Restore
 accepts only strict canonical envelopes, bounds physical and logical records,
 and removes only exact duplicates. Any ambiguous write makes that instance
 fail stopped until fresh restore.
 
-The inactive checkpoint repository stores the complete canonical current TR3
+The checkpoint repository stores the complete canonical current TR3
 and a sorted cumulative set of transition receipts. Each receipt binds inbound
 or outbound direction, assembly/stable record ID, session, ratchet revision,
 and a digest over the exact AR3 and TR3 bytes. Checkpoint digests additionally
@@ -494,7 +493,7 @@ dropping it.
 Replay-window entries are not time-purged by this coordinator. The existing
 explicit purge API is blocked after journal ownership. The frozen evaluator is
 non-destructive and can only declare eligibility after the local minimum age
-and independent Sparse-PQ non-derivability checks pass. The inactive encrypted
+and independent Sparse-PQ non-derivability checks pass. The encrypted
 `v3_session_retirement_v1` journal freezes an eligible exact proof/receipt, its
 locally measured age, and its source checkpoint in a `prepared` record. The sole
 session authority evaluates incoming and outgoing eligibility, writes that
@@ -516,7 +515,7 @@ latest-transition metadata.
 
 ### 7.6 Session-controller restore and commit invariants
 
-One inactive controller owns one journal for an encrypted identity/passphrase
+One controller owns one journal for an encrypted identity/passphrase
 scope. It claims an unforgeable in-memory journal authority before journal
 restore; after that claim, direct `restore`, `commit`, `resume`, or `close`
 calls and effect-read calls without the exact authority fail before reading

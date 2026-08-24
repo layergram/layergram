@@ -14,18 +14,16 @@ For transport channels that do not support invisible Unicode characters (or when
 - **Website:** https://layergram.app
 - **GitHub organization:** https://github.com/layergram
 
-## Protocol v3 Post-Quantum Candidate
+## Protocol v3 Post-Quantum Protection
 
-Layergram is preparing an intentionally incompatible protocol v3 designed for
-hybrid post-quantum protection. The implementation candidate combines X25519
-with ML-KEM-768, keeps Layergram serverless and transport-agnostic, and carries
-messages through the same three user-facing forms: direct text, deep link, and
-zero-width steganography.
+Layergram 2.0 activates the intentionally incompatible protocol v3 with hybrid
+post-quantum protection. It combines X25519 with ML-KEM-768, keeps Layergram
+serverless and transport-agnostic, and carries messages through the same three
+user-facing forms: direct text, deep link, and zero-width steganography.
 
-**Protocol v3 is integrated behind a fail-closed activation gate and is not yet
-enabled in released builds.** This repository and its review PR are public so
-the design, implementation, test evidence, and remaining release gates can be
-examined before Layergram makes a production post-quantum claim.
+**Protocol v3 is active in Layergram 2.0 and later.** Its security design,
+implementation, test evidence, migration contract, and release tooling remain
+public so researchers can inspect and audit the complete protocol boundary.
 
 The migration is deliberately explicit:
 
@@ -66,9 +64,8 @@ be shared with a contact.
 ## Key Features
 
 ### Security
-- **End-to-end encryption (active v2)** — X25519 key agreement + AES-GCM-256
-- **Forward Secrecy** — Advanced opportunistic FS and Maximum device-bound FS with Double Ratchet message keys, without a Layergram server or public-key redistribution
-- **Post-quantum v3 candidate (inactive)** — mandatory hybrid X25519 + ML-KEM-768 handshake and EC + sparse-PQ ratcheting, with no classical-only v3 fallback
+- **Hybrid post-quantum end-to-end encryption (active protocol v3)** — mandatory X25519 + ML-KEM-768 authenticated handshake, EC Double Ratchet, and sparse post-quantum ratcheting, with no classical-only v3 fallback
+- **Forward Secrecy** — Normal multi-device and Maximum device-bound session policies, without a Layergram server
 - **Passphrase identities and plausible deniability** — an optional passphrase derives a separate identity and encrypted keyspace that remain unavailable while the passphrase is inactive, providing practical but limited plausible deniability (not a guarantee against coercion, forensic correlation, or a compromised device)
 - **Steganographic encoding** — encrypted payloads hidden inside zero-width Unicode characters, with direct text and deep-link fallbacks for transports that don't support invisible characters
 - **App lock** — biometric unlock with PIN fallback support

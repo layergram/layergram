@@ -21,22 +21,20 @@ external communication channel chosen by the user. Layergram does not provide
 a VPN, proxy, telecommunications interception function, cryptographic API
 service, account server, key directory, or message relay.
 
-The currently active protocol is v2. Protocol v3 is an integrated but inactive
-post-quantum candidate behind a fail-closed activation selector. Its inclusion
-in this source inventory does not mean that a distributed build currently
-provides post-quantum protection.
+Layergram 2.0 and later use active protocol v3 behind a fail-closed activation
+selector. Earlier releases use protocol v2 and are not post-quantum protected.
 
 ## 2. Cryptographic inventory
 
 | Use | Algorithm | Parameters/reference | Runtime status |
 |---|---|---|---|
-| Identity and key agreement | X25519 | RFC 7748, 32-byte keys | Active v2 and required v3 branch |
-| Post-quantum KEM | ML-KEM-768 | NIST FIPS 203; 1,184-byte encapsulation key, 1,088-byte ciphertext | Inactive v3 candidate |
-| Message AEAD | AES-256-GCM | 256-bit key, 96-bit nonce, 128-bit tag; FIPS 197 and SP 800-38D | Active v2 and candidate v3 framing |
-| Native-state AEAD | AES-256-GCM-SIV | RFC 8452 | Inactive v3 candidate |
-| Key derivation and authentication | HKDF/HMAC-SHA-256 | RFC 5869 and FIPS 180-4 | Active/candidate as specified |
-| Identity/transcript digest | SHA-384 | FIPS 180-4 | Inactive v3 candidate |
-| Other integrity/fingerprints | SHA-256 | FIPS 180-4 | Active/candidate as specified |
+| Identity and key agreement | X25519 | RFC 7748, 32-byte keys | Active v3 classical branch; legacy v2 |
+| Post-quantum KEM | ML-KEM-768 | NIST FIPS 203; 1,184-byte encapsulation key, 1,088-byte ciphertext | Active v3 |
+| Message AEAD | AES-256-GCM | 256-bit key, 96-bit nonce, 128-bit tag; FIPS 197 and SP 800-38D | Active v3 framing; legacy v2 |
+| Native-state AEAD | AES-256-GCM-SIV | RFC 8452 | Active v3 |
+| Key derivation and authentication | HKDF/HMAC-SHA-256 | RFC 5869 and FIPS 180-4 | Active as specified |
+| Identity/transcript digest | SHA-384 | FIPS 180-4 | Active v3 |
+| Other integrity/fingerprints | SHA-256 | FIPS 180-4 | Active as specified |
 
 The Flutter/Dart layer uses the open-source `package:cryptography` dependency
 for its documented primitives. The v3 native components are independent Rust
@@ -54,7 +52,7 @@ truncated to make a v3 identity QR code or message carrier smaller.
 1. A user's BIP39 recovery phrase is generated locally from the platform CSPRNG
    and produces deterministic, versioned identity material. The optional BIP39
    passphrase selects a separate domain-separated context.
-2. Protocol v2 derives an X25519 identity. The inactive v3 candidate derives
+2. Protocol v2 derives an X25519 identity. Active protocol v3 derives
    separate X25519 and ML-KEM-768 identity material from the same recovery
    secret; it does not reuse the v2 cryptographic identity.
 3. Fresh device, handshake, nonce, and ratchet entropy comes from the supported

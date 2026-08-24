@@ -1,7 +1,7 @@
 // Copyright 2026 Layergram
 // SPDX-License-Identifier: Apache-2.0
 
-//! Approved operating-system entropy boundary for inactive SCKA transitions.
+//! Approved operating-system entropy boundary for SCKA transitions.
 //!
 //! Production transition entry points use [`OsEntropy`] directly. The trait is
 //! private to this crate so deterministic providers can exercise exact vectors

@@ -24,7 +24,7 @@ import 'lmf_v3_persistence.dart';
 /// One canonical AR3 record materialized in encrypted identity-scoped storage.
 ///
 /// The encoded record is copied on construction and access. The materializer
-/// owns its copy and wipes it when closed. The record remains an inactive v3
+/// owns its copy and wipes it when closed. The record remains a v3
 /// source of truth; projecting it into the current chat UI is a later gate.
 final class V3MaterializedCommittedRecord {
   V3MaterializedCommittedRecord._({

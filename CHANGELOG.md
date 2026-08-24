@@ -6,8 +6,10 @@ The format is inspired by Keep a Changelog and reflects the public GitHub Releas
 
 ## [Unreleased]
 
+## [2.0.0+27] - 2026-08-24
+
 ### Added
-- Added the inactive Layergram protocol v3 implementation candidate: hybrid
+- Activated Layergram protocol v3 with hybrid
   X25519 + ML-KEM-768 identity and handshake, LMF v3 framing, and combined EC +
   sparse post-quantum ratcheting.
 - Added durable, retryable v3 message processing for an unreliable external
@@ -19,9 +21,9 @@ The format is inspired by Keep a Changelog and reflects the public GitHub Releas
   notices, audit-package tooling, and a user migration guide.
 
 ### Changed
-- Prepared an explicit v2-to-v3 migration using the existing 24-word recovery
+- Introduced an explicit v2-to-v3 migration using the existing 24-word recovery
   phrase (and optional passphrase) to derive new v3 cryptographic keys.
-- Prepared Normal multi-device and Maximum single-device security modes for the
+- Activated Normal multi-device and Maximum single-device security modes for the
   v3 runtime without adding a Layergram server or account system.
 
 ### Migration
@@ -31,9 +33,9 @@ The format is inspired by Keep a Changelog and reflects the public GitHub Releas
   as v3.
 
 ### Security
-- Protocol v3 remains fail-closed and inactive. This unreleased entry describes
-  an implementation candidate for public review, not post-quantum protection in
-  currently distributed Layergram builds.
+- Protocol v3 is active in Layergram 2.0.0. Identity sharing, messaging, and
+  production approval use one fail-closed all-or-nothing selector. Official
+  packages require the exact allowlisted native backend on every shipped ABI.
 
 ## [1.4.0+20] - 2026-06-29
 

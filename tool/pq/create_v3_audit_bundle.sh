@@ -49,27 +49,27 @@ if git ls-files 'specs/private/**' | grep -q .; then
   fail 'Private specifications must not be tracked in the OSS audit snapshot'
 fi
 
-grep -Eq 'identitySharing[[:space:]]*=[[:space:]]*false' \
+grep -Eq 'identitySharing[[:space:]]*=[[:space:]]*true' \
   lib/core/crypto/v3/protocol_v3_activation.dart ||
-  fail 'Protocol v3 identity sharing is not fail-closed'
-grep -Eq 'messaging[[:space:]]*=[[:space:]]*false' \
+  fail 'Protocol v3 identity sharing is not active'
+grep -Eq 'messaging[[:space:]]*=[[:space:]]*true' \
   lib/core/crypto/v3/protocol_v3_activation.dart ||
-  fail 'Protocol v3 messaging is not fail-closed'
-grep -Eq 'productionApproved[[:space:]]*=[[:space:]]*false' \
+  fail 'Protocol v3 messaging is not active'
+grep -Eq 'productionApproved[[:space:]]*=[[:space:]]*true' \
   lib/core/crypto/v3/protocol_v3_activation.dart ||
-  fail 'Protocol v3 production approval is not fail-closed'
+  fail 'Protocol v3 production approval is not active'
 
 python3 - <<'PY'
 import json
 from pathlib import Path
 
 receipt = json.loads(Path('tool/pq/scka_native_candidate.json').read_text())
-if receipt.get('selectedImplementationPath', {}).get('productionRegistered') is not False:
-    raise SystemExit('SCKA production registration is not false')
-if receipt.get('checkpointEffects', {}).get('protocolV3Activated') is not False:
-    raise SystemExit('Protocol v3 receipt activation is not false')
-if not receipt.get('remainingGates'):
-    raise SystemExit('Protocol v3 receipt has no remaining activation gates')
+if receipt.get('selectedImplementationPath', {}).get('productionRegistered') is not True:
+    raise SystemExit('SCKA production registration is not true')
+if receipt.get('checkpointEffects', {}).get('protocolV3Activated') is not True:
+    raise SystemExit('Protocol v3 receipt activation is not true')
+if not receipt.get('continuousReleaseRequirements'):
+    raise SystemExit('Protocol v3 receipt has no continuous release requirements')
 PY
 
 mkdir -p "$snapshot_root" "$output_dir"
@@ -81,8 +81,8 @@ commit=$commit
 tree=$tree
 source_repository=layergram-public
 premium_repository_included=false
-protocol_v3_activated=false
-scka_production_registered=false
+protocol_v3_activated=true
+scka_production_registered=true
 generated_artifacts_included=false
 local_credentials_included=false
 review_instructions=specs/PROTOCOL_V3_AUDIT_PACKAGE.md

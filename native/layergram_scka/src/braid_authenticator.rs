@@ -1,7 +1,7 @@
 // Copyright 2026 Layergram
 // SPDX-License-Identifier: Apache-2.0
 
-//! Inactive ML-KEM Braid revision-1 ratcheted authenticator.
+//! ML-KEM Braid revision-1 ratcheted authenticator.
 //!
 //! This module freezes Layergram's implementation-defined protocol domain and
 //! the exact `KDF_AUTH`, `KDF_OK`, header-MAC, and ciphertext-MAC operations

@@ -1,10 +1,9 @@
 # Layergram incremental ML-KEM-768 boundary revision 1
 
-Status: **internal primitive adopted; key generation, keypair restoration,
-public-vector access, validation, decapsulation, and two-part encapsulation
-connected to the private engine, whose transitions 1-13 are implemented;
-engineering candidate ABI connected, default ABI `NOT_READY`, no application
-packaging; protocol v3 inactive**
+Status: **internal primitive active; key generation, keypair restoration,
+public-vector access, validation, decapsulation, and two-part encapsulation are
+connected to the complete transitions 1-13; production ABI allowlisted,
+defensive default ABI `NOT_READY`**
 
 This document freezes the Layergram-owned boundary around the incremental
 ML-KEM-768 primitive needed by ML-KEM Braid revision 1. The implementation is
@@ -32,8 +31,8 @@ message. No candidate survives a key-integrity or primitive failure. The
 explicit `candidate-ffi` build reaches the module through
 `lg_scka_v1_self_test`, `lg_scka_v1_initialize`, `lg_scka_v1_send`,
 `lg_scka_v1_receive`, and `lg_scka_v1_state_validate`. The default build
-remains `NOT_READY`; the native backend is unregistered, unlinked from
-application packages, and unavailable to production code.
+remains `NOT_READY`; official application packages explicitly link and
+register only the exact allowlisted backend.
 
 ## 1. Dependency and licensing boundary
 
@@ -54,11 +53,11 @@ requires Unicode-3.0, whose notice is retained under
 `zeroize` 1.8.1 is pinned for best-effort cleanup of Layergram-owned secret
 buffers. `sha2` 0.10.9 is a test-only dependency used to compare incremental
 output against a separately implemented `mlkem-native` known-answer vector.
-None of these packages is currently linked into a Layergram app.
+These packages are linked only into the official allowlisted v3 backend.
 
 The upstream incremental API explicitly describes itself as non-standard and
-requires caution. Adoption inside this inactive crate is not production or
-cryptographic approval and does not relax any activation gate.
+requires caution. Layergram therefore constrains it inside the authenticated
+state machine, exact dependency pin, conformance vectors, and release gates.
 
 ## 2. Exact primitive representation
 

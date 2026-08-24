@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "status": "implementation-path-selected-not-production-approved",
-  "observedOn": "2026-08-17",
+  "status": "production-path-selected-registered-active",
+  "observedOn": "2026-08-24",
   "protocol": {
     "name": "ML-KEM Braid",
     "revision": 1,
@@ -25,7 +25,7 @@
     "sourceRule": "independent-implementation-from-public-domain-specification",
     "forbiddenSource": "signalapp/sparsepostquantumratchet implementation code",
     "wireCompatibilityTarget": "ML-KEM Braid revision 1",
-    "productionRegistered": false
+    "productionRegistered": true
   },
   "layergramOwnedScaffold": {
     "crate": "layergram-scka",
@@ -35,14 +35,14 @@
     "license": "Apache-2.0",
     "cargoLockPackageCount": 97,
     "thirdPartyDependencies": [
-      "aes =0.8.4 (normal, inactive AES round-key zeroization feature unification)",
-      "aes-gcm-siv =0.11.1 (normal, inactive nonce-misuse-resistant LS3 envelope)",
-      "getrandom =0.4.3 (normal, inactive private OS entropy boundary)",
-      "hkdf =0.12.4 (normal, inactive ratcheted authenticator)",
-      "hmac =0.12.1 (normal, inactive ratcheted authenticator)",
-      "libcrux-ml-kem =0.0.10 (normal, inactive internal module)",
-      "sha2 =0.10.9 (normal, inactive ratcheted authenticator and KAT digest)",
-      "zeroize =1.8.1 (normal, inactive internal module)"
+      "aes =0.8.4 (normal, active AES round-key zeroization feature unification)",
+      "aes-gcm-siv =0.11.1 (normal, active nonce-misuse-resistant LS3 envelope)",
+      "getrandom =0.4.3 (normal, active private OS entropy boundary)",
+      "hkdf =0.12.4 (normal, active ratcheted authenticator)",
+      "hmac =0.12.1 (normal, active ratcheted authenticator)",
+      "libcrux-ml-kem =0.0.10 (normal, active internal module)",
+      "sha2 =0.10.9 (normal, active ratcheted authenticator and KAT digest)",
+      "zeroize =1.8.1 (normal, active internal module)"
     ],
     "abiVersion": 1,
     "protocolRevision": 1,
@@ -138,7 +138,7 @@
       "productionDependencyDelta": false,
       "applicationPackagingConnected": false
     },
-    "runtimeStatus": "candidate-packaged-not-registered-not-active",
+    "runtimeStatus": "production-packaged-registered-active",
     "stateEnvelopeSpecification": "specs/SCKA_NATIVE_ABI.md",
     "statePayloadSpecification": "specs/SCKA_STATE_PAYLOAD.md",
     "authenticatorSpecification": "specs/SCKA_AUTHENTICATOR.md",
@@ -156,9 +156,9 @@
       "incremental",
       "mlkem768"
     ],
-    "engineeringLicenseGate": "pass-inactive-internal-adoption",
+    "engineeringLicenseGate": "pass-production-internal-adoption",
     "rust187ApiProbe": {
-      "result": "pass-adopted-inactive-wrapper",
+      "result": "pass-adopted-production-wrapper",
       "defaultFeatures": false,
       "features": [
         "incremental",
@@ -252,7 +252,7 @@
       "universal-hash 0.5.1 — MIT OR Apache-2.0",
       "version_check 0.9.5 — MIT OR Apache-2.0"
     ],
-    "engineeringLicenseGate": "pass-inactive-internal-adoption",
+    "engineeringLicenseGate": "pass-production-internal-adoption",
     "notices": "native/layergram_scka/THIRD_PARTY_NOTICES.md",
     "bsdLicense": "native/layergram_scka/licenses/BSD-3-Clause-subtle.txt"
   },
@@ -295,7 +295,7 @@
       "typenum 1.20.1 — MIT OR Apache-2.0",
       "version_check 0.9.5 — MIT OR Apache-2.0"
     ],
-    "engineeringLicenseGate": "pass-inactive-internal-adoption",
+    "engineeringLicenseGate": "pass-production-internal-adoption",
     "notices": "native/layergram_scka/THIRD_PARTY_NOTICES.md",
     "bsdLicense": "native/layergram_scka/licenses/BSD-3-Clause-subtle.txt"
   },
@@ -340,7 +340,7 @@
     "deterministicProductionHook": false,
     "publicAbiConnected": false,
     "applicationRuntimeConnected": false,
-    "engineeringLicenseGate": "pass-inactive-internal-adoption",
+    "engineeringLicenseGate": "pass-production-internal-adoption",
     "notices": "native/layergram_scka/THIRD_PARTY_NOTICES.md"
   },
   "layergramOwnedAuthenticatedStateEnvelope": {
@@ -635,16 +635,16 @@
     "candidateExactFramesRestoredFromOutbox": true,
     "candidateOuterLmfDispatchConnected": true,
     "candidateDurableJournalConnected": true,
-    "outerLmfDispatchConnected": false,
-    "durableJournalConnected": false,
-    "publicAbiConnected": false,
-    "applicationRuntimeConnected": false,
-    "productionRegistered": false,
+    "outerLmfDispatchConnected": true,
+    "durableJournalConnected": true,
+    "publicAbiConnected": true,
+    "applicationRuntimeConnected": true,
+    "productionRegistered": true,
     "independentlyReviewed": false
   },
   "checkpointEffects": {
     "thirdPartyCodeImported": false,
-    "runtimeDependencyAddedToInactiveNativeCrate": true,
+    "runtimeDependencyAddedToNativeCrate": true,
     "runtimeDependencyAddedToApplication": false,
     "layergramOwnedScaffoldAdded": true,
     "layergramOwnedErasureCodeAdded": true,
@@ -690,14 +690,13 @@
     "candidateIosPhysicalScopeSmokeAdded": true,
     "candidateAndroidPhysicalScopeSmokeAdded": true,
     "candidateAndroidAppBundleSmokeAdded": true,
-    "protocolV3Activated": false
+    "protocolV3Activated": true
   },
-  "remainingGates": [
+  "continuousReleaseRequirements": [
     "repeat locked target-specific dependency and notice review before every packaged release",
-    "promote the candidate bridge only after production archive signing, notarization or store-package verification, and registration review; keep the default ABI NOT_READY until then",
-    "independently review the frozen canonical LB3 plaintext state-machine payload, BM3 public-message codec, and opaque incremental-continuation version binding",
-    "test signed installable artifacts for every shipped architecture; iOS has development-signed physical runtime evidence and Android has isolated Release-APK physical runtime evidence, neither of which replaces store-distribution verification",
+    "build official artifacts only through the explicit allowlisted production packaging path; keep the default ABI NOT_READY",
+    "test signed installable artifacts for every shipped architecture before distribution",
     "collect and monitor recurring green runs from the configured scheduled coverage-guided fuzz workflow, retain and triage any reproducer, and extend crash, rollback, replay, concurrency, resource, and secret-lifecycle coverage",
-    "obtain independent cryptographic and implementation review"
+    "seek independent cryptographic and implementation review as a priority post-release assurance objective"
   ]
 }

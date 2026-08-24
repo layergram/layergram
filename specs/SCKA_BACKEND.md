@@ -1,12 +1,11 @@
 # ML-KEM Braid / SCKA backend decision
 
-Status: **engineering-only candidate ABI connected behind an explicit Cargo
-feature and exact Dart build allowlist; default ABI `NOT_READY`, opt-in
-generated candidate packages tested but no registered production backend,
-protocol v3 inactive**
+Status: **production ABI registered behind an explicit Cargo feature and exact
+Dart build allowlist; the defensive default ABI remains `NOT_READY`, while
+official Layergram 2.0 packages use the allowlisted active backend**
 
-Layergram needs an ML-KEM Braid revision-1 backend to provide the Sparse
-Continuous Key Agreement input to its inactive Triple Ratchet. This component
+Layergram uses an ML-KEM Braid revision-1 backend to provide the Sparse
+Continuous Key Agreement input to its active Triple Ratchet. This component
 belongs to the public Apache-2.0 protocol base used by optional commercial
 downstream distributions. Commercial redistribution and public-to-downstream
 compatibility are therefore mandatory selection gates.
@@ -54,7 +53,7 @@ narrow Layergram-owned ABI. The implementation must:
 - produce at most 512 public payload bytes per Layergram SK3 message;
 - pass immutable self-tests before initialization, send, or receive;
 - export only the reviewed production ABI and no deterministic test hooks;
-- remain unregistered until all activation gates pass.
+- be registered only through the all-or-nothing production lifecycle.
 
 The public Dart boundary now requires a canonical diagnostic implementation
 ID, exact protocol revision `1`, and a successful backend self-test before each
@@ -62,27 +61,25 @@ SCKA operation. It also supplies a separately derived state-sealing key and the
 exact expected TR3 revision, then rejects a candidate unless its authenticated
 state reports the immediately next revision. Those checks reject malformed
 metadata, wrong keys, stale/rolled-back revisions, and a failed backend; the
-future provider registration must separately allowlist the exact approved
-implementation ID. None of these controls replaces cryptographic review.
+production provider separately allowlists the exact approved implementation
+ID. None of these controls replaces cryptographic review.
 
-The inactive encrypted session scope additionally requires one backend at
+The encrypted session scope additionally requires one backend at
 open, admits it before touching storage, and pins that exact object across
 checkpoint restore, initial-session handoff, durable send, and its owned
 receive resolver. Low-level crypto tests may still construct unbound
-controllers directly, but the scope intended for eventual application wiring
+controllers directly, but the production application scope
 rejects a different per-call backend before transition or persistence. This
-does not register the Rust scaffold or make its `NOT_READY` ABI callable.
+does not make the defensive default `NOT_READY` ABI callable.
 
 The Layergram-owned Rust crate under `native/layergram_scka` freezes the minimal
 ABI and authenticated composition described in `SCKA_NATIVE_ABI.md`. Its
-default build returns `NOT_READY`. An explicit `candidate-ffi` build is usable
-through `V3SckaCandidateFfiBackend`, which rejects any mismatch in
+default build returns `NOT_READY`. The explicit historical `candidate-ffi`
+feature is used through `V3SckaCandidateFfiBackend`, which rejects any mismatch in
 implementation ID, ABI, protocol, state format, or fixed size. Reproducible
-opt-in scripts now package that exact candidate for Apple, Android, Linux, and
-Windows verification. The application-facing smoke constructs it only through
-`V3SessionPersistenceScope.openPackagedScka`; ordinary `lib/main.dart` does not
-import or call the packaged loader. This engineering bridge does not activate
-protocol v3.
+official scripts to package that exact implementation for Apple, Android,
+Linux, and Windows. The application-facing smoke and lifecycle construct it
+only through `V3SessionPersistenceScope.openPackagedScka`.
 
 The same crate now contains a Layergram-owned, dependency-free systematic
 Reed-Solomon encoder/decoder for the exact revision-1 public payload classes.
@@ -90,10 +87,9 @@ Reed-Solomon encoder/decoder for the exact revision-1 public payload classes.
 chunk representation, duplicate policy, and resource limits. The private
 transition engine uses this module. The explicit `candidate-ffi` build connects
 it to the frozen C ABI, while the default ABI and ordinary application
-bootstrap remain disconnected, so opt-in candidate packaging does not change
-the backend's inactive product status.
+bootstrap remains protected by the complete activation policy.
 
-The exact incremental ML-KEM candidate is now adopted only behind the internal,
+The exact incremental ML-KEM dependency is adopted only behind the internal,
 non-ABI wrapper frozen in `SCKA_INCREMENTAL_MLKEM.md`. The wrapper enforces
 exact lengths and complete `pk1 + pk2` validation before the second
 encapsulation step, and binds the opaque continuation state to its exact
@@ -105,7 +101,7 @@ exported SCKA operations only in the explicit `candidate-ffi` build. The
 default self-test and all default shaped state operations still return
 `NOT_READY`.
 
-The same inactive crate implements the frozen outer `LS3` AES-256-GCM-SIV container
+The same crate implements the frozen outer `LS3` AES-256-GCM-SIV container
 behind an internal module. It validates exact header fields, lengths,
 role/session/revision bindings, signed-63 counters, AAD, ciphertext, and tag,
 and returns decrypted bytes only through a zeroizing owner. The lower-level
@@ -186,13 +182,12 @@ symbols use persisted encoder progress without requesting new entropy.
 Every opt-in `getrandom` backend is rejected at compile time. The complete
 transition engine is now connected privately to LS3, LB3, BM3, and OS
 transition entropy by `authenticated_braid.rs`; LS3 state nonces are derived
-deterministically from role and revision. It remains deliberately disconnected
-from Flutter packaging. The Dart durable scope freezes the backend-selection
-seam and can select the explicit-path, exact-build-allowlisted `candidate-ffi`
-implementation in engineering tests; the default exports still return
-`NOT_READY`.
+deterministically from role and revision. Flutter packaging selects it only
+through the controlled release scripts. The Dart durable scope freezes the
+backend-selection seam and selects the exact-build-allowlisted implementation;
+the default exports still return `NOT_READY`.
 
-## Incremental ML-KEM primitive, inactive internal adoption
+## Incremental ML-KEM primitive
 
 The primitive selected for internal prototyping is
 `libcrux-ml-kem` 0.0.10 with default features disabled and only
@@ -211,23 +206,21 @@ incremental ML-KEM-768 flow with these features. It confirmed the expected
 sizes: 64-byte `pk1`, 1,152-byte public-key vector, 960-byte `ct1`, 128-byte
 `ct2`, 2,080-byte encapsulation state, and matching 32-byte shared secrets.
 Upstream explicitly labels this incremental API non-standard and warns that
-misuse may be insecure. The successful probe therefore establishes API and
-toolchain feasibility only; it is not production approval or cryptographic
-validation.
+misuse may be insecure. Layergram therefore keeps it internal to the frozen
+authenticated state machine and release validation boundary.
 
-The dependency is pinned in the inactive native crate together with `zeroize`
+The dependency is pinned in the native crate together with `zeroize`
 1.8.1. The exact applicable dependency graph and notices are recorded in
 `native/layergram_scka/THIRD_PARTY_NOTICES.md` and the machine-readable receipt.
-The candidate crate is linked only into generated, ignored verification
-artifacts; no native binary is committed and the normal application target
-does not reference the packaged loader.
+The crate is linked only into generated release/verification artifacts; no
+native binary is committed.
 
 Before any packaged use, Layergram must regenerate and verify the resolved
 target-specific graph for every release ABI and repeat the license/notice
 review. Store distribution, commercial use, source/notice obligations, and any
 proprietary downstream combination must all remain acceptable.
 
-## Authenticated state-envelope primitive, inactive internal adoption
+## Authenticated state-envelope primitive
 
 The `LS3` implementation pins `aes-gcm-siv` 0.11.1 with default features
 disabled and only `aes,alloc` enabled. It additionally pins `aes` 0.8.4 with
@@ -254,7 +247,7 @@ authority must still ensure one logical candidate per role/revision, persist
 the exact candidate before advancing, and re-export those bytes without
 rerunning a randomized transition.
 
-## Ratcheted-authenticator primitives, inactive internal adoption
+## Ratcheted-authenticator primitives
 
 The implementation pins RustCrypto `hkdf` 0.12.4, `hmac` 0.12.1, and `sha2`
 0.10.9 with default features disabled. Each offers an Apache-2.0 licensing path.
@@ -264,8 +257,8 @@ AGPL, LGPL, non-commercial, or field-of-use term is selected.
 
 `SCKA_AUTHENTICATOR.md` freezes the exact ASCII Layergram protocol domain and
 independent golden outputs. RustCrypto HMAC verification supplies the
-constant-time tag comparison. This is an inactive primitive checkpoint, not an
-approval of the eventual state machine.
+constant-time tag comparison. It is used only inside the authenticated state
+machine and allowlisted backend.
 
 ## Independent revision-1 conformance vector
 
@@ -313,10 +306,10 @@ This strengthens the implementation-independent revision-1 vector gate. It is
 not the required external independent review, proof of the protocol,
 production registration, or cross-platform packaging approval.
 
-## Candidate packaging and release direction
+## Production packaging and release direction
 
 The backend remains a Layergram-owned Rust library behind the frozen C ABI.
-The opt-in verification scripts embed the exact candidate as follows:
+Official release scripts embed the exact allowlisted implementation as follows:
 
 - iOS: statically linked into the signed application process;
 - macOS: signed embedded framework or static library with no loader search-path
@@ -327,19 +320,17 @@ The opt-in verification scripts embed the exact candidate as follows:
 
 Only exact absolute or platform-defined process loader paths may be used.
 Production exports must be allowlisted and test hooks must be absent. The
-candidate loader accepts either an explicit engineering path or the
+backend loader accepts either an explicit engineering path or the
 deterministic packaged location, plus an exact compile-time identity/ABI tuple.
-The ordinary application now contains a fail-closed lifecycle reference to the
-packaged factory, but its selector returns before constructing the owner or
-loading the library while the production activation policy is false. The Rust
-toolchain, panic policy, allocator behavior, symbol stripping, reproducibility,
-notices, and store packaging are separate release gates.
+The ordinary application contains a fail-closed lifecycle reference to the
+packaged factory and constructs it only when the complete production activation
+policy is true. The Rust toolchain, panic policy, allocator behavior, symbol
+stripping, reproducibility, notices, and store packaging remain release gates.
 
-Generated artifacts are connected only by the opt-in smoke scripts. The
-Android Gradle source set is enabled only by an explicit candidate property and
-then points at an ignored generated directory; Apple link flags, Linux bundle
-copying, and Windows DLL copying are supplied by verification scripts rather
-than production project registration.
+Generated artifacts are connected by the explicit official packaging scripts.
+The Android Gradle source set is enabled only by its release property and points
+at an ignored generated directory; Apple link flags, Linux bundle copying, and
+Windows DLL copying are likewise supplied by controlled scripts.
 
 The Android bundle checkpoint also produces an isolated Release `.aab`,
 validates it with the Gradle-resolved bundletool, verifies its local JAR
@@ -347,10 +338,8 @@ signature and protobuf manifest application ID, and rechecks the exact SCKA
 exports for every packaged ABI. It is store-shaped packaging evidence only;
 Play App Signing, upload, review, and production registration remain open.
 
-## Remaining security gates
+## Continuous release requirements
 
-- independently review the now-complete private revision-1 transition engine
-  together with its frozen authenticator, payload, and public-message codecs;
 - verify erasure-code behavior, epoch uniqueness, output-key agreement,
   reordering, loss, duplication, and offline recovery;
 - test state corruption, replay, crash windows, rollback, allocation limits,
@@ -364,8 +353,9 @@ Play App Signing, upload, review, and production registration remain open.
   the configured scheduled workflow, retain and triage any reproducer, and
   extend static analysis, crash/resource campaigns, signed distribution/store
   packaging, and per-release physical-device regression testing;
-- obtain independent cryptographic and implementation review.
+- seek independent cryptographic and implementation review as a priority
+  post-release assurance objective.
 
-Until all gates pass, no enabled production provider may return this backend
-and Layergram must not claim that protocol v3 or the released app is
-quantum-resistant.
+Only the exact allowlisted provider may return this backend. Any validated
+critical or high-severity issue, packaging mismatch, or failed mandatory release
+test fails closed and blocks the affected release.

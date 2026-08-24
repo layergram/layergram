@@ -1,8 +1,8 @@
 # Layergram ML-KEM Braid state payload revision 1
 
-Status: **canonical internal payload frozen and used by private transitions
-1-13; engineering candidate ABI connected, default ABI `NOT_READY`, no
-production application registration; protocol v3 inactive**
+Status: **canonical internal payload frozen and used by transitions 1-13;
+production ABI registered through exact allowlisted packaging, defensive
+default ABI `NOT_READY`**
 
 This document freezes the plaintext state-machine representation carried inside
 the authenticated `LS3` envelope defined by `SCKA_NATIVE_ABI.md`. The Apache-2.0
@@ -19,8 +19,8 @@ transitions 1-13 and uses the private OS-entropy boundary where required. The
 explicit `candidate-ffi` build connects those operations to the frozen C ABI
 for exact-build-allowlisted Dart integration tests. The default build continues
 to return `NOT_READY`. The candidate build is packaged only by opt-in generated
-smoke scripts and loaded through the persistence scope; neither build is
-registered or loaded by ordinary application bootstrap.
+release scripts and loaded through the persistence scope. Official Layergram
+2.0 packages register only the exact allowlisted build.
 
 ## 1. Authenticated composition
 

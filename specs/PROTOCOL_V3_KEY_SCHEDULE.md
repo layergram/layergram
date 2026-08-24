@@ -1,24 +1,24 @@
-# Layergram Protocol v3 — Key Schedule and Durable State Draft
+# Layergram Protocol v3 — Key Schedule and Durable State
 
-Status: **normative implementation candidate; integrated but inactive; not externally reviewed**
+Status: **normative active implementation in Layergram 2.0 and later**
 
 This document freezes the first testable Layergram-v3 key-expansion boundary,
 hybrid message-key combination, fragment nonce derivation, acknowledgement
 schedule, committed application/control record, and Triple Ratchet snapshot
-envelope. The separate `PROTOCOL_V3_HANDSHAKE.md` defines the inactive
-candidate that supplies its authenticated inputs. The EC Double Ratchet engine,
+envelope. The separate `PROTOCOL_V3_HANDSHAKE.md` defines the active handshake
+that supplies its authenticated inputs. The EC Double Ratchet engine,
 ML-KEM Braid/SCKA backend boundary, Sparse-PQ message chains, exact HR3-to-LMF
 authentication, candidate-only hybrid send/receive orchestration,
-deferred-fragment key resolution, and an inactive crash-consistent send/receive
+deferred-fragment key resolution, and a crash-consistent send/receive
 session coordinator, encrypted stable-ID AR3 materializer, and monotonic TR3
 checkpoint repository now exist. A scope-pinned owner also connects those
 components and a bounded crash-consistent hybrid-handshake pending repository
 to Layergram's real encrypted Aux/Hive storage. A fail-closed application
 lifecycle owner now selects the exact primary/passphrase scope, drains the old
-runtime before its identity handle is destroyed, and can open the packaged SCKA
-candidate only after the single production activation policy becomes true.
-That policy remains false, so normal application startup neither constructs the
-owner nor loads the native backend. Protocol v3 remains disabled.
+runtime before its identity handle is destroyed, and opens the packaged SCKA
+backend only after the single production activation policy is true. That policy
+is true in official Layergram 2.0 packages, which load only the exact
+allowlisted native implementation.
 
 `PROTOCOL_V3_SECURITY_GOALS.md` remains authoritative. This draft and its code
 must change if later transcript design, ML-KEM Braid integration, persistence
@@ -60,7 +60,7 @@ This checkpoint provides:
   portable adaptive fragmentation;
 - durable retention and later exact-key resolution when continuation fragments
   arrive before fragment zero;
-- one inactive identity/passphrase-scoped send/receive coordinator that owns
+- one identity/passphrase-scoped send/receive coordinator that owns
   its journals and outbox, reconstructs a unified contiguous per-session TR3
   revision chain, validates AR3/LMF/session bindings, and applies serialized
   revision CAS;
@@ -69,11 +69,11 @@ This checkpoint provides:
   cumulative direction/revision/state receipts;
 - checkpoint-backed restore, explicit journal collection, and write-before-
   delete replacement of incoming tombstones with durable replay-window proofs;
-- one inactive scope-pinned Aux/Hive owner that privately constructs the full
+- one scope-pinned Aux/Hive owner that privately constructs the full
   handshake/journal/outbox/checkpoint topology, restores sealed frames and
   pending handshakes before session keys are requested, and destroys its copied
   storage key on close;
-- one inactive application lifecycle owner that serializes primary,
+- one application lifecycle owner that serializes primary,
   passphrase, and multi-identity context changes, closes the complete session
   scope before its private identity handle is replaced or expelled, and leaves
   the packaged native loader unreachable while the activation selector is
@@ -112,10 +112,10 @@ It deliberately does not provide:
   coordinator, or AR3 projection path;
 - production activation in contacts, messaging, UI, backup, migration, or
   downstream capability paths. The providers and UI seams described in Section
-  10 are registered only behind the single fail-closed inactive selector.
+  10 are registered only behind the single fail-closed selector.
 
 Protocol-v3 cryptography remains isolated under `lib/core/crypto/v3/`; the
-inactive application seams live in their ordinary provider/UI layers. Protocol
+application seams live in their ordinary provider/UI layers. Protocol
 v2 remains the only active messaging protocol.
 
 ## 2. Canonical notation
@@ -326,7 +326,7 @@ factory. The normal Rust build retains a different scaffold ID and returns
 candidate integration proof only; production code signing, packaged-path
 verification, and registration remain gates.
 
-The inactive encrypted session scope MUST pin one admitted backend instance
+The encrypted session scope MUST pin one admitted backend instance
 for its lifetime. Checkpoint restore, HP3-to-TR3 handoff, durable send, and the
 scope-owned receive resolver use that same instance; a divergent per-call
 backend fails before SCKA transition work or a durable write. This process-local
@@ -345,7 +345,7 @@ resume after one fragment zero is restricted to that exact assembly so another
 session's ready delivery cannot be consumed without notification; the explicit
 all-assembly resume returns every delivery it completes.
 
-`SCKA_NATIVE_ABI.md` freezes the inactive Layergram-owned C ABI and outer `LS3`
+`SCKA_NATIVE_ABI.md` freezes the Layergram-owned C ABI and outer `LS3`
 state envelope. The session expansion derives a separate stable 32-byte
 state-sealing key with label `"layergram/v3/session/scka-state-seal\0"`. TR3
 format 2 persists that key beside, never inside, the opaque native state under
@@ -371,7 +371,7 @@ The public SCKA message uses a canonical `SK3` envelope:
 | 24 | N | canonical backend SCKA public message, 0–512 bytes |
 
 The epoch and counter are limited to `0..2^63-1`. The backend message is public
-and the generic inactive Dart boundary permits an empty SCKA no-op so test
+and the generic Dart boundary permits an empty SCKA no-op so test
 doubles and future revisions remain representable; it is length-bounded before
 copying. The admitted ML-KEM Braid revision-1 backend instead MUST emit and
 accept one canonical non-empty `BM3` record: 24 bytes for `None`/`Ct1Ack` or 58
@@ -792,7 +792,7 @@ outbox materialization. A crash after the completed journal revision cannot
 re-export the acknowledged frame set even if an older outbox record is still
 present. Partial or unauthenticated ACKs never alter the send journal.
 
-The inactive `V3SessionCommitController` claims its receive journal and, when
+`V3SessionCommitController` claims its receive journal and, when
 durable sending is configured, its send journal and outbox before restore, so
 direct lifecycle, mutation, effect/frame-read, or export calls cannot race the
 coordinator after the claim. Passing these objects to the controller transfers
@@ -813,7 +813,7 @@ The controller validates the canonical TR3 envelope and derives the stored
 X25519 public key from its private seed before accepting a checkpoint or
 candidate. Its optional backend validator is mandatory for future activation:
 without a reviewed implementation authenticating and semantically validating
-the opaque native SCKA export, the controller remains inactive and unapproved. It does not
+the opaque native SCKA export, the controller rejects the state. It does not
 prove that a caller-supplied hybrid candidate is cryptographically correct by
 revision shape alone; the reviewed EC/SCKA transition engines and validator
 must supply that proof.
@@ -895,18 +895,14 @@ successful or recovered finalization removes it, so another receipt can be
 retired at the same stable ratchet revision with fixed-size latest-transition
 metadata. Divergence fails closed at every boundary.
 
-## 10. Remaining activation gates
+## 10. Continuous release requirements
 
-Before this schedule can carry user messages, Layergram still requires:
+This active schedule may continue to carry user messages only while Layergram
+retains:
 
-- independent cryptographic review of the authenticated hybrid handshake and
-  EC Double Ratchet construction;
-- a reviewed ML-KEM Braid backend implementing authenticated state
+- the allowlisted ML-KEM Braid backend implementing authenticated state
   export/import behind the frozen boundary;
-- independent review of the integrated crash-consistent send/receive
-  coordinator, native-state validator, scope-owned initial-session and receive-
-  dispatch capability topology;
-- hosted CI and release-matrix verification of the gated repository/UI
+- hosted CI and release-matrix verification of the repository/UI
   projection, lifecycle ownership, migration cutoff, per-contact status,
   explicit reset, and Normal/Maximum policy;
 - current supported physical-device and real external-carrier tests covering
@@ -916,9 +912,8 @@ Before this schedule can carry user messages, Layergram still requires:
   platforms;
 - full packaging, crash, migration, multiple-device, passphrase,
   Maximum-mode, backup, and downstream-capability compatibility tests;
-- independent protocol and implementation audit with no unresolved high or
-  critical findings.
+- no unresolved validated high or critical security finding.
 
-Until those gates pass, this is an inactive implementation candidate and must
-not be described to users as active quantum-resistant messaging. See
+Independent protocol and implementation review remains a priority post-release
+assurance objective rather than a claim that has already been completed. See
 [Protocol v3 Migration](PROTOCOL_V3_MIGRATION.md).

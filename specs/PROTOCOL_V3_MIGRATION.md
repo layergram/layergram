@@ -1,12 +1,12 @@
 # Layergram Protocol v3 Migration Guide
 
-Status: **public migration contract for an integrated but inactive candidate**
+Status: **public migration contract for active protocol v3**
 
 Protocol v3 is intentionally incompatible with protocol v2. It is designed to
 add hybrid post-quantum protection without adding Layergram accounts, servers,
-key directories, or a new message-delivery network. Until the activation and
-release gates pass, released Layergram builds continue to use protocol v2 and
-must not be described as post-quantum protected.
+key directories, or a new message-delivery network. Protocol v3 is active in
+Layergram 2.0.0 and later; earlier releases continue to use protocol v2 and are
+not post-quantum protected.
 
 ## What users keep
 
@@ -43,7 +43,7 @@ v2 public or private keys.
 
 ## Required user migration
 
-After an official v3-capable release is activated:
+After installing Layergram 2.0.0 or a later v3-capable release:
 
 1. Update Layergram on each supported device.
 2. Restore or unlock the same recovery phrase and, if applicable, intentionally
@@ -146,18 +146,14 @@ sessions, ratchet state, or contact verification. Those require the relevant
 encrypted local state or an intentionally supported backup/restore path.
 
 Users should retain any old installation or backup needed to read historical v2
-data until the official migration instructions say it can be retired. V3 does
-not reinterpret old v2 ciphertext as v3.
+data until they no longer need it. V3 does not reinterpret old v2 ciphertext as
+v3.
 
-## Activation and release boundary
+## Release boundary
 
-The current implementation is behind a single fail-closed activation selector.
-Public review, hosted CI, documented security review, supported physical-device
-and real-carrier tests, and verification of established signed store artifact
-flows must pass before the selector can be changed.
-
-A public Draft PR means Layergram is visibly preparing post-quantum protocol v3.
-It is not evidence that a currently installed release already provides v3
-protection. The project will only describe Layergram itself as quantum-resistant
-after the documented activation gate has passed and an activated build has been
-released.
+The active implementation remains behind a single fail-closed selector whose
+identity, messaging, and production decisions must all be true. Official
+release artifacts must package the exact allowlisted native backend and pass
+the documented platform, migration, carrier, persistence, and security gates.
+Source availability, a public identity, or a successful build alone is not
+evidence that an unofficial binary used the required backend.

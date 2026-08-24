@@ -31,7 +31,7 @@ class V3LmfStoredRecord {
   final Map<String, dynamic> payload;
 }
 
-/// Minimal persistence seam used by inactive v3 transport state.
+/// Minimal persistence seam used by v3 transport state.
 ///
 /// Production adapts [AuxRecordRepository], retaining its write-new-before-
 /// delete update behavior and externally opaque padded records. Tests can use a
@@ -276,7 +276,7 @@ class V3LmfDurableInbox {
   /// Higher-level atomic effect binding for every committed assembly.
   ///
   /// A null value represents a transport-only tombstone created without the
-  /// inactive atomic application/ratchet journal. The getter is available only
+  /// atomic application/ratchet journal. The getter is available only
   /// after restore so the journal can fail closed on missing or mismatched
   /// cross-record state.
   Map<String, String?> get committedHigherLevelBindings {
@@ -349,7 +349,7 @@ class V3LmfDurableInbox {
 
   /// Makes higher-level digest binding mandatory for this inbox lifetime.
   ///
-  /// The inactive atomic journal calls this during restore. It prevents an
+  /// The atomic journal calls this during restore. It prevents an
   /// older transport-only commit path from racing or running after the journal
   /// has taken responsibility for application/ratchet durability.
   Future<V3LmfReplayWindowRetirementAuthority> attachAtomicCommitJournal({

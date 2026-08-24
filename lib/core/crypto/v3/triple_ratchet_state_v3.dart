@@ -286,7 +286,7 @@ final class V3PqSkippedMessageKey {
   }
 }
 
-/// Complete inactive Triple Ratchet snapshot committed with one v3 effect.
+/// Complete Triple Ratchet snapshot committed with one v3 effect.
 ///
 /// The ML-KEM Braid implementation remains a future reviewed native boundary.
 /// [nativeSckaState] must therefore be an opaque, backend-authenticated export;

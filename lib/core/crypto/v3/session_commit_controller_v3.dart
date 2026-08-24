@@ -187,7 +187,7 @@ final class V3DeletedApplicationCollectionResult {
   bool get canForgetPresentationState => referencedRecords == 0;
 }
 
-/// Inactive single-authority coordinator for protocol-v3 session commits.
+/// Single-authority coordinator for protocol-v3 session commits.
 ///
 /// One instance owns one [V3LmfAtomicCommitJournal] for an encrypted
 /// identity/passphrase scope and serializes every registered session. Passing
@@ -216,7 +216,7 @@ final class V3DeletedApplicationCollectionResult {
 /// When [sckaBackend] is supplied, the controller also pins that exact backend
 /// instance for restore validation and every durable send; a different
 /// per-call backend is rejected before a transition. Hybrid handshake/session
-/// creation, the inactive native ABI, projection into the real chat repository
+/// creation, the allowlisted native ABI, projection into the real chat repository
 /// and independently reviewed replay-window expiry remain activation gates.
 final class V3SessionCommitController {
   V3SessionCommitController({

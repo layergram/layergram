@@ -9,25 +9,25 @@ String _normalized(String value) => value
     .trim();
 
 void main() {
-  test('public documentation describes the inactive v3 candidate honestly', () {
+  test('public documentation describes active protocol v3 honestly', () {
     final readme = _normalized(File('README.md').readAsStringSync());
     final migration = _normalized(
       File('specs/PROTOCOL_V3_MIGRATION.md').readAsStringSync(),
     );
 
-    expect(ProtocolV3Activation.identitySharing, isFalse);
-    expect(ProtocolV3Activation.messaging, isFalse);
-    expect(ProtocolV3Activation.productionApproved, isFalse);
-    expect(ProtocolV3Activation.isActive, isFalse);
+    expect(ProtocolV3Activation.identitySharing, isTrue);
+    expect(ProtocolV3Activation.messaging, isTrue);
+    expect(ProtocolV3Activation.productionApproved, isTrue);
+    expect(ProtocolV3Activation.isActive, isTrue);
 
-    expect(readme, contains('Protocol v3 Post-Quantum Candidate'));
+    expect(readme, contains('Protocol v3 Post-Quantum Protection'));
     expect(
       readme,
-      contains('not yet enabled in released builds'),
+      contains('active in Layergram 2.0 and later'),
     );
     expect(
       migration,
-      contains('currently installed release already provides v3 protection'),
+      contains('active protocol v3'),
     );
   });
 

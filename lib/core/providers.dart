@@ -468,8 +468,9 @@ final v3ApplicationRuntimeOwnerProvider =
 
 /// Restored v3 application runtime for the currently effective identity.
 ///
-/// With the production activation constants still false this provider returns
-/// without constructing the identity owner or loading any native library.
+/// Production v3 activation still returns early until an identity and its
+/// encrypted storage context exist, so startup never opens an unscoped native
+/// runtime.
 final v3ApplicationSessionRuntimeProvider =
     FutureProvider<V3ApplicationSessionRuntime?>((ref) async {
   if (!ref.watch(protocolV3MessagingEnabledProvider)) return null;

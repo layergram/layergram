@@ -32,8 +32,8 @@ typedef V3LmfAtomicEffectBuilder = FutureOr<V3LmfAtomicEffect> Function(
 
 /// Opaque higher-level state that must become durable as one unit.
 ///
-/// [applicationState] is the canonical inactive `AR3` application/control
-/// record. [ratchetState] is the matching complete inactive `TR3` Triple
+/// [applicationState] is the canonical `AR3` application/control
+/// record. [ratchetState] is the matching complete `TR3` Triple
 /// Ratchet snapshot. This layer establishes their crash-consistent commit
 /// boundary; the real handshake and ratchet transition engines remain gated.
 class V3LmfAtomicEffect {
@@ -142,7 +142,7 @@ class V3LmfAtomicCommitRestoreResult {
   final Map<String, V3LmfReplayWindowBinding> replayWindowBindings;
 }
 
-/// Unforgeable ownership token for the inactive v3 session coordinator.
+/// Unforgeable ownership token for the v3 session coordinator.
 ///
 /// A coordinator claims the journal before restore. From that point on direct
 /// lifecycle or commit calls are rejected unless they present this exact
@@ -153,7 +153,7 @@ final class V3LmfAtomicCommitAuthority {
   const V3LmfAtomicCommitAuthority._();
 }
 
-/// Inactive crash-consistent commit boundary above [V3LmfDurableInbox].
+/// Crash-consistent commit boundary above [V3LmfDurableInbox].
 ///
 /// The single encrypted journal record contains both the future application
 /// effect and its matching future ratchet snapshot. That record is the commit

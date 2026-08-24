@@ -1,7 +1,7 @@
 // Copyright 2026 Layergram
 // SPDX-License-Identifier: Apache-2.0
 
-//! Inactive authenticated composition for the complete ML-KEM Braid engine.
+//! Authenticated composition for the complete ML-KEM Braid engine.
 //!
 //! This private module is the only Rust path that composes canonical `LS3`
 //! authenticated state, canonical `LB3` plaintext, canonical `BM3` public

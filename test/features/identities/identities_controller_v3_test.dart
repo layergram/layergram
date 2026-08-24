@@ -41,28 +41,30 @@ void main() {
     );
   });
 
-  test('inactive v3 migration rejects every v3 import carrier', () {
-    final inactive = ProviderContainer();
-    addTearDown(inactive.dispose);
-    final inactiveController = inactive.read(identitiesControllerProvider);
+  test('production selector accepts every v3 import carrier', () {
+    final production = ProviderContainer();
+    addTearDown(production.dispose);
+    final productionController = production.read(identitiesControllerProvider);
 
     expect(
-      () => inactiveController.parseIdentityFromText(
-        V3IdentityAdapter.encodeShareBlock(identity),
-      ),
-      throwsA(isA<ProtocolV3IdentityUnavailableException>()),
+      productionController
+          .parseIdentityFromText(V3IdentityAdapter.encodeShareBlock(identity))
+          .identityId,
+      identity.identityId,
     );
     expect(
-      () => inactiveController.parseIdentityFromLink(
-        V3PublicIdentityCodec.encodeLink(identity),
-      ),
-      throwsA(isA<ProtocolV3IdentityUnavailableException>()),
+      productionController
+          .parseIdentityFromLink(V3PublicIdentityCodec.encodeLink(identity))
+          .identityId,
+      identity.identityId,
     );
     expect(
-      () => inactiveController.parseIdentityFromQrPayload(
-        V3PublicIdentityCodec.encodeBinary(identity),
-      ),
-      throwsA(isA<ProtocolV3IdentityUnavailableException>()),
+      productionController
+          .parseIdentityFromQrPayload(
+            V3PublicIdentityCodec.encodeBinary(identity),
+          )
+          .identityId,
+      identity.identityId,
     );
   });
 

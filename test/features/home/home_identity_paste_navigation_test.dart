@@ -3,14 +3,14 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:base32/base32.dart';
-import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:layergram/core/crypto/identity_link_codec.dart';
 import 'package:layergram/core/crypto/models.dart';
+import 'package:layergram/core/crypto/v3/identity_v3_adapter.dart';
+import 'package:layergram/core/crypto/v3/ml_kem_768.dart';
+import 'package:layergram/core/crypto/v3/public_identity_v3.dart';
 import 'package:layergram/core/providers.dart';
 import 'package:layergram/core/storage/identities_repository.dart';
 import 'package:layergram/core/storage/local_database.dart';
@@ -18,6 +18,7 @@ import 'package:layergram/core/storage/messages_repository.dart';
 import 'package:layergram/core/storage/secure_storage.dart';
 import 'package:layergram/core/utils/clipboard_service.dart';
 import 'package:layergram/features/identities/add_identity_view.dart';
+import 'package:layergram/features/identities/identities_controller.dart';
 import 'package:layergram/features/shell/app_shell.dart';
 import 'package:layergram/l10n/app_strings.dart';
 
@@ -107,6 +108,17 @@ class _FakeMessagesRepository extends MessagesRepository {
   Future<List<MessageRecord>> getAllMessages() async => messages;
 }
 
+class _IdentityPasteTestController extends IdentitiesController {
+  _IdentityPasteTestController(super.ref);
+
+  @override
+  Future<void> saveIdentity(RemoteIdentity identity) {
+    return ref
+        .read(identitiesRepositoryProvider)
+        .upsertRemoteIdentity(identity);
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -143,11 +155,11 @@ void main() {
   testWidgets(
     'pasted identity link opens confirmed import in Contacts before saving',
     (tester) async {
-      final sourceIdentity = _legacyIdentity(
+      final sourceIdentity = _v3Identity(
         displayName: 'Alice',
         seed: 1,
       );
-      final link = IdentityLinkCodec.encode(sourceIdentity);
+      final link = V3PublicIdentityCodec.encodeLink(sourceIdentity);
       final repository = _FakeIdentitiesRepository();
       addTearDown(repository.dispose);
 
@@ -158,7 +170,7 @@ void main() {
       );
 
       await tester.tap(find.text('Paste & Decode'));
-      await tester.pumpAndSettle();
+      await _pumpNavigation(tester);
 
       expect(find.byType(AddIdentityView), findsOneWidget);
       expect(find.text('Add contact'), findsOneWidget);
@@ -166,7 +178,7 @@ void main() {
       expect(repository.upsertCount, 0);
 
       await tester.tap(find.text('Save'));
-      await tester.pumpAndSettle();
+      await _pumpNavigation(tester);
 
       expect(find.byType(AddIdentityView), findsNothing);
       expect(repository.upsertCount, 1);
@@ -183,20 +195,13 @@ void main() {
   testWidgets(
     'pasted identity text block opens the same confirmed Contacts import',
     (tester) async {
-      final sourceIdentity = _legacyIdentity(
+      final sourceIdentity = _v3Identity(
         displayName: 'Bob',
         seed: 2,
       );
       final identityBlock = '''
 Some surrounding text
-[Layergram Identity]
-Protocol: layergram/1
-Name: Bob
-Identity ID: ${sourceIdentity.identityId}
-Fingerprint: ${sourceIdentity.fingerprint}
-Public Key (Base64):
-${sourceIdentity.publicKeyBase64}
-[/Layergram Identity]
+${V3IdentityAdapter.encodeShareBlock(sourceIdentity)}
 ''';
       final repository = _FakeIdentitiesRepository();
       addTearDown(repository.dispose);
@@ -208,7 +213,7 @@ ${sourceIdentity.publicKeyBase64}
       );
 
       await tester.tap(find.text('Paste & Decode'));
-      await tester.pumpAndSettle();
+      await _pumpNavigation(tester);
 
       expect(find.byType(AddIdentityView), findsOneWidget);
       expect(find.text('Add contact'), findsOneWidget);
@@ -227,7 +232,7 @@ ${sourceIdentity.publicKeyBase64}
         fingerprint: 'CC-DD-EE-FF',
         displayName: 'Charlie',
       );
-      final sourceIdentity = _legacyIdentity(
+      final sourceIdentity = _v3Identity(
         displayName: 'Alice from chat',
         seed: 3,
       );
@@ -236,7 +241,7 @@ ${sourceIdentity.publicKeyBase64}
 
       await _pumpShell(
         tester,
-        clipboardText: IdentityLinkCodec.encode(sourceIdentity),
+        clipboardText: V3PublicIdentityCodec.encodeLink(sourceIdentity),
         identitiesRepository: repository,
         size: const Size(1200, 900),
         messages: const [
@@ -252,14 +257,14 @@ ${sourceIdentity.publicKeyBase64}
 
       expect(find.byTooltip('Paste & Decode'), findsOneWidget);
       await tester.tap(find.byTooltip('Paste & Decode'));
-      await tester.pumpAndSettle();
+      await _pumpNavigation(tester);
 
       expect(find.byType(AddIdentityView), findsOneWidget);
       expect(find.text('Alice from chat'), findsOneWidget);
       expect(repository.upsertCount, 0);
 
       await tester.tap(find.text('Save'));
-      await tester.pumpAndSettle();
+      await _pumpNavigation(tester);
 
       expect(find.byType(AddIdentityView), findsNothing);
       expect(repository.upsertCount, 1);
@@ -269,25 +274,23 @@ ${sourceIdentity.publicKeyBase64}
   );
 }
 
-LocalIdentity _legacyIdentity({
+V3PublicIdentity _v3Identity({
   required String displayName,
   required int seed,
 }) {
-  final publicKey = Uint8List.fromList(
+  final x25519PublicKey = Uint8List.fromList(
     List<int>.generate(32, (index) => (seed + index) & 0xff),
   );
-  final digest = sha256.convert(publicKey).bytes;
-  return LocalIdentity(
-    identityId: base32.encode(Uint8List.fromList(digest)).replaceAll('=', ''),
-    publicKeyBase64: base64Encode(publicKey),
-    fingerprint: digest
-        .take(8)
-        .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
-        .join('-')
-        .toUpperCase(),
+  final mlKem768PublicKey = Uint8List.fromList(
+    List<int>.generate(
+      MlKem768.publicKeyBytes,
+      (index) => ((seed * 17) + index) % 251 + 1,
+    ),
+  );
+  return V3PublicIdentity(
+    x25519PublicKey: x25519PublicKey,
+    mlKem768PublicKey: mlKem768PublicKey,
     displayName: displayName,
-    mnemonic:
-        'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
   );
 }
 
@@ -314,6 +317,12 @@ Future<void> _pumpShell(
         ),
         identitiesRepositoryProvider.overrideWithValue(identitiesRepository),
         messagesRepositoryProvider.overrideWithValue(messagesRepository),
+        identitiesControllerProvider.overrideWith(
+          (ref) => _IdentityPasteTestController(ref),
+        ),
+        // This widget test covers the active v3 identity-import path only.
+        // Keep the independent messaging-session lifecycle out of scope.
+        protocolV3MessagingEnabledProvider.overrideWithValue(false),
         secureStorageProvider.overrideWithValue(
           _InMemorySecureStorageService(),
         ),
@@ -324,6 +333,12 @@ Future<void> _pumpShell(
       ),
     ),
   );
-  await tester.pumpAndSettle();
+  await _pumpNavigation(tester);
   expect(find.text('Paste & Decode'), findsOneWidget);
+}
+
+Future<void> _pumpNavigation(WidgetTester tester) async {
+  for (var frame = 0; frame < 12; frame++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
 }

@@ -111,7 +111,7 @@ final class V3TripleRatchetTransition {
   }
 }
 
-/// Candidate-only orchestration for the inactive protocol-v3 Triple Ratchet.
+/// Scope-owned orchestration for the active protocol-v3 Triple Ratchet.
 ///
 /// Both branches always advance together and the hybrid key schedule binds the
 /// visible PQ coordinates, direction, frame kind, and session. This class does

@@ -16,7 +16,7 @@ import 'dart:typed_data';
 
 import 'ec_double_ratchet_v3.dart';
 
-/// Wire identifier shared by the inactive v3 hybrid codecs.
+/// Wire identifier shared by the active v3 hybrid codecs.
 const int v3HybridSuiteWireId = 1;
 
 /// Public SCKA message carried alongside one EC Double Ratchet header.

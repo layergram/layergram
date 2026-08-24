@@ -90,7 +90,7 @@ final class V3SessionPersistenceRestoreResult {
 ///
 /// A null acknowledgement means the exact sealed frame was retained because
 /// fragment zero (and therefore its ratchet candidate) is not available yet.
-/// A complete delivery is still candidate-only until [V3SessionPersistenceScope]
+/// A complete delivery is not authoritative until [V3SessionPersistenceScope]
 /// commits it through the pinned resolver/controller pair.
 final class V3SessionInboundFrameResult {
   const V3SessionInboundFrameResult({
@@ -106,7 +106,7 @@ final class V3SessionInboundFrameResult {
   bool get isComplete => status == V3LmfInboxStatus.complete;
 }
 
-/// Inactive, scope-pinned owner of the complete protocol-v3 durable runtime.
+/// Scope-pinned owner of the complete protocol-v3 durable runtime.
 ///
 /// The active v2 application uses a mutable singleton [AuxRecordRepository]. A
 /// protocol-v3 controller cannot safely retain that singleton across identity
@@ -123,9 +123,8 @@ final class V3SessionInboundFrameResult {
 ///
 /// Opening the scope admits and pins exactly one caller-selected SCKA backend
 /// across restore validation, initial handoff, durable send, and its owned
-/// receive resolver. It does not register that provider, connect the inactive
-/// Rust ABI, import v3 into the active identity path, or enable v3 messaging in
-/// production.
+/// receive resolver. Registration remains owned by the application lifecycle,
+/// which reaches this scope only through the all-or-nothing activation policy.
 final class V3SessionPersistenceScope {
   V3SessionPersistenceScope._({
     required AuxRecordRepository repository,
@@ -262,12 +261,12 @@ final class V3SessionPersistenceScope {
     }
   }
 
-  /// Opens the complete durable scope with the packaged SCKA candidate.
+  /// Opens the complete durable scope with the packaged SCKA backend.
   ///
   /// This is the intended application-facing packaged-library boundary. The
   /// backend is created inside the scope and cannot be swapped between restore,
-  /// send, receive, handoff, or commit. Protocol v3 remains inactive until a
-  /// separately reviewed application bootstrap calls this method.
+  /// send, receive, handoff, or commit. Official bootstrap calls this method
+  /// only after every production activation decision is true.
   static Future<V3SessionPersistenceScope> openPackagedScka({
     required String scopeToken,
     required SecretKey auxStorageKey,

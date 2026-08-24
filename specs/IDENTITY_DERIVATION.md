@@ -24,7 +24,7 @@ protocol generations.
 - KDF: HKDF-SHA256
 - Salt/context: `layergram`
 - Output length: 32 bytes
-- Status: current preferred derivation
+- Status: legacy protocol-v2 derivation
 
 For `v2`, Layergram uses explicit domain separation:
 
@@ -33,15 +33,15 @@ For `v2`, Layergram uses explicit domain separation:
 
 This keeps identity derivation isolated from future key uses and from the passphrase-derived identity namespace.
 
-### v3 (integrated candidate, not active)
+### v3 (active in Layergram 2.0 and later)
 
 - Input: BIP39 seed bytes
 - KDF: HKDF-SHA256
 - Salt/context: `layergram/protocol-v3/identity-derivation`
 - X25519 seed output: 32 bytes
 - ML-KEM-768 key-generation seed output: 64 bytes (`d || z`)
-- Status: implemented and connected to the fail-closed protocol-v3 application
-  seams; not the preferred production derivation until the release gates pass
+- Status: preferred production derivation, connected to the fail-closed
+  protocol-v3 application seams
 
 The labels are purpose- and algorithm-specific:
 
@@ -50,7 +50,7 @@ The labels are purpose- and algorithm-specific:
 - `layergram/v3/passphrase-identity/x25519-seed`
 - `layergram/v3/passphrase-identity/ml-kem-768-keygen-seed`
 
-The inactive `V3LocalIdentityFactory` is the only complete v3 assembly path. It
+The active `V3LocalIdentityFactory` is the only complete v3 assembly path. It
 requires a successful native ML-KEM self-test, derives both key components,
 validates the resulting ML-KEM public key, and returns a non-serializable local
 handle. Temporary BIP39 and algorithm seed buffers are overwritten as a best
@@ -68,10 +68,9 @@ Public identities received from text, links, or QR must cross the separate
 not sufficient: the native backend self-test and ML-KEM public-key validity
 check must also pass. This validation still does not authenticate the owner.
 
-The 64-byte ML-KEM seed is never truncated for QR or link compactness. A native
-backend expands it into the complete FIPS 203 keypair. Until that backend and
-the complete protocol pass their release gates, `v2` remains the preferred
-application derivation and v3 remains inactive.
+The 64-byte ML-KEM seed is never truncated for QR or link compactness. The
+allowlisted native backend expands it into the complete FIPS 203 keypair. In
+Layergram 2.0 and later, v3 is the preferred application derivation.
 
 ## Storage Metadata
 
@@ -86,10 +85,9 @@ The application must never infer derivation version heuristically when metadata 
 
 ### New identity creation
 
-While protocol v3 is inactive, newly created identities default to `v2`. After
-an explicit reviewed activation, the application must derive the v3 identity
-for the active recovery context without silently treating its v2 contact state
-as v3.
+In Layergram 2.0 and later, newly created identities default to `v3`. The
+application derives the v3 identity for the active recovery context without
+silently treating its v2 contact state as v3.
 
 ### Restore from raw mnemonic
 

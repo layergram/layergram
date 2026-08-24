@@ -1,11 +1,11 @@
 # Layergram ML-KEM Braid authenticator revision 1
 
-Status: **canonical KDF and ratcheted authenticator implemented internally;
+Status: **canonical KDF and ratcheted authenticator active internally;
 initialization, header MAC, output-key derivation, ratcheting, and ciphertext
 generation/verification connected only to the private transition engine, whose
 revision-1 transitions 1-13 are implemented; public
-candidate ABI and durable integration connected, default ABI `NOT_READY`;
-protocol v3 inactive**
+production ABI and durable integration connected, defensive default ABI
+`NOT_READY`; active protocol v3**
 
 This document freezes Layergram's implementation-defined domain and the
 ratcheted-authenticator primitives required by the public-domain [ML-KEM Braid

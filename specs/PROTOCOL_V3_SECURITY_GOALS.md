@@ -1,9 +1,9 @@
 # Layergram Protocol v3 — Security Goals
 
-Status: **normative activation baseline; integrated candidate is not enabled**
+Status: **normative security baseline for active protocol v3**
 
 This document defines the properties that a Layergram protocol-v3 design must
-demonstrate before it can replace protocol v2. If a later handshake, ratchet,
+demonstrate while replacing protocol v2. If a later handshake, ratchet,
 transport, or storage choice cannot satisfy these properties, the choice must
 change. The application must not weaken a property silently or describe a
 partial result as quantum-resistant.
@@ -74,8 +74,7 @@ The design MUST address at least:
 
 ## Handshake properties
 
-`PROTOCOL_V3_HANDSHAKE.md` freezes the current inactive implementation
-candidate. It is not approved for activation and any candidate MUST:
+`PROTOCOL_V3_HANDSHAKE.md` freezes the current active implementation. It MUST:
 
 - bind both complete identities, both device identifiers and device keys,
   initiator/responder roles, protocol version, suite, capabilities, security
@@ -286,9 +285,10 @@ The eventual protocol state machine MUST distinguish at least:
 No state transition may reinterpret v2 bytes as v3 or automatically downgrade a
 contact from v3 to v2.
 
-## Activation and claim gate
+## Release and claim gate
 
-Protocol v3 may be called quantum-resistant only after all of the following:
+Protocol v3 is described as quantum-resistant only while all of the following
+release invariants hold:
 
 - normative wire, transcript, state-machine, KDF, ratchet, persistence, and
   migration specifications are frozen with public vectors;
@@ -299,12 +299,15 @@ Protocol v3 may be called quantum-resistant only after all of the following:
   compatibility tests without a protocol fork;
 - every runtime and native dependency has a versioned license inventory that
   permits both open-source and commercial downstream distribution;
-- every security review completed for the release has no unresolved critical
+- every security review completed for a release has no unresolved critical
   or high-severity finding.
 
-Until then, all v3 code and UI must remain inactive and must be labelled as an
-implementation candidate rather than active quantum-resistant messaging. The
-required incompatible user transition is defined in
+Layergram 2.0 satisfied this activation gate using the public implementation,
+automated security review, cross-platform packaging, physical-device, carrier,
+QR, fuzzing, migration, and downstream compatibility evidence available for
+the release candidate. Independent external review remains a priority ongoing
+assurance objective and any validated critical or high-severity issue fails the
+next release gate. The required incompatible user transition is defined in
 [Protocol v3 Migration](PROTOCOL_V3_MIGRATION.md).
 
 ## Primary references

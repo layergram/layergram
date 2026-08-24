@@ -35,7 +35,7 @@ class MlKem768NativeException implements Exception {
       '${_statusDescription(status)})';
 }
 
-/// Inactive protocol-v3 FFI backend for the Layergram-owned ML-KEM-768 ABI.
+/// Protocol-v3 FFI backend for the Layergram-owned ML-KEM-768 ABI.
 ///
 /// Constructing this object does not activate protocol v3. Packaged-library
 /// loading is explicit and is not wired into the app runtime or protocol

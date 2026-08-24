@@ -1,7 +1,7 @@
 // Copyright 2026 Layergram
 // SPDX-License-Identifier: Apache-2.0
 
-//! Inactive, Layergram-owned boundary around incremental ML-KEM-768.
+//! Layergram-owned boundary around incremental ML-KEM-768.
 //!
 //! This module deliberately exposes no C ABI. Its key-generation entry point is
 //! used only by the private transition-1 slice; encapsulation, decapsulation,

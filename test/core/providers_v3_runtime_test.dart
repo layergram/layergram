@@ -6,7 +6,7 @@ import 'package:layergram/core/crypto/v3/identity_runtime_v3.dart';
 import 'package:layergram/core/providers.dart';
 
 void main() {
-  test('inactive production selector never constructs or loads v3 runtimes',
+  test('active selector without an identity never constructs a v3 runtime',
       () async {
     var mlKemLoads = 0;
     var applicationOpens = 0;
@@ -14,7 +14,7 @@ void main() {
       seedService: SeedService(),
       backendLoader: () {
         mlKemLoads++;
-        throw StateError('inactive v3 must not load ML-KEM');
+        throw StateError('unscoped v3 must not load ML-KEM');
       },
     );
     Future<V3ApplicationSessionRuntime> factory({
@@ -22,7 +22,7 @@ void main() {
       required scopeToken,
     }) async {
       applicationOpens++;
-      throw StateError('inactive v3 must not open SCKA');
+      throw StateError('unscoped v3 must not open SCKA');
     }
 
     final container = ProviderContainer(

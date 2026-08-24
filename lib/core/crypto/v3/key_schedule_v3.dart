@@ -55,7 +55,7 @@ enum V3TrafficDirection {
   }
 }
 
-/// Initial transcript-bound material for one inactive v3 session.
+/// Initial transcript-bound material for one v3 session.
 ///
 /// The future authenticated handshake supplies the two independent 32-byte
 /// secrets and the SHA-384 digest of its complete canonical transcript. This
@@ -357,7 +357,7 @@ final class V3AcknowledgementKeyMaterial {
   }
 }
 
-/// Inactive protocol-v3 extract-then-expand schedule.
+/// Protocol-v3 extract-then-expand schedule.
 ///
 /// HKDF-SHA-256 follows RFC 5869. Hybrid message derivation follows the Triple
 /// Ratchet ordering recommended by Signal: the sparse-PQ message key is the

@@ -19,7 +19,7 @@ import 'lmf_v3.dart';
 /// existing steganographic carrier.
 ///
 /// Raw helpers remain useful for comparing candidate fragment sizes. The
-/// canonical-frame helpers include the inactive LMF v3 header and full AEAD tag.
+/// canonical-frame helpers include the LMF v3 header and full AEAD tag.
 abstract final class V3PqStegoBudget {
   static int fragmentCount({
     required int totalPayloadBytes,

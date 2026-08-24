@@ -1,15 +1,14 @@
 # Layergram ML-KEM Braid transition engine revision 1
 
-Status: **initialization and all revision-1 transitions 1-13 plus private
-authenticated LS3/LB3/BM3 composition implemented; engineering candidate ABI
-and durable coordinator connected, default ABI `NOT_READY`, no application
-activation; protocol v3 inactive**
+Status: **initialization and all revision-1 transitions 1-13 plus authenticated
+LS3/LB3/BM3 composition implemented and active through the production ABI and
+durable coordinator; defensive default ABI `NOT_READY`**
 
 This document freezes the initial bounded slice of Layergram's independent
 Apache-2.0 implementation of the public-domain [ML-KEM Braid revision-1
 specification](https://signal.org/docs/specifications/mlkembraid/). The code is
-`native/layergram_scka/src/braid_transition.rs` and remains private to the
-inactive native crate.
+`native/layergram_scka/src/braid_transition.rs` and remains internal to the
+native crate.
 
 No source from Signal's AGPL implementation was inspected, copied, adapted,
 linked, or embedded. The normative inputs for this slice are only the published
@@ -343,7 +342,7 @@ epoch no-wrap behavior.
 `SCKA_AUTHENTICATED_COMPOSITION.md` freezes the private LS3/LB3/BM3 boundary,
 including exact sealed-candidate re-export, semantic inner validation,
 deterministic role-and-revision state nonces under nonce-misuse-resistant
-AES-256-GCM-SIV, and a sealed two-party epoch-key agreement test. The inactive
+AES-256-GCM-SIV, and a sealed two-party epoch-key agreement test. The
 application integration connects native candidates to the durable send/receive
 journals with atomic LS3/TR3/outbox composition behind the false activation
 selector.

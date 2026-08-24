@@ -56,7 +56,7 @@ final class V3LocalIdentityHandle {
   /// Destroys the private material owned by this identity handle.
   ///
   /// The operation is idempotent. The only consumer of the private fields is
-  /// the still-inactive authenticated handshake part of this library; no
+  /// the authenticated handshake part of this library; no
   /// active identity, provider, messaging, storage, or UI seam can reach it.
   Future<void> close() async {
     if (_isClosed) return;
@@ -75,7 +75,7 @@ final class V3LocalIdentityHandle {
   }
 }
 
-/// Creates complete, but still inactive, protocol-v3 local identities.
+/// Creates complete protocol-v3 local identities.
 ///
 /// Callers must explicitly provide the native ML-KEM backend. This factory is
 /// not wired into the current identity manager, storage, providers, or UI, so

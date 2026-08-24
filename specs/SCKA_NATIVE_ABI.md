@@ -1,10 +1,8 @@
 # Layergram SCKA native ABI and state envelope v1
 
 Status: **default build is a frozen `NOT_READY` scaffold; an explicit
-engineering-only Cargo feature connects the authenticated composition to the
-frozen ABI; opt-in generated candidate artifacts are packaged for verification,
-while ordinary application bootstrap, production registration, and protocol v3
-activation remain disconnected**
+exact-build-allowlisted Cargo feature connects the authenticated composition to
+the frozen production ABI used by official Layergram 2.0 packages**
 
 This document freezes the first Layergram-owned C ABI and authenticated state
 envelope for an eventual independent implementation of ML-KEM Braid revision 1.
@@ -19,13 +17,13 @@ candidate bytes. With default features the crate deliberately returns
 `LG_SCKA_V1_ERR_NOT_READY` from its self-test and every correctly shaped state
 operation. Cargo feature `candidate-ffi` connects those exact ABI shapes to the
 private authenticated composition for laboratory integration tests. That
-feature changes the implementation ID. Opt-in scripts package it into
-generated, ignored platform artifacts and exercise the scope-owned loader; it
-is not referenced by ordinary `lib/main.dart`, is not registered for
-production, and does not make Layergram quantum-resistant.
+feature changes the implementation ID. Official scripts package it into
+generated platform artifacts and exercise the scope-owned loader; the
+application lifecycle registers it only when the fail-closed v3 selector is
+fully active.
 
 The crate is Apache-2.0, pins Rust 1.87.0, and is suitable for the public
-repository and commercial downstream distribution. Its inactive incremental primitive uses exact-version permissive
+repository and commercial downstream distribution. Its active internal primitive uses exact-version permissive
 dependencies recorded in `native/layergram_scka/THIRD_PARTY_NOTICES.md` and the
 machine receipt. Every dependency change requires a new checksum, feature,
 transitive-license, notice, and target-specific review.
@@ -301,7 +299,7 @@ both device checkpoints are now satisfied. macOS success never substitutes for
 iOS evidence, and an Android cross-build never substitutes for Android-device
 execution.
 
-The inactive candidate now also runs a dependency-free fixed-schedule ABI
+The active backend also runs a dependency-free fixed-schedule ABI
 campaign over four concurrent sessions. It advances both participants through
 128 sends per endpoint, reopens exact sealed states between calls, rejects
 stale states when the current revision is required, bounds retained carrier
@@ -325,6 +323,6 @@ The backend remains unregistrable until all of the following are complete:
 - full security testing and an independent cryptographic/implementation audit.
 
 Changing a frozen function signature, status meaning, header field, algorithm,
-or authenticated binding after this inactive state-format-v2 checkpoint
+or authenticated binding after this state-format-v2 checkpoint
 requires a new ABI/state format. Until activation, the only safe
 runtime outcome from this crate is `LG_SCKA_V1_ERR_NOT_READY`.

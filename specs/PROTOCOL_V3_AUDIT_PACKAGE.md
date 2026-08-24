@@ -1,8 +1,8 @@
 # Layergram protocol v3 — independent review package
 
-Status: **audit input for an inactive engineering candidate**. Creating or
-reviewing this package does not activate protocol v3, register the native SCKA
-backend, or approve a production claim of post-quantum security.
+Status: **audit input for active protocol v3**. The package binds every review
+to one exact open-source commit and exposes the complete production protocol
+boundary without including downstream non-OSS source.
 
 ## 1. Purpose and scope
 
@@ -67,9 +67,8 @@ The independent reviewer must evaluate at least:
 Layergram-authored tests, vectors, receipts, policy assertions, and security
 scans are evidence for an independent reviewer, not assumptions the reviewer
 must accept. Findings must identify the exact commit, affected surface,
-severity, proof or counterevidence, and remediation status. Any critical or
-high-severity finding reported by a completed review must be resolved before
-release.
+severity, proof or counterevidence, and remediation status. Any validated
+critical or high-severity finding must be resolved before a further release.
 
 ## 4. Evidence expected alongside the package
 
@@ -85,14 +84,16 @@ The release candidate should attach results for:
   applications and representative printed/scanned QR samples;
 - a dependency/license inventory and the exact `SOURCE_SHA256SUMS.txt`.
 
-Any unavailable evidence remains an explicit activation gate. It must not be
-converted into a positive claim based only on compilation or simulator results.
+Any unavailable evidence remains an explicit release-candidate failure. It
+must not be converted into a positive claim based only on compilation or
+simulator results.
 
-## 5. Activation boundary
+## 5. Active-release boundary
 
-The bundle tool itself verifies that all three Dart activation booleans are
-false, the SCKA candidate is not production-registered, the receipt still says
-protocol v3 is inactive, and at least one remaining gate is recorded. It never
-changes those values. Activation is a separate, reviewed commit after external
-audit, distribution signing/store verification, physical-device regression,
-downstream compatibility verification, and explicit release authorization.
+The bundle tool verifies that all three Dart activation booleans are true, the
+allowlisted SCKA path is production-registered, the receipt records protocol v3
+as active, and continuous release requirements remain explicit. It never
+changes those values. Official artifacts must still be built and inspected
+through the documented signed/store packaging paths; an ordinary source build
+that leaves the defensive default ABI at `NOT_READY` is not an official
+Layergram 2.0 package.

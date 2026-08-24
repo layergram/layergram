@@ -24,7 +24,7 @@ import 'lmf_v3_persistence.dart';
 import 'local_identity_v3.dart';
 import 'public_identity_v3.dart';
 
-/// Durable metadata and secret pending state for one inactive v3 handshake.
+/// Durable metadata and secret pending state for one v3 handshake.
 ///
 /// The encoded HP3 state contains private key material. It is deliberately not
 /// exposed as bytes and may only be decoded through the role-specific methods.
@@ -210,7 +210,7 @@ final class V3HandshakePersistenceAuthority {
   const V3HandshakePersistenceAuthority._();
 }
 
-/// Bounded crash-consistent repository for inactive HP3 handshake state.
+/// Bounded crash-consistent repository for HP3 handshake state.
 ///
 /// Records are plaintext only inside the already authenticated and padded
 /// identity/passphrase-scoped Aux repository. A successful pending write must

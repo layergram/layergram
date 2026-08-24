@@ -927,7 +927,7 @@ final class V3InitiatorHandshakeResult {
   final V3HandshakeEstablishedMaterial established;
 }
 
-/// Inactive three-message authenticated hybrid handshake.
+/// Three-message authenticated hybrid handshake for protocol v3.
 ///
 /// The proof tags are HMACs derived from both the five ordered X25519 outputs
 /// and both ordered ML-KEM shared secrets. Either participant knows the MAC

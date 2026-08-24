@@ -1,16 +1,16 @@
-# Layergram Protocol v3 — Security and Identity Draft
+# Layergram Protocol v3 — Security and Identity Specification
 
-Status: **integrated implementation candidate; inactive; not a security claim**
+Status: **normative active protocol in Layergram 2.0 and later**
 
 This document defines the falsifiable invariants for the intentionally
-incompatible Layergram protocol v3 candidate. The application integration is
-complete behind a fail-closed selector, but the protocol is not activated or
-independently approved.
+incompatible Layergram protocol v3. The application integration is active
+behind a fail-closed selector and the production backend is exact-build
+allowlisted on every supported platform.
 
 The normative threat boundary and activation properties are defined in
 `PROTOCOL_V3_SECURITY_GOALS.md`. If this draft conflicts with those goals, the
-security-goals document wins and this draft must be corrected before code is
-enabled.
+security-goals document wins and the implementation must be corrected before a
+further release.
 
 ## Recovery, public identity, and session proof are different operations
 
@@ -103,7 +103,7 @@ preferred derivation or appear as quantum-resistant until all of these pass:
 - migration, passphrase, multi-device, Maximum mode, backup, and crash tests;
 - documented security review with no unresolved high or critical findings.
 
-The native wrapper and inactive packaging now traverse the production ABI on
+The native wrapper and controlled packaging traverse the production ABI on
 an Android arm64 emulator, an iOS arm64 simulator, a macOS arm64 app, and a
 Windows x64 app running on Windows 11 ARM64, plus a Linux x64 app on Ubuntu
 22.04; the packaged Android libraries and Apple binaries also cover their
@@ -113,7 +113,7 @@ distributed Linux ARM64 or native Windows ARM64 build, complete per-ABI
 vectors, and representative physical QR/carrier tests remain. See
 `ML_KEM_BACKEND.md`.
 
-## Inactive complete local-identity checkpoint
+## Complete local-identity boundary
 
 `V3LocalIdentityFactory` now restores a complete hybrid public identity from a
 valid mnemonic using the explicit v3 X25519 and ML-KEM derivation labels. It
@@ -123,9 +123,9 @@ wipes temporary seed buffers on both success and failure. Passphrase-scoped
 restoration uses both the BIP39 passphrase and the separate v3 passphrase
 derivation namespace.
 
-The factory is reachable only through the inactive v3 lifecycle and provider
-seams. It is not an activation: v2 remains preferred and no active application
-path can construct the v3 runtime while the selector is false.
+The factory is reachable only through the v3 lifecycle and provider seams.
+Layergram 2.0 prefers v3 and constructs the runtime only when every selector
+decision is true.
 
 Imported identities have a distinct `V3PublicIdentityValidator` boundary. It
 first applies the strict canonical codec, then requires the native backend
@@ -140,7 +140,7 @@ forward-secrecy control budget. It must be fragmented for steganographic
 bootstrap. The steady-state sparse PQ ratchet will use bounded smaller chunks.
 Neither issue may be hidden through a classical-only fallback labelled as v3.
 
-`LMF_V3_DRAFT.md` now defines an inactive framing candidate with a fixed
+`LMF_V3_DRAFT.md` defines the active framing with a fixed
 180-byte authenticated base header, a full 16-byte AES-GCM tag, canonical
 adaptive first-fragment sizing, at most 64 fragments, and a 16,384-byte global
 final-length limit. The exact canonical `HR3` EC+SCKA header is appended to
@@ -155,34 +155,34 @@ maximum 608-byte HR3, fragment zero carries 24 plaintext bytes in an 828-byte
 frame and its minimum-cover steganographic encoding is 3,997 characters. These
 are frozen codec vectors, not cross-app reliability proof.
 
-The framing implementation is still isolated from active messaging and exposes
-no authenticated handshake. Its bounded durable inbox stores sealed frames
+The framing implementation is composed with the authenticated handshake. Its
+bounded durable inbox stores sealed frames
 before authentication, withholds partial plaintext, restores after restart, and
 writes a replay tombstone before cleanup. Its durable outbox retains the exact
 sealed bytes and applies authenticated cumulative ACKs using write-new-before-
-delete revisions. An inactive atomic-effect journal now makes the application or
+delete revisions. An atomic-effect journal makes the application or
 control record and its matching opaque ratchet snapshot durable in one encrypted
 record before binding that effect digest into the inbox tombstone. A crash in
 between restores the effect without running its builder or advancing the ratchet
 twice. Missing or mismatched effect/tombstone pairs fail closed.
 
-An inactive identity/passphrase-scoped receive-commit controller now claims the
+An identity/passphrase-scoped receive-commit controller claims the
 atomic journal before restore, reconstructs each registered session through a
 contiguous TR3 revision chain, validates canonical AR3/LMF/routing bindings, and
 serializes revision compare-and-swap before invoking a candidate builder. It
 advances the in-memory snapshot only after the durable effect and replay
 tombstone both succeed; an ambiguous post-candidate failure requires a fresh
-restore. This is the persistence authority boundary, not an active or complete
-Triple Ratchet integration.
+restore. This is the persistence authority boundary for the complete Triple
+Ratchet integration.
 
-`PROTOCOL_V3_KEY_SCHEDULE.md` now freezes the next inactive boundary: mandatory
+`PROTOCOL_V3_KEY_SCHEDULE.md` freezes the active boundary: mandatory
 hybrid EC/PQ message-key combination, transcript-bound session/routing/ACK
 expansion, deterministic fragment nonces, a canonical committed record, and a
 bounded complete Triple Ratchet snapshot envelope. The key schedule has public
 golden vectors and the concrete codecs pass through the atomic journal.
 
-`PROTOCOL_V3_HANDSHAKE.md` now freezes an inactive three-message authenticated
-hybrid candidate. Both peers contribute an ephemeral X25519 key and an
+`PROTOCOL_V3_HANDSHAKE.md` freezes the active three-message authenticated
+hybrid handshake. Both peers contribute an ephemeral X25519 key and an
 ML-KEM-768 encapsulation; five ordered X25519 outputs and both ordered ML-KEM
 secrets produce symmetric responder and initiator confirmation tags. Complete
 identities, installation devices, roles, mode, capabilities, record IDs, and
@@ -193,10 +193,10 @@ records now live in the real identity/passphrase-scoped encrypted Aux store:
 the exact offer/reply is persisted before first export, survives restart
 without repeating ML-KEM, and is replaced only after a checkpoint-bound
 completion tombstone is durable. Crossed offers use a clock-free deterministic
-tie-break, which the gated contact/device coordinator enforces after activation.
+tie-break, which the gated contact/device coordinator enforces.
 
-The handshake and application runtime remain implementation candidates behind the
-inactive v3 boundary. They now compose canonical identity import, durable
+The handshake and application runtime form the active v3 boundary. They compose
+canonical identity import, durable
 offer/reply/confirmation bootstrap, the exact initial-TR3 handoff, complete
 send/receive persistence authority, deferred continuation-key resolution,
 checkpointing, replay retirement, AP3 application plaintext, Normal-mode
@@ -204,13 +204,12 @@ multi-device send groups, Maximum-mode exclusivity, exact receiver-ACK retry,
 and per-frame text/link/steganography carriage. `APPLICATION_MESSAGE_V3.md`
 freezes that application boundary.
 
-This is application/runtime integration, not product activation. Contact and
-message repositories, chat UI, migration, passphrase-scoped lifecycle, and
-downstream capability seams are connected only behind the false activation
-selector. The controller depends on an approved native SCKA candidate and
-trusted construction. Its initial registration/completion API is protected by
+Contact and message repositories, chat UI, migration, passphrase-scoped
+lifecycle, and downstream capability seams are connected behind the complete
+activation selector. The controller depends on the approved allowlisted native
+SCKA backend. Its initial registration/completion API is protected by
 one unexposed scope-created identity capability, including concurrent forged-
 claim rejection. Hosted CI, current physical devices, real cross-application
-loss/preservation tests, signed distribution-artifact verification, and
-independent review remain activation gates. The user consequences are defined
+loss/preservation tests, and signed distribution-artifact verification remain
+release gates. The user consequences are defined
 in [Protocol v3 Migration](PROTOCOL_V3_MIGRATION.md).

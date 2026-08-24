@@ -273,6 +273,8 @@ Future<_Fixture> _createFixture() async {
       encryptionServiceProvider.overrideWithValue(encryptionService),
       identitiesRepositoryProvider.overrideWithValue(identitiesRepository),
       messagesRepositoryProvider.overrideWithValue(messagesRepository),
+      protocolV3IdentityEnabledProvider.overrideWithValue(false),
+      protocolV3MessagingEnabledProvider.overrideWithValue(false),
     ],
   );
   final messageStorageKey =
@@ -343,6 +345,8 @@ Future<_Fixture> _createFixtureFor({
       encryptionServiceProvider.overrideWithValue(encryptionService),
       identitiesRepositoryProvider.overrideWithValue(identitiesRepository),
       messagesRepositoryProvider.overrideWithValue(messagesRepository),
+      protocolV3IdentityEnabledProvider.overrideWithValue(false),
+      protocolV3MessagingEnabledProvider.overrideWithValue(false),
     ],
   );
   final messageStorageKey =
@@ -506,7 +510,7 @@ void main() {
     await Hive.box<Map>(LocalDatabase.messagesBoxName).clear();
   });
 
-  group('HomeController session decryption cache', () {
+  group('legacy v2 HomeController session decryption cache', () {
     test('warmSessionDisplayKeys is opt-in and reuses derived keys once warmed',
         () async {
       final fixture = await _createFixture();

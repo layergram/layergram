@@ -32,7 +32,7 @@ typedef V3LmfOutboxBeforePersist = FutureOr<void> Function(
   V3LmfOutboxEntry updatedEntry,
 );
 
-/// Unforgeable ownership token for the inactive v3 send coordinator.
+/// Unforgeable ownership token for the v3 send coordinator.
 ///
 /// Direct outbox access remains available to isolated transport tests. Once a
 /// coordinator claims an outbox, every lifecycle, read, and mutation call must

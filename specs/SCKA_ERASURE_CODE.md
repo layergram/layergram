@@ -1,7 +1,7 @@
 # Layergram SCKA erasure code revision 1
 
-Status: **internal representation frozen; engineering candidate ABI and
-verification packaging connected, default ABI `NOT_READY`; protocol v3 inactive**
+Status: **internal representation frozen and active through the allowlisted
+production ABI; the defensive default ABI remains `NOT_READY`**
 
 This document freezes the Layergram-owned erasure-code representation for the
 public messages used by ML-KEM Braid revision 1. The implementation is
@@ -10,9 +10,9 @@ dependency and is suitable for open-source and commercial downstream use.
 
 The explicit `candidate-ffi` build reaches this module through
 `lg_scka_v1_initialize`, `lg_scka_v1_send`, `lg_scka_v1_receive`, and the
-native self-test. The default build remains `NOT_READY`; candidate packaging is
-opt-in for verification, and the SCKA backend remains unregistered by ordinary
-application startup and non-production.
+native self-test. The default build remains `NOT_READY`; official packaging
+explicitly selects the allowlisted implementation, while unsupported ordinary
+builds fail closed.
 
 ## 1. Sources and scope
 

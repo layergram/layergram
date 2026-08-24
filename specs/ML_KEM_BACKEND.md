@@ -1,11 +1,11 @@
 # ML-KEM-768 native backend
 
-Status: **inactive Android/Apple/Windows/Linux packaging checkpoint; not production approved**
+Status: **active Android/Apple/Windows/Linux production packaging boundary**
 
 Layergram protocol v3 uses a narrow C ABI around the pinned `mlkem-native`
 v2.0.0 implementation. Android, iOS, macOS, Windows x64, and Linux x64 builds
-now package the production ABI, but the current app remains on protocol v2 and
-never loads it from the normal startup, identity, contact, or message paths.
+package the production ABI. Layergram 2.0 loads it through the exact allowlisted
+v3 lifecycle; the defensive default build remains fail-closed.
 
 ## Security boundary
 
@@ -59,7 +59,7 @@ Sanitizer, and production encapsulation traverses the Linux `getrandom` branch.
 
 ## Packaged-platform verification
 
-The inactive production ABI is included without `LG_MLKEM_TESTING` and has
+The production ABI is included without `LG_MLKEM_TESTING` and has
 been checked as follows:
 
 - Android debug and release APKs contain `liblayergram_mlkem.so` for
@@ -71,8 +71,8 @@ been checked as follows:
   packaged round trip and self-test pass in an arm64 iOS simulator.
 - The unsigned iOS device release build is arm64, retains the 14 production
   functions after dead stripping, excludes test hooks, and links the Security
-  framework. Physical-device execution and distribution signing have not yet
-  been verified.
+  framework. Physical-device execution has also passed on the supported iPhone
+  test scope; distribution signing remains part of the official store pipeline.
 - The embedded macOS `LayergramMlKem.framework` is universal
   `arm64`/`x86_64`, exports only the 14 production functions, and is loaded by
   an absolute path derived from the application bundle. The packaged round
@@ -92,10 +92,8 @@ been checked as follows:
   `lib` directory using an absolute path derived from the app executable and is
   linked with full RELRO and immediate binding.
 
-An ordinary signed macOS release build reaches code signing but currently
-fails with the development certificate/keychain error
-`errSecInternalComponent`. The equivalent unsigned release build succeeds;
-signed distribution and notarization therefore remain unverified.
+Official signed distribution remains a per-release pipeline responsibility;
+local unsigned packages are used only for deterministic engineering traversal.
 
 `integration_test/ml_kem_768_packaging_test.dart` is the common device,
 simulator, and desktop FFI traversal. `tool/pq/mlkem_packaged_process_smoke.dart`
@@ -139,12 +137,12 @@ selected choice in `third_party/mlkem-native/SOURCE.json` and
 The SCKA implementation path is now selected in `SCKA_BACKEND.md`: the
 AGPL-only Signal reference implementation is excluded, while an independent
 Layergram-owned Apache-2.0 implementation from the public-domain specification
-is the approved direction. `libcrux-ml-kem` 0.0.10 is only a permissively
-licensed incremental-primitive candidate; no SCKA runtime dependency or
-production implementation is registered. Cryptographic review, the final
-transitive license review, and packaging remain activation gates.
+is the approved direction. `libcrux-ml-kem` 0.0.10 is the pinned permissively
+licensed incremental primitive inside the Layergram-owned SCKA implementation.
+Exact transitive license review and packaging verification remain mandatory for
+every release.
 
-## Remaining activation gates
+## Continuous release requirements
 
 - Package and test the backend on Linux ARM64 and native Windows ARM64 if
   Layergram distributes those targets.
@@ -154,10 +152,13 @@ transitive license review, and packaging remain activation gates.
   physical devices.
 - Complete Apple distribution signing/notarization and Android store-signing
   validation.
-- Complete supply-chain inventory and independent implementation audit.
-- Approve the exact native SCKA dependency and its full transitive license
+- Maintain the supply-chain inventory and seek independent implementation
+  review as a priority post-release objective.
+- Re-approve the exact native SCKA dependency and its full transitive license
   inventory for both public and commercial downstream distribution.
-- Specify and review the authenticated hybrid handshake and sparse PQ ratchet.
+- Keep the authenticated hybrid handshake and sparse PQ ratchet specifications
+  synchronized with the implementation.
 
-Until all gates pass, the backend must not be described to users as active or
-as making Layergram quantum-resistant.
+Only official packages containing the exact allowlisted backend satisfy the
+Layergram 2.0 post-quantum claim. Any missing artifact or failed gate blocks the
+affected release.

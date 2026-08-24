@@ -18,14 +18,14 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('SCKA candidate receipt excludes AGPL code from the OSS base', () {
+  test('SCKA production receipt excludes AGPL code from the OSS base', () {
     final receipt = jsonDecode(
       File('tool/pq/scka_native_candidate.json').readAsStringSync(),
     ) as Map<String, dynamic>;
 
     expect(
       receipt['status'],
-      'implementation-path-selected-not-production-approved',
+      'production-path-selected-registered-active',
     );
 
     final reference =
@@ -36,7 +36,7 @@ void main() {
     final selected =
         receipt['selectedImplementationPath'] as Map<String, dynamic>;
     expect(selected['license'], 'Apache-2.0');
-    expect(selected['productionRegistered'], isFalse);
+    expect(selected['productionRegistered'], isTrue);
 
     final scaffold = receipt['layergramOwnedScaffold'] as Map<String, dynamic>;
     expect(scaffold['crate'], 'layergram-scka');
@@ -157,7 +157,7 @@ void main() {
     expect(File(fuzzing['notices'] as String).existsSync(), isTrue);
     expect(
       scaffold['runtimeStatus'],
-      'candidate-packaged-not-registered-not-active',
+      'production-packaged-registered-active',
     );
 
     final primitive =
@@ -167,10 +167,10 @@ void main() {
     expect(primitive['license'], 'Apache-2.0');
     expect(
       primitive['engineeringLicenseGate'],
-      'pass-inactive-internal-adoption',
+      'pass-production-internal-adoption',
     );
     final probe = primitive['rust187ApiProbe'] as Map<String, dynamic>;
-    expect(probe['result'], 'pass-adopted-inactive-wrapper');
+    expect(probe['result'], 'pass-adopted-production-wrapper');
     expect(probe['offlineLockedRerun'], isTrue);
     expect(probe['pk1Bytes'], 64);
     expect(probe['pk2Bytes'], 1152);
@@ -641,16 +641,16 @@ void main() {
     expect(composition['candidateExactFramesRestoredFromOutbox'], isTrue);
     expect(composition['candidateOuterLmfDispatchConnected'], isTrue);
     expect(composition['candidateDurableJournalConnected'], isTrue);
-    expect(composition['outerLmfDispatchConnected'], isFalse);
-    expect(composition['durableJournalConnected'], isFalse);
-    expect(composition['publicAbiConnected'], isFalse);
-    expect(composition['applicationRuntimeConnected'], isFalse);
-    expect(composition['productionRegistered'], isFalse);
+    expect(composition['outerLmfDispatchConnected'], isTrue);
+    expect(composition['durableJournalConnected'], isTrue);
+    expect(composition['publicAbiConnected'], isTrue);
+    expect(composition['applicationRuntimeConnected'], isTrue);
+    expect(composition['productionRegistered'], isTrue);
     expect(composition['independentlyReviewed'], isFalse);
 
     final effects = receipt['checkpointEffects'] as Map<String, dynamic>;
     expect(effects['thirdPartyCodeImported'], isFalse);
-    expect(effects['runtimeDependencyAddedToInactiveNativeCrate'], isTrue);
+    expect(effects['runtimeDependencyAddedToNativeCrate'], isTrue);
     expect(effects['runtimeDependencyAddedToApplication'], isFalse);
     expect(effects['dartScopeOwnedReceiveDispatchAdded'], isTrue);
     expect(effects['layergramOwnedScaffoldAdded'], isTrue);
@@ -708,46 +708,47 @@ void main() {
     expect(effects['candidateAndroidPhysicalScopeSmokeAdded'], isTrue);
     expect(effects['candidateAndroidAppBundleSmokeAdded'], isTrue);
     expect(effects['pubspecChanged'], isFalse);
-    expect(effects['protocolV3Activated'], isFalse);
+    expect(effects['protocolV3Activated'], isTrue);
 
-    final remainingGates =
-        (receipt['remainingGates'] as List<dynamic>).cast<String>();
-    expect(remainingGates, hasLength(6));
+    final releaseRequirements =
+        (receipt['continuousReleaseRequirements'] as List<dynamic>)
+            .cast<String>();
+    expect(releaseRequirements, hasLength(5));
+    expect(releaseRequirements.any((gate) => gate.contains('transition 13')),
+        isFalse);
     expect(
-        remainingGates.any((gate) => gate.contains('transition 13')), isFalse);
-    expect(
-      remainingGates.any(
+      releaseRequirements.any(
         (gate) => gate.contains('every shipped architecture'),
       ),
       isTrue,
     );
     expect(
-      remainingGates.any(
-        (gate) => gate
-            .contains('independent cryptographic and implementation review'),
+      releaseRequirements.any(
+        (gate) => gate.contains(
+          'independent cryptographic and implementation review',
+        ),
       ),
       isTrue,
     );
     expect(
-      remainingGates.any(
+      releaseRequirements.any(
         (gate) => gate.contains('keep the default ABI NOT_READY'),
       ),
       isTrue,
     );
     expect(
-      remainingGates.any(
-        (gate) => gate.contains('physical Android runtime'),
-      ),
+      releaseRequirements
+          .any((gate) => gate.contains('physical Android runtime')),
       isFalse,
     );
     expect(
-      remainingGates.any(
+      releaseRequirements.any(
         (gate) => gate.contains('recurring green runs'),
       ),
       isTrue,
     );
     expect(
-      remainingGates.any(
+      releaseRequirements.any(
         (gate) => gate.contains('cross-implementation ML-KEM Braid vectors'),
       ),
       isFalse,
@@ -818,7 +819,7 @@ void main() {
     expect(notices, contains('not linked into'));
   });
 
-  test('SCKA dependencies stay permissive and packaging remains opt-in', () {
+  test('SCKA dependencies stay permissive and packaging stays controlled', () {
     final manifest =
         File('native/layergram_scka/Cargo.toml').readAsStringSync();
     final lock = File('native/layergram_scka/Cargo.lock').readAsStringSync();
@@ -957,7 +958,7 @@ void main() {
       expect(entropySource, contains('getrandom_backend = "$backend"'));
     }
     expect(File('specs/ENTROPY_SOURCES.md').readAsStringSync(),
-        contains('protocol v3 inactive'));
+        contains('active identity and protocol-v3'));
 
     final notices = File(
       'native/layergram_scka/THIRD_PARTY_NOTICES.md',
@@ -1065,10 +1066,10 @@ void main() {
     expect(auditTool, contains('git status --porcelain'));
     expect(auditTool, contains('git archive --format=tar'));
     expect(auditTool, contains('premium_repository_included=false'));
-    expect(auditTool, contains('protocol_v3_activated=false'));
-    expect(auditTool, contains('scka_production_registered=false'));
+    expect(auditTool, contains('protocol_v3_activated=true'));
+    expect(auditTool, contains('scka_production_registered=true'));
     expect(auditTool, contains('SOURCE_SHA256SUMS.txt'));
-    expect(auditPolicy, contains('inactive engineering candidate'));
+    expect(auditPolicy, contains('audit input for active protocol v3'));
     expect(
       auditPolicy,
       contains('Non-OSS downstream extension source is not a review input'),
@@ -1076,7 +1077,7 @@ void main() {
     expect(auditPolicy, contains('Layergram-authored tests'));
     expect(
       auditPolicy,
-      contains('high-severity finding reported by a completed review'),
+      contains('critical or high-severity finding must be resolved'),
     );
   });
 
@@ -1124,7 +1125,7 @@ void main() {
     expect(stateEnvelope, contains('decrypt_in_place_detached'));
     expect(
       File('specs/SCKA_INCREMENTAL_MLKEM.md').readAsStringSync(),
-      contains('v3 inactive'),
+      contains('internal primitive active'),
     );
     final payload = File(
       'native/layergram_scka/src/braid_state_payload.rs',
@@ -1136,7 +1137,7 @@ void main() {
     expect(payload, contains('self.encoded.zeroize()'));
     expect(
       File('specs/SCKA_STATE_PAYLOAD.md').readAsStringSync(),
-      contains('protocol v3 inactive'),
+      contains('production ABI registered'),
     );
     final authenticator = File(
       'native/layergram_scka/src/braid_authenticator.rs',
@@ -1150,7 +1151,7 @@ void main() {
     expect(authenticator, contains('self.root_key.zeroize()'));
     expect(
       File('specs/SCKA_AUTHENTICATOR.md').readAsStringSync(),
-      contains('protocol v3 inactive'),
+      contains('active protocol v3'),
     );
     final publicMessage = File(
       'native/layergram_scka/src/braid_message.rs',
@@ -1161,7 +1162,7 @@ void main() {
     expect(publicMessage, contains('BraidMessageType::Ciphertext1Ack'));
     expect(
       File('specs/SCKA_PUBLIC_MESSAGE.md').readAsStringSync(),
-      contains('protocol v3 inactive'),
+      contains('production ABI allowlisted and active'),
     );
     final transition = File(
       'native/layergram_scka/src/braid_transition.rs',
@@ -1219,15 +1220,15 @@ void main() {
     expect(composition, contains('validate_successor'));
     expect(
       File('specs/SCKA_AUTHENTICATED_COMPOSITION.md').readAsStringSync(),
-      contains('Protocol v3 remains inactive'),
+      contains('active behind an exact-build-allowlisted'),
     );
     expect(
       File('specs/SCKA_TRANSITION_ENGINE.md').readAsStringSync(),
-      contains('protocol v3 inactive'),
+      contains('active through the production ABI'),
     );
   });
 
-  test('inactive durable scope pins one admitted SCKA backend', () {
+  test('active durable scope pins one admitted SCKA backend', () {
     final scope = File(
       'lib/core/crypto/v3/session_persistence_scope_v3.dart',
     ).readAsStringSync();
@@ -1271,7 +1272,7 @@ void main() {
     expect(resolver, isNot(contains('V3SessionSnapshotProvider')));
   });
 
-  test('Layergram erasure code remains owned, dependency-free, and inactive',
+  test('Layergram erasure code remains owned, dependency-free, and internal',
       () {
     final receipt = jsonDecode(
       File('tool/pq/scka_native_candidate.json').readAsStringSync(),
@@ -1296,7 +1297,7 @@ void main() {
     expect(source, contains('ConflictingDuplicate'));
     expect(
       File('specs/SCKA_ERASURE_CODE.md').readAsStringSync(),
-      contains('protocol v3 inactive'),
+      contains('active through the allowlisted'),
     );
 
     final nativeEntry = File(

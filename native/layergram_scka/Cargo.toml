@@ -5,13 +5,13 @@ edition = "2021"
 rust-version = "1.87"
 license = "Apache-2.0"
 publish = false
-description = "Inactive Layergram ML-KEM Braid revision-1 native ABI scaffold"
+description = "Layergram ML-KEM Braid revision-1 native ABI backend"
 
 [features]
 default = []
-# Engineering-only bridge used to exercise the complete authenticated SCKA
-# composition through the frozen ABI. Application packaging must never enable
-# this feature until the production activation gates are closed.
+# Exact-build-allowlisted bridge for the complete authenticated SCKA
+# composition. Official packaging enables this historical feature name; the
+# default feature set remains NOT_READY so unsupported builds fail closed.
 candidate-ffi = []
 
 [lints.rust]

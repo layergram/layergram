@@ -1,19 +1,17 @@
 # Layergram authenticated SCKA composition v1
 
-Status: **implemented behind an engineering-only candidate FFI feature; the
-default ABI remains `NOT_READY`; opt-in generated candidate artifacts are
-packaged only by the verification scripts, application routing remains
-fail-closed behind the inactive selector, and protocol v3 remains inactive**
+Status: **active behind an exact-build-allowlisted FFI feature; the defensive
+default ABI remains `NOT_READY`; official Layergram 2.0 artifacts package and
+register the production implementation through the fail-closed selector**
 
 This document freezes the internal composition implemented by
 `native/layergram_scka/src/authenticated_braid.rs`. It joins the already frozen
 Layergram-owned `LS3`, `LB3`, `BM3`, entropy, and ML-KEM Braid revision-1
 transition modules. Cargo feature `candidate-ffi` now connects that composition
 to the frozen C shapes strictly for engineering verification. The default
-feature set still returns `NOT_READY`. The opt-in packaged-scope smoke loads the
-candidate build only through `V3SessionPersistenceScope.openPackagedScka`;
-ordinary `lib/main.dart` reaches only the false activation selector and loads
-neither build.
+feature set still returns `NOT_READY`. Official packaging loads the allowlisted
+build through `V3SessionPersistenceScope.openPackagedScka`; ordinary unsupported
+builds without it fail closed before v3 state opens.
 
 ## 1. Boundary and ownership
 
@@ -126,7 +124,7 @@ persist the exact candidate before another transition can observe that prior
 revision. Retry re-exports those exact bytes and never invokes the transition
 again.
 
-The inactive Dart v3 persistence scope now admits one backend before opening
+The active Dart v3 persistence scope admits one backend before opening
 storage and pins that exact instance across checkpoint restore validation,
 initial HP3-to-TR3 handoff, durable send, and its scope-owned receive resolver.
 A different per-call backend is rejected before SCKA transition work or a
@@ -147,17 +145,16 @@ authentication-failure handler, or commit controller into this scope path.
 Scope-owned wrappers preserve durable send, exact re-export, ACK processing,
 compaction, and retention operations without exposing the controller itself.
 
-The candidate-only bridge now exercises the private Rust composition through
+The allowlisted bridge exercises the internal Rust composition through
 the authority-side integration seam. Its Dart loader accepts only an explicit
 path and checks the exact implementation ID, ABI, protocol revision, state
 format, and every fixed size before admission. The normal Rust feature set
-still returns `NOT_READY`; the candidate is unregistered by ordinary
-application bootstrap and is packaged only by the explicit verification path.
-The application now has inactive text, link, and steganography routing through
-the scope-owned dispatcher, plus inactive migration/status UX and durable
-Normal/Maximum session-generation selection. Production registration, current
-physical-device/real-carrier verification, signed release-artifact
-verification, independent review, and activation approval remain gates.
+still returns `NOT_READY`; official application bootstrap registers only the
+exact production build packaged by the explicit release path. The application
+has active text, link, and steganography routing through the scope-owned
+dispatcher, plus migration/status UX and durable Normal/Maximum
+session-generation selection. Physical-device/carrier and signed artifact
+verification remain per-release gates.
 
 ## 7. Verification and commercial boundary
 
@@ -198,5 +195,5 @@ recorded in `native/layergram_scka/THIRD_PARTY_NOTICES.md` and
 excluded; this is an independent implementation of the public-domain protocol
 specification.
 
-Protocol v3 remains inactive and Layergram must not claim active post-quantum
-protection from this checkpoint.
+This composition is part of active protocol v3. Its production claim remains
+conditional on exact allowlisted packaging and the complete release gate.

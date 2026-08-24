@@ -1,8 +1,8 @@
 # Third-party notices for `layergram-scka`
 
-The SCKA crate is currently an inactive research/build target and is not linked
-into Layergram applications. This file records the exact dependencies that
-would contribute to the crate's normal/build output at the frozen checkpoint.
+The SCKA crate supplies the allowlisted native backend in official Layergram
+2.0 packages. This file records the exact dependencies that contribute to its
+normal/build output at the frozen release checkpoint.
 
 Layergram selects the Apache License 2.0 alternative for every package that is
 dual licensed. The complete Apache License 2.0 text is the repository root

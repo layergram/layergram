@@ -1,7 +1,7 @@
 // Copyright 2026 Layergram
 // SPDX-License-Identifier: Apache-2.0
 
-//! Canonical public-message codec for inactive ML-KEM Braid revision 1.
+//! Canonical public-message codec for ML-KEM Braid revision 1.
 //!
 //! This Layergram-owned `BM3` representation carries the exact logical
 //! `epoch`, `type`, and optional erasure chunk from the public-domain

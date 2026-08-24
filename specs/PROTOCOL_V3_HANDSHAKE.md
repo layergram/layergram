@@ -1,13 +1,13 @@
-# Layergram Protocol v3 — Authenticated Hybrid Handshake Draft
+# Layergram Protocol v3 — Authenticated Hybrid Handshake
 
-Status: **normative implementation candidate; integrated but inactive; not externally reviewed**
+Status: **normative active implementation in Layergram 2.0 and later**
 
-This document freezes a falsifiable three-message handshake candidate for the
-inactive Layergram protocol v3. It does not enable protocol v3 and it is not a
-claim that the construction has passed independent cryptographic review.
+This document freezes the falsifiable three-message handshake used by active
+Layergram protocol v3. Its publication enables independent review; it does not
+claim that such a review has already occurred.
 
 `PROTOCOL_V3_SECURITY_GOALS.md` remains authoritative. This construction must
-change, or remain disabled, if external review finds that its authentication,
+change or be disabled if review finds that its authentication,
 deniability, key-compromise, KEM, transcript, or state-machine properties are
 insufficient.
 
@@ -36,7 +36,7 @@ This checkpoint defines and implements:
 - handoff to the mandatory hybrid session key schedule;
 - fixed canonical `offer`, `reply`, and `confirmation` records;
 - canonical pending-state records for encrypted restart persistence;
-- an inactive, bounded Aux-backed pending repository and single-authority
+- a bounded Aux-backed pending repository and single-authority
   controller with persist-before-export retry and completion tombstones;
 - deterministic resolution of simultaneous crossed offers;
 - fixed size bounds, public codec vectors, negative tests, and native-backend
@@ -71,7 +71,7 @@ Each participant has:
 - `RK`: one fresh 32-byte X25519 initial Double Ratchet key.
 
 The device key is not derived from BIP39. A second device or reinstall creates
-a new random device seed. The inactive integration stores that seed only inside
+a new random device seed. The integration stores that seed only inside
 the same identity/passphrase-scoped encrypted local boundary as other secret
 state.
 
@@ -219,7 +219,7 @@ TH = H384(BASE
 
 Only after the appropriate proof verifies may each side call the mandatory
 hybrid `V3KeySchedule.deriveSession(CS, PS, TH)`. The result is still only an
-authenticated handoff to the inactive ratchet initializers, not an active
+authenticated handoff to the ratchet initializers, not by itself an active
 Layergram application session.
 
 ## 6. Symmetric hybrid proof schedule
@@ -344,7 +344,7 @@ digests are exact role reversals and their mode/capabilities match. Both peers
 retain the lexicographically smaller complete canonical offer. Arrival order
 and wall-clock time do not participate.
 
-An exact duplicate is not a second handshake. The inactive persistence
+An exact duplicate is not a second handshake. The persistence
 controller keys pending state by handshake ID, retains the exact canonical
 offer or reply bytes for resend, and enforces a global and per-remote-identity
 pending cap before expensive handshake cryptography. The active contact/device
@@ -378,7 +378,7 @@ The codec is bounded to 4,096 bytes and rejects truncation, corruption, role
 confusion, zero secrets, non-canonical embedded records, and inconsistent
 offer/reply links. Managed-memory wiping is best effort, not guaranteed.
 
-The inactive `V3HandshakePendingRepository` now stores HP3 plus the exact
+`V3HandshakePendingRepository` stores HP3 plus the exact
 canonical public offer/reply in the same encrypted, padded Aux namespace as the
 session scope. It is bounded to 64 pending handshakes, 4 per remote identity,
 4 MiB of retained pending bytes, 4,096 completion tombstones, and 8,192
@@ -390,7 +390,7 @@ First export occurs only after the pending record write succeeds. An ambiguous
 write fails stopped until a fresh restore, which recovers the exact offer/reply
 without rerunning cryptography.
 
-The inactive handoff coordinator closes the later checkpoint/tombstone crash
+The handoff coordinator closes the later checkpoint/tombstone crash
 gap with an encrypted `v3_handshake_handoff_v1` preparation. It persists the
 exact revision-zero `TR3` and exact confirmation before attempting the initial
 checkpoint. It then persists the checkpoint, writes a completion tombstone
@@ -419,11 +419,10 @@ or preparation-delete outcomes fail stopped until a fresh scope restore. For
 an initiator, the tombstone retains the exact confirmation without retaining
 HP3 secrets.
 
-This remains inactive bootstrap infrastructure. The integrated scope factory
+This is active bootstrap infrastructure. The integrated scope factory
 preserves the unexposed capability topology, contact/device policy, transport
-wrapper, and application projection behind the false selector. An approved
-SCKA backend, hosted/release verification, real carriers, and independent review
-remain activation gates.
+wrapper, and application projection behind the all-or-nothing selector. The
+approved allowlisted SCKA backend and release verification remain mandatory.
 
 ## 10. Manual transport sizing
 
@@ -435,13 +434,13 @@ With canonical 256-byte LMF plaintext fragments:
 | reply | 1,412 | 6 | about 3,147 characters before delimiters |
 | confirmation | 324 | 2 | about 854 characters before delimiters |
 
-The candidate therefore remains compatible with the existing 4,000-character
+The protocol remains compatible with the existing 4,000-character
 portable text target if one logical record's fragments are exported together
 with a compact bounded delimiter. This is a size calculation, not completed
 WhatsApp, Telegram, Signal, iMessage, deep-link, or steganographic UX proof.
 
 The outer bootstrap wrapper, exact armor, loss/retry UX, and carrier-text cost
-must be tested before activation. No implementation may silently omit either
+remain part of the per-release matrix. No implementation may silently omit either
 ML-KEM ciphertext to make the handshake shorter.
 
 ## 11. State transitions
@@ -451,32 +450,32 @@ ML-KEM ciphertext to make the handshake shorter.
 | `INIT` | create/receive canonical offer | pending only |
 | `REPLY` | create/verify responder reply | pending only |
 | `CONFIRM` | create/verify initiator confirmation | pending only |
-| authenticated handoff | prepare exact TR3, checkpoint, tombstone HP3, collect preparation | implemented but inactive |
+| authenticated handoff | prepare exact TR3, checkpoint, tombstone HP3, collect preparation | active |
 | `ACTIVE` | only after ratchet/controller commit | allowed |
 
-Proof verification does not by itself make the application active. The gated
+Proof verification does not by itself bypass application policy. The gated
 integration atomically binds the final transcript, initial EC state, initial PQ
 state, device policy, and replay state before releasing content.
 
-## 12. Remaining security gates
+## 12. Continuous security requirements
 
-Before this candidate can be enabled:
+The active handshake must continue to satisfy:
 
-- independent cryptographic review must assess the custom interactive KEM
-  possession proof, deniability, KCI, active-quantum, reflection, replay, and
-  transcript construction;
-- the implemented bootstrap encryption and LMF key-resolution design must pass
-  independent review and continue to prevent a classical-only application
+- the implemented bootstrap encryption and LMF key-resolution design must
+  continue to prevent a classical-only application
   fallback while binding exact outer records;
 - the implemented Normal and Maximum device policy must pass release-level
   concurrency, loss, and migration tests;
 - the implemented EC, epoch-zero PQ, and native-SCKA initializers must run with
-  an independently reviewed production SCKA backend; the current atomic handoff
+  the allowlisted production SCKA backend; the atomic handoff
   already composes and persists their exact initial `TR3`;
-- active construction must remain private behind the scope coordinator so no
+- construction must remain private behind the scope coordinator so no
   caller can bypass the preparation/checkpoint/tombstone ordering;
 - loss, reorder, duplicate, resend, text, link, steganography, complete static-
   QR identity, passphrase, multiple-identity, backup, and cross-platform
   packaging tests must pass on the release matrix;
 - the complete protocol and implementation must pass the activation gate in
   `PROTOCOL_V3_SECURITY_GOALS.md`.
+
+Independent review of the custom interactive construction remains a priority
+post-release objective; this document does not claim that it has occurred.

@@ -121,7 +121,7 @@ abstract final class V3EcRatchetHeaderCodec {
   }
 }
 
-/// Isolated EC component of one inactive protocol-v3 Triple Ratchet session.
+/// Isolated EC component of one protocol-v3 Triple Ratchet session.
 ///
 /// The state is immutable from the caller's perspective. Send and receive
 /// operations return candidate transitions so failed authentication never
@@ -437,7 +437,7 @@ final class V3EcRatchetTransition {
   }
 }
 
-/// Inactive X25519 Double Ratchet transition engine for protocol v3.
+/// X25519 Double Ratchet transition engine for protocol v3.
 abstract final class V3EcDoubleRatchet {
   static const int maxCounter = 0x7fffffffffffffff;
   static const int maxSkippedMessageKeys =
