@@ -9,6 +9,7 @@ TARGET_DIR=${LAYERGRAM_SCKA_IOS_PHYSICAL_TARGET_DIR:-$REPO_ROOT/.dart_tool/layer
 DERIVED_DATA=${LAYERGRAM_SCKA_IOS_PHYSICAL_DERIVED_DATA:-$REPO_ROOT/.dart_tool/layergram_pq/scka-physical-ios/DerivedData}
 CONFIG_BACKUP_ROOT=${LAYERGRAM_SCKA_IOS_PHYSICAL_CONFIG_BACKUP_DIR:-$REPO_ROOT/.dart_tool/layergram_pq/scka-physical-ios}
 SYMBOLS="$SCRIPT_DIR/scka_expected_symbols.txt"
+PUBSPEC="$REPO_ROOT/pubspec.yaml"
 BUNDLE_ID=app.layergram.app
 LAUNCH_TIMEOUT=${LAYERGRAM_SCKA_IOS_PHYSICAL_TIMEOUT_SECONDS:-60}
 INSTALLED_BY_SCRIPT=false
@@ -21,6 +22,19 @@ GENERATED_ENV_EXISTED=false
 fail() {
   printf '%s\n' "$1" >&2
   exit 1
+}
+
+assert_bundle_version() {
+  plist=$1
+  label=$2
+  [ -f "$plist" ] || fail "Missing $label Info.plist: $plist"
+  short_version=$(/usr/libexec/PlistBuddy -c \
+    'Print :CFBundleShortVersionString' "$plist")
+  build_version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")
+  [ "$short_version" = "$BUILD_NAME" ] ||
+    fail "$label short version $short_version does not match $BUILD_NAME"
+  [ "$build_version" = "$BUILD_NUMBER" ] ||
+    fail "$label build version $build_version does not match $BUILD_NUMBER"
 }
 
 cleanup() {
@@ -78,6 +92,16 @@ command -v xcrun >/dev/null 2>&1 || fail 'Xcode tools are required'
 [ "$(rustc --version | awk '{ print $2 }')" = 1.87.0 ] ||
   fail 'Layergram SCKA packaging requires Rust 1.87.0'
 
+APP_VERSION=$(awk '/^version:/ { print $2; exit }' "$PUBSPEC")
+case "$APP_VERSION" in
+  *+*) ;;
+  *) fail "Invalid pubspec version: $APP_VERSION" ;;
+esac
+BUILD_NAME=${APP_VERSION%%+*}
+BUILD_NUMBER=${APP_VERSION#*+}
+[ -n "$BUILD_NAME" ] && [ -n "$BUILD_NUMBER" ] ||
+  fail "Invalid pubspec version: $APP_VERSION"
+
 mkdir -p "$TARGET_DIR" "$DERIVED_DATA" "$CONFIG_BACKUP_ROOT"
 CONFIG_BACKUP_DIR=$(mktemp -d "$CONFIG_BACKUP_ROOT/ios-config-backup.XXXXXX")
 if [ -f "$GENERATED_CONFIG" ]; then
@@ -122,6 +146,9 @@ binary="$app/Runner"
 [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' \
   "$app/Info.plist")" = "$BUNDLE_ID" ] ||
   fail 'Unexpected physical-iOS smoke bundle identifier'
+assert_bundle_version "$app/Info.plist" 'Runner app'
+assert_bundle_version "$app/PlugIns/Share Extension.appex/Info.plist" \
+  'Share Extension'
 codesign --verify --deep --strict --verbose=2 "$app"
 check_symbols "$binary"
 
