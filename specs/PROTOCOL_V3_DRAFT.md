@@ -61,13 +61,24 @@ Base64URL armor around the exact same binary payload. Compactness therefore
 comes from eliminating redundant JSON field names and duplicated ID/fingerprint
 values, not from reducing cryptographic material.
 
-The maximum 1,270-byte binary identity can be constructed as one static QR at
-error-correction level H, where it occupies QR version 40 (177 x 177 modules).
-The branded renderer reserves a four-module quiet zone and limits the centered
-Layergram logo to 7.5% of the symbol side. Native byte-exact decoding of the
-maximum identity passes with Android ML Kit and Apple Vision at 1,024 and 768
-pixels. Representative physical cameras, printed sizes, lighting, damage, and
-display conditions remain release tests rather than implied by codec capacity.
+The maximum 1,270-byte binary identity is encoded as one static QR at
+error-correction level M, where it occupies QR version 30 (137 x 137 data
+modules). The branded renderer reserves a four-module quiet zone, for 145 x 145
+modules overall, and centers a Layergram logo whose side is 20% of the complete
+symbol side. The preview and normal exported PNG use this same renderer; the
+export is 1,024 x 1,024 pixels.
+
+Native decoders return the original binary payload byte-for-byte at the
+1,024-pixel export size. Bidirectional physical-camera checks also pass between
+an iPhone 14 Pro Max and a Huawei SNE-LX1: the iPhone app scanner reads the
+maximum 1,270-byte Android test identity, and the Android native scanner harness
+reads the complete 1,243-byte iPhone identity. The enlarged presentation uses a
+uniform light surface and raises only the app window to a 60% brightness floor,
+restoring the previous value when it closes; a dark surround was rejected after
+it caused glare and materially slower Android recognition. A 300-DPI render of
+the production 1,024-pixel PNG decodes exactly at each 50, 45, 40, 35, 30, and
+25 mm test size. Actual printed-media, damage, compression, lighting, and broader
+device coverage remain release tests rather than implied by codec capacity.
 
 ## Required identity invariants
 

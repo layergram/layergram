@@ -20,9 +20,10 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 const identityQrLogoAsset = 'assets/icons/app_icon.png';
 const identityQrLogoScale = 0.20;
-const identityQrV3LogoScale = 0.075;
+const identityQrV3LogoScale = 0.20;
 const identityQrV3QuietZoneModules = 4;
 const identityQrV3MaxPreviewSize = 420.0;
+const identityQrV3ErrorCorrectionLevel = QrErrorCorrectLevel.M;
 const identityQrErrorCorrectionLevel = QrErrorCorrectLevel.H;
 
 class IdentityQrCode extends StatelessWidget {
@@ -46,7 +47,7 @@ class IdentityQrCode extends StatelessWidget {
     if (data case final Uint8List binary) {
       final qr = QrCode.fromUint8List(
         data: binary,
-        errorCorrectLevel: identityQrErrorCorrectionLevel,
+        errorCorrectLevel: identityQrV3ErrorCorrectionLevel,
       );
       final quietZone = _quietZoneForSize(size, qr.moduleCount);
       final qrSize = size - (quietZone * 2);
@@ -134,7 +135,7 @@ Future<Uint8List?> renderIdentityQrPng(
     if (data case final Uint8List binary) {
       final qr = QrCode.fromUint8List(
         data: binary,
-        errorCorrectLevel: identityQrErrorCorrectionLevel,
+        errorCorrectLevel: identityQrV3ErrorCorrectionLevel,
       );
       quietZone = _quietZoneForSize(pixelSize.toDouble(), qr.moduleCount);
       qrPixelSize -= quietZone * 2;

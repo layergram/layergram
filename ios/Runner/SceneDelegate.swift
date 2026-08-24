@@ -134,6 +134,8 @@ private struct PendingSharedItem: Decodable {
 class SceneDelegate: FlutterSceneDelegate {
 
   private static let channelName = "layergram/screen_protection"
+  private static let qrBrightnessChannelName = "layergram/screen_brightness"
+  private static let qrBrightnessFloor: CGFloat = 0.60
   private static let defaultsKey = "screen_protection_enabled"
   private static let sharingChannelName = "layergram/sharing"
   private static let shareDefaultsKey = "ShareKey"
@@ -144,6 +146,8 @@ class SceneDelegate: FlutterSceneDelegate {
   private var privacyShieldView: UIView?
   private weak var flutterViewController: FlutterViewController?
   private var protectedRootViewController: ScreenProtectedHostingViewController?
+  private var qrBrightnessRequested = false
+  private var previousScreenBrightness: CGFloat?
 
   override func scene(
     _ scene: UIScene,
@@ -156,19 +160,29 @@ class SceneDelegate: FlutterSceneDelegate {
 
     installProtectedRootViewControllerIfNeeded()
     setupMethodChannel()
+    setupQrBrightnessChannel()
     setupSharingChannel()
     setupCaptureObservers()
     updatePrivacyShieldForCurrentState()
   }
 
   override func sceneWillResignActive(_ scene: UIScene) {
+    restorePreviousScreenBrightness(clearRequest: false)
     super.sceneWillResignActive(scene)
     showPrivacyShieldIfNeeded()
   }
 
   override func sceneDidBecomeActive(_ scene: UIScene) {
     super.sceneDidBecomeActive(scene)
+    if qrBrightnessRequested {
+      applyQrScreenBrightness()
+    }
     updatePrivacyShieldForCurrentState()
+  }
+
+  override func sceneDidDisconnect(_ scene: UIScene) {
+    restorePreviousScreenBrightness(clearRequest: true)
+    super.sceneDidDisconnect(scene)
   }
 
   override func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
@@ -219,6 +233,28 @@ class SceneDelegate: FlutterSceneDelegate {
       case "isSupported":
         // iOS support is partial: we can't hard-block screenshots, but we can shield.
         result(true)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+  }
+
+  private func setupQrBrightnessChannel() {
+    guard let controller = flutterViewController else {
+      return
+    }
+
+    let channel = FlutterMethodChannel(
+      name: Self.qrBrightnessChannelName,
+      binaryMessenger: controller.binaryMessenger
+    )
+
+    channel.setMethodCallHandler { [weak self] call, result in
+      guard let self = self else { return }
+      switch call.method {
+      case "setQrDisplayActive":
+        self.setQrDisplayActive(call.arguments as? Bool ?? false)
+        result(nil)
       default:
         result(FlutterMethodNotImplemented)
       }
@@ -329,6 +365,33 @@ class SceneDelegate: FlutterSceneDelegate {
     UserDefaults.standard.set(enabled, forKey: Self.defaultsKey)
     protectedRootViewController?.setProtectionEnabled(enabled)
     updatePrivacyShieldForCurrentState()
+  }
+
+  private func setQrDisplayActive(_ active: Bool) {
+    if active {
+      guard !qrBrightnessRequested else { return }
+      previousScreenBrightness = UIScreen.main.brightness
+      qrBrightnessRequested = true
+      applyQrScreenBrightness()
+    } else {
+      restorePreviousScreenBrightness(clearRequest: true)
+    }
+  }
+
+  private func applyQrScreenBrightness() {
+    let baseline = previousScreenBrightness ?? UIScreen.main.brightness
+    UIScreen.main.brightness = max(baseline, Self.qrBrightnessFloor)
+  }
+
+  private func restorePreviousScreenBrightness(clearRequest: Bool) {
+    if let previousScreenBrightness {
+      UIScreen.main.brightness = previousScreenBrightness
+    }
+
+    if clearRequest {
+      qrBrightnessRequested = false
+      previousScreenBrightness = nil
+    }
   }
 
   @objc private func onCapturedDidChange() {

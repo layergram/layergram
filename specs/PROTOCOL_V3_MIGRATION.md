@@ -75,10 +75,15 @@ verification reference or an online lookup key:
 
 The QR is deliberately a single, non-animated symbol. Compact encoding removes
 redundant representation data but never truncates X25519 or ML-KEM-768 public
-material. Its maximum form may require a large version-40 QR and an adequate
-printed/displayed size for reliable scanning. Layergram keeps a four-module
-quiet zone and a deliberately small centered logo; users should share the
-full-size preview or high-resolution PNG rather than a compressed thumbnail.
+material. Its maximum form uses QR version 30 with error correction M, a
+four-module quiet zone, and a centered Layergram logo whose side is 20% of the
+complete symbol. The enlarged in-app view uses a uniform light surface and a
+temporary 60% brightness floor that is restored when the view closes. Users
+should share the full-size preview or the 1,024-pixel PNG rather than a
+compressed thumbnail. Printed cards and stickers must preserve the whole quiet
+zone and be tested with representative phones; successful digital rendering at
+a given physical scale is not by itself a guarantee that every printer, paper,
+camera, and lighting condition will scan reliably.
 
 ## Messages and unreliable external delivery
 

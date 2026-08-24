@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:layergram/core/crypto/identity_manager.dart';
@@ -60,6 +61,19 @@ void main() {
   });
 
   testWidgets('identity QR exposes a save/share image action', (tester) async {
+    const brightnessChannel = MethodChannel('layergram/screen_brightness');
+    final brightnessStates = <bool>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(brightnessChannel, (call) async {
+      expect(call.method, 'setQrDisplayActive');
+      brightnessStates.add(call.arguments as bool);
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(brightnessChannel, null);
+    });
+
     final storage = _InMemorySecureStorageService();
     final vault = LocalIdentityVault(secureStorage: storage);
     final manager = IdentityManager(
@@ -113,12 +127,28 @@ void main() {
     await tester.tap(find.text('Share or save QR PNG'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Identity QR'), findsOneWidget);
-    expect(
-      find.textContaining('save it to Photos or Files'),
-      findsOneWidget,
-    );
+    expect(find.byKey(const ValueKey('identity-qr-actions-sheet')), findsOne);
+    expect(find.text('Identity QR'), findsNothing);
+    expect(find.textContaining('save it to Photos or Files'), findsNothing);
+    expect(find.byType(SingleChildScrollView), findsNothing);
+    expect(find.byType(IdentityQrCode), findsNWidgets(2));
     expect(find.text('Share or save QR PNG'), findsWidgets);
+    expect(
+      tester.widget<BottomSheet>(find.byType(BottomSheet)).backgroundColor,
+      Colors.white,
+    );
+    expect(
+      tester
+          .widgetList<ModalBarrier>(find.byType(ModalBarrier))
+          .any((barrier) => barrier.color == Colors.white),
+      isTrue,
+    );
+    expect(brightnessStates, [true]);
+
+    await tester.tapAt(const Offset(4, 4));
+    await tester.pumpAndSettle();
+
+    expect(brightnessStates, [true, false]);
     expect(tester.takeException(), isNull);
   });
 

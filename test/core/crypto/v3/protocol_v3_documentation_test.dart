@@ -58,6 +58,24 @@ void main() {
     expect(migration, contains('lost, delayed, duplicated'));
   });
 
+  test('identity QR documentation stays aligned with the physical gate', () {
+    final draft = _normalized(
+      File('specs/PROTOCOL_V3_DRAFT.md').readAsStringSync(),
+    );
+    final migration = _normalized(
+      File('specs/PROTOCOL_V3_MIGRATION.md').readAsStringSync(),
+    );
+
+    expect(draft, contains('error-correction level M'));
+    expect(draft, contains('QR version 30'));
+    expect(draft, contains('four-module quiet zone'));
+    expect(draft, contains('20% of the complete symbol side'));
+    expect(draft, contains('1,024 x 1,024 pixels'));
+    expect(migration, contains('temporary 60% brightness floor'));
+    expect(draft, isNot(contains('QR version 40')));
+    expect(draft, isNot(contains('7.5% of the symbol side')));
+  });
+
   test('migration contract preserves mode and passphrase boundaries', () {
     final migration = _normalized(
       File('specs/PROTOCOL_V3_MIGRATION.md').readAsStringSync(),

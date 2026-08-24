@@ -97,6 +97,70 @@ default ABI remains `NOT_READY`.
 
 ## Reproducible checks
 
+### Static identity QR physical and print gate
+
+The physical camera harness displays the maximum 1,270-byte canonical v3
+identity and scans any complete canonical v3 identity. It uses the same QR
+renderer and native scanner dependency as the app, continues automatically
+after an incomplete/non-canonical read, and emits a byte-counted
+`LAYERGRAM_QR_CAMERA_PASS` line only after canonical decoding succeeds. Its
+display mode also exercises the temporary brightness floor; scan mode restores
+the prior window value.
+
+Build and install the isolated Android harness without replacing the normal app:
+
+```sh
+ORG_GRADLE_PROJECT_layergramSckaPhysicalSmoke=true \
+  flutter build apk --debug -t tool/pq/identity_qr_camera_harness.dart
+
+adb -s <serial> install -r -d build/app/outputs/flutter-apk/app-debug.apk
+adb -s <serial> shell am force-stop app.layergram.sckasmoke
+adb -s <serial> shell monkey -p app.layergram.sckasmoke \
+  -c android.intent.category.LAUNCHER 1
+```
+
+Confirm the APK manifest says `app.layergram.sckasmoke` before installing it.
+Use **Mostra QR** for Android-display-to-iPhone-camera tests. Use **Scansiona**
+for iPhone-display-to-Android-camera tests: open a complete v3 identity in the
+iOS candidate app and scan it with the harness. Test the normal preview and the
+enlarged preview separately. A successful screen test requires the complete
+expected byte length and no `LAYERGRAM_QR_CAMERA_RETRY` result left as the final
+state. Record device models, OS versions, payload length, elapsed time,
+lighting, orientation, and whether either phone had to be tilted.
+
+On Android, the display-mode window must report `sbrt=0.6` when the system
+brightness is below 60%; scan mode must have no window brightness override, and
+the global system setting must remain unchanged. The equivalent iOS check uses
+the candidate app: opening the enlarged QR raises the app display to at least
+60%, and closing/backgrounding it restores the previous brightness. The QR
+itself remains version 30, ECC M, with a four-module quiet zone and a 20% logo;
+brightness presentation must never change those encoding parameters.
+
+Create the one-page A4 print gate from the real 1,024-pixel app export:
+
+```sh
+flutter run -d macos -t tool/pq/export_qr_print_test_png.dart
+# Copy the `created=...` file reported by the sandboxed runner:
+mkdir -p tmp/pdfs output/pdf
+cp <created-path> tmp/pdfs/layergram-v3-max-identity-export-1024.png
+python3 -m pip install --disable-pip-version-check --no-input \
+  --target tmp/pdfs/python-deps -r tool/pq/requirements-print.txt
+PYTHONPATH=tmp/pdfs/python-deps \
+  python3 tool/pq/create_qr_print_test_pdf.py
+```
+
+The PDF places the same PNG at 50, 45, 40, 35, 30, and 25 mm on one A4 page;
+the 50 mm example is inside an 85.60 x 53.98 mm card outline. Print at 100%
+with page fitting disabled, measure the 50 x 10 mm calibration rectangle, and
+scan every numbered size three times with representative iPhone and Android
+devices. The supported minimum is the smallest size read immediately and
+without error by both physical devices, not the smallest size decoded from a
+digital 300-DPI render. The QR payload is synthetic and must not be added as a
+real contact.
+
+The print-only Python packages are permissively licensed and are not linked,
+packaged, or distributed with Layergram.
+
 Regenerate and compare the independent revision-1 conformance vector with the
 Python 3 standard-library oracle:
 

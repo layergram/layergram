@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -22,6 +23,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/providers.dart';
 import '../../l10n/app_strings.dart';
 import '../../ui/passphrase_button.dart';
+import '../../utils/qr_display_brightness_controller.dart';
 import '../../utils/sharing.dart';
 import 'identity_qr_code.dart';
 import 'my_identity_controller.dart';
@@ -128,52 +130,68 @@ class _MyIdentityViewState extends ConsumerState<MyIdentityView> {
   }
 
   Future<void> _showQrActions(Object data) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheetContext) {
-        final t = AppStrings.t;
-        return SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  t(sheetContext, 'identityQrActionsTitle'),
-                  style: Theme.of(sheetContext).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 8),
-                Text(t(sheetContext, 'identityQrActionsSubtitle')),
-                if (data is Uint8List) ...[
-                  const SizedBox(height: 16),
-                  Center(
-                    child: IdentityQrCode(
-                      data: data,
-                      size: (MediaQuery.sizeOf(sheetContext).width - 32)
-                          .clamp(160.0, identityQrV3MaxPreviewSize)
-                          .toDouble(),
-                      color: Colors.black,
-                      backgroundColor: Colors.white,
+    final brightness = QrDisplayBrightnessController();
+    await brightness.enhance();
+    if (!mounted) {
+      await brightness.restore();
+      return;
+    }
+    try {
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: false,
+        backgroundColor: Colors.white,
+        barrierColor: Colors.white,
+        builder: (sheetContext) {
+          final t = AppStrings.t;
+          final screenSize = MediaQuery.sizeOf(sheetContext);
+          final maxQrSize =
+              data is Uint8List ? identityQrV3MaxPreviewSize : 360.0;
+          final qrSize = math
+              .min(screenSize.width - 32, screenSize.height - 200)
+              .clamp(160.0, maxQrSize)
+              .toDouble();
+          return SafeArea(
+            child: Padding(
+              key: const ValueKey('identity-qr-actions-sheet'),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Semantics(
+                    image: true,
+                    label: t(sheetContext, 'identityQrActionsTitle'),
+                    child: Center(
+                      child: IdentityQrCode(
+                        data: data,
+                        size: qrSize,
+                        color: Colors.black,
+                        backgroundColor: Colors.white,
+                      ),
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                    iconColor: Colors.black,
+                    textColor: Colors.black,
+                    leading: const Icon(Icons.file_download_outlined),
+                    title: Text(t(sheetContext, 'shareOrSaveQrImage')),
+                    onTap: () async {
+                      Navigator.of(sheetContext).pop();
+                      await _shareQrImage(data);
+                    },
+                  ),
                 ],
-                const SizedBox(height: 12),
-                ListTile(
-                  leading: const Icon(Icons.file_download_outlined),
-                  title: Text(t(sheetContext, 'shareOrSaveQrImage')),
-                  onTap: () async {
-                    Navigator.of(sheetContext).pop();
-                    await _shareQrImage(data);
-                  },
-                ),
-              ],
+              ),
             ),
-          ),
-        );
-      },
-    );
+          );
+        },
+      );
+    } finally {
+      await brightness.restore();
+    }
   }
 
   @override

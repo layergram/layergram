@@ -34,8 +34,18 @@ void main() {
     final logo = find.byKey(const ValueKey('identity-v3-qr-logo'));
     expect(logo, findsOneWidget);
     final logoSize = tester.getSize(logo);
-    expect(logoSize.width, closeTo(23.0, 0.2));
-    expect(logoSize.height, closeTo(23.0, 0.2));
+    final qr = QrCode.fromUint8List(
+      data: binary,
+      errorCorrectLevel: identityQrV3ErrorCorrectionLevel,
+    );
+    final quietZone = 320 *
+        identityQrV3QuietZoneModules /
+        (qr.moduleCount + identityQrV3QuietZoneModules * 2);
+    final expectedLogoSize = (320 - quietZone * 2) * identityQrV3LogoScale;
+    expect(qr.typeNumber, 30);
+    expect(qr.moduleCount, 137);
+    expect(logoSize.width, closeTo(expectedLogoSize, 0.2));
+    expect(logoSize.height, closeTo(expectedLogoSize, 0.2));
     expect(tester.takeException(), isNull);
   });
 

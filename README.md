@@ -78,7 +78,7 @@ be shared with a contact.
 ### Core Functionality
 - **Compose and share** encrypted messages over any text-based channel
 - **Decode** received messages by pasting them into the app
-- **Identity management** — create, export, and import public identities via a branded static QR code, deep link, or text block
+- **Identity management** — create, export, and import complete public identities via a single branded static QR code, deep link, or text block; the enlarged QR temporarily improves display brightness and restores the previous setting when closed
 - **Local chat history** — encrypted archive of sent and received messages
 - **Pin / search / delete** conversations
 - **Self-destructing messages** — optional expiration and delete-after-read
