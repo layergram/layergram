@@ -72,6 +72,7 @@ void main() {
     expect(draft, contains('20% of the complete symbol side'));
     expect(draft, contains('1,024 x 1,024 pixels'));
     expect(migration, contains('temporary 60% brightness floor'));
+    expect(migration, contains('at least 35 mm per side'));
     expect(draft, isNot(contains('QR version 40')));
     expect(draft, isNot(contains('7.5% of the symbol side')));
   });

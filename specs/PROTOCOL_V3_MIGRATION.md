@@ -81,9 +81,14 @@ complete symbol. The enlarged in-app view uses a uniform light surface and a
 temporary 60% brightness floor that is restored when the view closes. Users
 should share the full-size preview or the 1,024-pixel PNG rather than a
 compressed thumbnail. Printed cards and stickers must preserve the whole quiet
-zone and be tested with representative phones; successful digital rendering at
-a given physical scale is not by itself a guarantee that every printer, paper,
-camera, and lighting condition will scan reliably.
+zone. For the maximum 1,270-byte identity, print the complete QR at **at least
+35 mm per side, including its quiet zone**, as the conservative card and
+sticker recommendation. In the physical release check, a printer reduced the
+nominal sizes to approximately 96%: an older Huawei SNE-LX1 decoded the nominal
+30 mm sample (about 28.8 mm measured), while an iPhone 14 Pro Max also decoded
+the nominal 25 mm sample (about 24 mm measured). Those smaller results are test
+evidence, not a universal supported minimum: printer scaling, paper, damage,
+camera quality, and lighting can all require more margin.
 
 ## Messages and unreliable external delivery
 

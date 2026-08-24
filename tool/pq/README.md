@@ -157,6 +157,14 @@ without error by both physical devices, not the smallest size decoded from a
 digital 300-DPI render. The QR payload is synthetic and must not be added as a
 real contact.
 
+The 2026-08-24 release print measured the nominal 50 mm sample at 48 mm, so the
+page was scaled to approximately 96%. The Huawei SNE-LX1 decoded nominal sizes
+from 30 mm upward (about 28.8 mm measured); the iPhone 14 Pro Max also decoded
+the nominal 25 mm sample (about 24 mm measured). The published recommendation
+therefore remains a conservative **35 mm measured side or larger**, including
+the complete quiet zone, rather than treating the smallest successful sample as
+a universal promise.
+
 The print-only Python packages are permissively licensed and are not linked,
 packaged, or distributed with Layergram.
 
