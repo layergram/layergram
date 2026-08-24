@@ -13,8 +13,6 @@
 // limitations under the License.
 
 import 'dart:async';
-import 'dart:collection';
-import 'dart:ui' show FrameTiming;
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
@@ -66,7 +64,6 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
   bool _streamDeepLinkObserved = false;
   int _deepLinkGeneration = 0;
   Future<void> _deepLinkTail = Future<void>.value();
-  final ListQueue<bool> _recentSlowFrames = ListQueue<bool>();
   final Set<String> _sharedTextsInFlight = <String>{};
   final Map<String, DateTime> _recentSharedTexts = <String, DateTime>{};
 
@@ -82,7 +79,6 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
       },
     );
     WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addTimingsCallback(_handleFrameTimings);
     _reloadIdentity();
     _identityReloadSub = ref.listenManual<int>(
       identityReloadTokenProvider,
@@ -237,32 +233,6 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
     );
 
     Future.microtask(_loadPendingSharedText);
-  }
-
-  void _handleFrameTimings(List<FrameTiming> timings) {
-    for (final timing in timings) {
-      final buildMicros = timing.buildDuration.inMicroseconds;
-      final rasterMicros = timing.rasterDuration.inMicroseconds;
-      final totalMicros = timing.totalSpan.inMicroseconds;
-      final slow =
-          buildMicros >= 14000 || rasterMicros >= 16000 || totalMicros >= 28000;
-      _recentSlowFrames.addLast(slow);
-      if (_recentSlowFrames.length > 24) {
-        _recentSlowFrames.removeFirst();
-      }
-    }
-
-    if (_recentSlowFrames.length < 12) {
-      return;
-    }
-
-    final slowCount = _recentSlowFrames.where((slow) => slow).length;
-    final reducedEffects = ref.read(reducedEffectsProvider);
-    if (!reducedEffects && slowCount >= 6) {
-      ref.read(reducedEffectsProvider.notifier).state = true;
-    } else if (reducedEffects && slowCount <= 1) {
-      ref.read(reducedEffectsProvider.notifier).state = false;
-    }
   }
 
   Future<void> _loadPendingSharedText() async {
@@ -526,7 +496,6 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
     }
 
     if (state == AppLifecycleState.resumed) {
-      _recentSlowFrames.clear();
       Future.microtask(_loadPendingSharedText);
       if (!ref.read(appNeedsUnlockProvider)) {
         unawaited(ref.read(homeControllerProvider).warmSessionDisplayKeys());
@@ -556,7 +525,6 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
     _passphrasePreferencesSub?.close();
     ref.read(fsPassphraseTimeoutControllerProvider).dispose();
     _appLockIdleController.dispose();
-    WidgetsBinding.instance.removeTimingsCallback(_handleFrameTimings);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -571,9 +539,6 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
     final needsUnlock = ref.watch(appNeedsUnlockProvider);
     final screenProtectionEnabled = ref.watch(screenProtectionEnabledProvider);
     final privacyShieldVisible = ref.watch(privacyShieldVisibleProvider);
-    final reducedEffects = ref.watch(reducedEffectsProvider);
-    final backgroundAnimationPaused =
-        ref.watch(backgroundAnimationPausedProvider);
     final tooltipsEnabled = ref.watch(tooltipsEnabledProvider);
     final tooltipsVisible =
         AppPlatform.supportsHoverTooltips && tooltipsEnabled;
@@ -618,9 +583,6 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
       supportedLocales: context.supportedLocales,
       localizationsDelegates: context.localizationDelegates,
       builder: (context, child) {
-        final mediaQuery = MediaQuery.maybeOf(context);
-        final effectiveReducedEffects =
-            reducedEffects || (mediaQuery?.disableAnimations ?? false);
         return Listener(
           behavior: HitTestBehavior.translucent,
           onPointerDown: (_) => _appLockIdleController.onUserInteraction(),
@@ -632,11 +594,7 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
             child: Stack(
               fit: StackFit.expand,
               children: [
-                LayergramBackground(
-                  reducedEffects: effectiveReducedEffects,
-                  pauseAnimation: backgroundAnimationPaused,
-                  child: child ?? const SizedBox(),
-                ),
+                LayergramBackground(child: child ?? const SizedBox()),
                 if (screenProtectionEnabled && privacyShieldVisible)
                   const PrivacyShieldOverlay(),
               ],

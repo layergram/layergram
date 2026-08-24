@@ -366,12 +366,6 @@ final pinnedChatsProvider = StreamProvider<Map<String, int>>((ref) {
   return repo.watchPinnedChats(folderId: folderId);
 });
 
-final reducedEffectsProvider = StateProvider<bool>((_) => false);
-final backgroundAnimationHoldCountProvider = StateProvider<int>((_) => 0);
-final backgroundAnimationPausedProvider = Provider<bool>((ref) {
-  return ref.watch(backgroundAnimationHoldCountProvider) > 0;
-});
-
 final themeModeProvider = StateProvider<ThemeMode>((_) => ThemeMode.system);
 final pendingDeepLinkProvider = StateProvider<String?>((_) => null);
 final pendingSharedTextProvider = StateProvider<String?>((_) => null);

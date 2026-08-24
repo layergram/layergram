@@ -175,7 +175,6 @@ class ChatViewState extends ConsumerState<ChatView> {
   bool _handoffScheduled = false;
   bool _decryptionPrimed = false;
   Timer? _decryptionPrimeTimer;
-  bool _backgroundHoldActive = false;
   bool _verifiedThisSession = false;
   bool _bannerDismissed = false;
   bool _maximumFsOutgoingSetupConfirmed = false;
@@ -552,26 +551,6 @@ class ChatViewState extends ConsumerState<ChatView> {
     );
   }
 
-  void _acquireBackgroundHold() {
-    if (_backgroundHoldActive) {
-      return;
-    }
-    final holdCount = ref.read(backgroundAnimationHoldCountProvider);
-    ref.read(backgroundAnimationHoldCountProvider.notifier).state =
-        holdCount + 1;
-    _backgroundHoldActive = true;
-  }
-
-  void _releaseBackgroundHold() {
-    if (!_backgroundHoldActive) {
-      return;
-    }
-    final notifier = ref.read(backgroundAnimationHoldCountProvider.notifier);
-    final next = notifier.state > 0 ? notifier.state - 1 : 0;
-    notifier.state = next;
-    _backgroundHoldActive = false;
-  }
-
   static const Map<String, Map<String, String>> _expiryLexicon = {
     'en': {
       'never': 'Never',
@@ -935,14 +914,6 @@ class ChatViewState extends ConsumerState<ChatView> {
     super.initState();
     _homeController = ref.read(homeControllerProvider);
     _decryptionPrimed = widget.embedded;
-    if (!widget.embedded) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || widget.embedded) {
-          return;
-        }
-        _acquireBackgroundHold();
-      });
-    }
     _coverCtrl.addListener(_onFieldChanged);
     _secretCtrl.addListener(_onFieldChanged);
     _scrollController.addListener(_onScroll);
@@ -993,10 +964,7 @@ class ChatViewState extends ConsumerState<ChatView> {
           setState(() {
             _decryptionPrimed = true;
           });
-          _releaseBackgroundHold();
         });
-      } else {
-        _releaseBackgroundHold();
       }
       unawaited(
         _homeController.purgeReadDeleteAfterReadFor(widget.contact.identityId),
@@ -1583,7 +1551,6 @@ class ChatViewState extends ConsumerState<ChatView> {
     }
     _revealTimers.clear();
     _decryptionPrimeTimer?.cancel();
-    _releaseBackgroundHold();
     _searchCtrl.dispose();
     _searchFocusNode.dispose();
     _coverCtrl.removeListener(_onFieldChanged);
