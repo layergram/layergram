@@ -27,21 +27,34 @@ void main() {
     expect(
       'CURRENT_PROJECT_VERSION = "\$(FLUTTER_BUILD_NUMBER)";'
           .allMatches(project),
-      hasLength(7),
+      hasLength(4),
     );
     expect(
-      'MARKETING_VERSION = "\$(FLUTTER_BUILD_NAME)";'.allMatches(project),
+      'CURRENT_PROJECT_VERSION = 27;'.allMatches(project),
       hasLength(3),
     );
-    expect(project, isNot(contains('MARKETING_VERSION = 1.0.4;')));
+    expect(
+      'MARKETING_VERSION = 2.0.0;'.allMatches(project),
+      hasLength(3),
+    );
+
+    final extensionConfigurations = RegExp(
+      r'buildSettings = \{.*?PRODUCT_BUNDLE_IDENTIFIER = app\.layergram\.app\.share;.*?\n\s*\};',
+      dotAll: true,
+    ).allMatches(project).map((match) => match.group(0)!).toList();
+    expect(extensionConfigurations, hasLength(3));
+    for (final configuration in extensionConfigurations) {
+      expect(configuration, contains('CURRENT_PROJECT_VERSION = 27;'));
+      expect(configuration, contains('MARKETING_VERSION = 2.0.0;'));
+    }
 
     final extensionInfo = File(
       'ios/Share Extension/Info.plist',
     ).readAsStringSync();
-    expect(extensionInfo, contains('<string>\$(FLUTTER_BUILD_NAME)</string>'));
+    expect(extensionInfo, contains('<string>\$(MARKETING_VERSION)</string>'));
     expect(
       extensionInfo,
-      contains('<string>\$(FLUTTER_BUILD_NUMBER)</string>'),
+      contains('<string>\$(CURRENT_PROJECT_VERSION)</string>'),
     );
   });
 }
