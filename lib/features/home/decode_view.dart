@@ -74,13 +74,19 @@ class _DecodeViewState extends ConsumerState<DecodeView> {
                   if (!mounted) return;
                   setState(() => _outcome = outcome);
 
-                  if (outcome.kind == DecodeKind.success &&
-                      outcome.payload != null) {
-                    final sender = await ref
-                        .read(identitiesRepositoryProvider)
-                        .getRemoteById(outcome.payload!.senderId);
+                  if ((outcome.kind == DecodeKind.success &&
+                          outcome.payload != null) ||
+                      outcome.kind == DecodeKind.v3Control) {
+                    var sender = outcome.v3Inbound?.contact;
+                    final payload = outcome.payload;
+                    if (sender == null && payload != null) {
+                      sender = await ref
+                          .read(identitiesRepositoryProvider)
+                          .getRemoteById(payload.senderId);
+                    }
                     if (!context.mounted) return;
-                    if (sender != null) {
+                    final resolvedSender = sender;
+                    if (resolvedSender != null) {
                       if (outcome.isMaximumFsSetupOnly) {
                         await showMaximumFsSetupDialog(
                           context,
@@ -90,7 +96,7 @@ class _DecodeViewState extends ConsumerState<DecodeView> {
                       }
                       await Navigator.of(context).push(
                         MaterialPageRoute(
-                            builder: (_) => ChatView(contact: sender)),
+                            builder: (_) => ChatView(contact: resolvedSender)),
                       );
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(

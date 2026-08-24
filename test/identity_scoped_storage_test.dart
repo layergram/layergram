@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 
@@ -30,16 +31,20 @@ void main() {
     );
   }
 
+  Future<SecretKey> deriveContactsKey(String keyScope) {
+    return SealedMapCipher.deriveKey(
+      keyMaterial,
+      scope: keyScope,
+      info: 'contacts-test',
+    );
+  }
+
   Future<void> initIdentitiesRepo(
     IdentitiesRepository repo,
     String scopeToken,
     String keyScope,
   ) async {
-    final key = await SealedMapCipher.deriveKey(
-      keyMaterial,
-      scope: keyScope,
-      info: 'contacts-test',
-    );
+    final key = await deriveContactsKey(keyScope);
     await repo.setActiveContext(
       scopeToken: scopeToken,
       encryptionKey: key,
@@ -143,5 +148,109 @@ void main() {
     final bContacts = await repoB2.watchRemote().first;
     expect(bContacts.map((c) => c.identityId).toSet(), {'Y'});
     repoB2.dispose();
+  });
+
+  test('contact writes stay bound to their queued identity context', () async {
+    final keyA = await deriveContactsKey('A');
+    final keyB = await deriveContactsKey('B');
+    final repo = IdentitiesRepository(ownerIdentityId: 'owner');
+    await repo.setActiveContext(
+      scopeToken: 'scope-a',
+      encryptionKey: keyA,
+      selfIdentity: null,
+    );
+
+    final writeA = repo.upsertRemoteIdentity(
+      const RemoteIdentity(
+        identityId: 'contact-a',
+        publicKeyBase64: 'pk-a',
+        fingerprint: 'fp-a',
+        displayName: 'A',
+      ),
+    );
+    final switchToB = repo.setActiveContext(
+      scopeToken: 'scope-b',
+      encryptionKey: keyB,
+      selfIdentity: null,
+    );
+    final writeB = repo.upsertRemoteIdentity(
+      const RemoteIdentity(
+        identityId: 'contact-b',
+        publicKeyBase64: 'pk-b',
+        fingerprint: 'fp-b',
+        displayName: 'B',
+      ),
+    );
+
+    await Future.wait([writeA, switchToB, writeB]);
+    repo.dispose();
+
+    final viewA = IdentitiesRepository(ownerIdentityId: 'owner');
+    await initIdentitiesRepo(viewA, 'scope-a', 'A');
+    expect(
+      (await viewA.watchRemote().first).map((contact) => contact.identityId),
+      ['contact-a'],
+    );
+    viewA.dispose();
+
+    final viewB = IdentitiesRepository(ownerIdentityId: 'owner');
+    await initIdentitiesRepo(viewB, 'scope-b', 'B');
+    expect(
+      (await viewB.watchRemote().first).map((contact) => contact.identityId),
+      ['contact-b'],
+    );
+    viewB.dispose();
+  });
+
+  test('verification changes only an unchanged persisted contact', () async {
+    final repo = IdentitiesRepository(ownerIdentityId: 'owner');
+    await initIdentitiesRepo(repo, 'scope-a', 'A');
+    const contact = RemoteIdentity(
+      identityId: 'contact-a',
+      publicKeyBase64: 'pk-a',
+      fingerprint: 'fp-a',
+      displayName: 'A',
+      verified: true,
+    );
+
+    await repo.upsertRemoteIdentity(contact);
+    expect((await repo.getRemoteById(contact.identityId))?.verified, isFalse);
+
+    await repo.setRemoteVerification(
+      expectedIdentity: contact,
+      verified: true,
+    );
+    expect((await repo.getRemoteById(contact.identityId))?.verified, isTrue);
+
+    await repo.upsertRemoteIdentity(contact.copyWith(displayName: 'Renamed'));
+    final renamed = await repo.getRemoteById(contact.identityId);
+    expect(renamed?.displayName, 'Renamed');
+    expect(renamed?.verified, isTrue);
+
+    await expectLater(
+      repo.setRemoteVerification(
+        expectedIdentity: const RemoteIdentity(
+          identityId: 'contact-a',
+          publicKeyBase64: 'different-key',
+          fingerprint: 'different-fingerprint',
+          displayName: 'A',
+        ),
+        verified: false,
+      ),
+      throwsStateError,
+    );
+    await expectLater(
+      repo.setRemoteVerification(
+        expectedIdentity: const RemoteIdentity(
+          identityId: 'missing-contact',
+          publicKeyBase64: 'pk',
+          fingerprint: 'fp',
+          displayName: 'Missing',
+        ),
+        verified: true,
+      ),
+      throwsStateError,
+    );
+    repo.dispose();
   });
 }

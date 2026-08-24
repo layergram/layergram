@@ -53,7 +53,9 @@ class FsPassphraseSettingsSection extends ConsumerWidget {
             underline: const SizedBox.shrink(),
             onChanged: (value) {
               if (value == null) return;
-              ref.read(passphrasePreferencesProvider.notifier).updateTimeout(value);
+              ref
+                  .read(passphrasePreferencesProvider.notifier)
+                  .updateTimeout(value);
             },
             items: PassphraseTimeout.values.map((to) {
               return DropdownMenuItem(
@@ -155,19 +157,21 @@ class FsPassphraseSettingsSection extends ConsumerWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: OutlinedButton.icon(
-            onPressed: () {
+            onPressed: () async {
               final pp = ref.read(passphraseProvider);
               final prefs = ref.read(passphrasePreferencesProvider);
               final keyTag = pp.keyTag;
               if (keyTag != null) {
-                ref.read(fsHistoryModeEnforcementProvider).onPassphraseExpelled(
+                await ref
+                    .read(fsHistoryModeEnforcementProvider)
+                    .onPassphraseExpelled(
                       historyMode: prefs.historyMode,
                       fsPersistence: prefs.fsPersistence,
                       identityContext: keyTag,
                     );
               }
               ref.read(fsPassphraseTimeoutControllerProvider).stop();
-              ref.read(passphraseProvider.notifier).deactivate();
+              await ref.read(passphraseProvider.notifier).deactivate();
             },
             icon: const Icon(Icons.logout),
             label: Text(t(context, 'security.pp.expel_now')),
@@ -211,8 +215,7 @@ class FsPassphraseSettingsSection extends ConsumerWidget {
     }
   }
 
-  String _fsPersistenceLabel(
-      BuildContext context, PassphraseFsPersistence fp) {
+  String _fsPersistenceLabel(BuildContext context, PassphraseFsPersistence fp) {
     final t = AppStrings.t;
     switch (fp) {
       case PassphraseFsPersistence.persistent:
@@ -274,9 +277,12 @@ class FsPassphraseSettingsSection extends ConsumerWidget {
             return AlertDialog(
               title: Row(
                 children: [
-                  const Icon(Icons.warning_amber_outlined, color: Colors.orange),
+                  const Icon(Icons.warning_amber_outlined,
+                      color: Colors.orange),
                   const SizedBox(width: 8),
-                  Expanded(child: Text(t(ctx, 'security.warn.recoverability_title'))),
+                  Expanded(
+                      child:
+                          Text(t(ctx, 'security.warn.recoverability_title'))),
                 ],
               ),
               content: SingleChildScrollView(
@@ -311,7 +317,8 @@ class FsPassphraseSettingsSection extends ConsumerWidget {
                   style: FilledButton.styleFrom(
                     backgroundColor: confirmed ? Colors.orange : Colors.grey,
                   ),
-                  onPressed: confirmed ? () => Navigator.of(ctx).pop(true) : null,
+                  onPressed:
+                      confirmed ? () => Navigator.of(ctx).pop(true) : null,
                   child: Text(t(ctx, 'confirm')),
                 ),
               ],

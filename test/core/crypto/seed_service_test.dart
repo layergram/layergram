@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:layergram/core/crypto/seed_service.dart';
 
@@ -12,7 +14,33 @@ void main() {
   });
 
   group('SeedService', () {
-    test('derivePrivateKeyV1 reproduces the legacy sha256(seed) output exactly', () {
+    test('generates valid 12-word and 24-word mnemonics from the secure source',
+        () {
+      final words12 = service.generateMnemonic(words: 12);
+      final words24 = service.generateMnemonic(words: 24);
+      final independent24 = service.generateMnemonic(words: 24);
+
+      expect(words12.split(' '), hasLength(12));
+      expect(words24.split(' '), hasLength(24));
+      expect(service.validateMnemonic(words12), isTrue);
+      expect(service.validateMnemonic(words24), isTrue);
+      expect(independent24, isNot(words24));
+    });
+
+    test('owns the full-byte secure-random callback instead of bip39 default',
+        () {
+      final source = File(
+        'lib/core/crypto/seed_service.dart',
+      ).readAsStringSync();
+
+      expect(source, contains('final secureRandom = math.Random.secure();'));
+      expect(source, contains('randomBytes: (length)'));
+      expect(source, contains('secureRandom.nextInt(256)'));
+      expect(source, isNot(contains('secureRandom.nextInt(255)')));
+    });
+
+    test('derivePrivateKeyV1 reproduces the legacy sha256(seed) output exactly',
+        () {
       final seed = service.mnemonicToSeed(mnemonic);
       final derived = service.derivePrivateKeyV1(seed);
 
@@ -22,7 +50,8 @@ void main() {
       );
     });
 
-    test('derivePrivateKeyV2 is deterministic for the same seed and purpose', () async {
+    test('derivePrivateKeyV2 is deterministic for the same seed and purpose',
+        () async {
       final seed = service.mnemonicToSeed(mnemonic);
 
       final first = await service.deriveIdentityPrivateKey(
@@ -49,7 +78,8 @@ void main() {
       expect(_toHex(v2), isNot(_toHex(v1)));
     });
 
-    test('v2 identity and passphrase derivations use distinct namespaces', () async {
+    test('v2 identity and passphrase derivations use distinct namespaces',
+        () async {
       final seed = service.mnemonicToSeed(mnemonic);
 
       final identityV2 = await service.deriveIdentityPrivateKey(
@@ -64,7 +94,8 @@ void main() {
       expect(_toHex(passphraseV2), isNot(_toHex(identityV2)));
     });
 
-    test('legacy v1 passphrase and identity derivations remain identical', () async {
+    test('legacy v1 passphrase and identity derivations remain identical',
+        () async {
       final seed = service.mnemonicToSeed(mnemonic);
 
       final identityV1 = await service.deriveIdentityPrivateKey(

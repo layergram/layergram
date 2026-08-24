@@ -1,0 +1,4 @@
+# Test-artifact dependencies only; neither package is linked into Layergram.
+# qrcode: BSD-3-Clause. reportlab: BSD-3-Clause.
+qrcode==8.2
+reportlab==4.2.0

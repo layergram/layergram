@@ -12,6 +12,8 @@ val releaseStorePassword = keystoreProperties.getProperty("storePassword")
 val releaseKeyAlias = keystoreProperties.getProperty("keyAlias")
 val releaseKeyPassword = keystoreProperties.getProperty("keyPassword")
 val hasReleaseKeystore = keystorePropertiesFile.exists()
+val isLayergramSckaPhysicalSmoke =
+    providers.gradleProperty("layergramSckaPhysicalSmoke").orNull == "true"
 
 fun resolveKeystoreFile(path: String): File {
     val normalizedPath = if (path.startsWith("~/")) {
@@ -84,13 +86,39 @@ android {
     }
 
     defaultConfig {
-        applicationId = "app.layergram"
+        applicationId = if (isLayergramSckaPhysicalSmoke) {
+            "app.layergram.sckasmoke"
+        } else {
+            "app.layergram"
+        }
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        externalNativeBuild {
+            cmake {
+                arguments += listOf("-DANDROID_STL=none")
+            }
+        }
+    }
+
+    // Generated only by the explicit protocol-v3 packaging tool. Requiring a
+    // Gradle property prevents a later ordinary build from inheriting stale
+    // candidate artifacts left in the ignored directory.
+    if (providers.gradleProperty("layergramSckaCandidatePackage").orNull == "true") {
+        sourceSets.getByName("main").jniLibs.srcDir(
+            rootProject.file("../.dart_tool/layergram_pq/scka-package/android/jniLibs")
+        )
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
 
     buildTypes {

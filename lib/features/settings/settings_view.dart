@@ -30,6 +30,7 @@ import 'widgets/cover_length_limit_selector.dart';
 import 'widgets/data_reset_section.dart';
 import 'widgets/language_selector.dart';
 import 'widgets/premium_tile.dart';
+import 'widgets/settings_section.dart';
 import 'widgets/theme_selector.dart';
 
 class SettingsView extends ConsumerWidget {
@@ -50,6 +51,10 @@ class SettingsView extends ConsumerWidget {
         ref.watch(sessionDecryptionCacheEnabledProvider);
     final sessionDecryptionCacheService =
         ref.read(sessionDecryptionCacheServiceProvider);
+    final isPassphraseActive = ref.watch(isPassphraseActiveProvider);
+    final hasPremiumSettings = caps.backup.isAvailable ||
+        caps.coverGenerator.isAvailable ||
+        caps.identity.isAvailable;
     // Aggiungi context.locale per forzare il rebuild quando cambia la lingua
     Localizations.maybeLocaleOf(context);
 
@@ -62,135 +67,173 @@ class SettingsView extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
         children: [
-          ListTile(
-            title: Text(t(context, 'security')),
-            subtitle: Text(t(context, 'privacyShield')),
+          SettingsSection(
+            key: const ValueKey('settings-section-security'),
+            title: t(context, 'security'),
+            subtitle: t(context, 'privacyShield'),
+            icon: Icons.shield_outlined,
+            isFirst: true,
+            children: [
+              SwitchListTile.adaptive(
+                value: screenProtectionEnabled,
+                title: Text(t(context, 'screenProtection')),
+                subtitle: Text(t(context, 'screenProtectionSubtitle')),
+                onChanged: (value) async {
+                  ref.read(screenProtectionEnabledProvider.notifier).state =
+                      value;
+                  if (!value) {
+                    ref.read(privacyShieldVisibleProvider.notifier).state =
+                        false;
+                  }
+                  await screenProtectionService.setEnabled(value);
+                },
+              ),
+              const AppLockSettings(),
+              // §11.2/§14.2 — visible only for an active passphrase identity.
+              if (isPassphraseActive) const FsPassphraseSettingsSection(),
+            ],
           ),
-          SwitchListTile.adaptive(
-            value: screenProtectionEnabled,
-            title: Text(t(context, 'screenProtection')),
-            subtitle: Text(t(context, 'screenProtectionSubtitle')),
-            onChanged: (value) async {
-              ref.read(screenProtectionEnabledProvider.notifier).state = value;
-              if (!value) {
-                ref.read(privacyShieldVisibleProvider.notifier).state = false;
-              }
-              await screenProtectionService.setEnabled(value);
-            },
+          SettingsSection(
+            key: const ValueKey('settings-section-privacy'),
+            title: t(context, 'privacyFirst'),
+            icon: Icons.privacy_tip_outlined,
+            children: [
+              SwitchListTile.adaptive(
+                value: hideChatPreview,
+                title: Text(t(context, 'hideChatPreview')),
+                subtitle: Text(t(context, 'hideChatPreviewSubtitle')),
+                onChanged: (value) async {
+                  ref.read(hideChatPreviewProvider.notifier).state = value;
+                  await previewService.setHidden(value);
+                },
+              ),
+              SwitchListTile.adaptive(
+                value: sessionDecryptionCacheEnabled,
+                title: Text(t(context, 'sessionDecryptionCache')),
+                subtitle: Text(t(context, 'sessionDecryptionCacheSubtitle')),
+                onChanged: (value) async {
+                  ref
+                      .read(
+                        sessionDecryptionCacheEnabledProvider.notifier,
+                      )
+                      .state = value;
+                  await sessionDecryptionCacheService.setEnabled(value);
+                  final controller = ref.read(homeControllerProvider);
+                  if (!value) {
+                    controller.clearSessionDecryptionCache();
+                    return;
+                  }
+                  if (!ref.read(appNeedsUnlockProvider)) {
+                    await controller.warmSessionDisplayKeys();
+                  }
+                },
+              ),
+            ],
           ),
-          AppLockSettings(),
-          const SizedBox(height: 8),
-
-          // §11.2/§14.2 — Passphrase settings (visible only when active)
-          const FsPassphraseSettingsSection(),
-          if (showTooltipSetting) ...[
-            SwitchListTile.adaptive(
-              value: tooltipsEnabled,
-              title: Text(t(context, 'enableButtonDescriptions')),
-              subtitle: Text(t(context, 'enableButtonDescriptionsSubtitle')),
-              onChanged: (value) async {
-                ref.read(tooltipsEnabledProvider.notifier).state = value;
-                await tooltipService.setEnabled(value);
-              },
+          SettingsSection(
+            key: const ValueKey('settings-section-messaging'),
+            title: t(context, 'settingsSectionMessaging'),
+            icon: Icons.chat_bubble_outline,
+            children: const [CoverLengthLimitSelector()],
+          ),
+          SettingsSection(
+            key: const ValueKey('settings-section-appearance'),
+            title: '${t(context, 'theme')} · ${t(context, 'language')}',
+            icon: Icons.palette_outlined,
+            children: [
+              if (showTooltipSetting)
+                SwitchListTile.adaptive(
+                  value: tooltipsEnabled,
+                  title: Text(t(context, 'enableButtonDescriptions')),
+                  subtitle: Text(
+                    t(context, 'enableButtonDescriptionsSubtitle'),
+                  ),
+                  onChanged: (value) async {
+                    ref.read(tooltipsEnabledProvider.notifier).state = value;
+                    await tooltipService.setEnabled(value);
+                  },
+                ),
+              const ThemeSelector(),
+              const LanguageSelector(),
+            ],
+          ),
+          if (hasPremiumSettings)
+            SettingsSection(
+              key: const ValueKey('settings-section-premium'),
+              title: t(context, 'premiumFeatures'),
+              icon: Icons.workspace_premium_outlined,
+              children: [
+                if (caps.backup.isAvailable)
+                  PremiumTile(
+                    isAvailable: caps.backup.isAvailable,
+                    icon: Icons.cloud_outlined,
+                    titleKey: 'premiumBackupTitle',
+                    subtitleKey: 'premiumBackupSubtitle',
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const BackupView()),
+                      );
+                    },
+                  ),
+                if (caps.coverGenerator.isAvailable)
+                  PremiumTile(
+                    isAvailable: caps.coverGenerator.isAvailable,
+                    icon: Icons.auto_awesome,
+                    titleKey: 'premiumCoverTitle',
+                    subtitleKey: 'premiumCoverSubtitle',
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const CoverGeneratorView(),
+                        ),
+                      );
+                    },
+                  ),
+                if (caps.identity.isAvailable)
+                  PremiumTile(
+                    isAvailable: caps.identity.isAvailable,
+                    icon: Icons.switch_account_outlined,
+                    titleKey: 'premiumMultiIdentityTitle',
+                    subtitleKey: 'premiumMultiIdentitySubtitle',
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const MultiIdentityView(),
+                        ),
+                      );
+                    },
+                  ),
+              ],
             ),
-            const SizedBox(height: 8),
-          ],
-          SwitchListTile.adaptive(
-            value: hideChatPreview,
-            title: Text(t(context, 'hideChatPreview')),
-            subtitle: Text(t(context, 'hideChatPreviewSubtitle')),
-            onChanged: (value) async {
-              ref.read(hideChatPreviewProvider.notifier).state = value;
-              await previewService.setHidden(value);
-            },
-          ),
-          const SizedBox(height: 8),
-          SwitchListTile.adaptive(
-            value: sessionDecryptionCacheEnabled,
-            title: Text(t(context, 'sessionDecryptionCache')),
-            subtitle: Text(t(context, 'sessionDecryptionCacheSubtitle')),
-            onChanged: (value) async {
-              ref.read(sessionDecryptionCacheEnabledProvider.notifier).state =
-                  value;
-              await sessionDecryptionCacheService.setEnabled(value);
-              final controller = ref.read(homeControllerProvider);
-              if (!value) {
-                controller.clearSessionDecryptionCache();
-                return;
-              }
-              if (!ref.read(appNeedsUnlockProvider)) {
-                await controller.warmSessionDisplayKeys();
-              }
-            },
-          ),
-          const SizedBox(height: 8),
-          ThemeSelector(),
-          const SizedBox(height: 8),
-          CoverLengthLimitSelector(),
-          const SizedBox(height: 8),
-          LanguageSelector(),
-          const SizedBox(height: 8),
-
-          if (caps.backup.isAvailable || caps.coverGenerator.isAvailable || caps.identity.isAvailable) ...[
-            ListTile(
-              leading: const Icon(Icons.workspace_premium_outlined),
-              title: Text(t(context, 'premiumFeatures')),
-            ),
-            if (caps.backup.isAvailable)
-              PremiumTile(
-                isAvailable: caps.backup.isAvailable,
-                icon: Icons.cloud_outlined,
-                titleKey: 'premiumBackupTitle',
-                subtitleKey: 'premiumBackupSubtitle',
+          SettingsSection(
+            key: const ValueKey('settings-section-information'),
+            title: t(context, 'settingsSectionInformation'),
+            icon: Icons.info_outline,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.phonelink_lock_outlined),
+                title: Text(t(context, 'privacyFirst')),
+                subtitle: Text(t(context, 'localOnlyVersion')),
+              ),
+              ListTile(
+                leading: const Icon(Icons.info_outline),
+                title: Text(t(context, 'aboutApp')),
+                trailing: const Icon(Icons.chevron_right),
                 onTap: () {
                   Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const BackupView()),
+                    MaterialPageRoute(builder: (_) => const AboutView()),
                   );
                 },
               ),
-            if (caps.coverGenerator.isAvailable)
-              PremiumTile(
-                isAvailable: caps.coverGenerator.isAvailable,
-                icon: Icons.auto_awesome,
-                titleKey: 'premiumCoverTitle',
-                subtitleKey: 'premiumCoverSubtitle',
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const CoverGeneratorView()),
-                  );
-                },
-              ),
-            if (caps.identity.isAvailable)
-              PremiumTile(
-                isAvailable: caps.identity.isAvailable,
-                icon: Icons.switch_account_outlined,
-                titleKey: 'premiumMultiIdentityTitle',
-                subtitleKey: 'premiumMultiIdentitySubtitle',
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const MultiIdentityView()),
-                  );
-                },
-              ),
-            const SizedBox(height: 8),
-          ],
-
-          ListTile(
-            title: Text(t(context, 'privacyFirst')),
-            subtitle: Text(t(context, 'localOnlyVersion')),
+            ],
           ),
-          const SizedBox(height: 8),
-          ListTile(
-            leading: const Icon(Icons.info_outline),
-            title: Text(t(context, 'aboutApp')),
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const AboutView()),
-              );
-            },
+          SettingsSection(
+            key: const ValueKey('settings-section-danger'),
+            title: t(context, 'settingsSectionDanger'),
+            icon: Icons.warning_amber_outlined,
+            isDanger: true,
+            children: const [DataResetSection()],
           ),
-          const SizedBox(height: 24),
-          DataResetSection(),
         ],
       ),
     );

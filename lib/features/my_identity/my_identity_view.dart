@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -22,6 +23,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/providers.dart';
 import '../../l10n/app_strings.dart';
 import '../../ui/passphrase_button.dart';
+import '../../utils/qr_display_brightness_controller.dart';
 import '../../utils/sharing.dart';
 import 'identity_qr_code.dart';
 import 'my_identity_controller.dart';
@@ -71,9 +73,14 @@ class _MyIdentityViewState extends ConsumerState<MyIdentityView> {
     }
   }
 
-  Future<void> _shareQrImage(String data) async {
+  Future<void> _shareQrImage(Object data) async {
     final messenger = ScaffoldMessenger.of(context);
-    if (data.trim().isEmpty) {
+    final isEmpty = switch (data) {
+      final String value => value.trim().isEmpty,
+      final Uint8List value => value.isEmpty,
+      _ => true,
+    };
+    if (isEmpty) {
       messenger.showSnackBar(
         SnackBar(
           content: Text(AppStrings.t(context, 'identityQrImageUnavailable')),
@@ -122,40 +129,69 @@ class _MyIdentityViewState extends ConsumerState<MyIdentityView> {
     }
   }
 
-  Future<void> _showQrActions(String data) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheetContext) {
-        final t = AppStrings.t;
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  t(sheetContext, 'identityQrActionsTitle'),
-                  style: Theme.of(sheetContext).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 8),
-                Text(t(sheetContext, 'identityQrActionsSubtitle')),
-                const SizedBox(height: 12),
-                ListTile(
-                  leading: const Icon(Icons.file_download_outlined),
-                  title: Text(t(sheetContext, 'shareOrSaveQrImage')),
-                  onTap: () async {
-                    Navigator.of(sheetContext).pop();
-                    await _shareQrImage(data);
-                  },
-                ),
-              ],
+  Future<void> _showQrActions(Object data) async {
+    final brightness = QrDisplayBrightnessController();
+    await brightness.enhance();
+    if (!mounted) {
+      await brightness.restore();
+      return;
+    }
+    try {
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: false,
+        backgroundColor: Colors.white,
+        barrierColor: Colors.white,
+        builder: (sheetContext) {
+          final t = AppStrings.t;
+          final screenSize = MediaQuery.sizeOf(sheetContext);
+          final maxQrSize =
+              data is Uint8List ? identityQrV3MaxPreviewSize : 360.0;
+          final qrSize = math
+              .min(screenSize.width - 32, screenSize.height - 200)
+              .clamp(160.0, maxQrSize)
+              .toDouble();
+          return SafeArea(
+            child: Padding(
+              key: const ValueKey('identity-qr-actions-sheet'),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Semantics(
+                    image: true,
+                    label: t(sheetContext, 'identityQrActionsTitle'),
+                    child: Center(
+                      child: IdentityQrCode(
+                        data: data,
+                        size: qrSize,
+                        color: Colors.black,
+                        backgroundColor: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                    iconColor: Colors.black,
+                    textColor: Colors.black,
+                    leading: const Icon(Icons.file_download_outlined),
+                    title: Text(t(sheetContext, 'shareOrSaveQrImage')),
+                    onTap: () async {
+                      Navigator.of(sheetContext).pop();
+                      await _shareQrImage(data);
+                    },
+                  ),
+                ],
+              ),
             ),
-          ),
-        );
-      },
-    );
+          );
+        },
+      );
+    } finally {
+      await brightness.restore();
+    }
   }
 
   @override
@@ -260,14 +296,30 @@ class _MyIdentityViewState extends ConsumerState<MyIdentityView> {
                   child: LayoutBuilder(
                     builder: (lbContext, constraints) {
                       final isWide = constraints.maxWidth > 600;
-                      final qr = FutureBuilder<Map<String, dynamic>?>(
+                      final qr = FutureBuilder<Object?>(
                         future: ref
                             .read(myIdentityControllerProvider)
                             .identityQrPayload(),
                         builder: (qrContext, payloadSnap) {
                           final payload = payloadSnap.data;
-                          final data =
-                              payload == null ? '' : jsonEncode(payload);
+                          final Object data = payload == null
+                              ? ''
+                              : payload is Uint8List
+                                  ? payload
+                                  : jsonEncode(payload);
+                          final hasData = switch (data) {
+                            final String value => value.isNotEmpty,
+                            final Uint8List value => value.isNotEmpty,
+                            _ => false,
+                          };
+                          final qrColumnWidth = isWide
+                              ? (constraints.maxWidth - 16) / 2
+                              : constraints.maxWidth;
+                          final qrSize = data is Uint8List
+                              ? (qrColumnWidth - 16)
+                                  .clamp(160.0, identityQrV3MaxPreviewSize)
+                                  .toDouble()
+                              : 220.0;
                           return Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -280,21 +332,25 @@ class _MyIdentityViewState extends ConsumerState<MyIdentityView> {
                                       context, 'identityQrActionHint'),
                                   child: InkWell(
                                     borderRadius: BorderRadius.circular(18),
-                                    onTap: data.isEmpty
+                                    onTap: !hasData
                                         ? null
                                         : () => _showQrActions(data),
-                                    onLongPress: data.isEmpty
+                                    onLongPress: !hasData
                                         ? null
                                         : () => _showQrActions(data),
                                     child: Padding(
                                       padding: const EdgeInsets.all(8),
                                       child: IdentityQrCode(
                                         data: data,
-                                        size: 220,
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.onSurface,
-                                        backgroundColor: Colors.transparent,
+                                        size: qrSize,
+                                        color: data is Uint8List
+                                            ? Colors.black
+                                            : Theme.of(
+                                                context,
+                                              ).colorScheme.onSurface,
+                                        backgroundColor: data is Uint8List
+                                            ? Colors.white
+                                            : Colors.transparent,
                                       ),
                                     ),
                                   ),
@@ -302,7 +358,7 @@ class _MyIdentityViewState extends ConsumerState<MyIdentityView> {
                               ),
                               const SizedBox(height: 8),
                               TextButton.icon(
-                                onPressed: data.isEmpty
+                                onPressed: !hasData
                                     ? null
                                     : () => _showQrActions(data),
                                 icon: const Icon(Icons.file_download_outlined),
@@ -374,6 +430,28 @@ class _MyIdentityViewState extends ConsumerState<MyIdentityView> {
                                 ),
                               ),
                             ],
+                          ),
+                          const SizedBox(height: 8),
+                          OutlinedButton.icon(
+                            onPressed: () async {
+                              final messenger = ScaffoldMessenger.of(context);
+                              final block = await ref
+                                  .read(myIdentityControllerProvider)
+                                  .identityShareBlock();
+                              await ref
+                                  .read(clipboardServiceProvider)
+                                  .writeText(block);
+                              if (!context.mounted) return;
+                              messenger.showSnackBar(
+                                SnackBar(
+                                  content: Text(AppStrings.t(
+                                      context, 'identityTextCopied')),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.content_copy_outlined),
+                            label: Text(
+                                AppStrings.t(context, 'copyIdentityAsText')),
                           ),
                           const SizedBox(height: 8),
                           Text(

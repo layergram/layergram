@@ -28,9 +28,14 @@ import '../../core/crypto/fs_opportunistic_controller.dart';
 import '../../core/crypto/fs_security_mode.dart';
 import '../../core/crypto/lmf_v2_decoder.dart';
 import '../../core/crypto/fs_session_manager.dart';
+import '../../core/crypto/identity_link_codec.dart';
 import '../../core/crypto/message_record_cipher.dart';
 import '../../core/crypto/models.dart';
 import '../../core/crypto/passphrase_service.dart';
+import '../../core/crypto/stego_decoder.dart';
+import '../../core/crypto/v3/application_chat_bridge_v3.dart';
+import '../../core/crypto/v3/local_identity_v3.dart';
+import '../../core/crypto/v3/public_identity_v3.dart';
 import '../../core/providers.dart';
 
 class DecryptedMessagePreview {
@@ -52,6 +57,14 @@ class FsSendBlockedException implements Exception {
   String toString() => messageKey;
 }
 
+class ProtocolV3ContactMigrationRequiredException implements Exception {
+  const ProtocolV3ContactMigrationRequiredException();
+}
+
+class ProtocolV3OutboundRequiredException implements Exception {
+  const ProtocolV3OutboundRequiredException();
+}
+
 class HomeController {
   HomeController(this.ref);
 
@@ -60,12 +73,14 @@ class HomeController {
   final Ref ref;
   final LinkedHashMap<String, Future<SecretKey?>> _displayKeys =
       LinkedHashMap<String, Future<SecretKey?>>();
+  final Map<String, V3ChatOutboundExport> _pendingV3Responses = {};
 
   static const int _maxRetainedDisplayKeys = 12;
   static const int _sessionWarmContactLimit = 6;
   static const int _minRawMessageBytes = 28;
   static const int _minDirectPayloadChars = 38;
   static const int _maxDirectPayloadChars = 65536;
+  static const int _maxIdentityImportCharacters = 4096;
   static final RegExp _directPayloadPattern = RegExp(r'^[A-Za-z0-9_-]+={0,2}$');
 
   // ── Passphrase helpers ──────────────────────────────────────────────────
@@ -87,7 +102,24 @@ class HomeController {
     final keyTag = await currentKeyTag();
     if (keyTag == null) return null;
     final keyBytes = Uint8List.fromList(base64Decode(privateKeyB64));
-    return MessageRecordCipher.deriveKey(keyBytes, keyTag: keyTag);
+    try {
+      return await MessageRecordCipher.deriveKey(keyBytes, keyTag: keyTag);
+    } finally {
+      keyBytes.fillRange(0, keyBytes.length, 0);
+    }
+  }
+
+  Future<void> persistMessageRecord(MessageRecord message) async {
+    final messagesRepository = ref.read(messagesRepositoryProvider);
+    final storageKey = await currentStorageKey();
+    try {
+      await messagesRepository.add(
+        message,
+        storageKey: storageKey,
+      );
+    } finally {
+      storageKey?.destroy();
+    }
   }
 
   /// The keyTag for the currently active key (passphrase or original).
@@ -102,6 +134,160 @@ class HomeController {
     final local = await ref.read(identityManagerProvider).getLocalIdentity();
     if (local == null) return null;
     return PassphraseNotifier.computeKeyTagFromBase64(local.publicKeyBase64);
+  }
+
+  bool isProtocolV3Contact(RemoteIdentity contact) {
+    return ref.read(protocolV3MessagingEnabledProvider) &&
+        contact.protocolVersion == V3PublicIdentityCodec.protocolVersion &&
+        (contact.publicIdentityBase64?.isNotEmpty ?? false);
+  }
+
+  Future<V3ApplicationChatBridge?> _protocolV3Bridge() async {
+    if (!ref.read(protocolV3MessagingEnabledProvider)) return null;
+    final runtime = await ref.read(v3ApplicationSessionRuntimeProvider.future);
+    if (runtime == null) return null;
+    return V3ApplicationChatBridge(
+      runtime: runtime,
+      messagesRepository: ref.read(messagesRepositoryProvider),
+      keyTag: await currentKeyTag(),
+    );
+  }
+
+  Future<V3ChatContactSecurityStatus?> protocolV3SecurityStatus(
+    RemoteIdentity contact,
+  ) async {
+    if (!isProtocolV3Contact(contact)) return null;
+    final bridge = await _protocolV3Bridge();
+    if (bridge == null) return null;
+    return bridge.securityStatus(
+      contact: contact,
+      selectedMode: bridge.modeForContact(contact),
+      eligibilityPolicy: bridge.eligibilityForContact(contact),
+      requireEligibilityPolicy: true,
+    );
+  }
+
+  Future<void> setProtocolV3SecurityMode(
+    RemoteIdentity contact,
+    FsSecurityMode mode,
+  ) async {
+    if (!isProtocolV3Contact(contact) || mode == FsSecurityMode.base) {
+      throw ArgumentError('Invalid Layergram v3 contact security mode');
+    }
+    final bridge = await _protocolV3Bridge();
+    if (bridge == null) {
+      throw StateError('Layergram v3 runtime is not available');
+    }
+    final fsController = ref.read(
+      fsOpportunisticControllerProvider(contact.identityId),
+    );
+    await bridge.setContactSecurityMode(contact, mode);
+    fsController.securityMode = mode;
+    ref.read(fsRegistryVersionProvider.notifier).state++;
+  }
+
+  Future<V3ChatOutboundExport> prepareProtocolV3Outbound({
+    required RemoteIdentity recipient,
+    required V3ChatCarrierMode carrierMode,
+    required String text,
+    String coverText = '',
+    int? expireAfter,
+    bool deleteAfterRead = false,
+    bool backupExcluded = false,
+  }) async {
+    if (!isProtocolV3Contact(recipient)) {
+      throw StateError('Layergram v3 is not available for this contact');
+    }
+    final bridge = await _protocolV3Bridge();
+    if (bridge == null) {
+      throw StateError('Layergram v3 runtime is not available');
+    }
+    final selectedMode = bridge.modeForContact(recipient);
+    final existingPolicy = bridge.eligibilityForContact(recipient);
+    final policy = existingPolicy ??
+        await bridge.ensureContactPolicy(recipient, selectedMode);
+    final export = await bridge.prepareOutbound(
+      contact: recipient,
+      mode: selectedMode,
+      carrierMode: carrierMode,
+      text: text,
+      coverText: coverText,
+      expireAfterUnixSeconds: expireAfter,
+      deleteAfterRead: deleteAfterRead,
+      backupExcluded: backupExcluded,
+      eligibilityPolicy: policy,
+      eligibilityForContact: bridge.eligibilityForContact,
+    );
+    if (export.purpose == V3ChatOutboundPurpose.handshake) {
+      ref.read(fsRegistryVersionProvider.notifier).state++;
+    }
+    return export;
+  }
+
+  Future<void> markProtocolV3Exported(
+    V3ChatOutboundExport export, {
+    int? partIndex,
+  }) async {
+    final bridge = await _protocolV3Bridge();
+    if (bridge == null) return;
+    await bridge.markExported(export, partIndex: partIndex);
+  }
+
+  V3ChatOutboundExport? takePendingProtocolV3Response(String contactId) {
+    return _pendingV3Responses.remove(contactId);
+  }
+
+  Future<List<V3ChatOutboundExport>> restorePendingProtocolV3Exports({
+    required RemoteIdentity contact,
+    required V3ChatCarrierMode carrierMode,
+    String coverText = '',
+  }) async {
+    if (!isProtocolV3Contact(contact)) return const [];
+    final bridge = await _protocolV3Bridge();
+    if (bridge == null) return const [];
+    return bridge.pendingExportsForContact(
+      contact: contact,
+      carrierMode: carrierMode,
+      coverText: coverText,
+    );
+  }
+
+  Future<void> markMessageRead(MessageRecord message) async {
+    if (!message.isV3Encrypted) {
+      await ref.read(messagesRepositoryProvider).markRead(message.id);
+      return;
+    }
+    final runtime = await ref.read(v3ApplicationSessionRuntimeProvider.future);
+    if (runtime == null) return;
+    await runtime.markProjectedMessageRead(
+      messagesRepository: ref.read(messagesRepositoryProvider),
+      messageRecordId: message.id,
+      keyTag: await currentKeyTag(),
+    );
+  }
+
+  Future<void> deleteMessage(MessageRecord message) async {
+    if (!message.isV3Encrypted) {
+      await ref.read(messagesRepositoryProvider).delete(message.id);
+      return;
+    }
+    final runtime = await ref.read(v3ApplicationSessionRuntimeProvider.future);
+    if (runtime == null) return;
+    await runtime.deleteProjectedMessage(
+      messagesRepository: ref.read(messagesRepositoryProvider),
+      messageRecordId: message.id,
+      keyTag: await currentKeyTag(),
+    );
+  }
+
+  Future<void> purgeReadDeleteAfterReadFor(String contactId) async {
+    final messages =
+        await ref.read(messagesRepositoryProvider).getThread(contactId);
+    for (final message in messages) {
+      if (message.deleteAfterRead && message.readAt != null) {
+        await deleteMessage(message);
+      }
+    }
   }
 
   /// V2: link payload is base64url of raw bytes (nonce + ciphertext).
@@ -190,6 +376,12 @@ class HomeController {
     bool selfCopy = false,
     bool maximumFsSetupOnly = false,
   }) async {
+    if (!selfCopy && ref.read(protocolV3MessagingEnabledProvider)) {
+      if (recipient.protocolVersion == V3PublicIdentityCodec.protocolVersion) {
+        throw const ProtocolV3OutboundRequiredException();
+      }
+      throw const ProtocolV3ContactMigrationRequiredException();
+    }
     final identityManager = ref.read(identityManagerProvider);
     final local = await identityManager.getLocalIdentity();
     final privateKey = await _activePrivateKey();
@@ -533,7 +725,24 @@ class HomeController {
     required MessageRecord message,
     required RemoteIdentity contact,
   }) async {
+    if (message.direction == 'incoming' &&
+        message.deleteAfterRead &&
+        message.readAt != null) {
+      return null;
+    }
     if (message.text != null) return message.text;
+    if (message.isV3Encrypted) {
+      final bridge = await _protocolV3Bridge();
+      if (bridge == null) return null;
+      final plaintext = await bridge.loadPlaintext(message.id);
+      if (plaintext != null &&
+          message.direction == 'incoming' &&
+          message.deleteAfterRead &&
+          message.readAt == null) {
+        await markMessageRead(message);
+      }
+      return plaintext;
+    }
     if (message.ciphertextBase64 == null || message.nonceBase64 == null) {
       return null;
     }
@@ -649,8 +858,19 @@ class HomeController {
     required List<MessageRecord> messages,
     required RemoteIdentity contact,
   }) async {
+    // Sort messages descending by timestamp to find the latest
+    final sortedMessages = List<MessageRecord>.from(messages)
+      ..sort((a, b) {
+        final byTs = b.timestamp.compareTo(a.timestamp);
+        if (byTs != 0) return byTs;
+        return b.id.compareTo(a.id);
+      });
+
+    final hasV3Messages =
+        sortedMessages.any((message) => message.isV3Encrypted);
+    final v3Bridge = hasV3Messages ? await _protocolV3Bridge() : null;
     final privateKey = await _activePrivateKey();
-    if (privateKey == null) return null;
+    if (privateKey == null && v3Bridge == null) return null;
 
     // §7.3: Get ratchet state for decryption — supports per-device sessions.
     final allRatchets = ref.read(fsRatchetStateCacheProvider);
@@ -663,20 +883,23 @@ class HomeController {
       ratchetState = allRatchets[activeSessionId];
     }
 
-    // Sort messages descending by timestamp to find the latest
-    final sortedMessages = List<MessageRecord>.from(messages)
-      ..sort((a, b) {
-        final byTs = b.timestamp.compareTo(a.timestamp);
-        if (byTs != 0) return byTs;
-        return b.id.compareTo(a.id);
-      });
-
     for (final message in sortedMessages) {
       if (message.text != null) {
         return DecryptedMessagePreview(
           text: message.text!,
           timestamp: message.timestamp,
         );
+      }
+
+      if (message.isV3Encrypted) {
+        final persisted = await v3Bridge?.loadPlaintext(message.id);
+        if (persisted != null) {
+          return DecryptedMessagePreview(
+            text: persisted,
+            timestamp: message.timestamp,
+          );
+        }
+        continue;
       }
 
       // FS message: try aux record cache
@@ -697,6 +920,7 @@ class HomeController {
       }
 
       try {
+        if (privateKey == null) continue;
         final result = await ref.read(encryptionServiceProvider).decrypt(
               recipientPrivateKeyBase64: privateKey,
               senderPublicKeyBase64: contact.publicKeyBase64,
@@ -750,6 +974,9 @@ class HomeController {
     String source, {
     String? hintContactId,
   }) async {
+    if (source.length > StegoDecoder.maxCarrierCodeUnits) {
+      return const DecodeOutcome.noData();
+    }
     final normalizedSource = source.trim();
     final identityManager = ref.read(identityManagerProvider);
     final local = await identityManager.getLocalIdentity();
@@ -758,7 +985,19 @@ class HomeController {
       return const DecodeOutcome.error('Identity not initialized');
     }
 
-    // ── 1. Try v2 binary format (fully encrypted, no LAYERGRAM| prefix) ────
+    // ── 1. Try protocol v3 canonical carriers when the complete runtime is
+    // active. A failed v3 parse falls through to the current v2 decoder so
+    // ordinary cover text remains indistinguishable from unrelated content.
+    final v3 = await _tryDecodeProtocolV3(
+      normalizedSource,
+      hintContactId: hintContactId,
+    );
+    if (v3 != null) return v3;
+    if (ref.read(protocolV3MessagingEnabledProvider)) {
+      return const DecodeOutcome.noData();
+    }
+
+    // ── 2. Try v2 binary format (fully encrypted, no LAYERGRAM| prefix) ────
     final v2 = await _tryDecodeV2(
       normalizedSource,
       local: local,
@@ -766,6 +1005,82 @@ class HomeController {
       hintContactId: hintContactId,
     );
     return v2 ?? const DecodeOutcome.noData();
+  }
+
+  Future<DecodeOutcome?> _tryDecodeProtocolV3(
+    String source, {
+    String? hintContactId,
+  }) async {
+    final bridge = await _protocolV3Bridge();
+    if (bridge == null) return null;
+    final contacts = await _contactsByPriority(hintContactId);
+    if (contacts.where(isProtocolV3Contact).isEmpty) return null;
+
+    late final V3ChatInboundResult inbound;
+    try {
+      inbound = await bridge.receiveCarrier(
+        carrier: source,
+        contacts: contacts,
+        modeForContact: bridge.modeForContact,
+        eligibilityForContact: bridge.eligibilityForContact,
+        ensureEligibilityForContact: bridge.ensureContactPolicy,
+        pinMaximumDevice: bridge.pinMaximumDevice,
+      );
+    } on FormatException {
+      return null;
+    }
+
+    final contact = inbound.contact;
+    final response = inbound.response;
+    if (contact != null && response != null) {
+      _pendingV3Responses[contact.identityId] = response;
+    }
+    if (contact != null &&
+        (inbound.status == V3ChatInboundStatus.handshakeProgress ||
+            inbound.status == V3ChatInboundStatus.handshakeResponse ||
+            inbound.status == V3ChatInboundStatus.sessionEstablished)) {
+      ref.read(fsRegistryVersionProvider.notifier).state++;
+    }
+
+    switch (inbound.status) {
+      case V3ChatInboundStatus.delivered:
+        final payload = inbound.payload;
+        if (payload == null || contact == null) {
+          return const DecodeOutcome.notForMe();
+        }
+        final classification =
+            bridge.modeForContact(contact) == V3HandshakeMode.maximum
+                ? FsMessageClassification.strictFs
+                : FsMessageClassification.fsOnly;
+        return DecodeOutcome.success(
+          PlaintextPayload(
+            senderId: contact.identityId,
+            recipientId: bridge.localIdentityId,
+            text: payload.text,
+            timestamp: payload.timestampUnixSeconds,
+            senderDisplayName: payload.senderDisplayName.isEmpty
+                ? contact.displayName
+                : payload.senderDisplayName,
+            expireAfter: payload.expireAfterUnixSeconds,
+            deleteAfterRead: payload.deleteAfterRead,
+            backupExcluded: payload.backupExcluded,
+          ),
+          classification: classification,
+          v3Inbound: inbound,
+        );
+      case V3ChatInboundStatus.expired:
+        return DecodeOutcome.expired(v3Inbound: inbound);
+      case V3ChatInboundStatus.handshakeProgress:
+      case V3ChatInboundStatus.handshakeResponse:
+      case V3ChatInboundStatus.sessionEstablished:
+      case V3ChatInboundStatus.acknowledgementApplied:
+      case V3ChatInboundStatus.committedReplay:
+      case V3ChatInboundStatus.pending:
+        return DecodeOutcome.v3Control(inbound);
+      case V3ChatInboundStatus.notForThisInstallation:
+      case V3ChatInboundStatus.invalid:
+        return const DecodeOutcome.notForMe();
+    }
   }
 
   // ── V2 binary decode ────────────────────────────────────────────────────
@@ -975,7 +1290,6 @@ class HomeController {
     final recordTs = payload.timestamp > nowTs ? payload.timestamp : nowTs;
     final recordId = DateTime.now().microsecondsSinceEpoch.toString();
     final keyTag = await currentKeyTag();
-    final storageKey = await currentStorageKey();
 
     // §12.3: FS plaintext must NOT be stored in MessageRecord.text.
     // Instead, persist it as an opaque encrypted auxiliary record.
@@ -996,26 +1310,25 @@ class HomeController {
       );
     }
 
-    await ref.read(messagesRepositoryProvider).add(
-          MessageRecord(
-            id: recordId,
-            senderId: payload.senderId,
-            recipientId: payload.recipientId,
-            direction: 'incoming',
-            timestamp: recordTs,
-            text: isFsEncrypted ? null : payload.text,
-            ciphertextBase64: encryptedMessage.ciphertextBase64,
-            nonceBase64: encryptedMessage.nonceBase64,
-            rawSource: rawSource,
-            expireAfter: payload.expireAfter,
-            deleteAfterRead: payload.deleteAfterRead,
-            backupExcluded: payload.backupExcluded,
-            keyTag: keyTag,
-            isFsEncrypted: isFsEncrypted,
-            fsClassification: classification,
-          ),
-          storageKey: storageKey,
-        );
+    await persistMessageRecord(
+      MessageRecord(
+        id: recordId,
+        senderId: payload.senderId,
+        recipientId: payload.recipientId,
+        direction: 'incoming',
+        timestamp: recordTs,
+        text: isFsEncrypted ? null : payload.text,
+        ciphertextBase64: encryptedMessage.ciphertextBase64,
+        nonceBase64: encryptedMessage.nonceBase64,
+        rawSource: rawSource,
+        expireAfter: payload.expireAfter,
+        deleteAfterRead: payload.deleteAfterRead,
+        backupExcluded: payload.backupExcluded,
+        keyTag: keyTag,
+        isFsEncrypted: isFsEncrypted,
+        fsClassification: classification,
+      ),
+    );
 
     if (payload.deleteAfterRead) {
       await ref.read(messagesRepositoryProvider).markRead(recordId);
@@ -1262,17 +1575,20 @@ class HomeController {
   }
 
   RemoteIdentity parseIdentityBlock(String text) {
+    if (text.isEmpty || text.length > _maxIdentityImportCharacters) {
+      throw ArgumentError('Invalid identity text block');
+    }
     final scoped = _withinIdentityBlock(text);
     final name = _extract(scoped, 'Name:') ?? 'Unknown';
     final identityId = _extract(scoped, 'Identity ID:') ?? '';
     final fp = _extract(scoped, 'Fingerprint:') ?? '';
     final key = _extractAfter(scoped, 'Public Key (Base64):') ?? '';
-    return RemoteIdentity(
+    return IdentityLinkCodec.validateLegacyIdentity(RemoteIdentity(
       identityId: identityId,
       publicKeyBase64: key.trim(),
       fingerprint: fp,
       displayName: name,
-    );
+    ));
   }
 
   String _withinIdentityBlock(String text) {
@@ -1577,22 +1893,28 @@ class DecodeOutcome {
     this.kind = DecodeKind.error,
     this.errorCode,
     this.classification,
+    this.v3Inbound,
   });
 
   const DecodeOutcome.success(
     PlaintextPayload payload, {
     FsMessageClassification? classification,
+    V3ChatInboundResult? v3Inbound,
   }) : this._(
           payload: payload,
           kind: DecodeKind.success,
           classification: classification,
+          v3Inbound: v3Inbound,
         );
 
   const DecodeOutcome.noData() : this._(kind: DecodeKind.noData);
   const DecodeOutcome.notForMe() : this._(kind: DecodeKind.notForMe);
   const DecodeOutcome.unknownSender() : this._(kind: DecodeKind.unknownSender);
-  const DecodeOutcome.expired() : this._(kind: DecodeKind.expired);
+  const DecodeOutcome.expired({V3ChatInboundResult? v3Inbound})
+      : this._(kind: DecodeKind.expired, v3Inbound: v3Inbound);
   const DecodeOutcome.fsLost() : this._(kind: DecodeKind.fsLost);
+  const DecodeOutcome.v3Control(V3ChatInboundResult inbound)
+      : this._(kind: DecodeKind.v3Control, v3Inbound: inbound);
   const DecodeOutcome.error(String code)
       : this._(kind: DecodeKind.error, errorCode: code);
 
@@ -1600,6 +1922,7 @@ class DecodeOutcome {
   final DecodeKind kind;
   final String? errorCode;
   final FsMessageClassification? classification;
+  final V3ChatInboundResult? v3Inbound;
 
   bool get isMaximumFsSetupOnly =>
       kind == DecodeKind.success &&
@@ -1613,6 +1936,7 @@ enum DecodeKind {
   notForMe,
   unknownSender,
   expired,
+  v3Control,
   fsLost,
   error
 }
@@ -1641,6 +1965,17 @@ final homeControllerProvider = Provider<HomeController>((ref) {
   });
   return controller;
 });
+
+final protocolV3ContactSecurityStatusProvider = FutureProvider.autoDispose
+    .family<V3ChatContactSecurityStatus?, RemoteIdentity>((ref, contact) async {
+  ref.watch(fsRegistryVersionProvider);
+  ref.watch(activeIdentityIdProvider);
+  ref.watch(effectiveKeyTagProvider);
+  ref.watch(identityReloadTokenProvider);
+  ref.watch(passphraseProvider);
+  return ref.watch(homeControllerProvider).protocolV3SecurityStatus(contact);
+});
+
 final encodeRecipientProvider = StateProvider<RemoteIdentity?>((_) => null);
 
 /// Stores composer handoff state during narrow↔wide layout transitions.

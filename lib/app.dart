@@ -13,8 +13,6 @@
 // limitations under the License.
 
 import 'dart:async';
-import 'dart:collection';
-import 'dart:ui' show FrameTiming;
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
@@ -23,6 +21,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/capabilities/chat_folders_capability.dart';
 import 'core/crypto/fs_passphrase_preferences.dart';
 import 'core/crypto/fs_startup_restore.dart';
+import 'core/crypto/stego_decoder.dart';
 import 'core/providers.dart';
 import 'core/security/app_lock_idle_controller.dart';
 import 'features/identities/add_identity_view.dart';
@@ -62,7 +61,9 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
   ProviderSubscription<bool>? _appNeedsUnlockSub;
   ProviderSubscription<PassphrasePreferences>? _passphrasePreferencesSub;
   bool _checkingPendingShare = false;
-  final ListQueue<bool> _recentSlowFrames = ListQueue<bool>();
+  bool _streamDeepLinkObserved = false;
+  int _deepLinkGeneration = 0;
+  Future<void> _deepLinkTail = Future<void>.value();
   final Set<String> _sharedTextsInFlight = <String>{};
   final Map<String, DateTime> _recentSharedTexts = <String, DateTime>{};
 
@@ -78,7 +79,6 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
       },
     );
     WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addTimingsCallback(_handleFrameTimings);
     _reloadIdentity();
     _identityReloadSub = ref.listenManual<int>(
       identityReloadTokenProvider,
@@ -188,13 +188,34 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
   void _startDeepLinks() {
     _linkSub?.cancel();
     _linkSub = _deepLinks.uriLinkStream.listen((uri) {
-      ref.read(pendingDeepLinkProvider.notifier).state = uri.toString();
+      _streamDeepLinkObserved = true;
+      final value = uri.toString();
+      if (value.isEmpty || value.length > StegoDecoder.maxCarrierCodeUnits) {
+        return;
+      }
+      ref.read(pendingDeepLinkProvider.notifier).state = value;
     });
 
     _deepLinks.getInitialLinkString().then((value) {
       if (!mounted) return;
+      if (_streamDeepLinkObserved) return;
       if (value == null || value.trim().isEmpty) return;
+      if (value.length > StegoDecoder.maxCarrierCodeUnits) return;
       ref.read(pendingDeepLinkProvider.notifier).state = value;
+    });
+  }
+
+  void _scheduleIncomingLink(String value) {
+    final generation = ++_deepLinkGeneration;
+    final previous = _deepLinkTail;
+    _deepLinkTail = previous.catchError((_) {}).then((_) async {
+      if (!mounted) return;
+      await _handleIncomingLink(value);
+      if (mounted &&
+          generation == _deepLinkGeneration &&
+          ref.read(pendingDeepLinkProvider) == value) {
+        ref.read(pendingDeepLinkProvider.notifier).state = null;
+      }
     });
   }
 
@@ -212,32 +233,6 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
     );
 
     Future.microtask(_loadPendingSharedText);
-  }
-
-  void _handleFrameTimings(List<FrameTiming> timings) {
-    for (final timing in timings) {
-      final buildMicros = timing.buildDuration.inMicroseconds;
-      final rasterMicros = timing.rasterDuration.inMicroseconds;
-      final totalMicros = timing.totalSpan.inMicroseconds;
-      final slow =
-          buildMicros >= 14000 || rasterMicros >= 16000 || totalMicros >= 28000;
-      _recentSlowFrames.addLast(slow);
-      if (_recentSlowFrames.length > 24) {
-        _recentSlowFrames.removeFirst();
-      }
-    }
-
-    if (_recentSlowFrames.length < 12) {
-      return;
-    }
-
-    final slowCount = _recentSlowFrames.where((slow) => slow).length;
-    final reducedEffects = ref.read(reducedEffectsProvider);
-    if (!reducedEffects && slowCount >= 6) {
-      ref.read(reducedEffectsProvider.notifier).state = true;
-    } else if (reducedEffects && slowCount <= 1) {
-      ref.read(reducedEffectsProvider.notifier).state = false;
-    }
   }
 
   Future<void> _loadPendingSharedText() async {
@@ -271,7 +266,9 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
   String? _firstSharedText(List<SharedMediaFile> files) {
     for (final file in files) {
       final text = extractSharedText(file);
-      if (text != null && text.trim().isNotEmpty) {
+      if (text != null &&
+          text.length <= StegoDecoder.maxCarrierCodeUnits &&
+          text.trim().isNotEmpty) {
         return text.trim();
       }
     }
@@ -279,6 +276,9 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
   }
 
   bool _claimSharedText(String text) {
+    if (text.length > StegoDecoder.maxCarrierCodeUnits) {
+      return false;
+    }
     final normalized = text.trim();
     if (normalized.isEmpty) {
       return false;
@@ -331,6 +331,7 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
   }
 
   Future<void> _handleIncomingLink(String text) async {
+    if (text.length > StegoDecoder.maxCarrierCodeUnits) return;
     final normalized = text.trim();
     if (normalized.isEmpty) {
       return;
@@ -385,6 +386,7 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
   }
 
   Future<void> _processSharedText(String text) async {
+    if (text.length > StegoDecoder.maxCarrierCodeUnits) return;
     final normalized = text.trim();
     if (normalized.isEmpty) return;
 
@@ -420,6 +422,14 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
         }
         _navKey.currentState?.push(
           MaterialPageRoute(builder: (_) => ChatView(contact: sender)),
+        );
+        break;
+      case DecodeKind.v3Control:
+        final contact = outcome.v3Inbound?.contact;
+        final ctx = _navKey.currentContext;
+        if (contact == null || ctx == null || !ctx.mounted) return;
+        _navKey.currentState?.push(
+          MaterialPageRoute(builder: (_) => ChatView(contact: contact)),
         );
         break;
       default:
@@ -486,7 +496,6 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
     }
 
     if (state == AppLifecycleState.resumed) {
-      _recentSlowFrames.clear();
       Future.microtask(_loadPendingSharedText);
       if (!ref.read(appNeedsUnlockProvider)) {
         unawaited(ref.read(homeControllerProvider).warmSessionDisplayKeys());
@@ -516,32 +525,27 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
     _passphrasePreferencesSub?.close();
     ref.read(fsPassphraseTimeoutControllerProvider).dispose();
     _appLockIdleController.dispose();
-    WidgetsBinding.instance.removeTimingsCallback(_handleFrameTimings);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    // Keeps the single v3 runtime owner synchronized with identity and
+    // passphrase changes. While the reviewed activation policy is false this
+    // resolves to null without loading a native library.
+    ref.watch(v3ApplicationSessionRuntimeProvider);
     final themeMode = ref.watch(themeModeProvider);
     final needsUnlock = ref.watch(appNeedsUnlockProvider);
     final screenProtectionEnabled = ref.watch(screenProtectionEnabledProvider);
     final privacyShieldVisible = ref.watch(privacyShieldVisibleProvider);
-    final reducedEffects = ref.watch(reducedEffectsProvider);
-    final backgroundAnimationPaused =
-        ref.watch(backgroundAnimationPausedProvider);
     final tooltipsEnabled = ref.watch(tooltipsEnabledProvider);
     final tooltipsVisible =
         AppPlatform.supportsHoverTooltips && tooltipsEnabled;
 
     ref.listen<String?>(pendingDeepLinkProvider, (prev, next) {
       if (next == null || next.trim().isEmpty) return;
-      Future.microtask(() async {
-        await _handleIncomingLink(next);
-        if (mounted) {
-          ref.read(pendingDeepLinkProvider.notifier).state = null;
-        }
-      });
+      _scheduleIncomingLink(next);
     });
 
     ref.listen<String?>(pendingSharedTextProvider, (prev, next) {
@@ -579,9 +583,6 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
       supportedLocales: context.supportedLocales,
       localizationsDelegates: context.localizationDelegates,
       builder: (context, child) {
-        final mediaQuery = MediaQuery.maybeOf(context);
-        final effectiveReducedEffects =
-            reducedEffects || (mediaQuery?.disableAnimations ?? false);
         return Listener(
           behavior: HitTestBehavior.translucent,
           onPointerDown: (_) => _appLockIdleController.onUserInteraction(),
@@ -593,11 +594,7 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
             child: Stack(
               fit: StackFit.expand,
               children: [
-                LayergramBackground(
-                  reducedEffects: effectiveReducedEffects,
-                  pauseAnimation: backgroundAnimationPaused,
-                  child: child ?? const SizedBox(),
-                ),
+                LayergramBackground(child: child ?? const SizedBox()),
                 if (screenProtectionEnabled && privacyShieldVisible)
                   const PrivacyShieldOverlay(),
               ],

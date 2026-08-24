@@ -12,11 +12,20 @@ class SealedMapCipher {
     required String scope,
     required String info,
   }) async {
-    return _hkdf.deriveKey(
-      secretKey: SecretKey(keyMaterial),
-      nonce: utf8.encode(scope),
-      info: utf8.encode(info),
+    final ownedKeyMaterial = Uint8List.fromList(keyMaterial);
+    final inputKey = SecretKeyData(
+      ownedKeyMaterial,
+      overwriteWhenDestroyed: true,
     );
+    try {
+      return await _hkdf.deriveKey(
+        secretKey: inputKey,
+        nonce: utf8.encode(scope),
+        info: utf8.encode(info),
+      );
+    } finally {
+      inputKey.destroy();
+    }
   }
 
   static Future<String> encrypt({

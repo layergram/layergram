@@ -65,9 +65,10 @@ Iterable<File> _runtimeSourceFiles(Directory root) sync* {
 
     for (final entity in directory.listSync(recursive: true)) {
       if (entity is! File) continue;
-      if (!extensions.any(entity.path.endsWith)) continue;
-      if (entity.path.contains('/flutter/ephemeral/')) continue;
-      if (entity.path.contains('/GeneratedPluginRegistrant.')) continue;
+      final normalizedPath = entity.path.replaceAll('\\', '/');
+      if (!extensions.any(normalizedPath.endsWith)) continue;
+      if (normalizedPath.contains('/flutter/ephemeral/')) continue;
+      if (normalizedPath.contains('/GeneratedPluginRegistrant.')) continue;
       yield entity;
     }
   }

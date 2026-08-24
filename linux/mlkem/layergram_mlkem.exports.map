@@ -1,0 +1,6 @@
+LAYERGRAM_MLKEM_ABI_1 {
+  global:
+    lg_mlkem768_*;
+  local:
+    *;
+};

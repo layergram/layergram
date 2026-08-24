@@ -17,61 +17,25 @@ import 'package:flutter/material.dart';
 
 class LayergramBackground extends StatefulWidget {
   final Widget child;
-  final bool reducedEffects;
-  final bool pauseAnimation;
 
   const LayergramBackground({
     super.key,
     required this.child,
-    this.reducedEffects = false,
-    this.pauseAnimation = false,
   });
 
   @override
   State<LayergramBackground> createState() => _LayergramBackgroundState();
 }
 
-class _LayergramBackgroundState extends State<LayergramBackground>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-
-  bool get _shouldAnimate => !widget.reducedEffects && !widget.pauseAnimation;
+class _LayergramBackgroundState extends State<LayergramBackground> {
+  late final _SecurityLayerLayout _layout;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 30),
-    );
-    _syncAnimation();
-  }
-
-  @override
-  void didUpdateWidget(covariant LayergramBackground oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.reducedEffects != widget.reducedEffects ||
-        oldWidget.pauseAnimation != widget.pauseAnimation) {
-      _syncAnimation();
-    }
-  }
-
-  void _syncAnimation() {
-    if (_shouldAnimate) {
-      if (!_controller.isAnimating) {
-        _controller.repeat();
-      }
-      return;
-    }
-    if (_controller.isAnimating) {
-      _controller.stop(canceled: false);
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
+    // Decorative randomness is generated once per app session and is never
+    // used by, or sourced from, Layergram's cryptographic entropy paths.
+    _layout = _SecurityLayerLayout.random(math.Random());
   }
 
   @override
@@ -79,10 +43,9 @@ class _LayergramBackgroundState extends State<LayergramBackground>
     final theme = Theme.of(context);
     final dark = theme.brightness == Brightness.dark;
     final painter = _SecurityLayersPainter(
-      progress: _controller.value,
       isDark: dark,
       primaryColor: theme.colorScheme.primary,
-      reducedEffects: widget.reducedEffects,
+      layout: _layout,
     );
 
     // Tech/Security Palette
@@ -93,26 +56,16 @@ class _LayergramBackgroundState extends State<LayergramBackground>
     return Stack(
       children: [
         // 1. Solid Base
-        Positioned.fill(child: RepaintBoundary(child: ColoredBox(color: bgColor))),
-
-        // 2. Animated Floating Layers
         Positioned.fill(
           child: RepaintBoundary(
-            child: _shouldAnimate
-                ? AnimatedBuilder(
-                    animation: _controller,
-                    builder: (context, _) {
-                      return CustomPaint(
-                        painter: _SecurityLayersPainter(
-                          progress: _controller.value,
-                          isDark: dark,
-                          primaryColor: theme.colorScheme.primary,
-                          reducedEffects: widget.reducedEffects,
-                        ),
-                      );
-                    },
-                  )
-                : CustomPaint(painter: painter),
+            child: ColoredBox(color: bgColor),
+          ),
+        ),
+
+        // 2. Static session-randomized security layers
+        Positioned.fill(
+          child: RepaintBoundary(
+            child: CustomPaint(painter: painter),
           ),
         ),
 
@@ -123,17 +76,71 @@ class _LayergramBackgroundState extends State<LayergramBackground>
   }
 }
 
+class _SecurityLayerLayout {
+  final double firstX;
+  final double firstY;
+  final double firstSize;
+  final double firstRotation;
+  final double secondX;
+  final double secondY;
+  final double secondSize;
+  final double secondRotation;
+  final double thirdX;
+  final double thirdY;
+  final double thirdSize;
+  final double thirdRotation;
+  final double gridOffsetX;
+  final double gridOffsetY;
+
+  const _SecurityLayerLayout({
+    required this.firstX,
+    required this.firstY,
+    required this.firstSize,
+    required this.firstRotation,
+    required this.secondX,
+    required this.secondY,
+    required this.secondSize,
+    required this.secondRotation,
+    required this.thirdX,
+    required this.thirdY,
+    required this.thirdSize,
+    required this.thirdRotation,
+    required this.gridOffsetX,
+    required this.gridOffsetY,
+  });
+
+  factory _SecurityLayerLayout.random(math.Random random) {
+    double between(double min, double max) =>
+        min + random.nextDouble() * (max - min);
+
+    return _SecurityLayerLayout(
+      firstX: between(0.12, 0.30),
+      firstY: between(0.18, 0.38),
+      firstSize: between(280, 360),
+      firstRotation: between(-0.10, 0.10),
+      secondX: between(0.72, 0.92),
+      secondY: between(0.62, 0.84),
+      secondSize: between(360, 460),
+      secondRotation: between(-0.12, 0.12),
+      thirdX: between(0.40, 0.60),
+      thirdY: between(0.42, 0.58),
+      thirdSize: between(185, 230),
+      thirdRotation: between(-0.08, 0.08),
+      gridOffsetX: between(0, 80),
+      gridOffsetY: between(0, 80),
+    );
+  }
+}
+
 class _SecurityLayersPainter extends CustomPainter {
-  final double progress;
   final bool isDark;
   final Color primaryColor;
-  final bool reducedEffects;
+  final _SecurityLayerLayout layout;
 
   _SecurityLayersPainter({
-    required this.progress,
     required this.isDark,
     required this.primaryColor,
-    required this.reducedEffects,
+    required this.layout,
   });
 
   @override
@@ -153,42 +160,38 @@ class _SecurityLayersPainter extends CustomPainter {
         : Colors.black.withValues(alpha: 0.03);
 
     // Draw grid pattern (Tech feel)
-    if (!reducedEffects) {
-      _drawTechGrid(canvas, size, gridColor);
-    }
+    _drawTechGrid(canvas, size, gridColor);
 
     // Floating Squircle 1 (Top Left)
     _drawSquircle(
       canvas,
-      cx: w * 0.2 + math.sin(progress * 2 * math.pi) * (reducedEffects ? 0 : 30),
-      cy: h * 0.3 + math.cos(progress * 2 * math.pi) * (reducedEffects ? 0 : 20),
-      size: reducedEffects ? 260 : 320,
+      cx: w * layout.firstX,
+      cy: h * layout.firstY,
+      size: layout.firstSize,
       color: color1,
-      rotation: reducedEffects ? 0 : progress * 0.1,
+      rotation: layout.firstRotation,
     );
 
     // Floating Squircle 2 (Bottom Right)
     _drawSquircle(
       canvas,
-      cx: w * 0.85 - math.sin(progress * 2 * math.pi) * (reducedEffects ? 0 : 40),
-      cy: h * 0.75 - math.cos(progress * 2 * math.pi) * (reducedEffects ? 0 : 30),
-      size: reducedEffects ? 320 : 420,
+      cx: w * layout.secondX,
+      cy: h * layout.secondY,
+      size: layout.secondSize,
       color: color2,
-      rotation: reducedEffects ? 0 : -progress * 0.15,
+      rotation: layout.secondRotation,
     );
 
-    // Floating Squircle 3 (Center - Pulse)
-    if (!reducedEffects) {
-      _drawSquircle(
-        canvas,
-        cx: w * 0.5,
-        cy: h * 0.5,
-        size: 200 + math.sin(progress * 4 * math.pi) * 15,
-        color: primaryColor.withValues(alpha: isDark ? 0.03 : 0.04),
-        rotation: progress * 0.05,
-        stroke: true,
-      );
-    }
+    // Floating Squircle 3 (Center)
+    _drawSquircle(
+      canvas,
+      cx: w * layout.thirdX,
+      cy: h * layout.thirdY,
+      size: layout.thirdSize,
+      color: primaryColor.withValues(alpha: isDark ? 0.03 : 0.04),
+      rotation: layout.thirdRotation,
+      stroke: true,
+    );
   }
 
   void _drawTechGrid(Canvas canvas, Size size, Color color) {
@@ -199,12 +202,12 @@ class _SecurityLayersPainter extends CustomPainter {
     const step = 80.0;
 
     // Vertical lines
-    for (double x = step / 2; x < size.width; x += step) {
+    for (double x = layout.gridOffsetX; x < size.width; x += step) {
       canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
     }
 
     // Horizontal lines
-    for (double y = step / 2; y < size.height; y += step) {
+    for (double y = layout.gridOffsetY; y < size.height; y += step) {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
     }
   }
@@ -246,9 +249,8 @@ class _SecurityLayersPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _SecurityLayersPainter oldDelegate) {
-    return oldDelegate.progress != progress ||
-        oldDelegate.isDark != isDark ||
+    return oldDelegate.isDark != isDark ||
         oldDelegate.primaryColor != primaryColor ||
-        oldDelegate.reducedEffects != reducedEffects;
+        oldDelegate.layout != layout;
   }
 }

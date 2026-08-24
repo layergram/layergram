@@ -22,8 +22,30 @@ import 'stego_alphabet_v2.dart';
 /// Noise characters (U+2063, U+2064, U+FEFF) are ignored.
 /// V1 aliases (2060, 2062) are NOT accepted in v2 mode.
 class StegoDecoder {
+  /// Hard application-ingress ceiling checked before rune enumeration.
+  static const int maxCarrierCodeUnits = 262144;
+  static const int maxPayloadRunes = 196608;
+  static const int maxDecodedBytes = 49152;
+
   /// V2 payload alphabet: exact runes only, no aliases.
   static const Map<int, int> _runeToVal = StegoAlphabetV2.payloadRuneToValue;
+  static final Set<int> _reservedRunes = <int>{
+    ...StegoAlphabetV2.payloadRuneToValue.keys,
+    ...StegoAlphabetV2.noiseRunes,
+  };
+
+  static String visibleCoverText(String carrier) {
+    if (carrier.length > maxCarrierCodeUnits) {
+      throw const FormatException('Invalid Layergram steganographic carrier');
+    }
+    final visible = StringBuffer();
+    for (final rune in carrier.runes) {
+      if (!_reservedRunes.contains(rune)) {
+        visible.writeCharCode(rune);
+      }
+    }
+    return visible.toString();
+  }
 
   // ── V2 binary decode ────────────────────────────────────────────────────────
 
@@ -36,7 +58,21 @@ class StegoDecoder {
   ///
   /// Minimum 28 bytes expected: 12 (nonce) + 16 (AES-GCM MAC).
   List<Uint8List> decodeByteCandidates(String text, {int minBytes = 28}) {
-    final runes = text.runes.toList(growable: false);
+    if (text.length > maxCarrierCodeUnits ||
+        minBytes < 0 ||
+        minBytes > maxDecodedBytes) {
+      throw const FormatException('Invalid Layergram steganographic carrier');
+    }
+    final runes = <int>[];
+    for (final rune in text.runes) {
+      if (_runeToVal.containsKey(rune)) {
+        if (runes.length >= maxPayloadRunes) {
+          throw const FormatException(
+              'Invalid Layergram steganographic carrier');
+        }
+        runes.add(rune);
+      }
+    }
     final bits = _symsToBits(runes);
     if (bits.length < minBytes * 8) return const [];
 
@@ -45,6 +81,9 @@ class StegoDecoder {
       final available = bits.length - offset;
       if (available < minBytes * 8) continue;
       final byteCount = available ~/ 8;
+      if (byteCount > maxDecodedBytes) {
+        throw const FormatException('Invalid Layergram steganographic carrier');
+      }
       final bytes = Uint8List(byteCount);
       for (var b = 0; b < byteCount; b++) {
         var val = 0;

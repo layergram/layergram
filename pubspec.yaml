@@ -2,7 +2,7 @@ name: layergram
 description: Official open-source Layergram app for local encrypted steganographic messaging.
 homepage: https://layergram.app
 publish_to: 'none'
-version: 1.4.0+20
+version: 2.0.0+27
 
 environment:
   sdk: ^3.4.0
@@ -26,6 +26,7 @@ dependencies:
   hive_flutter: ^1.1.0
   path_provider: ^2.1.5
   qr_flutter: ^4.1.0
+  qr: ^3.0.2
   mobile_scanner: ^7.2.0
   uuid: ^4.5.1
   package_info_plus: ^9.0.0
@@ -36,6 +37,7 @@ dependencies:
   dotted_border: ^3.1.0
   flutter_linkify: ^6.0.0
   archive: ^4.0.0
+  ffi: ^2.2.0
   android_intent_plus: ^5.0.0
 
 dev_dependencies:
@@ -81,5 +83,7 @@ flutter_launcher_icons:
 flutter:
   uses-material-design: true
   assets:
+    - LICENSE
     - assets/translations/
     - assets/icons/app_icon.png
+    - third_party/mlkem-native/LICENSE

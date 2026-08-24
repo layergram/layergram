@@ -111,8 +111,19 @@ class _AddIdentityViewState extends ConsumerState<AddIdentityView> {
         _pendingIdentity = parsed;
         _error = null;
       });
+    } on ProtocolV3IdentityRequiredException {
+      setState(() {
+        _pendingIdentity = null;
+        _error = AppStrings.t(
+          context,
+          'security.fs.v3.identity_import_required',
+        );
+      });
     } catch (e) {
-      setState(() => _error = AppStrings.t(context, 'invalidLayergramLink'));
+      setState(() {
+        _pendingIdentity = null;
+        _error = AppStrings.t(context, 'invalidLayergramLink');
+      });
     }
   }
 
@@ -262,8 +273,18 @@ class _AddIdentityViewState extends ConsumerState<AddIdentityView> {
                             child: MobileScanner(
                               onDetect: (capture) async {
                                 if (_qrImported) return;
-                                final value = capture.barcodes.first.rawValue;
-                                if (value == null || value.isEmpty) return;
+                                final barcode = capture.barcodes.first;
+                                final Object? value =
+                                    switch (barcode.rawDecodedBytes) {
+                                  DecodedBarcodeBytes(:final bytes) => bytes,
+                                  DecodedVisionBarcodeBytes(:final bytes?) =>
+                                    bytes,
+                                  _ => barcode.rawValue,
+                                };
+                                if (value == null ||
+                                    (value is String && value.isEmpty)) {
+                                  return;
+                                }
                                 _qrImported = true;
                                 try {
                                   final parsed = ref
@@ -273,9 +294,21 @@ class _AddIdentityViewState extends ConsumerState<AddIdentityView> {
                                     _pendingIdentity = parsed;
                                     _error = null;
                                   });
+                                } on ProtocolV3IdentityRequiredException {
+                                  setState(() {
+                                    _pendingIdentity = null;
+                                    _error = AppStrings.t(
+                                      context,
+                                      'security.fs.v3.identity_import_required',
+                                    );
+                                  });
+                                  _qrImported = false;
                                 } catch (e) {
-                                  setState(() => _error =
-                                      AppStrings.t(context, 'invalidQrCode'));
+                                  setState(() {
+                                    _pendingIdentity = null;
+                                    _error =
+                                        AppStrings.t(context, 'invalidQrCode');
+                                  });
                                   _qrImported = false;
                                 }
                               },

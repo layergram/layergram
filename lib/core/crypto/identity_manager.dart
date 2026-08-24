@@ -78,6 +78,8 @@ class IdentityManager {
       mnemonic: current.mnemonic,
       derivationVersion: current.derivationVersion,
       derivationAlgorithm: current.derivationAlgorithm,
+      protocolVersion: current.protocolVersion,
+      publicIdentityBase64: current.publicIdentityBase64,
     );
     await _localIdentityVault.save(updated);
   }

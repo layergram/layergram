@@ -167,6 +167,193 @@ void main() {
       );
       expect(mode, equals(FsSecurityMode.strict));
     });
+
+    test('mode-change boundary is durable and monotonic', () async {
+      final auxRepo = await buildAuxRepo();
+      final fixed = DateTime.utc(2026, 8, 20, 12);
+      final service = FsSecurityModeService(
+        auxRepository: auxRepo,
+        now: () => fixed,
+      );
+
+      await service.setMode(
+        contactId: 'alice',
+        identityContext: 'primary',
+        mode: FsSecurityMode.advanced,
+      );
+      expect(
+        service.getModeChangedAtSync(
+          contactId: 'alice',
+          identityContext: 'primary',
+        ),
+        fixed,
+      );
+
+      await service.setMode(
+        contactId: 'alice',
+        identityContext: 'primary',
+        mode: FsSecurityMode.strict,
+      );
+      final second = service.getModeChangedAtSync(
+        contactId: 'alice',
+        identityContext: 'primary',
+      );
+      expect(second, fixed.add(const Duration(milliseconds: 1)));
+
+      final restored = FsSecurityModeService(auxRepository: auxRepo);
+      await restored.rebuildIndex();
+      expect(
+        restored.getModeChangedAtSync(
+          contactId: 'alice',
+          identityContext: 'primary',
+        ),
+        second,
+      );
+    });
+
+    test('v3 policy durably excludes pre-change session IDs', () async {
+      final auxRepo = await buildAuxRepo();
+      final service = FsSecurityModeService(auxRepository: auxRepo);
+      const oldSessions = <String>{
+        'AgICAgICAgICAgICAgICAg',
+        'AQEBAQEBAQEBAQEBAQEBAQ',
+      };
+
+      await service.setProtocolV3Mode(
+        contactId: 'alice',
+        identityContext: 'primary',
+        mode: FsSecurityMode.strict,
+        existingHandshakeIds: oldSessions,
+      );
+      final policy = service.getV3SessionEligibilitySync(
+        contactId: 'alice',
+        identityContext: 'primary',
+      );
+      expect(policy?.isValid, isTrue);
+      expect(policy?.excludedHandshakeIds, oldSessions);
+
+      final restored = FsSecurityModeService(auxRepository: auxRepo);
+      await restored.rebuildIndex();
+      expect(
+        restored
+            .getV3SessionEligibilitySync(
+              contactId: 'alice',
+              identityContext: 'primary',
+            )
+            ?.excludedHandshakeIds,
+        oldSessions,
+      );
+      expect(
+        restored.getModeSync(
+          contactId: 'alice',
+          identityContext: 'primary',
+        ),
+        FsSecurityMode.strict,
+      );
+    });
+
+    test('v3 policy rejects the reserved all-zero handshake ID', () async {
+      final auxRepo = await buildAuxRepo();
+      final service = FsSecurityModeService(auxRepository: auxRepo);
+
+      expect(
+        () => service.setProtocolV3Mode(
+          contactId: 'alice',
+          identityContext: 'primary',
+          mode: FsSecurityMode.advanced,
+          existingHandshakeIds: const <String>{
+            'AAAAAAAAAAAAAAAAAAAAAA',
+          },
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('restore chooses the highest durable policy revision', () async {
+      final auxRepo = await buildAuxRepo();
+      await auxRepo.write(
+        payload: <String, dynamic>{
+          'kind': 'fs_mode_v1',
+          'v': 2,
+          'revision': 1,
+          'cid': 'alice',
+          'ctx': 'primary',
+          'mode': 'advanced',
+          'changedAt': 1000,
+          'v3ExcludedHandshakeIds': <String>[],
+        },
+      );
+      await auxRepo.write(
+        payload: <String, dynamic>{
+          'kind': 'fs_mode_v1',
+          'v': 2,
+          'revision': 2,
+          'cid': 'alice',
+          'ctx': 'primary',
+          'mode': 'strict',
+          'changedAt': 2000,
+          'v3ExcludedHandshakeIds': <String>[],
+        },
+      );
+
+      final restored = FsSecurityModeService(auxRepository: auxRepo);
+      await restored.rebuildIndex();
+      expect(
+        restored.getModeSync(
+          contactId: 'alice',
+          identityContext: 'primary',
+        ),
+        FsSecurityMode.strict,
+      );
+      expect(
+        restored
+            .getV3SessionEligibilitySync(
+              contactId: 'alice',
+              identityContext: 'primary',
+            )
+            ?.revision,
+        2,
+      );
+    });
+
+    test('same-revision policy divergence fails closed', () async {
+      final auxRepo = await buildAuxRepo();
+      for (final mode in <String>['advanced', 'strict']) {
+        await auxRepo.write(
+          payload: <String, dynamic>{
+            'kind': 'fs_mode_v1',
+            'v': 2,
+            'revision': 4,
+            'cid': 'alice',
+            'ctx': 'primary',
+            'mode': mode,
+            'changedAt': 4000,
+            'v3ExcludedHandshakeIds': <String>[],
+          },
+        );
+      }
+
+      final restored = FsSecurityModeService(auxRepository: auxRepo);
+      await restored.rebuildIndex();
+      expect(
+        restored
+            .getV3SessionEligibilitySync(
+              contactId: 'alice',
+              identityContext: 'primary',
+            )
+            ?.isValid,
+        isFalse,
+      );
+      await expectLater(
+        restored.setProtocolV3Mode(
+          contactId: 'alice',
+          identityContext: 'primary',
+          mode: FsSecurityMode.advanced,
+          existingHandshakeIds: const <String>{},
+        ),
+        throwsStateError,
+      );
+    });
   });
 
   // ──────────────────────────────────────────────────────────────────────────

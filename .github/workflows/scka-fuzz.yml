@@ -1,0 +1,95 @@
+name: SCKA v3 scheduled fuzzing
+
+on:
+  schedule:
+    - cron: '47 2 * * *'
+  workflow_dispatch:
+    inputs:
+      seconds_per_target:
+        description: Seconds to fuzz each SCKA ABI target (1-900)
+        required: false
+        default: '600'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scka-v3-fuzz-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  linux-x64:
+    if: github.repository == 'layergram/layergram'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      SCKA_FUZZ_TOOLCHAIN: nightly-2026-08-16
+      SCKA_CARGO_FUZZ_VERSION: 0.13.2
+      LAYERGRAM_SCKA_FUZZ_SECONDS: ${{ inputs.seconds_per_target || '600' }}
+      LAYERGRAM_SCKA_FUZZ_TARGET_DIR: ${{ github.workspace }}/.dart_tool/layergram_pq/scka-fuzz-target-ci
+      LAYERGRAM_SCKA_FUZZ_RUNTIME_DIR: ${{ github.workspace }}/.dart_tool/layergram_pq/scka-fuzz-runtime-x86_64-unknown-linux-gnu
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: '1'
+    steps:
+      - name: Check out the default-branch source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Validate the bounded campaign input
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$LAYERGRAM_SCKA_FUZZ_SECONDS" in
+            ''|*[!0-9]*|0)
+              echo "seconds_per_target must be an integer from 1 to 900" >&2
+              exit 1
+              ;;
+          esac
+          if (( LAYERGRAM_SCKA_FUZZ_SECONDS > 900 )); then
+            echo "seconds_per_target must be an integer from 1 to 900" >&2
+            exit 1
+          fi
+          mkdir -p "$LAYERGRAM_SCKA_FUZZ_RUNTIME_DIR/corpus"
+
+      - name: Restore the evolving fuzz corpus
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .dart_tool/layergram_pq/scka-fuzz-runtime-x86_64-unknown-linux-gnu/corpus
+          key: scka-v3-fuzz-corpus-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}
+          restore-keys: |
+            scka-v3-fuzz-corpus-v1-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Install the pinned Rust fuzzing toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install "$SCKA_FUZZ_TOOLCHAIN" --profile minimal
+          cargo +"$SCKA_FUZZ_TOOLCHAIN" install cargo-fuzz \
+            --version "$SCKA_CARGO_FUZZ_VERSION" \
+            --locked \
+            --root "$RUNNER_TEMP/cargo-fuzz"
+          echo "$RUNNER_TEMP/cargo-fuzz/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch the exact locked fuzz dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo +"$SCKA_FUZZ_TOOLCHAIN" fetch \
+            --locked \
+            --manifest-path native/layergram_scka/fuzz/Cargo.toml
+
+      - name: Run the SCKA ABI fuzz campaign
+        shell: bash
+        run: tool/pq/test_scka_fuzz.sh
+
+      - name: Upload a reproducer when the campaign fails
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: scka-v3-fuzz-failure-${{ github.run_id }}
+          path: .dart_tool/layergram_pq/scka-fuzz-runtime-x86_64-unknown-linux-gnu/artifacts
+          if-no-files-found: ignore
+          retention-days: 30
+          include-hidden-files: false

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:layergram/core/crypto/identity_manager.dart';
@@ -10,6 +11,7 @@ import 'package:layergram/core/crypto/seed_service.dart';
 import 'package:layergram/core/providers.dart';
 import 'package:layergram/core/storage/local_identity_vault.dart';
 import 'package:layergram/core/storage/secure_storage.dart';
+import 'package:layergram/core/utils/clipboard_service.dart';
 import 'package:layergram/features/my_identity/identity_qr_code.dart';
 import 'package:layergram/features/my_identity/my_identity_view.dart';
 import 'package:layergram/l10n/app_strings.dart';
@@ -39,6 +41,15 @@ class _InMemorySecureStorageService extends SecureStorageService {
   }
 }
 
+class _RecordingClipboardService extends ClipboardService {
+  String? lastWritten;
+
+  @override
+  Future<void> writeText(String value) async {
+    lastWritten = value;
+  }
+}
+
 void main() {
   setUpAll(() {
     final strings = jsonDecode(
@@ -50,6 +61,19 @@ void main() {
   });
 
   testWidgets('identity QR exposes a save/share image action', (tester) async {
+    const brightnessChannel = MethodChannel('layergram/screen_brightness');
+    final brightnessStates = <bool>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(brightnessChannel, (call) async {
+      expect(call.method, 'setQrDisplayActive');
+      brightnessStates.add(call.arguments as bool);
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(brightnessChannel, null);
+    });
+
     final storage = _InMemorySecureStorageService();
     final vault = LocalIdentityVault(secureStorage: storage);
     final manager = IdentityManager(
@@ -65,6 +89,7 @@ void main() {
       ProviderScope(
         overrides: [
           secureStorageProvider.overrideWithValue(storage),
+          protocolV3IdentityEnabledProvider.overrideWithValue(false),
         ],
         child: MaterialApp(
           theme: ThemeData(useMaterial3: true),
@@ -102,13 +127,72 @@ void main() {
     await tester.tap(find.text('Share or save QR PNG'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Identity QR'), findsOneWidget);
-    expect(
-      find.textContaining('save it to Photos or Files'),
-      findsOneWidget,
-    );
+    expect(find.byKey(const ValueKey('identity-qr-actions-sheet')), findsOne);
+    expect(find.text('Identity QR'), findsNothing);
+    expect(find.textContaining('save it to Photos or Files'), findsNothing);
+    expect(find.byType(SingleChildScrollView), findsNothing);
+    expect(find.byType(IdentityQrCode), findsNWidgets(2));
     expect(find.text('Share or save QR PNG'), findsWidgets);
+    expect(
+      tester.widget<BottomSheet>(find.byType(BottomSheet)).backgroundColor,
+      Colors.white,
+    );
+    expect(
+      tester
+          .widgetList<ModalBarrier>(find.byType(ModalBarrier))
+          .any((barrier) => barrier.color == Colors.white),
+      isTrue,
+    );
+    expect(brightnessStates, [true]);
+
+    await tester.tapAt(const Offset(4, 4));
+    await tester.pumpAndSettle();
+
+    expect(brightnessStates, [true, false]);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('complete identity can be copied as direct text', (tester) async {
+    final storage = _InMemorySecureStorageService();
+    final clipboard = _RecordingClipboardService();
+    final vault = LocalIdentityVault(secureStorage: storage);
+    final manager = IdentityManager(
+      seedService: SeedService(),
+      localIdentityVault: vault,
+    );
+    await manager.restoreIdentityFromMnemonic(
+      'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+      displayName: 'Alice',
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          secureStorageProvider.overrideWithValue(storage),
+          clipboardServiceProvider.overrideWithValue(clipboard),
+          protocolV3IdentityEnabledProvider.overrideWithValue(false),
+        ],
+        child: MaterialApp(
+          theme: ThemeData(useMaterial3: true),
+          home: const MyIdentityView(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Copy identity as text'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('Copy identity as text'));
+    await tester.pumpAndSettle();
+
+    expect(clipboard.lastWritten, startsWith('[Layergram Identity]'));
+    expect(clipboard.lastWritten, contains('Protocol: layergram/'));
+    expect(clipboard.lastWritten, contains('[/Layergram Identity]'));
+    expect(clipboard.lastWritten, isNot(contains('layergram://')));
+    expect(find.text('Identity text copied'), findsOneWidget);
   });
 
   testWidgets('exported identity QR PNG contains the Layergram logo', (

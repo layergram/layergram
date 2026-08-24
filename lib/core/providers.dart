@@ -12,11 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
+import 'package:cryptography/cryptography.dart';
 
 import 'capabilities/chat_folders_capability.dart';
 import 'capabilities/layergram_capabilities.dart';
@@ -26,6 +28,10 @@ import 'crypto/identity_manager.dart';
 import 'crypto/models.dart';
 import 'crypto/passphrase_service.dart';
 import 'crypto/seed_service.dart';
+import 'crypto/v3/application_runtime_owner_v3.dart';
+import 'crypto/v3/application_session_runtime_v3.dart';
+import 'crypto/v3/identity_runtime_v3.dart';
+import 'crypto/v3/protocol_v3_activation.dart';
 import 'security/app_lock_service.dart';
 import 'security/cover_message_length_limit_service.dart';
 import 'security/screen_protection_service.dart';
@@ -86,11 +92,14 @@ final activeIdentityIdProvider = StateProvider<IdentityId?>((_) => null);
 final identitiesRepositoryProvider = Provider<IdentitiesRepository>((ref) {
   final ownerId = ref.watch(activeIdentityIdProvider) ?? '';
   final repo = IdentitiesRepository(ownerIdentityId: ownerId);
-  ref.onDispose(repo.dispose);
+  var contextGeneration = 0;
+  var disposed = false;
+  final pendingUpdates = <Future<void>>{};
 
-  Future<void> updateStorageContext() async {
+  Future<void> updateStorageContext(int generation) async {
     final identityId = ref.read(activeIdentityIdProvider) ?? '';
     if (identityId.isEmpty) {
+      if (disposed || generation != contextGeneration) return;
       await repo.setActiveContext(
         scopeToken: null,
         encryptionKey: null,
@@ -102,51 +111,93 @@ final identitiesRepositoryProvider = Provider<IdentitiesRepository>((ref) {
     final context = await ref
         .read(localStorageSecurityProvider)
         .contextForIdentity(identityId);
-    final local = await ref.read(identityManagerProvider).getLocalIdentity();
-    final selfIdentity = local != null && local.identityId == identityId
-        ? RemoteIdentity(
-            identityId: local.identityId,
-            publicKeyBase64: local.publicKeyBase64,
-            fingerprint: local.fingerprint,
-            displayName: local.displayName,
-            verified: true,
-          )
-        : null;
+    try {
+      if (disposed || generation != contextGeneration) return;
+      final local = await ref.read(identityManagerProvider).getLocalIdentity();
+      if (disposed || generation != contextGeneration) return;
+      final selfIdentity = local != null && local.identityId == identityId
+          ? RemoteIdentity(
+              identityId: local.identityId,
+              publicKeyBase64: local.publicKeyBase64,
+              fingerprint: local.fingerprint,
+              displayName: local.displayName,
+              verified: true,
+              protocolVersion: local.protocolVersion,
+              publicIdentityBase64: local.publicIdentityBase64,
+            )
+          : null;
 
-    await repo.setActiveContext(
-      scopeToken: context?.scopeToken,
-      encryptionKey: context?.contactsKey,
-      selfIdentity: selfIdentity,
-    );
+      await repo.setActiveContext(
+        scopeToken: context?.scopeToken,
+        encryptionKey: context?.contactsKey,
+        selfIdentity: selfIdentity,
+      );
+    } finally {
+      context?.destroy();
+    }
   }
 
-  updateStorageContext();
+  void scheduleStorageContextUpdate() {
+    final generation = ++contextGeneration;
+    late final Future<void> pending;
+    pending = updateStorageContext(generation).catchError((_) async {
+      if (!disposed && generation == contextGeneration) {
+        await repo.setActiveContext(
+          scopeToken: null,
+          encryptionKey: null,
+          selfIdentity: null,
+        );
+      }
+    }).whenComplete(
+      () => pendingUpdates.remove(pending),
+    );
+    pendingUpdates.add(pending);
+  }
+
+  scheduleStorageContextUpdate();
+  ref.listen<IdentityId?>(activeIdentityIdProvider, (_, __) {
+    scheduleStorageContextUpdate();
+  });
   ref.listen<int>(identityReloadTokenProvider, (_, __) {
-    updateStorageContext();
+    scheduleStorageContextUpdate();
+  });
+  ref.onDispose(() {
+    disposed = true;
+    contextGeneration++;
+    unawaited(
+      Future.wait(pendingUpdates.toList(growable: false))
+          .then<void>((_) {}, onError: (_, __) {})
+          .whenComplete(repo.dispose),
+    );
   });
   return repo;
 });
 
 final messagesRepositoryProvider = Provider<MessagesRepository>((ref) {
-  ref.watch(activeIdentityIdProvider);
+  final ownerIdentityId = ref.watch(activeIdentityIdProvider) ?? '';
   final repo = MessagesRepository();
-  ref.onDispose(repo.dispose);
+  var contextGeneration = 0;
+  var disposed = false;
+  final pendingUpdates = <Future<void>>{};
 
-  Future<void> updateStorageContext() async {
-    final identityId = ref.read(activeIdentityIdProvider) ?? '';
+  Future<void> updateStorageContext(int generation) async {
     final keyTag = ref.read(effectiveKeyTagProvider);
-    if (identityId.isEmpty) {
+    final pp = ref.read(passphraseProvider);
+    if (ownerIdentityId.isEmpty) {
+      if (disposed || generation != contextGeneration) return;
       await repo.setActiveContext(scopeToken: null, storageKey: null);
       return;
     }
 
     final context = await ref
         .read(localStorageSecurityProvider)
-        .contextForIdentity(identityId);
-    final pp = ref.read(passphraseProvider);
+        .contextForIdentity(ownerIdentityId);
+    final scopeToken = context?.scopeToken;
+    context?.destroy();
     if (keyTag == null) {
+      if (disposed || generation != contextGeneration) return;
       await repo.setActiveContext(
-        scopeToken: context?.scopeToken,
+        scopeToken: scopeToken,
         storageKey: null,
       );
       return;
@@ -160,28 +211,64 @@ final messagesRepositoryProvider = Provider<MessagesRepository>((ref) {
           await ref.read(identityManagerProvider).getLocalPrivateKeyBase64();
     }
     if (privateKeyB64 == null) {
+      if (disposed || generation != contextGeneration) return;
       await repo.setActiveContext(
-        scopeToken: context?.scopeToken,
+        scopeToken: scopeToken,
         storageKey: null,
       );
       return;
     }
     final keyBytes = Uint8List.fromList(base64Decode(privateKeyB64));
-    final storageKey =
-        await MessageRecordCipher.deriveKey(keyBytes, keyTag: keyTag);
-    await repo.setActiveContext(
-      scopeToken: context?.scopeToken,
-      storageKey: storageKey,
-    );
+    late final SecretKey storageKey;
+    try {
+      storageKey =
+          await MessageRecordCipher.deriveKey(keyBytes, keyTag: keyTag);
+    } finally {
+      keyBytes.fillRange(0, keyBytes.length, 0);
+    }
+    if (disposed || generation != contextGeneration) {
+      storageKey.destroy();
+      return;
+    }
+    try {
+      await repo.setActiveContext(
+        scopeToken: scopeToken,
+        storageKey: storageKey,
+      );
+    } finally {
+      storageKey.destroy();
+    }
   }
 
-  updateStorageContext();
+  void scheduleStorageContextUpdate() {
+    final generation = ++contextGeneration;
+    late final Future<void> pending;
+    pending = updateStorageContext(generation).catchError((_) async {
+      if (!disposed && generation == contextGeneration) {
+        await repo.setActiveContext(scopeToken: null, storageKey: null);
+      }
+    }).whenComplete(
+      () => pendingUpdates.remove(pending),
+    );
+    pendingUpdates.add(pending);
+  }
+
+  scheduleStorageContextUpdate();
 
   ref.listen<String?>(effectiveKeyTagProvider, (_, next) {
-    updateStorageContext();
+    scheduleStorageContextUpdate();
   });
   ref.listen<int>(identityReloadTokenProvider, (_, __) {
-    updateStorageContext();
+    scheduleStorageContextUpdate();
+  });
+  ref.onDispose(() {
+    disposed = true;
+    contextGeneration++;
+    unawaited(
+      Future.wait(pendingUpdates.toList(growable: false))
+          .then<void>((_) {}, onError: (_, __) {})
+          .whenComplete(repo.dispose),
+    );
   });
 
   return repo;
@@ -190,26 +277,59 @@ final messagesRepositoryProvider = Provider<MessagesRepository>((ref) {
 final chatMetaRepositoryProvider = Provider<ChatMetaRepository>((ref) {
   final identityId = ref.watch(activeIdentityIdProvider) ?? '';
   final repo = ChatMetaRepository(identityId: identityId);
-  ref.onDispose(repo.dispose);
+  var contextGeneration = 0;
+  var disposed = false;
+  final pendingUpdates = <Future<void>>{};
 
-  Future<void> updateStorageContext() async {
+  Future<void> updateStorageContext(int generation) async {
     final activeId = ref.read(activeIdentityIdProvider) ?? '';
     if (activeId.isEmpty) {
+      if (disposed || generation != contextGeneration) return;
       await repo.setActiveContext(scopeToken: null, encryptionKey: null);
       return;
     }
     final context = await ref
         .read(localStorageSecurityProvider)
         .contextForIdentity(activeId);
-    await repo.setActiveContext(
-      scopeToken: context?.scopeToken,
-      encryptionKey: context?.chatMetaKey,
-    );
+    try {
+      if (disposed || generation != contextGeneration) return;
+      await repo.setActiveContext(
+        scopeToken: context?.scopeToken,
+        encryptionKey: context?.chatMetaKey,
+      );
+    } finally {
+      context?.destroy();
+    }
   }
 
-  updateStorageContext();
+  void scheduleStorageContextUpdate() {
+    final generation = ++contextGeneration;
+    late final Future<void> pending;
+    pending = updateStorageContext(generation).catchError((_) async {
+      if (!disposed && generation == contextGeneration) {
+        await repo.setActiveContext(scopeToken: null, encryptionKey: null);
+      }
+    }).whenComplete(
+      () => pendingUpdates.remove(pending),
+    );
+    pendingUpdates.add(pending);
+  }
+
+  scheduleStorageContextUpdate();
+  ref.listen<IdentityId?>(activeIdentityIdProvider, (_, __) {
+    scheduleStorageContextUpdate();
+  });
   ref.listen<int>(identityReloadTokenProvider, (_, __) {
-    updateStorageContext();
+    scheduleStorageContextUpdate();
+  });
+  ref.onDispose(() {
+    disposed = true;
+    contextGeneration++;
+    unawaited(
+      Future.wait(pendingUpdates.toList(growable: false))
+          .then<void>((_) {}, onError: (_, __) {})
+          .whenComplete(repo.dispose),
+    );
   });
   return repo;
 });
@@ -244,12 +364,6 @@ final pinnedChatsProvider = StreamProvider<Map<String, int>>((ref) {
   final folderId = ref.watch(selectedChatFolderIdProvider);
   final repo = ref.watch(chatMetaRepositoryProvider);
   return repo.watchPinnedChats(folderId: folderId);
-});
-
-final reducedEffectsProvider = StateProvider<bool>((_) => false);
-final backgroundAnimationHoldCountProvider = StateProvider<int>((_) => 0);
-final backgroundAnimationPausedProvider = Provider<bool>((ref) {
-  return ref.watch(backgroundAnimationHoldCountProvider) > 0;
 });
 
 final themeModeProvider = StateProvider<ThemeMode>((_) => ThemeMode.system);
@@ -299,9 +413,122 @@ final identityManagerProvider = Provider((ref) {
   );
 });
 
+/// Fail-closed application selector for protocol-v3 identity presentation.
+///
+/// Tests may override this while the production value remains tied to the
+/// reviewed activation policy. Identity sharing is never enabled on its own.
+final protocolV3IdentityEnabledProvider = Provider<bool>((_) {
+  return ProtocolV3Activation.isActive;
+});
+
+/// Fail-closed selector for the complete v3 session/message runtime.
+///
+/// Identity sharing and messaging deliberately use the same all-or-nothing
+/// production decision. Tests may override this seam without changing the
+/// compiled production policy.
+final protocolV3MessagingEnabledProvider = Provider<bool>((_) {
+  return ProtocolV3Activation.isActive;
+});
+
+/// Process owner for deterministic v3 identity handles.
+///
+/// The backend is loaded lazily on first use, so merely constructing the app
+/// cannot activate or probe the native protocol path.
+final v3IdentityRuntimeProvider = Provider<V3IdentityRuntime>((ref) {
+  final runtime = V3IdentityRuntime(
+    seedService: ref.watch(seedServiceProvider),
+  );
+  ref.onDispose(() => unawaited(runtime.close()));
+  return runtime;
+});
+
+final v3ApplicationRuntimeFactoryProvider =
+    Provider<V3ApplicationRuntimeFactory<V3ApplicationSessionRuntime>>((_) {
+  return ({required localIdentity, required scopeToken}) =>
+      V3ApplicationSessionRuntime.openPackagedScka(
+        localIdentity: localIdentity,
+        scopeToken: scopeToken,
+      );
+});
+
+/// Sole owner of an open v3 identity/passphrase persistence scope.
+///
+/// The owner is kept separate from the async selector so rapid Riverpod
+/// rebuilds cannot overlap two durable runtimes or destroy an identity handle
+/// before its journals have drained.
+final v3ApplicationRuntimeOwnerProvider =
+    Provider<V3ApplicationRuntimeOwner<V3ApplicationSessionRuntime>>((ref) {
+  final owner = V3ApplicationRuntimeOwner<V3ApplicationSessionRuntime>(
+    identityRuntime: ref.watch(v3IdentityRuntimeProvider),
+    runtimeFactory: ref.watch(v3ApplicationRuntimeFactoryProvider),
+  );
+  ref.onDispose(() => unawaited(owner.close()));
+  return owner;
+});
+
+/// Restored v3 application runtime for the currently effective identity.
+///
+/// Production v3 activation still returns early until an identity and its
+/// encrypted storage context exist, so startup never opens an unscoped native
+/// runtime.
+final v3ApplicationSessionRuntimeProvider =
+    FutureProvider<V3ApplicationSessionRuntime?>((ref) async {
+  if (!ref.watch(protocolV3MessagingEnabledProvider)) return null;
+
+  final activeIdentityId = ref.watch(activeIdentityIdProvider);
+  ref.watch(identityReloadTokenProvider);
+  final passphrase = ref.watch(passphraseProvider);
+  final owner = ref.watch(v3ApplicationRuntimeOwnerProvider);
+  if (activeIdentityId == null || activeIdentityId.isEmpty) {
+    await owner.closeCurrent();
+    return null;
+  }
+
+  final local = await ref.read(identityManagerProvider).getLocalIdentity();
+  if (local == null || local.identityId != activeIdentityId) {
+    await owner.closeCurrent();
+    return null;
+  }
+  final context = await ref
+      .read(localStorageSecurityProvider)
+      .contextForIdentity(activeIdentityId);
+  if (context == null) {
+    await owner.closeCurrent();
+    return null;
+  }
+  final scopeToken = context.scopeToken;
+  context.destroy();
+
+  final usePassphrase = passphrase.isActive;
+  final effectiveIdentityId =
+      usePassphrase ? passphrase.v3IdentityId : local.identityId;
+  if (effectiveIdentityId == null || effectiveIdentityId.isEmpty) {
+    await owner.closeCurrent();
+    return null;
+  }
+  final runtime = await owner.open(
+    recoveryIdentity: local,
+    scopeToken: scopeToken,
+    contextId:
+        '${usePassphrase ? 'passphrase' : 'primary'}|$effectiveIdentityId|$scopeToken',
+    usePassphraseIdentity: usePassphrase,
+  );
+  await runtime.maintainRetainedState(now: DateTime.now().toUtc());
+  return runtime;
+});
+
 final passphraseProvider =
     StateNotifierProvider<PassphraseNotifier, PassphraseState>((ref) {
-  return PassphraseNotifier(seedService: ref.watch(seedServiceProvider));
+  final enableProtocolV3 = ref.watch(protocolV3IdentityEnabledProvider);
+  return PassphraseNotifier(
+    seedService: ref.watch(seedServiceProvider),
+    v3IdentityRuntime:
+        enableProtocolV3 ? ref.watch(v3IdentityRuntimeProvider) : null,
+    beforeV3ContextChange: enableProtocolV3
+        ? ref.watch(v3ApplicationRuntimeOwnerProvider).closeCurrent
+        : null,
+    enableProtocolV3: enableProtocolV3,
+  );
 });
 
 /// The keyTag for the original (non-passphrase) identity.
@@ -559,7 +786,7 @@ final fsPassphraseTimeoutControllerProvider =
               identityContext: keyTag,
             );
       }
-      ref.read(passphraseProvider.notifier).deactivate();
+      unawaited(ref.read(passphraseProvider.notifier).deactivate());
     },
   );
 });

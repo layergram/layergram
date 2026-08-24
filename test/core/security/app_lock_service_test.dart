@@ -167,7 +167,9 @@ void main() {
       expect(secureStorage._values.containsKey(pinLockedUntilMsKey), isFalse);
     });
 
-    test('uses a random salt so the same PIN produces different stored material', () async {
+    test(
+        'uses a random salt so the same PIN produces different stored material',
+        () async {
       await service.setPin('2468');
       final firstSalt = secureStorage._values[pinSaltKey];
       final firstHash = secureStorage._values[pinHashKey];
@@ -184,7 +186,9 @@ void main() {
       expect(secondHash, isNot(firstHash));
     });
 
-    test('migrates a legacy plaintext PIN to derived storage after successful validation', () async {
+    test(
+        'migrates a legacy plaintext PIN to derived storage after successful validation',
+        () async {
       await secureStorage.write(pinKey, '8642');
 
       expect(await service.hasPin(), isTrue);
@@ -200,7 +204,8 @@ void main() {
       expect(await service.validatePin('1111'), isFalse);
     });
 
-    test('does not migrate a legacy plaintext PIN when validation fails', () async {
+    test('does not migrate a legacy plaintext PIN when validation fails',
+        () async {
       await secureStorage.write(pinKey, '8642');
 
       expect(await service.validatePin('1111'), isFalse);
@@ -211,7 +216,9 @@ void main() {
       expect(secureStorage._values.containsKey(pinHashKey), isFalse);
     });
 
-    test('rehashes legacy derived PBKDF2 material transparently after successful validation', () async {
+    test(
+        'rehashes legacy derived PBKDF2 material transparently after successful validation',
+        () async {
       await service.setPin('2468');
       final previousSalt = secureStorage._values[pinSaltKey];
       final previousHash = secureStorage._values[pinHashKey];
@@ -226,47 +233,59 @@ void main() {
       expect(secureStorage._values[pinHashKey], isNot(previousHash));
     });
 
-    test('tracks consecutive failed attempts and applies temporary lockout backoff', () async {
-      await service.setPin('2468');
+    test(
+      'tracks consecutive failed attempts and applies temporary lockout backoff',
+      () async {
+        await service.setPin('2468');
 
-      for (var i = 1; i <= 4; i++) {
+        for (var i = 1; i <= 4; i++) {
+          expect(await service.validatePin('0000'), isFalse);
+          expect(await service.getConsecutiveFailedPinAttempts(), i);
+          expect(await service.isPinLockedOut(), isFalse);
+        }
+
         expect(await service.validatePin('0000'), isFalse);
-        expect(await service.getConsecutiveFailedPinAttempts(), i);
+        expect(await service.getConsecutiveFailedPinAttempts(), 5);
+        expect(await service.isPinLockedOut(), isTrue);
+        expect(
+          await service.getPinLockoutRemaining(),
+          greaterThan(Duration.zero),
+        );
+
+        expect(await service.validatePin('2468'), isFalse);
+        expect(await service.getConsecutiveFailedPinAttempts(), 5);
+
+        currentTime = currentTime.add(const Duration(seconds: 6));
+
+        expect(await service.validatePin('2468'), isTrue);
+        expect(await service.getConsecutiveFailedPinAttempts(), 0);
         expect(await service.isPinLockedOut(), isFalse);
-      }
+      },
+      timeout: const Timeout(Duration(minutes: 2)),
+    );
 
-      expect(await service.validatePin('0000'), isFalse);
-      expect(await service.getConsecutiveFailedPinAttempts(), 5);
-      expect(await service.isPinLockedOut(), isTrue);
-      expect(await service.getPinLockoutRemaining(), greaterThan(Duration.zero));
+    test(
+      'increases lockout duration when failed attempts continue after expiry',
+      () async {
+        await service.setPin('2468');
 
-      expect(await service.validatePin('2468'), isFalse);
-      expect(await service.getConsecutiveFailedPinAttempts(), 5);
+        for (var i = 0; i < 5; i++) {
+          expect(await service.validatePin('0000'), isFalse);
+        }
+        final firstLockout = await service.getPinLockoutRemaining();
+        expect(firstLockout, greaterThan(Duration.zero));
 
-      currentTime = currentTime.add(const Duration(seconds: 6));
-
-      expect(await service.validatePin('2468'), isTrue);
-      expect(await service.getConsecutiveFailedPinAttempts(), 0);
-      expect(await service.isPinLockedOut(), isFalse);
-    });
-
-    test('increases lockout duration when failed attempts continue after expiry', () async {
-      await service.setPin('2468');
-
-      for (var i = 0; i < 5; i++) {
+        currentTime = currentTime.add(const Duration(seconds: 6));
         expect(await service.validatePin('0000'), isFalse);
-      }
-      final firstLockout = await service.getPinLockoutRemaining();
-      expect(firstLockout, greaterThan(Duration.zero));
+        final secondLockout = await service.getPinLockoutRemaining();
+        expect(await service.getConsecutiveFailedPinAttempts(), 6);
+        expect(secondLockout, greaterThan(firstLockout));
+      },
+      timeout: const Timeout(Duration(minutes: 2)),
+    );
 
-      currentTime = currentTime.add(const Duration(seconds: 6));
-      expect(await service.validatePin('0000'), isFalse);
-      final secondLockout = await service.getPinLockoutRemaining();
-      expect(await service.getConsecutiveFailedPinAttempts(), 6);
-      expect(secondLockout, greaterThan(firstLockout));
-    });
-
-    test('reports biometric support only when both capability checks succeed', () async {
+    test('reports biometric support only when both capability checks succeed',
+        () async {
       expect(await service.isBiometricSupported(), isTrue);
       expect(
         await service.availableBiometrics(),
@@ -293,7 +312,8 @@ void main() {
       expect(await service.availableBiometrics(), isEmpty);
     });
 
-    test('authenticates biometrics and keeps the compatibility alias aligned', () async {
+    test('authenticates biometrics and keeps the compatibility alias aligned',
+        () async {
       expect(
         await service.authenticateBiometric(reason: 'Unlock Layergram'),
         isTrue,

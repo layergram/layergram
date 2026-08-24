@@ -3,16 +3,24 @@
 **Version:** 2.1
 **Status:** Stable; includes integrated Forward Secrecy extensions
 
+Protocol v3 has its active framing specification in
+[`LMF_V3_DRAFT.md`](LMF_V3_DRAFT.md). This document describes the legacy LMF v2
+format retained for historical compatibility.
+
 This document defines the **Layergram Message Format (LMF)**, the protocol used by Layergram to embed end-to-end encrypted messages within standard, visually innocuous text messages.
 
 ## Version History
 
+- **LMF v3 (active in Layergram 2.0+)**: Canonical binary framing,
+  strict text/link armor, steganographic carriage, bounded authenticated
+  fragment reassembly, acknowledgements, and durable retry. It is integrated
+  behind the fail-closed production selector. See the
+  [migration guide](PROTOCOL_V3_MIGRATION.md).
 - **LMF v2.1 (Forward Secrecy)**: Adds optional Forward Secrecy envelope fields and `x.fs` control extensions while preserving the raw-binary outer transport.
 - **LMF v2.0 (Stable base)**: Introduces structured inner container, gzip compression, hardened Unicode alphabet. Always encode with v2; decode supports v2 then v1 fallback.
 - **LMF v1.1 (Legacy)**: Original format with raw JSON encryption. Decode-only support for backward compatibility.
 
-The stable LMF v2 format is implemented by the public Layergram application and by official
-Layergram builds released through the project's official channels. LMF v2.1 extends that format
+The legacy LMF v2 format remains implemented for historical data. LMF v2.1 extends that format
 with integrated Forward Secrecy metadata while preserving v2 raw-binary outer transport and
 decode compatibility with older v2/v1 messages.
 

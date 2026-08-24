@@ -527,7 +527,6 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
                             if (!_deleteAfterRead) {
                               final ctrl = ref.read(homeControllerProvider);
                               final keyTag = await ctrl.currentKeyTag();
-                              final storageKey = await ctrl.currentStorageKey();
                               final recordId = DateTime.now()
                                   .microsecondsSinceEpoch
                                   .toString();
@@ -552,32 +551,29 @@ class _EncodeViewState extends ConsumerState<EncodeView> {
                                 );
                               }
 
-                              await ref.read(messagesRepositoryProvider).add(
-                                    MessageRecord(
-                                      id: recordId,
-                                      senderId: 'me',
-                                      recipientId: recipient.identityId,
-                                      direction: 'outgoing',
-                                      timestamp: DateTime.now()
-                                              .millisecondsSinceEpoch ~/
+                              await ctrl.persistMessageRecord(
+                                MessageRecord(
+                                  id: recordId,
+                                  senderId: 'me',
+                                  recipientId: recipient.identityId,
+                                  direction: 'outgoing',
+                                  timestamp:
+                                      DateTime.now().millisecondsSinceEpoch ~/
                                           1000,
-                                      text: encResult.isFsEncrypted
-                                          ? null
-                                          : _secretCtrl.text,
-                                      ciphertextBase64:
-                                          encrypted.ciphertextBase64,
-                                      nonceBase64: encrypted.nonceBase64,
-                                      rawSource: output,
-                                      expireAfter: expireAfter,
-                                      deleteAfterRead: _deleteAfterRead,
-                                      backupExcluded: backupExcluded,
-                                      keyTag: keyTag,
-                                      isFsEncrypted: encResult.isFsEncrypted,
-                                      fsClassification:
-                                          encResult.classification,
-                                    ),
-                                    storageKey: storageKey,
-                                  );
+                                  text: encResult.isFsEncrypted
+                                      ? null
+                                      : _secretCtrl.text,
+                                  ciphertextBase64: encrypted.ciphertextBase64,
+                                  nonceBase64: encrypted.nonceBase64,
+                                  rawSource: output,
+                                  expireAfter: expireAfter,
+                                  deleteAfterRead: _deleteAfterRead,
+                                  backupExcluded: backupExcluded,
+                                  keyTag: keyTag,
+                                  isFsEncrypted: encResult.isFsEncrypted,
+                                  fsClassification: encResult.classification,
+                                ),
+                              );
                             }
 
                             if (!mounted) return;

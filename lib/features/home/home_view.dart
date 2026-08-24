@@ -448,9 +448,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
     final looksLikeIdentity = lower.startsWith('layergram://i/') ||
         lower.contains('[layergram identity]');
     try {
-      ref
-          .read(identitiesControllerProvider)
-          .parseIdentityImport(normalized);
+      ref.read(identitiesControllerProvider).parseIdentityImport(normalized);
       ref.read(pendingIdentityImportProvider.notifier).state = normalized;
       return;
     } catch (_) {
@@ -504,6 +502,27 @@ class _HomeViewState extends ConsumerState<HomeView> {
           messenger.showSnackBar(
             SnackBar(content: Text(AppStrings.t(context, 'unknownSender'))),
           );
+        }
+        break;
+      case DecodeKind.v3Control:
+        final contact = outcome.v3Inbound?.contact;
+        if (contact == null) {
+          messenger.showSnackBar(
+            SnackBar(
+                content: Text(AppStrings.t(context, 'noMessageFoundDesc'))),
+          );
+          break;
+        }
+        ref.read(encodeRecipientProvider.notifier).state = contact;
+        if (isNarrow) {
+          await _openChat(contact);
+        } else {
+          final sameChat = _selectedContact?.identityId == contact.identityId;
+          if (sameChat) {
+            _embeddedChatKey.currentState?.refreshAfterDecodedMessage();
+          } else {
+            _selectContact(contact);
+          }
         }
         break;
       case DecodeKind.fsLost:

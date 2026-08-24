@@ -25,12 +25,28 @@ class IdentityBase {
     required this.publicKeyBase64,
     required this.fingerprint,
     required this.displayName,
+    this.protocolVersion = 2,
+    this.publicIdentityBase64,
   });
 
   final IdentityId identityId;
   final String publicKeyBase64;
   final String fingerprint;
   final String displayName;
+
+  /// Wire protocol understood by this identity record.
+  ///
+  /// Version 2 records contain only [publicKeyBase64]. Version 3 records also
+  /// carry the complete hybrid public identity in [publicIdentityBase64].
+  final int protocolVersion;
+
+  /// Canonical, unpadded Base64URL form of the complete public identity.
+  ///
+  /// This is public material. For protocol v3 it contains both X25519 and
+  /// ML-KEM-768 public components; it never contains a mnemonic or private
+  /// key. It remains nullable so existing encrypted v2 contact records decode
+  /// without a migration rewrite.
+  final String? publicIdentityBase64;
 }
 
 class LocalIdentity extends IdentityBase {
@@ -42,6 +58,8 @@ class LocalIdentity extends IdentityBase {
     required this.mnemonic,
     this.derivationVersion = IdentityDerivationVersion.v1,
     this.derivationAlgorithm = 'sha256-seed',
+    super.protocolVersion,
+    super.publicIdentityBase64,
   });
 
   final String mnemonic;
@@ -57,6 +75,9 @@ class LocalIdentity extends IdentityBase {
       'mnemonic': mnemonic,
       'derivationVersion': derivationVersion.storageValue,
       'derivationAlgorithm': derivationAlgorithm,
+      'protocolVersion': protocolVersion,
+      if (publicIdentityBase64 != null)
+        'publicIdentityBase64': publicIdentityBase64,
     };
   }
 
@@ -73,6 +94,8 @@ class LocalIdentity extends IdentityBase {
       derivationVersion: derivationVersion,
       derivationAlgorithm: (map['derivationAlgorithm'] as String?) ??
           derivationVersion.algorithm,
+      protocolVersion: (map['protocolVersion'] as int?) ?? 2,
+      publicIdentityBase64: map['publicIdentityBase64'] as String?,
     );
   }
 }
@@ -84,17 +107,26 @@ class RemoteIdentity extends IdentityBase {
     required super.fingerprint,
     required super.displayName,
     this.verified = false,
+    super.protocolVersion,
+    super.publicIdentityBase64,
   });
 
   final bool verified;
 
-  RemoteIdentity copyWith({bool? verified, String? displayName}) {
+  RemoteIdentity copyWith({
+    bool? verified,
+    String? displayName,
+    int? protocolVersion,
+    String? publicIdentityBase64,
+  }) {
     return RemoteIdentity(
       identityId: identityId,
       publicKeyBase64: publicKeyBase64,
       fingerprint: fingerprint,
       displayName: displayName ?? this.displayName,
       verified: verified ?? this.verified,
+      protocolVersion: protocolVersion ?? this.protocolVersion,
+      publicIdentityBase64: publicIdentityBase64 ?? this.publicIdentityBase64,
     );
   }
 
@@ -105,6 +137,9 @@ class RemoteIdentity extends IdentityBase {
       'fingerprint': fingerprint,
       'displayName': displayName,
       'verified': verified,
+      'protocolVersion': protocolVersion,
+      if (publicIdentityBase64 != null)
+        'publicIdentityBase64': publicIdentityBase64,
     };
   }
 
@@ -115,6 +150,8 @@ class RemoteIdentity extends IdentityBase {
       fingerprint: map['fingerprint'] as String,
       displayName: map['displayName'] as String,
       verified: (map['verified'] as bool?) ?? false,
+      protocolVersion: (map['protocolVersion'] as int?) ?? 2,
+      publicIdentityBase64: map['publicIdentityBase64'] as String?,
     );
   }
 }
@@ -207,6 +244,7 @@ class MessageRecord {
     this.deletedAt,
     this.keyTag,
     this.isFsEncrypted = false,
+    this.protocolVersion = 2,
     this.fsClassification,
     this.backupExcluded = false,
   });
@@ -226,7 +264,10 @@ class MessageRecord {
   final int? deletedAt;
   final String? keyTag;
   final bool isFsEncrypted;
+  final int protocolVersion;
   final bool backupExcluded;
+
+  bool get isV3Encrypted => protocolVersion == 3;
 
   /// Per-message security classification (§14.4).
   ///
@@ -269,6 +310,7 @@ class MessageRecord {
     int? deletedAt,
     String? keyTag,
     bool? isFsEncrypted,
+    int? protocolVersion,
     FsMessageClassification? fsClassification,
     bool? backupExcluded,
   }) {
@@ -288,6 +330,7 @@ class MessageRecord {
       deletedAt: deletedAt ?? this.deletedAt,
       keyTag: keyTag ?? this.keyTag,
       isFsEncrypted: isFsEncrypted ?? this.isFsEncrypted,
+      protocolVersion: protocolVersion ?? this.protocolVersion,
       fsClassification: fsClassification ?? this.fsClassification,
       backupExcluded: backupExcluded ?? this.backupExcluded,
     );
@@ -310,6 +353,7 @@ class MessageRecord {
       'deletedAt': deletedAt,
       'keyTag': keyTag,
       if (isFsEncrypted) 'isFsEncrypted': true,
+      if (protocolVersion != 2) 'protocolVersion': protocolVersion,
       if (fsClassification != null) 'fsCls': fsClassification!.storageIndex,
       if (backupExcluded) 'backupExcluded': true,
     };
@@ -332,6 +376,7 @@ class MessageRecord {
       deletedAt: map['deletedAt'] as int?,
       keyTag: map['keyTag'] as String?,
       isFsEncrypted: (map['isFsEncrypted'] as bool?) ?? false,
+      protocolVersion: (map['protocolVersion'] as int?) ?? 2,
       fsClassification: map['fsCls'] != null
           ? FsMessageClassificationExt.fromStorageIndex(map['fsCls'] as int)
           : null,

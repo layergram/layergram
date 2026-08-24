@@ -16,9 +16,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/crypto/models.dart';
+import '../../core/crypto/v3/identity_v3_adapter.dart';
+import '../../core/crypto/v3/public_identity_v3.dart';
 import '../../core/providers.dart';
 import '../../l10n/app_strings.dart';
 import '../identities/identities_controller.dart';
+import '../my_identity/my_identity_controller.dart';
 import 'contact_sas_service.dart';
 
 /// Opens the contact verification ceremony.
@@ -71,26 +74,68 @@ class ContactVerificationView extends ConsumerStatefulWidget {
 class _ContactVerificationViewState
     extends ConsumerState<ContactVerificationView> {
   Future<ContactSasCode>? _codeFuture;
+  RemoteIdentity? _codeContact;
+  bool _verificationInProgress = false;
 
   @override
   void initState() {
     super.initState();
-    _codeFuture = _loadCode();
+    _beginCodeLoad(widget.contact);
   }
 
-  Future<ContactSasCode> _loadCode() async {
+  @override
+  void didUpdateWidget(covariant ContactVerificationView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_hasSameCryptographicIdentity(oldWidget.contact, widget.contact)) {
+      _beginCodeLoad(widget.contact);
+    }
+  }
+
+  void _beginCodeLoad(RemoteIdentity contact) {
+    _codeContact = contact;
+    _codeFuture = _loadCode(contact);
+    _verificationInProgress = false;
+  }
+
+  Future<ContactSasCode> _loadCode(RemoteIdentity contact) async {
     final sas = ref.read(contactSasServiceProvider);
+    if (contact.protocolVersion == V3PublicIdentityCodec.protocolVersion) {
+      if (!ref.read(protocolV3IdentityEnabledProvider)) {
+        throw StateError('Layergram v3 identity verification is unavailable');
+      }
+      final local =
+          await ref.read(myIdentityControllerProvider).getActiveIdentity();
+      if (local == null ||
+          local.protocolVersion != V3PublicIdentityCodec.protocolVersion ||
+          local.publicIdentityBase64 == null) {
+        throw StateError('Active Layergram v3 identity is unavailable');
+      }
+      return sas.deriveV3(
+        localIdentity:
+            V3IdentityAdapter.decodePublicBundle(local.publicIdentityBase64!),
+        peerIdentity: V3IdentityAdapter.fromRemoteIdentity(contact),
+      );
+    }
     final local = await ref.read(identityManagerProvider).getLocalIdentity();
     if (local == null) {
       throw StateError('Local identity not initialized');
     }
     return sas.derive(
       localPublicKeyBase64: local.publicKeyBase64,
-      peerPublicKeyBase64: widget.contact.publicKeyBase64,
+      peerPublicKeyBase64: contact.publicKeyBase64,
     );
   }
 
   Future<void> _confirmMatch() async {
+    final codeContact = _codeContact;
+    if (codeContact == null ||
+        !_hasSameCryptographicIdentity(codeContact, widget.contact)) {
+      setState(() => _beginCodeLoad(widget.contact));
+      return;
+    }
+    if (_verificationInProgress) return;
+    setState(() => _verificationInProgress = true);
+
     final messengerName = widget.contact.displayName;
     final messenger = ScaffoldMessenger.of(context);
     final snackbarText = AppStrings.t(
@@ -99,9 +144,16 @@ class _ContactVerificationViewState
       namedArgs: {'name': messengerName},
     );
 
-    await ref
-        .read(identitiesControllerProvider)
-        .markContactVerified(widget.contact);
+    try {
+      await ref
+          .read(identitiesControllerProvider)
+          .markContactVerified(codeContact);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _beginCodeLoad(widget.contact));
+      }
+      return;
+    }
 
     if (!mounted) return;
     Navigator.of(context).pop(true);
@@ -189,7 +241,7 @@ class _ContactVerificationViewState
               ),
               const SizedBox(height: 24),
               FilledButton.icon(
-                onPressed: _confirmMatch,
+                onPressed: _verificationInProgress ? null : _confirmMatch,
                 icon: const Icon(Icons.check_circle_outline),
                 label: Text(t(context, 'verifyContactMatch')),
                 style: FilledButton.styleFrom(
@@ -215,6 +267,17 @@ class _ContactVerificationViewState
   String _formatDigits(String digits) {
     if (digits.length != 6) return digits;
     return '${digits.substring(0, 3)} ${digits.substring(3)}';
+  }
+
+  bool _hasSameCryptographicIdentity(
+    RemoteIdentity first,
+    RemoteIdentity second,
+  ) {
+    return first.identityId == second.identityId &&
+        first.publicKeyBase64 == second.publicKeyBase64 &&
+        first.fingerprint == second.fingerprint &&
+        first.protocolVersion == second.protocolVersion &&
+        first.publicIdentityBase64 == second.publicIdentityBase64;
   }
 }
 

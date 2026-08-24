@@ -273,8 +273,17 @@ Future<_Fixture> _createFixture() async {
       encryptionServiceProvider.overrideWithValue(encryptionService),
       identitiesRepositoryProvider.overrideWithValue(identitiesRepository),
       messagesRepositoryProvider.overrideWithValue(messagesRepository),
+      protocolV3IdentityEnabledProvider.overrideWithValue(false),
+      protocolV3MessagingEnabledProvider.overrideWithValue(false),
     ],
   );
+  final messageStorageKey =
+      await container.read(homeControllerProvider).currentStorageKey();
+  await messagesRepository.setActiveContext(
+    scopeToken: 'home-controller-cache-test',
+    storageKey: messageStorageKey,
+  );
+  messageStorageKey?.destroy();
   final auxStorageKey = await AuxRecordCipher.deriveAuxStorageKey(
     base64Decode(localKeys.privateKeyBase64),
   );
@@ -336,8 +345,17 @@ Future<_Fixture> _createFixtureFor({
       encryptionServiceProvider.overrideWithValue(encryptionService),
       identitiesRepositoryProvider.overrideWithValue(identitiesRepository),
       messagesRepositoryProvider.overrideWithValue(messagesRepository),
+      protocolV3IdentityEnabledProvider.overrideWithValue(false),
+      protocolV3MessagingEnabledProvider.overrideWithValue(false),
     ],
   );
+  final messageStorageKey =
+      await container.read(homeControllerProvider).currentStorageKey();
+  await messagesRepository.setActiveContext(
+    scopeToken: 'home-controller-cache-test-$localIdentityId',
+    storageKey: messageStorageKey,
+  );
+  messageStorageKey?.destroy();
   final auxStorageKey = await AuxRecordCipher.deriveAuxStorageKey(
     base64Decode(localKeys.privateKeyBase64),
   );
@@ -492,7 +510,7 @@ void main() {
     await Hive.box<Map>(LocalDatabase.messagesBoxName).clear();
   });
 
-  group('HomeController session decryption cache', () {
+  group('legacy v2 HomeController session decryption cache', () {
     test('warmSessionDisplayKeys is opt-in and reuses derived keys once warmed',
         () async {
       final fixture = await _createFixture();

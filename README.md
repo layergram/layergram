@@ -14,6 +14,33 @@ For transport channels that do not support invisible Unicode characters (or when
 - **Website:** https://layergram.app
 - **GitHub organization:** https://github.com/layergram
 
+## Protocol v3 Post-Quantum Protection
+
+Layergram 2.0 activates the intentionally incompatible protocol v3 with hybrid
+post-quantum protection. It combines X25519 with ML-KEM-768, keeps Layergram
+serverless and transport-agnostic, and carries messages through the same three
+user-facing forms: direct text, deep link, and zero-width steganography.
+
+**Protocol v3 is active in Layergram 2.0 and later.** Its security design,
+implementation, test evidence, migration contract, and release tooling remain
+public so researchers can inspect and audit the complete protocol boundary.
+
+The migration is deliberately explicit:
+
+- users keep their existing 24-word recovery phrase and optional passphrase;
+- those secrets deterministically derive new v3 X25519 and ML-KEM-768 key
+  material, so the v3 public identity, ID, fingerprint, contacts, and sessions
+  are different from v2;
+- every user must share their complete new public identity by text, deep link,
+  or one branded static QR code and verify contacts again;
+- v2 identities and sessions are not silently treated as v3, and v2 message
+  sending will be blocked after a contact migrates.
+
+Read the [Protocol v3 migration guide](specs/PROTOCOL_V3_MIGRATION.md) for the
+user and compatibility consequences. Keeping the same recovery phrase does
+not mean reusing the old cryptographic keys, and the recovery phrase must never
+be shared with a contact.
+
 ## Release and Distribution Model
 
 - This repository contains the public source code for the official Layergram app.
@@ -37,8 +64,9 @@ For transport channels that do not support invisible Unicode characters (or when
 ## Key Features
 
 ### Security
-- **End-to-end encryption** — X25519 key agreement + AES-GCM-256
-- **Forward Secrecy** — Advanced opportunistic FS and Maximum device-bound FS with Double Ratchet message keys, without a Layergram server or public-key redistribution
+- **Hybrid post-quantum end-to-end encryption (active protocol v3)** — mandatory X25519 + ML-KEM-768 authenticated handshake, EC Double Ratchet, and sparse post-quantum ratcheting, with no classical-only v3 fallback
+- **Forward Secrecy** — Normal multi-device and Maximum device-bound session policies, without a Layergram server
+- **Passphrase identities and plausible deniability** — an optional passphrase derives a separate identity and encrypted keyspace that remain unavailable while the passphrase is inactive, providing practical but limited plausible deniability (not a guarantee against coercion, forensic correlation, or a compromised device)
 - **Steganographic encoding** — encrypted payloads hidden inside zero-width Unicode characters, with direct text and deep-link fallbacks for transports that don't support invisible characters
 - **App lock** — biometric unlock with PIN fallback support
 - **Secure local storage** — sensitive state protected at rest
@@ -47,7 +75,7 @@ For transport channels that do not support invisible Unicode characters (or when
 ### Core Functionality
 - **Compose and share** encrypted messages over any text-based channel
 - **Decode** received messages by pasting them into the app
-- **Identity management** — create, export, and import public identities via QR code, deep link, or text block
+- **Identity management** — create, export, and import complete public identities via a single branded static QR code, deep link, or text block; the enlarged QR temporarily improves display brightness and restores the previous setting when closed
 - **Local chat history** — encrypted archive of sent and received messages
 - **Pin / search / delete** conversations
 - **Self-destructing messages** — optional expiration and delete-after-read
@@ -143,6 +171,14 @@ dart doc
 
 - [Layergram Message Format (LMF)](specs/LAYERGRAM_MESSAGE_FORMAT.md)
 - [Forward Secrecy](specs/FORWARD_SECRECY.md)
+- [Protocol v3 migration guide](specs/PROTOCOL_V3_MIGRATION.md)
+- [Protocol v3 security goals](specs/PROTOCOL_V3_SECURITY_GOALS.md)
+- [Protocol v3 identity and protocol draft](specs/PROTOCOL_V3_DRAFT.md)
+- [LMF v3 canonical framing](specs/LMF_V3_DRAFT.md)
+- [Protocol v3 handshake](specs/PROTOCOL_V3_HANDSHAKE.md)
+- [Protocol v3 key schedule and ratchet](specs/PROTOCOL_V3_KEY_SCHEDULE.md)
+- [Protocol v3 application messages](specs/APPLICATION_MESSAGE_V3.md)
+- [Protocol v3 audit package](specs/PROTOCOL_V3_AUDIT_PACKAGE.md)
 - [Cryptography Export Compliance Notes](specs/CRYPTOGRAPHY_EXPORT_COMPLIANCE.md)
 
 ### Forward Secrecy Status

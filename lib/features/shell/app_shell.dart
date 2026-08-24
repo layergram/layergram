@@ -19,6 +19,8 @@ import '../../core/capabilities/chat_folders_capability.dart';
 import '../../core/providers.dart';
 import '../../l10n/app_strings.dart';
 import '../home/home_view.dart';
+import '../identity_migration_notice/identity_migration_notice_controller.dart';
+import '../identity_migration_notice/identity_migration_notice_service.dart';
 import '../identities/add_identity_view.dart';
 import '../identities/identities_list_view.dart';
 import '../my_identity/my_identity_view.dart';
@@ -34,6 +36,7 @@ class AppShell extends ConsumerStatefulWidget {
 
 class _AppShellState extends ConsumerState<AppShell> {
   int _index = 0;
+  String? _v3MigrationNoticeScheduledFor;
   final GlobalKey _switcherKey = GlobalKey(debugLabel: 'app_shell_switcher');
 
   @override
@@ -78,6 +81,86 @@ class _AppShellState extends ConsumerState<AppShell> {
     );
   }
 
+  Future<void> _showV3MigrationNotice(List<_ShellItem> items) async {
+    final service = IdentityMigrationNoticeService(
+      ref.read(secureStorageProvider),
+      isFeatureEnabled: () => ref.read(protocolV3IdentityEnabledProvider),
+    );
+    final controller = IdentityMigrationNoticeController(
+      service: service,
+      loadTarget: () async {
+        if (ref.read(passphraseProvider).isActive) return null;
+        final capabilities = ref.read(layergramCapabilitiesProvider).identity;
+        if (capabilities.isAvailable) {
+          final activeId = ref.read(activeIdentityIdProvider);
+          if (activeId == null || activeId.isEmpty) return null;
+          final profiles = await capabilities.watchLocalIdentities().first;
+          final matches = profiles
+              .where((profile) => profile.identityId == activeId)
+              .toList(growable: false);
+          if (matches.length != 1) return null;
+          final profile = matches.single;
+          return IdentityMigrationNoticeTarget(
+            identityId: profile.identityId,
+            protocolVersion: profile.protocolVersion ?? 2,
+          );
+        }
+        final identity =
+            await ref.read(identityManagerProvider).getLocalIdentity();
+        return identity == null
+            ? null
+            : IdentityMigrationNoticeTarget.fromLocalIdentity(identity);
+      },
+      presentNotice: (noticeContext) async {
+        final openIdentity = await showDialog<bool>(
+          context: noticeContext,
+          barrierDismissible: false,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(
+              AppStrings.t(
+                dialogContext,
+                'security.fs.v3.migration_title',
+              ),
+            ),
+            content: Text(
+              AppStrings.t(
+                dialogContext,
+                'security.fs.v3.migration_body',
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: Text(
+                  AppStrings.t(
+                    dialogContext,
+                    'security.fs.v3.migration_later',
+                  ),
+                ),
+              ),
+              FilledButton.icon(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                icon: const Icon(Icons.qr_code_2),
+                label: Text(
+                  AppStrings.t(
+                    dialogContext,
+                    'security.fs.v3.migration_view_identity',
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+        if (openIdentity != true || !mounted) return false;
+        final identityIndex =
+            items.indexWhere((item) => item.viewKey == 'myIdentity');
+        if (identityIndex >= 0) setState(() => _index = identityIndex);
+        return true;
+      },
+    );
+    await controller.checkAndShowIfNeeded(context);
+  }
+
   @override
   Widget build(BuildContext context) {
     // Aggiungi context.locale per forzare il rebuild della navigation bar quando cambia la lingua
@@ -114,6 +197,23 @@ class _AppShellState extends ConsumerState<AppShell> {
           viewKey: 'settings'),
     ];
 
+    final v3IdentityEnabled = ref.watch(protocolV3IdentityEnabledProvider);
+    final activeIdentityId = ref.watch(activeIdentityIdProvider);
+    final passphraseActive = ref.watch(passphraseProvider).isActive;
+    final migrationTarget = passphraseActive
+        ? 'passphrase-context'
+        : (activeIdentityId?.isNotEmpty ?? false)
+            ? activeIdentityId!
+            : 'primary';
+    if (!v3IdentityEnabled) {
+      _v3MigrationNoticeScheduledFor = null;
+    } else if (_v3MigrationNoticeScheduledFor != migrationTarget) {
+      _v3MigrationNoticeScheduledFor = migrationTarget;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showV3MigrationNotice(items);
+      });
+    }
+
     ref.listen<String?>(pendingIdentityImportProvider, (_, initialText) {
       if (initialText == null || initialText.trim().isEmpty) return;
       final contactsIndex =
@@ -146,9 +246,13 @@ class _AppShellState extends ConsumerState<AppShell> {
     if (desktop) {
       final topItems = [
         items[0], // Home (Messages)
-        ...items.where((i) => i.chatFolderId != null && i.chatFolderId != kAllChatsFolderId) // Premium folders
+        ...items.where((i) =>
+            i.chatFolderId != null &&
+            i.chatFolderId != kAllChatsFolderId) // Premium folders
       ];
-      final bottomItems = items.where((i) => i.chatFolderId == null).toList(); // Identities, MyIdentity, Settings
+      final bottomItems = items
+          .where((i) => i.chatFolderId == null)
+          .toList(); // Identities, MyIdentity, Settings
 
       final railSelectedIndex = _index < topItems.length ? _index : -1;
       final railTheme = NavigationRailTheme.of(context);
@@ -167,45 +271,46 @@ class _AppShellState extends ConsumerState<AppShell> {
                 child: Column(
                   children: [
                     Expanded(
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          return SingleChildScrollView(
-                            child: ConstrainedBox(
-                              constraints: BoxConstraints(
-                                minHeight: constraints.maxHeight,
-                              ),
-                              child: IntrinsicHeight(
-                                child: NavigationRailTheme(
-                                  data: railTheme.copyWith(
-                                    indicatorColor: railSelectedIndex == -1
-                                        ? Colors.transparent
-                                        : railTheme.indicatorColor,
-                                  ),
-                                  child: NavigationRail(
-                                    backgroundColor: Colors.transparent,
-                                    selectedIndex: railSelectedIndex == -1 ? null : railSelectedIndex,
-                                    labelType: NavigationRailLabelType.all,
-                                    onDestinationSelected: (i) => _selectIndex(items.indexOf(topItems[i]), items),
-                                    destinations: [
-                                      for (final item in topItems)
-                                        NavigationRailDestination(
-                                          icon: item.icon,
-                                          label: Text(
-                                            item.label,
-                                            textAlign: TextAlign.center,
-                                            softWrap: true,
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
+                      child: LayoutBuilder(builder: (context, constraints) {
+                        return SingleChildScrollView(
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              minHeight: constraints.maxHeight,
+                            ),
+                            child: IntrinsicHeight(
+                              child: NavigationRailTheme(
+                                data: railTheme.copyWith(
+                                  indicatorColor: railSelectedIndex == -1
+                                      ? Colors.transparent
+                                      : railTheme.indicatorColor,
+                                ),
+                                child: NavigationRail(
+                                  backgroundColor: Colors.transparent,
+                                  selectedIndex: railSelectedIndex == -1
+                                      ? null
+                                      : railSelectedIndex,
+                                  labelType: NavigationRailLabelType.all,
+                                  onDestinationSelected: (i) => _selectIndex(
+                                      items.indexOf(topItems[i]), items),
+                                  destinations: [
+                                    for (final item in topItems)
+                                      NavigationRailDestination(
+                                        icon: item.icon,
+                                        label: Text(
+                                          item.label,
+                                          textAlign: TextAlign.center,
+                                          softWrap: true,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
                                         ),
-                                    ],
-                                  ),
+                                      ),
+                                  ],
                                 ),
                               ),
                             ),
-                          );
-                        }
-                      ),
+                          ),
+                        );
+                      }),
                     ),
                     Column(
                       mainAxisSize: MainAxisSize.min,
@@ -218,35 +323,51 @@ class _AppShellState extends ConsumerState<AppShell> {
                               splashColor: Colors.transparent,
                               hoverColor: Colors.transparent,
                               highlightColor: Colors.transparent,
-                              onTap: () => setState(() => _index = items.indexOf(item)),
+                              onTap: () =>
+                                  setState(() => _index = items.indexOf(item)),
                               child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 14, vertical: 8),
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 12, vertical: 4),
                                       decoration: ShapeDecoration(
                                         color: _index == items.indexOf(item)
                                             ? (railTheme.indicatorColor ??
-                                                Theme.of(context).colorScheme.primary.withAlpha(0x1F))
+                                                Theme.of(context)
+                                                    .colorScheme
+                                                    .primary
+                                                    .withAlpha(0x1F))
                                             : Colors.transparent,
-                                        shape: railTheme.indicatorShape ?? const StadiumBorder(),
+                                        shape: railTheme.indicatorShape ??
+                                            const StadiumBorder(),
                                       ),
                                       child: Icon(
                                         item.icon.icon,
                                         color: _index == items.indexOf(item)
-                                            ? (railTheme.selectedIconTheme?.color ??
-                                                Theme.of(context).colorScheme.onSecondaryContainer)
-                                            : (railTheme.unselectedIconTheme?.color ??
-                                                Theme.of(context).iconTheme.color),
+                                            ? (railTheme
+                                                    .selectedIconTheme?.color ??
+                                                Theme.of(context)
+                                                    .colorScheme
+                                                    .onSecondaryContainer)
+                                            : (railTheme.unselectedIconTheme
+                                                    ?.color ??
+                                                Theme.of(context)
+                                                    .iconTheme
+                                                    .color),
                                       ),
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
                                       item.label,
                                       style: _index == items.indexOf(item)
-                                          ? (railTheme.selectedLabelTextStyle ?? Theme.of(context).textTheme.labelMedium)
+                                          ? (railTheme.selectedLabelTextStyle ??
+                                              Theme.of(context)
+                                                  .textTheme
+                                                  .labelMedium)
                                           : unselectedLabelStyle,
                                       textAlign: TextAlign.center,
                                       maxLines: 1,
@@ -285,7 +406,8 @@ class _AppShellState extends ConsumerState<AppShell> {
         padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
         child: ClipPath(
           clipper: ShapeBorderClipper(
-            shape: ContinuousRectangleBorder(borderRadius: BorderRadius.circular(56)),
+            shape: ContinuousRectangleBorder(
+                borderRadius: BorderRadius.circular(56)),
           ),
           child: TooltipVisibility(
             visible: false,

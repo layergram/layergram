@@ -72,11 +72,14 @@ class PassphraseButton extends ConsumerWidget {
     if (result == null || result.isEmpty) return;
     if (!context.mounted) return;
 
-    final mnemonic =
-        await ref.read(identityManagerProvider).getRecoveryPhrase();
-    if (mnemonic == null) return;
+    final local = await ref.read(identityManagerProvider).getLocalIdentity();
+    if (local == null) return;
 
-    await ref.read(passphraseProvider.notifier).activate(mnemonic, result);
+    await ref.read(passphraseProvider.notifier).activate(
+          local.mnemonic,
+          result,
+          displayName: local.displayName,
+        );
 
     // Start the passphrase timeout controller (§11.3)
     final prefs = ref.read(passphrasePreferencesProvider);
@@ -123,7 +126,7 @@ class PassphraseButton extends ConsumerWidget {
             );
       }
 
-      ref.read(passphraseProvider.notifier).deactivate();
+      await ref.read(passphraseProvider.notifier).deactivate();
     }
   }
 }
@@ -181,7 +184,9 @@ class _PassphraseDialogState extends State<_PassphraseDialog> {
                 ),
               ),
               onSubmitted: (value) {
-                if (value.trim().isNotEmpty) Navigator.of(context).pop(value.trim());
+                if (value.trim().isNotEmpty) {
+                  Navigator.of(context).pop(value.trim());
+                }
               },
             ),
             const SizedBox(height: 16),
