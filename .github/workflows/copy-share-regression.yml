@@ -32,7 +32,6 @@ jobs:
         with:
           channel: stable
           flutter-version: 3.41.1
-          cache: true
 
       - name: Resolve locked dependencies
         run: flutter pub get
@@ -64,7 +63,6 @@ jobs:
         with:
           channel: stable
           flutter-version: 3.41.1
-          cache: true
 
       - name: Enable macOS desktop and resolve locked dependencies
         run: |
