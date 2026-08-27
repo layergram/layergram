@@ -132,6 +132,8 @@
   "confirmResetFinalYes": "Yes, delete everything",
   "dataClearedSnackbar": "Data deleted. Restart or create a new identity.",
   "messageCopiedClipboard": "Message copied to clipboard",
+  "messageCopyFailed": "The message could not be copied. Try again.",
+  "messageShareFailed": "The message could not be shared. Try again.",
   "decryptError": "[decrypt error]",
   "newChat": "New chat",
   "newMessage": "New message",

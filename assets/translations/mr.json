@@ -117,6 +117,8 @@
   "confirmResetFinalYes": "होय, सर्व हटवा",
   "dataClearedSnackbar": "डेटा हटवला. पुन्हा सुरू करा किंवा नवीन ओळख तयार करा.",
   "messageCopiedClipboard": "संदेश क्लिपबोर्डवर कॉपी केला",
+  "messageCopyFailed": "संदेश कॉपी करता आला नाही. पुन्हा प्रयत्न करा.",
+  "messageShareFailed": "संदेश शेअर करता आला नाही. पुन्हा प्रयत्न करा.",
   "decryptError": "[डिक्रिप्शन त्रुटी]",
   "newChat": "नवीन चॅट",
   "searchContact": "संपर्क शोधा",

@@ -117,6 +117,8 @@
   "confirmResetFinalYes": "ಹೌದು, ಎಲ್ಲವನ್ನೂ ಅಳಿಸಿ",
   "dataClearedSnackbar": "ಡೇಟಾ ಅಳಿಸಲಾಗಿದೆ. ಮರುಪ್ರಾರಂಭಿಸಿ ಅಥವಾ ಹೊಸ ಗುರುತು ರಚಿಸಿ.",
   "messageCopiedClipboard": "ಸಂದೇಶ ಕ್ಲಿಪ್‌ಬೋರ್ಡ್‌ಗೆ ನಕಲಿಸಲಾಗಿದೆ",
+  "messageCopyFailed": "ಸಂದೇಶವನ್ನು ನಕಲಿಸಲಾಗಲಿಲ್ಲ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+  "messageShareFailed": "ಸಂದೇಶವನ್ನು ಹಂಚಿಕೊಳ್ಳಲಾಗಲಿಲ್ಲ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
   "decryptError": "[ಡಿಕ್ರಿಪ್ಶನ್ ದೋಷ]",
   "newChat": "ಹೊಸ ಸಂಭಾಷಣೆ",
   "searchContact": "ಸಂಪರ್ಕ ಹುಡುಕಿ",

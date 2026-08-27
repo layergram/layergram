@@ -119,6 +119,8 @@
   "confirmResetFinalYes": "Ya, hapus semuanya",
   "dataClearedSnackbar": "Data dihapus. Mulai ulang atau buat identitas baru.",
   "messageCopiedClipboard": "Pesan disalin ke clipboard",
+  "messageCopyFailed": "Pesan tidak dapat disalin. Coba lagi.",
+  "messageShareFailed": "Pesan tidak dapat dibagikan. Coba lagi.",
   "decryptError": "[kesalahan dekripsi]",
   "newChat": "Percakapan baru",
   "searchContact": "Cari kontak",

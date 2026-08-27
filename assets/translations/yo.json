@@ -119,6 +119,8 @@
   "confirmResetFinalYes": "Bẹẹni, pa ohun gbogbo rẹ",
   "dataClearedSnackbar": "Ti pa data rẹ. Tun bẹrẹ tabi ṣẹda idanimọ tuntun.",
   "messageCopiedClipboard": "Ti daakọ ifiranṣẹ si kiliboodu",
+  "messageCopyFailed": "A ko le daakọ ifiranṣẹ naa. Gbiyanju lẹẹkansi.",
+  "messageShareFailed": "A ko le pin ifiranṣẹ naa. Gbiyanju lẹẹkansi.",
   "decryptError": "[Aṣiṣe Ṣiṣii]",
   "newChat": "Ibaraẹnisọrọ Tuntun",
   "searchContact": "Wa Olubasọrọ",

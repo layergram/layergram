@@ -119,6 +119,8 @@
   "confirmResetFinalYes": "हाँ, सब कुछ हटाएं",
   "dataClearedSnackbar": "डेटा हटाया गया। पुनः शुरू करें या नई पहचान बनाएं।",
   "messageCopiedClipboard": "संदेश क्लिपबोर्ड पर कॉपी किया गया",
+  "messageCopyFailed": "संदेश कॉपी नहीं किया जा सका। फिर से कोशिश करें।",
+  "messageShareFailed": "संदेश साझा नहीं किया जा सका। फिर से कोशिश करें।",
   "decryptError": "[डिक्रिप्शन त्रुटि]",
   "newChat": "नई चैट",
   "searchContact": "संपर्क खोजें",

@@ -119,6 +119,8 @@
   "confirmResetFinalYes": "Ya, padam semua",
   "dataClearedSnackbar": "Data dipadam. Mulakan semula atau cipta identiti baharu.",
   "messageCopiedClipboard": "Mesej disalin ke papan klip",
+  "messageCopyFailed": "Mesej tidak dapat disalin. Cuba lagi.",
+  "messageShareFailed": "Mesej tidak dapat dikongsi. Cuba lagi.",
   "decryptError": "[ralat dekripsi]",
   "newChat": "Perbualan baharu",
   "searchContact": "Cari kenalan",

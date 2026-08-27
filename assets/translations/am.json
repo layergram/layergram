@@ -119,6 +119,8 @@
   "confirmResetFinalYes": "አዎ፣ ሁሉንም ሰርዝ",
   "dataClearedSnackbar": "ውሂብ ተሰርዟል። እንደገና ያስጀምሩ ወይም አዲስ ማንነት ይፍጠሩ።",
   "messageCopiedClipboard": "መልዕክት ወደ ቅንጥብ ሰሌዳ ተቀድቷል",
+  "messageCopyFailed": "መልዕክቱን መቅዳት አልተቻለም። እንደገና ይሞክሩ።",
+  "messageShareFailed": "መልዕክቱን ማጋራት አልተቻለም። እንደገና ይሞክሩ።",
   "decryptError": "[የመፍታት ስህተት]",
   "newChat": "አዲስ ውይይት",
   "searchContact": "እውቂያ ፈልግ",

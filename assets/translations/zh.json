@@ -119,6 +119,8 @@
   "confirmResetFinalYes": "是，刪除所有內容",
   "dataClearedSnackbar": "資料已刪除。請重新啟動或建立新身份。",
   "messageCopiedClipboard": "訊息已複製到剪貼簿",
+  "messageCopyFailed": "無法複製訊息，請再試一次。",
+  "messageShareFailed": "無法分享訊息，請再試一次。",
   "decryptError": "[解密錯誤]",
   "newChat": "新對話",
   "searchContact": "搜尋聯絡人",

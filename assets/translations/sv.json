@@ -119,6 +119,8 @@
   "confirmResetFinalYes": "Ja, ta bort allt",
   "dataClearedSnackbar": "Data borttagen. Starta om eller skapa ny identitet.",
   "messageCopiedClipboard": "Meddelande kopierat till urklipp",
+  "messageCopyFailed": "Meddelandet kunde inte kopieras. Försök igen.",
+  "messageShareFailed": "Meddelandet kunde inte delas. Försök igen.",
   "decryptError": "[dekrypteringsfel]",
   "newChat": "Ny konversation",
   "searchContact": "Sök kontakt",

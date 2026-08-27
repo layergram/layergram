@@ -119,6 +119,8 @@
   "confirmResetFinalYes": "예, 모두 삭제",
   "dataClearedSnackbar": "데이터가 삭제되었습니다. 다시 시작하거나 새 신원을 만드세요.",
   "messageCopiedClipboard": "메시지가 클립보드에 복사되었습니다",
+  "messageCopyFailed": "메시지를 복사할 수 없습니다. 다시 시도하세요.",
+  "messageShareFailed": "메시지를 공유할 수 없습니다. 다시 시도하세요.",
   "decryptError": "[복호화 오류]",
   "newChat": "새 채팅",
   "searchContact": "연락처 검색",

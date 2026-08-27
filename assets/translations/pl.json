@@ -119,6 +119,8 @@
   "confirmResetFinalYes": "Tak, usuń wszystko",
   "dataClearedSnackbar": "Dane usunięte. Uruchom ponownie lub utwórz nową tożsamość.",
   "messageCopiedClipboard": "Wiadomość skopiowana",
+  "messageCopyFailed": "Nie udało się skopiować wiadomości. Spróbuj ponownie.",
+  "messageShareFailed": "Nie udało się udostępnić wiadomości. Spróbuj ponownie.",
   "decryptError": "[błąd deszyfrowania]",
   "newChat": "Nowy czat",
   "searchContact": "Szukaj kontaktu",

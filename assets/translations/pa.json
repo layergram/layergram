@@ -117,6 +117,8 @@
   "confirmResetFinalYes": "ਹਾਂ, ਸਭ ਕੁਝ ਮਿਟਾਓ",
   "dataClearedSnackbar": "ਡੇਟਾ ਮਿਟਾ ਦਿੱਤਾ ਗਿਆ। ਮੁੜ-ਚਾਲੂ ਕਰੋ ਜਾਂ ਨਵੀਂ ਪਛਾਣ ਬਣਾਓ।",
   "messageCopiedClipboard": "ਸੁਨੇਹਾ ਕਲਿੱਪਬੋਰਡ ਵਿੱਚ ਕਾਪੀ ਕੀਤਾ ਗਿਆ",
+  "messageCopyFailed": "ਸੁਨੇਹਾ ਕਾਪੀ ਨਹੀਂ ਕੀਤਾ ਜਾ ਸਕਿਆ। ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।",
+  "messageShareFailed": "ਸੁਨੇਹਾ ਸਾਂਝਾ ਨਹੀਂ ਕੀਤਾ ਜਾ ਸਕਿਆ। ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।",
   "decryptError": "[ਡਿਕ੍ਰਿਪਸ਼ਨ ਗਲਤੀ]",
   "newChat": "ਨਵੀਂ ਗੱਲਬਾਤ",
   "searchContact": "ਸੰਪਰਕ ਖੋਜੋ",

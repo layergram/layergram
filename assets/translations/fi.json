@@ -119,6 +119,8 @@
   "confirmResetFinalYes": "Kyllä, poista kaikki",
   "dataClearedSnackbar": "Tiedot poistettu. Käynnistä uudelleen tai luo uusi henkilöllisyys.",
   "messageCopiedClipboard": "Viesti kopioitu leikepöydälle",
+  "messageCopyFailed": "Viestin kopiointi epäonnistui. Yritä uudelleen.",
+  "messageShareFailed": "Viestin jakaminen epäonnistui. Yritä uudelleen.",
   "decryptError": "[salauksen purkuvirhe]",
   "newChat": "Uusi keskustelu",
   "searchContact": "Hae yhteystietoa",

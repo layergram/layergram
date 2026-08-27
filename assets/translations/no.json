@@ -119,6 +119,8 @@
   "confirmResetFinalYes": "Ja, slett alt",
   "dataClearedSnackbar": "Data slettet. Start på nytt eller opprett ny identitet.",
   "messageCopiedClipboard": "Melding kopiert til utklippstavlen",
+  "messageCopyFailed": "Meldingen kunne ikke kopieres. Prøv igjen.",
+  "messageShareFailed": "Meldingen kunne ikke deles. Prøv igjen.",
   "decryptError": "[dekrypteringsfeil]",
   "newChat": "Ny samtale",
   "searchContact": "Søk etter kontakt",

@@ -119,6 +119,8 @@
   "confirmResetFinalYes": "Ja, alles verwijderen",
   "dataClearedSnackbar": "Gegevens verwijderd. Herstart of maak een nieuwe identiteit aan.",
   "messageCopiedClipboard": "Bericht naar klembord gekopieerd",
+  "messageCopyFailed": "Het bericht kon niet worden gekopieerd. Probeer het opnieuw.",
+  "messageShareFailed": "Het bericht kon niet worden gedeeld. Probeer het opnieuw.",
   "decryptError": "[ontsleutelingsfout]",
   "newChat": "Nieuwe chat",
   "searchContact": "Contact zoeken",

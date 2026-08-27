@@ -119,6 +119,8 @@
   "confirmResetFinalYes": "ใช่ ลบทั้งหมด",
   "dataClearedSnackbar": "ลบข้อมูลแล้ว เริ่มต้นใหม่หรือสร้างตัวตนใหม่",
   "messageCopiedClipboard": "คัดลอกข้อความไปยังคลิปบอร์ดแล้ว",
+  "messageCopyFailed": "ไม่สามารถคัดลอกข้อความได้ โปรดลองอีกครั้ง",
+  "messageShareFailed": "ไม่สามารถแชร์ข้อความได้ โปรดลองอีกครั้ง",
   "decryptError": "[ข้อผิดพลาดในการถอดรหัส]",
   "newChat": "การสนทนาใหม่",
   "searchContact": "ค้นหาผู้ติดต่อ",

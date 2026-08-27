@@ -119,6 +119,8 @@
   "confirmResetFinalYes": "Ja, alles löschen",
   "dataClearedSnackbar": "Daten gelöscht. Neu starten oder neue Identität erstellen.",
   "messageCopiedClipboard": "Nachricht in Zwischenablage kopiert",
+  "messageCopyFailed": "Die Nachricht konnte nicht kopiert werden. Versuche es erneut.",
+  "messageShareFailed": "Die Nachricht konnte nicht geteilt werden. Versuche es erneut.",
   "decryptError": "[Entschlüsselungsfehler]",
   "newChat": "Neuer Chat",
   "searchContact": "Kontakt suchen",

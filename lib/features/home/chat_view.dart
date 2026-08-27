@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:math' show max;
+import 'dart:math' show max, min;
 
 import 'package:dotted_border/dotted_border.dart';
 import 'package:flutter/material.dart';
@@ -171,6 +171,9 @@ class ChatViewState extends ConsumerState<ChatView> {
   int _v3OutputPartIndex = 0;
   bool _dirtySinceEncode = true;
   bool _sending = false;
+  bool _exporting = false;
+  OverlayEntry? _exportToastEntry;
+  Timer? _exportToastTimer;
   int? _exactCoverMissingCount;
   bool _handoffScheduled = false;
   bool _decryptionPrimed = false;
@@ -1360,6 +1363,66 @@ class ChatViewState extends ConsumerState<ChatView> {
     );
   }
 
+  void _showComposerFailureSnackbar(String message) {
+    _showExportToast(message);
+  }
+
+  void _showExportToast(
+    String message, {
+    Duration duration = const Duration(seconds: 4),
+  }) {
+    if (!mounted) return;
+    final overlay = Overlay.maybeOf(context);
+    if (overlay == null) return;
+    _exportToastTimer?.cancel();
+    _exportToastEntry?.remove();
+
+    late final OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (overlayContext) {
+        final media = MediaQuery.of(overlayContext);
+        final theme = Theme.of(overlayContext);
+        final toastWidth = min(360.0, max(180.0, media.size.width * 0.55));
+        return Positioned(
+          left: (media.size.width - toastWidth) / 2,
+          bottom: media.viewPadding.bottom + 16,
+          width: toastWidth,
+          child: IgnorePointer(
+            child: Semantics(
+              liveRegion: true,
+              label: message,
+              child: Material(
+                elevation: 6,
+                color: theme.snackBarTheme.backgroundColor ??
+                    theme.colorScheme.inverseSurface,
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
+                  child: Text(
+                    message,
+                    style: theme.snackBarTheme.contentTextStyle ??
+                        TextStyle(color: theme.colorScheme.onInverseSurface),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    _exportToastEntry = entry;
+    overlay.insert(entry);
+    _exportToastTimer = Timer(duration, () {
+      if (_exportToastEntry != entry) return;
+      entry.remove();
+      _exportToastEntry = null;
+      _exportToastTimer = null;
+    });
+  }
+
   void _setComposerMode(MessageOutputMode mode) {
     if (_outputMode == mode) {
       return;
@@ -1546,6 +1609,8 @@ class ChatViewState extends ConsumerState<ChatView> {
 
   @override
   void dispose() {
+    _exportToastTimer?.cancel();
+    _exportToastEntry?.remove();
     for (final timer in _revealTimers.values) {
       timer.cancel();
     }
@@ -1649,7 +1714,7 @@ class ChatViewState extends ConsumerState<ChatView> {
         );
         if (mounted) {
           setState(() => _exactCoverMissingCount = missing);
-          _showTouchComposerSnackbar(
+          _showComposerFailureSnackbar(
             AppStrings.t(context, 'coverTooShort')
                 .replaceAll('{n}', '$missing'),
           );
@@ -1730,27 +1795,84 @@ class ChatViewState extends ConsumerState<ChatView> {
       return output;
     } on FsSendBlockedException catch (e) {
       if (mounted) {
-        _showTouchComposerSnackbar(AppStrings.t(context, e.messageKey));
+        _showComposerFailureSnackbar(AppStrings.t(context, e.messageKey));
       }
       return null;
     } on V3ChatCoverCapacityException catch (e) {
       final missing = max(1, e.missingCharacters);
       if (mounted) {
         setState(() => _exactCoverMissingCount = missing);
-        _showTouchComposerSnackbar(
+        _showComposerFailureSnackbar(
           AppStrings.t(context, 'coverTooShort').replaceAll('{n}', '$missing'),
+        );
+      }
+      return null;
+    } on ProtocolV3OutboundRequiredException {
+      if (mounted) {
+        _showComposerFailureSnackbar(
+          AppStrings.t(context, 'security.fs.v3.contact_migration_required'),
         );
       }
       return null;
     } on ProtocolV3ContactMigrationRequiredException {
       if (mounted) {
-        _showTouchComposerSnackbar(
+        _showComposerFailureSnackbar(
           AppStrings.t(context, 'security.fs.v3.contact_migration_required'),
         );
       }
       return null;
     } finally {
       if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  bool get _exportActionDisabled =>
+      (!_hasPreparedOutput && !_isInputValid) || _sending || _exporting;
+
+  Future<void> _copyComposerOutput() async {
+    if (_exportActionDisabled) return;
+    setState(() => _exporting = true);
+    try {
+      final output = await _encodeAndPersist();
+      if (output == null || !mounted) return;
+      await ref.read(clipboardServiceProvider).writeText(output);
+      await _recordPreparedOutputExported();
+      if (!mounted) return;
+      _showExportToast(
+        AppStrings.t(context, 'messageCopiedClipboard'),
+        duration: const Duration(milliseconds: 1800),
+      );
+    } on Object {
+      if (mounted) {
+        _showComposerFailureSnackbar(
+          AppStrings.t(context, 'messageCopyFailed'),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
+  Future<void> _shareComposerOutput() async {
+    if (_exportActionDisabled) return;
+    setState(() => _exporting = true);
+    try {
+      final output = await _encodeAndPersist();
+      if (output == null || !mounted) return;
+      await ref.read(externalTextShareProvider)(
+        context,
+        output,
+        forceStegoCover: _isCoverMode,
+      );
+      await _recordPreparedOutputExported();
+    } on Object {
+      if (mounted) {
+        _showComposerFailureSnackbar(
+          AppStrings.t(context, 'messageShareFailed'),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _exporting = false);
     }
   }
 
@@ -1883,47 +2005,14 @@ class ChatViewState extends ConsumerState<ChatView> {
                     IconButton(
                       icon: const Icon(Icons.copy_outlined, size: 20),
                       tooltip: _preparedOutputLabel(t(context, 'copy')),
-                      onPressed: ((!_hasPreparedOutput && !_isInputValid) ||
-                              _sending)
-                          ? null
-                          : () async {
-                              final output = await _encodeAndPersist();
-                              if (output == null || !context.mounted) {
-                                return;
-                              }
-                              final messenger = ScaffoldMessenger.of(context);
-                              await ref
-                                  .read(clipboardServiceProvider)
-                                  .writeText(output);
-                              await _recordPreparedOutputExported();
-                              if (!context.mounted) {
-                                return;
-                              }
-                              messenger.showSnackBar(
-                                SnackBar(
-                                    content: Text(
-                                        t(context, 'messageCopiedClipboard'))),
-                              );
-                            },
+                      onPressed:
+                          _exportActionDisabled ? null : _copyComposerOutput,
                     ),
                     IconButton(
                       icon: const Icon(Icons.ios_share_outlined, size: 20),
                       tooltip: _preparedOutputLabel(t(context, 'share')),
                       onPressed:
-                          ((!_hasPreparedOutput && !_isInputValid) || _sending)
-                              ? null
-                              : () async {
-                                  final output = await _encodeAndPersist();
-                                  if (output == null || !context.mounted) {
-                                    return;
-                                  }
-                                  await shareTextExternally(
-                                    context,
-                                    output,
-                                    forceStegoCover: _isCoverMode,
-                                  );
-                                  await _recordPreparedOutputExported();
-                                },
+                          _exportActionDisabled ? null : _shareComposerOutput,
                     ),
                   ],
                 ),
@@ -3033,41 +3122,9 @@ class ChatViewState extends ConsumerState<ChatView> {
                                                           3),
                                                   child: OutlinedButton.icon(
                                                     onPressed:
-                                                        ((!_hasPreparedOutput &&
-                                                                    !_isInputValid) ||
-                                                                _sending)
+                                                        _exportActionDisabled
                                                             ? null
-                                                            : () async {
-                                                                final output =
-                                                                    await _encodeAndPersist();
-                                                                if (output ==
-                                                                        null ||
-                                                                    !context
-                                                                        .mounted) {
-                                                                  return;
-                                                                }
-                                                                final messenger =
-                                                                    ScaffoldMessenger.of(
-                                                                        context);
-                                                                await ref
-                                                                    .read(
-                                                                        clipboardServiceProvider)
-                                                                    .writeText(
-                                                                        output);
-                                                                await _recordPreparedOutputExported();
-                                                                if (!context
-                                                                    .mounted) {
-                                                                  return;
-                                                                }
-                                                                messenger
-                                                                    .showSnackBar(
-                                                                  SnackBar(
-                                                                    content: Text(t(
-                                                                        context,
-                                                                        'messageCopiedClipboard')),
-                                                                  ),
-                                                                );
-                                                              },
+                                                            : _copyComposerOutput,
                                                     icon: const Icon(
                                                         Icons.copy_outlined,
                                                         size: 18),
@@ -3089,27 +3146,9 @@ class ChatViewState extends ConsumerState<ChatView> {
                                                           4),
                                                   child: OutlinedButton.icon(
                                                     onPressed:
-                                                        ((!_hasPreparedOutput &&
-                                                                    !_isInputValid) ||
-                                                                _sending)
+                                                        _exportActionDisabled
                                                             ? null
-                                                            : () async {
-                                                                final output =
-                                                                    await _encodeAndPersist();
-                                                                if (output ==
-                                                                        null ||
-                                                                    !context
-                                                                        .mounted) {
-                                                                  return;
-                                                                }
-                                                                await shareTextExternally(
-                                                                  context,
-                                                                  output,
-                                                                  forceStegoCover:
-                                                                      _isCoverMode,
-                                                                );
-                                                                await _recordPreparedOutputExported();
-                                                              },
+                                                            : _shareComposerOutput,
                                                     icon: const Icon(
                                                         Icons
                                                             .ios_share_outlined,

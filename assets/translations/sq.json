@@ -119,6 +119,8 @@
   "confirmResetFinalYes": "Po, fshi gjithçka",
   "dataClearedSnackbar": "Të dhënat u fshinë. Rinisni ose krijoni identitet të ri.",
   "messageCopiedClipboard": "Mesazhi u kopjua në clipboard",
+  "messageCopyFailed": "Mesazhi nuk mund të kopjohej. Provo përsëri.",
+  "messageShareFailed": "Mesazhi nuk mund të ndahej. Provo përsëri.",
   "decryptError": "[gabim dekriptimi]",
   "newChat": "Bisedë e re",
   "searchContact": "Kërko kontakt",

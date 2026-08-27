@@ -119,6 +119,8 @@
   "confirmResetFinalYes": "Так, видалити все",
   "dataClearedSnackbar": "Дані видалено. Перезапустіть або створіть нову ідентичність.",
   "messageCopiedClipboard": "Повідомлення скопійовано",
+  "messageCopyFailed": "Не вдалося скопіювати повідомлення. Спробуйте ще раз.",
+  "messageShareFailed": "Не вдалося поділитися повідомленням. Спробуйте ще раз.",
   "decryptError": "[помилка розшифрування]",
   "newChat": "Новий чат",
   "searchContact": "Пошук контакту",

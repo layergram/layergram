@@ -119,6 +119,8 @@
   "confirmResetFinalYes": "Da, șterge tot",
   "dataClearedSnackbar": "Date șterse. Repornește sau creează o identitate nouă.",
   "messageCopiedClipboard": "Mesaj copiat în clipboard",
+  "messageCopyFailed": "Mesajul nu a putut fi copiat. Încearcă din nou.",
+  "messageShareFailed": "Mesajul nu a putut fi distribuit. Încearcă din nou.",
   "decryptError": "[eroare de decriptare]",
   "newChat": "Conversație nouă",
   "searchContact": "Caută contact",

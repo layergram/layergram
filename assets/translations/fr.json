@@ -119,6 +119,8 @@
   "confirmResetFinalYes": "Oui, tout supprimer",
   "dataClearedSnackbar": "Données supprimées. Redémarrez ou créez une nouvelle identité.",
   "messageCopiedClipboard": "Message copié dans le presse-papiers",
+  "messageCopyFailed": "Impossible de copier le message. Réessayez.",
+  "messageShareFailed": "Impossible de partager le message. Réessayez.",
   "decryptError": "[erreur de déchiffrement]",
   "newChat": "Nouvelle conversation",
   "searchContact": "Rechercher un contact",

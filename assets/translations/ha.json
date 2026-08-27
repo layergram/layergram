@@ -119,6 +119,8 @@
   "confirmResetFinalYes": "Eh, goge komai",
   "dataClearedSnackbar": "An goge bayanai. Sake farawa ko ƙirƙiri sabon asali.",
   "messageCopiedClipboard": "An kwafi saƙo zuwa allo",
+  "messageCopyFailed": "Ba a iya kwafin saƙon ba. Sake gwadawa.",
+  "messageShareFailed": "Ba a iya raba saƙon ba. Sake gwadawa.",
   "decryptError": "[kuskuren bayyanawa]",
   "newChat": "Sabon tattaunawa",
   "searchContact": "Nemo adireso",
