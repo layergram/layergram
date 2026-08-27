@@ -26,6 +26,20 @@ import 'sharing_android.dart' show AndroidShareApp, AndroidAppSelectorDialog;
 
 export 'sharing_io.dart' if (dart.library.html) 'sharing_stub.dart';
 
+typedef ExternalTextShare = Future<ShareResult> Function(
+  BuildContext context,
+  String text, {
+  required bool forceStegoCover,
+});
+
+final externalTextShareProvider = Provider<ExternalTextShare>(
+  (_) => (context, text, {required forceStegoCover}) => shareTextExternally(
+        context,
+        text,
+        forceStegoCover: forceStegoCover,
+      ),
+);
+
 /// Returns true if the text contains zero-width characters used for
 /// Layergram steganographic encoding.
 bool _containsSteganography(String text) {

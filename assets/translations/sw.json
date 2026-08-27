@@ -119,6 +119,8 @@
   "confirmResetFinalYes": "Ndiyo, futa yote",
   "dataClearedSnackbar": "Data imefutwa. Anza upya au unda utambulisho mpya.",
   "messageCopiedClipboard": "Ujumbe umenakiliwa kwenye ubao wa kunakili",
+  "messageCopyFailed": "Ujumbe haukuweza kunakiliwa. Jaribu tena.",
+  "messageShareFailed": "Ujumbe haukuweza kushirikiwa. Jaribu tena.",
   "decryptError": "[hitilafu ya kufua simba]",
   "newChat": "Mazungumzo mapya",
   "searchContact": "Tafuta anwani",

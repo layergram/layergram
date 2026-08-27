@@ -119,6 +119,8 @@
   "confirmResetFinalYes": "بله، همه چیز را حذف کن",
   "dataClearedSnackbar": "داده‌ها حذف شدند. راه‌اندازی مجدد کنید یا هویت جدیدی ایجاد کنید.",
   "messageCopiedClipboard": "پیام در کلیپ‌بورد کپی شد",
+  "messageCopyFailed": "پیام کپی نشد. دوباره تلاش کنید.",
+  "messageShareFailed": "پیام به اشتراک گذاشته نشد. دوباره تلاش کنید.",
   "decryptError": "[خطای رمزگشایی]",
   "newChat": "مکالمه جدید",
   "searchContact": "جستجوی مخاطب",

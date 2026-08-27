@@ -119,6 +119,8 @@
   "confirmResetFinalYes": "Oo, tanggalin ang lahat",
   "dataClearedSnackbar": "Natanggal ang data. Mag-restart o lumikha ng bagong pagkakakilanlan.",
   "messageCopiedClipboard": "Nakopya ang mensahe sa clipboard",
+  "messageCopyFailed": "Hindi makopya ang mensahe. Subukan muli.",
+  "messageShareFailed": "Hindi maibahagi ang mensahe. Subukan muli.",
   "decryptError": "[error sa pag-decrypt]",
   "newChat": "Bagong pag-uusap",
   "searchContact": "Maghanap ng kontak",

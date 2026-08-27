@@ -119,6 +119,8 @@
   "confirmResetFinalYes": "نعم، احذف كل شيء",
   "dataClearedSnackbar": "تم حذف البيانات. أعد التشغيل أو أنشئ هوية جديدة.",
   "messageCopiedClipboard": "تم نسخ الرسالة إلى الحافظة",
+  "messageCopyFailed": "تعذر نسخ الرسالة. حاول مرة أخرى.",
+  "messageShareFailed": "تعذرت مشاركة الرسالة. حاول مرة أخرى.",
   "decryptError": "[خطأ في فك التشفير]",
   "newChat": "محادثة جديدة",
   "searchContact": "البحث عن جهة اتصال",

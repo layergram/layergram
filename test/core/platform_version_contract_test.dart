@@ -19,7 +19,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('Layergram 2.0 version and iOS share extension stay synchronized', () {
     final pubspec = File('pubspec.yaml').readAsStringSync();
-    expect(pubspec, contains('version: 2.0.0+27'));
+    expect(pubspec, contains('version: 2.0.1+28'));
 
     final project = File(
       'ios/Runner.xcodeproj/project.pbxproj',
@@ -30,11 +30,11 @@ void main() {
       hasLength(4),
     );
     expect(
-      'CURRENT_PROJECT_VERSION = 27;'.allMatches(project),
+      'CURRENT_PROJECT_VERSION = 28;'.allMatches(project),
       hasLength(3),
     );
     expect(
-      'MARKETING_VERSION = 2.0.0;'.allMatches(project),
+      'MARKETING_VERSION = 2.0.1;'.allMatches(project),
       hasLength(3),
     );
 
@@ -44,8 +44,8 @@ void main() {
     ).allMatches(project).map((match) => match.group(0)!).toList();
     expect(extensionConfigurations, hasLength(3));
     for (final configuration in extensionConfigurations) {
-      expect(configuration, contains('CURRENT_PROJECT_VERSION = 27;'));
-      expect(configuration, contains('MARKETING_VERSION = 2.0.0;'));
+      expect(configuration, contains('CURRENT_PROJECT_VERSION = 28;'));
+      expect(configuration, contains('MARKETING_VERSION = 2.0.1;'));
     }
 
     final extensionInfo = File(

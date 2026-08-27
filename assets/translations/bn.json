@@ -119,6 +119,8 @@
   "confirmResetFinalYes": "হ্যাঁ, সব মুছুন",
   "dataClearedSnackbar": "ডেটা মুছে ফেলা হয়েছে। পুনরায় শুরু করুন বা নতুন পরিচয় তৈরি করুন।",
   "messageCopiedClipboard": "বার্তা ক্লিপবোর্ডে কপি হয়েছে",
+  "messageCopyFailed": "বার্তাটি কপি করা যায়নি। আবার চেষ্টা করুন।",
+  "messageShareFailed": "বার্তাটি শেয়ার করা যায়নি। আবার চেষ্টা করুন।",
   "decryptError": "[ডিক্রিপশন ত্রুটি]",
   "newChat": "নতুন চ্যাট",
   "searchContact": "পরিচিতি খুঁজুন",

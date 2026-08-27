@@ -119,6 +119,8 @@
   "confirmResetFinalYes": "はい、すべて削除",
   "dataClearedSnackbar": "データを削除しました。再起動するか新しいIDを作成してください。",
   "messageCopiedClipboard": "メッセージをクリップボードにコピーしました",
+  "messageCopyFailed": "メッセージをコピーできませんでした。もう一度お試しください。",
+  "messageShareFailed": "メッセージを共有できませんでした。もう一度お試しください。",
   "decryptError": "[復号エラー]",
   "newChat": "新しいチャット",
   "searchContact": "連絡先を検索",

@@ -119,6 +119,8 @@
   "confirmResetFinalYes": "હા, બધું કાઢો",
   "dataClearedSnackbar": "ડેટા કાઢ્યો. ફરી શરૂ કરો અથવા નવી ઓળખ બનાવો.",
   "messageCopiedClipboard": "સંદેશ ક્લિપબોર્ડ પર કૉપિ થયો",
+  "messageCopyFailed": "સંદેશ કૉપિ કરી શકાયો નથી. ફરી પ્રયાસ કરો.",
+  "messageShareFailed": "સંદેશ શેર કરી શકાયો નથી. ફરી પ્રયાસ કરો.",
   "decryptError": "[ડિક્રિપ્શન ભૂલ]",
   "newChat": "નવી વાતચીત",
   "searchContact": "સંપર્ક શોધો",

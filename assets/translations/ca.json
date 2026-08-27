@@ -119,6 +119,8 @@
   "confirmResetFinalYes": "Sí, elimina-ho tot",
   "dataClearedSnackbar": "Dades eliminades. Reinicieu o creeu una nova identitat.",
   "messageCopiedClipboard": "Missatge copiat al porta-retalls",
+  "messageCopyFailed": "No s'ha pogut copiar el missatge. Torna-ho a provar.",
+  "messageShareFailed": "No s'ha pogut compartir el missatge. Torna-ho a provar.",
   "decryptError": "[error de desxifrat]",
   "newChat": "Nova conversa",
   "searchContact": "Cerca contacte",

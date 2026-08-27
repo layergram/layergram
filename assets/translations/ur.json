@@ -119,6 +119,8 @@
   "confirmResetFinalYes": "ہاں، سب حذف کریں",
   "dataClearedSnackbar": "ڈیٹا حذف کر دیا گیا۔ دوبارہ شروع کریں یا نئی شناخت بنائیں۔",
   "messageCopiedClipboard": "پیغام کلپ بورڈ پر نقل کیا گیا",
+  "messageCopyFailed": "پیغام کاپی نہیں ہو سکا۔ دوبارہ کوشش کریں۔",
+  "messageShareFailed": "پیغام شیئر نہیں ہو سکا۔ دوبارہ کوشش کریں۔",
   "decryptError": "[خفیہ کشائی کی خرابی]",
   "newChat": "نئی گفتگو",
   "searchContact": "رابطہ تلاش کریں",

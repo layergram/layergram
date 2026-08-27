@@ -119,6 +119,8 @@
   "confirmResetFinalYes": "Có, xóa tất cả",
   "dataClearedSnackbar": "Dữ liệu đã xóa. Khởi động lại hoặc tạo danh tính mới.",
   "messageCopiedClipboard": "Tin nhắn đã sao chép vào clipboard",
+  "messageCopyFailed": "Không thể sao chép tin nhắn. Hãy thử lại.",
+  "messageShareFailed": "Không thể chia sẻ tin nhắn. Hãy thử lại.",
   "decryptError": "[lỗi giải mã]",
   "newChat": "Cuộc trò chuyện mới",
   "searchContact": "Tìm liên hệ",

@@ -119,6 +119,8 @@
   "confirmResetFinalYes": "Evet, hepsini sil",
   "dataClearedSnackbar": "Veriler silindi. Yeniden başlatın veya yeni kimlik oluşturun.",
   "messageCopiedClipboard": "Mesaj panoya kopyalandı",
+  "messageCopyFailed": "Mesaj kopyalanamadı. Tekrar deneyin.",
+  "messageShareFailed": "Mesaj paylaşılamadı. Tekrar deneyin.",
   "decryptError": "[şifre çözme hatası]",
   "newChat": "Yeni sohbet",
   "searchContact": "Kişi ara",
