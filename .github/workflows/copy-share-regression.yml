@@ -47,6 +47,12 @@ jobs:
     name: macOS clipboard round trip
     runs-on: macos-15
     timeout-minutes: 25
+    env:
+      FLUTTER_XCODE_CODE_SIGNING_ALLOWED: "NO"
+      FLUTTER_XCODE_CODE_SIGNING_REQUIRED: "NO"
+      FLUTTER_XCODE_CODE_SIGN_IDENTITY: ""
+      FLUTTER_XCODE_DEVELOPMENT_TEAM: ""
+      FLUTTER_XCODE_PROVISIONING_PROFILE_SPECIFIER: ""
     steps:
       - name: Check out the tested revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
