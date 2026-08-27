@@ -1,0 +1,78 @@
+name: Copy and Share regression
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: copy-share-regression-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  widget-actions:
+    name: Widget actions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out the tested revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the pinned Flutter SDK
+        uses: subosito/flutter-action@fd55f4c5af5b953cc57a2be44cb082c8f6635e8e # v2.21.0
+        with:
+          channel: stable
+          flutter-version: 3.41.1
+          cache: true
+
+      - name: Resolve locked dependencies
+        run: flutter pub get
+
+      - name: Test generated-message Copy and Share actions
+        run: >-
+          flutter test
+          test/features/home/chat_view_composer_mode_test.dart
+          test/core/platform_version_contract_test.dart
+
+  macos-clipboard:
+    name: macOS clipboard round trip
+    runs-on: macos-15
+    timeout-minutes: 25
+    env:
+      FLUTTER_XCODE_CODE_SIGNING_ALLOWED: "NO"
+      FLUTTER_XCODE_CODE_SIGNING_REQUIRED: "NO"
+      FLUTTER_XCODE_CODE_SIGN_IDENTITY: ""
+      FLUTTER_XCODE_DEVELOPMENT_TEAM: ""
+      FLUTTER_XCODE_PROVISIONING_PROFILE_SPECIFIER: ""
+    steps:
+      - name: Check out the tested revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the pinned Flutter SDK
+        uses: subosito/flutter-action@fd55f4c5af5b953cc57a2be44cb082c8f6635e8e # v2.21.0
+        with:
+          channel: stable
+          flutter-version: 3.41.1
+          cache: true
+
+      - name: Enable macOS desktop and resolve locked dependencies
+        run: |
+          flutter config --enable-macos-desktop
+          flutter pub get
+
+      - name: Verify the native system clipboard round trip
+        run: >-
+          flutter test
+          integration_test/clipboard_roundtrip_test.dart
+          -d macos
