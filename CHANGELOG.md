@@ -9,18 +9,21 @@ The format is inspired by Keep a Changelog and reflects the public GitHub Releas
 ## [2.0.1+28] - 2026-08-27
 
 ### Fixed
-- Restored reliable message copying and sharing on macOS when protocol-v3
-  preparation blocks the export before reaching the system clipboard or share
-  sheet.
-- Made message-export failures visible on desktop instead of silently ignoring
-  them, including migration, forward-secrecy, cover-capacity, clipboard, and
-  native-sharing failures.
+- Restored reliable message copying and sharing across all supported platforms.
+  The production incident was reproduced on macOS, but the failure was in the
+  shared export path used by macOS, Windows, Linux, Android, and iOS.
+- Made message-export failures visible instead of silently ignoring them,
+  including migration, forward-secrecy, cover-capacity, clipboard, and
+  native-sharing failures. This is especially important on hover-based desktop
+  platforms, where the previous touch-only feedback was suppressed.
 - Prevented copy feedback from intercepting an immediate Share action.
 
 ### Testing
-- Added compact and desktop regression coverage for Copy and Share in direct
-  text and cover modes, including exact output parity and visible failures.
-- Added a native macOS clipboard round-trip test for generated cover messages.
+- Added shared compact and desktop regression coverage for Copy and Share in
+  direct text and cover modes, including exact output parity and visible
+  failures.
+- Added a native macOS clipboard round-trip test for generated cover messages;
+  the shared export-path tests protect every supported platform.
 
 ## [2.0.0+27] - 2026-08-24
 
