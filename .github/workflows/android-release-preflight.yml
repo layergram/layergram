@@ -1,0 +1,40 @@
+name: Android release preflight
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-release-preflight-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-apk:
+    name: Release APK dependency graph
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out the tested revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the pinned Flutter SDK
+        uses: subosito/flutter-action@fd55f4c5af5b953cc57a2be44cb082c8f6635e8e # v2.21.0
+        with:
+          channel: stable
+          flutter-version: 3.41.1
+
+      - name: Resolve locked dependencies
+        run: flutter pub get
+
+      - name: Build the non-distribution release APK
+        run: flutter build apk --release --target lib/main.dart

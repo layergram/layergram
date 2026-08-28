@@ -2,7 +2,7 @@ name: layergram
 description: Official open-source Layergram app for local encrypted steganographic messaging.
 homepage: https://layergram.app
 publish_to: 'none'
-version: 2.0.2+29
+version: 2.0.3+30
 
 environment:
   sdk: ^3.4.0
