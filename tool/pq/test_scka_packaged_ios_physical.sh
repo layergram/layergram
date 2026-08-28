@@ -59,14 +59,8 @@ trap cleanup EXIT
 
 check_symbols() {
   binary=$1
-  actual="$DERIVED_DATA/actual-ios-physical-symbols.txt"
-  xcrun nm -gU "$binary" |
-    awk '{ name = $NF; sub(/^_/, "", name); if (name ~ /^lg_scka_v1_/) print name }' |
-    sort -u >"$actual"
-  cmp -s "$SYMBOLS" "$actual" || {
-    diff -u "$SYMBOLS" "$actual" >&2 || true
-    fail 'Unexpected packaged physical-iOS SCKA export surface'
-  }
+  "$SCRIPT_DIR/verify_scka_export_contract.sh" namespace xcrun "$binary" ||
+    fail 'Unexpected packaged physical-iOS SCKA namespace surface'
 }
 
 record_apps() {

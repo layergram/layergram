@@ -397,6 +397,8 @@ final hideChatPreviewProvider = StateProvider<bool>((_) => false);
 final sessionDecryptionCacheEnabledProvider = StateProvider<bool>((_) => false);
 final appLockEnabledProvider = StateProvider<bool>((_) => false);
 final appNeedsUnlockProvider = StateProvider<bool>((_) => false);
+final appLockStateReadyProvider = StateProvider<bool>((_) => false);
+final appLockRequestTokenProvider = StateProvider<int>((_) => 0);
 final appLockTimeoutProvider = StateProvider<int>((_) => 60);
 final appLockForcePinProvider = StateProvider<bool>((_) => false);
 final identityReloadTokenProvider = StateProvider<int>((_) => 0);
@@ -475,10 +477,17 @@ final v3ApplicationSessionRuntimeProvider =
     FutureProvider<V3ApplicationSessionRuntime?>((ref) async {
   if (!ref.watch(protocolV3MessagingEnabledProvider)) return null;
 
+  final lockStateReady = ref.watch(appLockStateReadyProvider);
+  final needsUnlock = ref.watch(appNeedsUnlockProvider);
+  final owner = ref.watch(v3ApplicationRuntimeOwnerProvider);
+  if (!lockStateReady || needsUnlock) {
+    await owner.closeCurrent();
+    return null;
+  }
+
   final activeIdentityId = ref.watch(activeIdentityIdProvider);
   ref.watch(identityReloadTokenProvider);
   final passphrase = ref.watch(passphraseProvider);
-  final owner = ref.watch(v3ApplicationRuntimeOwnerProvider);
   if (activeIdentityId == null || activeIdentityId.isEmpty) {
     await owner.closeCurrent();
     return null;

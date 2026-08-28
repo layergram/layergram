@@ -352,10 +352,11 @@ format 2 persists that key beside, never inside, the opaque native state under
 the existing encrypted identity/passphrase scope. Every Dart backend call gets
 a temporary copy plus the exact expected TR3 revision; initialization must
 validate native revision 0 and every candidate must report exactly
-`expected_revision + 1` before it can enter the atomic TR3 effect. The Rust
-scaffold still returns `NOT_READY` and is not registered. Generated opt-in
-candidate packages exercise only the scope-owned loader; ordinary application
-bootstrap does not link or load it.
+`expected_revision + 1` before it can enter the atomic TR3 effect. The reviewed
+Rust candidate is registered behind the all-or-nothing production selector and
+exact implementation allowlist. Official packages exercise the same
+scope-owned loader used by application bootstrap. Independent external review
+of the complete construction remains outstanding.
 
 The public SCKA message uses a canonical `SK3` envelope:
 

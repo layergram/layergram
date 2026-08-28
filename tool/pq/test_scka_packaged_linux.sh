@@ -44,15 +44,8 @@ flutter build linux --release -t tool/pq/scka_packaged_scope_smoke.dart
 
 LIBRARY="$BUNDLE/lib/liblayergram_scka.so"
 install -m 755 "$TARGET_DIR/release/liblayergram_scka.so" "$LIBRARY"
-actual="$PACKAGE_ROOT/symbols.txt"
 mkdir -p "$PACKAGE_ROOT"
-nm -D --defined-only "$LIBRARY" |
-  awk '{ name = $NF; sub(/@@.*/, "", name); if (name ~ /^lg_scka_v1_/) print name }' |
-  sort -u >"$actual"
-cmp -s "$SYMBOLS" "$actual" || {
-  diff -u "$SYMBOLS" "$actual" >&2 || true
-  fail 'Unexpected packaged Linux SCKA export surface'
-}
+"$SCRIPT_DIR/verify_scka_export_contract.sh" dynamic nm "$LIBRARY"
 readelf -d "$LIBRARY" | grep -q 'BIND_NOW'
 readelf -lW "$LIBRARY" | grep -q 'GNU_RELRO'
 

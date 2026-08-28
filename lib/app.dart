@@ -24,12 +24,14 @@ import 'core/crypto/fs_startup_restore.dart';
 import 'core/crypto/stego_decoder.dart';
 import 'core/providers.dart';
 import 'core/security/app_lock_idle_controller.dart';
+import 'core/security/external_ingress_coordinator.dart';
 import 'features/identities/add_identity_view.dart';
 import 'features/identities/identities_controller.dart';
 import 'features/home/chat_view.dart';
 import 'features/home/home_controller.dart';
 import 'features/onboarding/create_or_restore_view.dart';
 import 'features/security/unlock_view.dart';
+import 'features/security/app_lock_gate.dart';
 import 'features/shell/app_shell.dart';
 import 'l10n/app_strings.dart';
 import 'theme/app_theme.dart';
@@ -49,25 +51,33 @@ class LayergramApp extends ConsumerStatefulWidget {
 class _LayergramAppState extends ConsumerState<LayergramApp>
     with WidgetsBindingObserver {
   late Future _identityFuture;
+  late final Future<void> _lockStateFuture;
   late final AppLockIdleController _appLockIdleController;
+  late final ExternalIngressCoordinator _externalIngress;
   final _deepLinks = DeepLinks();
   final _sharing = Sharing();
   StreamSubscription<Uri>? _linkSub;
   final _navKey = GlobalKey<NavigatorState>();
+  final _lockNavKey = GlobalKey<NavigatorState>();
   StreamSubscription<List<SharedMediaFile>>? _sharedTextSub;
   ProviderSubscription<int>? _identityReloadSub;
   ProviderSubscription<bool>? _appLockEnabledSub;
   ProviderSubscription<int>? _appLockTimeoutSub;
   ProviderSubscription<bool>? _appNeedsUnlockSub;
+  ProviderSubscription<int>? _appLockRequestSub;
   ProviderSubscription<PassphrasePreferences>? _passphrasePreferencesSub;
   bool _checkingPendingShare = false;
   bool _streamDeepLinkObserved = false;
-  int _deepLinkGeneration = 0;
-  Future<void> _deepLinkTail = Future<void>.value();
+  bool _externalIngressOperationActive = false;
+  bool _lockRequested = false;
   final Set<String> _sharedTextsInFlight = <String>{};
   final Map<String, DateTime> _recentSharedTexts = <String, DateTime>{};
+  final List<List<SharedMediaFile>> _opaqueSharedMediaBatches =
+      <List<SharedMediaFile>>[];
 
   static const Duration _sharedTextDedupWindow = Duration(seconds: 4);
+  static const int _maxOpaqueSharedMediaBatches = 4;
+  static const int _maxOpaqueSharedMediaItemsPerBatch = 4;
 
   @override
   void initState() {
@@ -75,10 +85,14 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
     _appLockIdleController = AppLockIdleController(
       onLockRequired: () {
         if (!mounted) return;
-        ref.read(appNeedsUnlockProvider.notifier).state = true;
+        ref.read(appLockRequestTokenProvider.notifier).state++;
       },
     );
+    _externalIngress = ExternalIngressCoordinator(
+      maxTotalCodeUnits: StegoDecoder.maxCarrierCodeUnits,
+    );
     WidgetsBinding.instance.addObserver(this);
+    _lockStateFuture = _loadLockState();
     _reloadIdentity();
     _identityReloadSub = ref.listenManual<int>(
       identityReloadTokenProvider,
@@ -109,12 +123,35 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
     _appNeedsUnlockSub = ref.listenManual<bool>(
       appNeedsUnlockProvider,
       (prev, next) {
+        if (prev == null) return;
         if (next) {
+          FocusManager.instance.primaryFocus?.unfocus();
           _appLockIdleController.onLocked();
         } else {
           _appLockIdleController.onUnlocked();
-          unawaited(ref.read(homeControllerProvider).warmSessionDisplayKeys());
+          // Refresh the identity future before any queued carrier can drain.
+          // Otherwise a synchronous unlock notification could observe the
+          // already-completed, locked startup future and consume the carrier
+          // before identity restore has finished.
+          _reloadIdentity();
+          unawaited(
+            _identityFuture.then((_) async {
+              if (!_mayStartExternalIngress()) return;
+              unawaited(
+                ref.read(homeControllerProvider).warmSessionDisplayKeys(),
+              );
+              await _loadPendingSharedText();
+              await _resumePendingExternalInputs();
+            }),
+          );
         }
+      },
+    )..read();
+    _appLockRequestSub = ref.listenManual<int>(
+      appLockRequestTokenProvider,
+      (prev, next) {
+        if (prev == null || next == prev) return;
+        _requestAppLock();
       },
     )..read();
     _passphrasePreferencesSub = ref.listenManual<PassphrasePreferences>(
@@ -133,7 +170,6 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
         }
       },
     )..read();
-    _loadLockState();
     _loadScreenProtectionState();
     _loadTooltipState();
     _loadCoverMessageLengthLimit();
@@ -172,8 +208,12 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
   Future<void> _loadSessionDecryptionCacheState() async {
     final service = ref.read(sessionDecryptionCacheServiceProvider);
     final enabled = await service.isEnabled();
+    await _lockStateFuture;
+    if (!mounted) return;
     ref.read(sessionDecryptionCacheEnabledProvider.notifier).state = enabled;
-    if (enabled && !ref.read(appNeedsUnlockProvider)) {
+    if (enabled &&
+        ref.read(appLockStateReadyProvider) &&
+        !ref.read(appNeedsUnlockProvider)) {
       unawaited(ref.read(homeControllerProvider).warmSessionDisplayKeys());
     }
   }
@@ -199,23 +239,9 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
     _deepLinks.getInitialLinkString().then((value) {
       if (!mounted) return;
       if (_streamDeepLinkObserved) return;
-      if (value == null || value.trim().isEmpty) return;
+      if (value == null || value.isEmpty) return;
       if (value.length > StegoDecoder.maxCarrierCodeUnits) return;
       ref.read(pendingDeepLinkProvider.notifier).state = value;
-    });
-  }
-
-  void _scheduleIncomingLink(String value) {
-    final generation = ++_deepLinkGeneration;
-    final previous = _deepLinkTail;
-    _deepLinkTail = previous.catchError((_) {}).then((_) async {
-      if (!mounted) return;
-      await _handleIncomingLink(value);
-      if (mounted &&
-          generation == _deepLinkGeneration &&
-          ref.read(pendingDeepLinkProvider) == value) {
-        ref.read(pendingDeepLinkProvider.notifier).state = null;
-      }
     });
   }
 
@@ -225,11 +251,7 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
     _sharedTextSub?.cancel();
     final stream = _sharing.mediaStream;
     _sharedTextSub = stream.listen(
-      (files) {
-        final sharedText = _firstSharedText(files);
-        if (sharedText == null) return;
-        ref.read(pendingSharedTextProvider.notifier).state = sharedText;
-      },
+      _acceptSharedMediaBatch,
     );
 
     Future.microtask(_loadPendingSharedText);
@@ -246,14 +268,22 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
       final files = await _sharing.getInitialMedia();
       if (!mounted) return;
 
+      if (files.isNotEmpty && !_mayStartExternalIngress()) {
+        _enqueueOpaqueSharedMediaBatch(files);
+        return;
+      }
+
       final initialText = _firstSharedText(files);
       if (initialText != null) {
-        await _sharing.clearPendingShare();
-        if (!mounted) return;
+        // Acknowledge the platform share only in the unlocked processing
+        // path, after the coordinator has retained its bounded in-memory copy.
         ref.read(pendingSharedTextProvider.notifier).state = initialText;
         return;
       }
 
+      // iOS consumePendingText is destructive. Leave that durable handoff in
+      // the app-group store until the user has unlocked Layergram.
+      if (!_mayStartExternalIngress()) return;
       final pendingText = await _sharing.takePendingText();
       if (!mounted) return;
       if (pendingText == null) return;
@@ -273,6 +303,47 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
       }
     }
     return null;
+  }
+
+  void _acceptSharedMediaBatch(List<SharedMediaFile> files) {
+    if (!mounted || files.isEmpty) return;
+    if (!_mayStartExternalIngress()) {
+      _enqueueOpaqueSharedMediaBatch(files);
+      return;
+    }
+    final sharedText = _firstSharedText(files);
+    if (sharedText == null) return;
+    _stageExternalIngress(ExternalIngressKind.sharedText, sharedText);
+  }
+
+  void _enqueueOpaqueSharedMediaBatch(List<SharedMediaFile> files) {
+    if (files.isEmpty ||
+        _opaqueSharedMediaBatches.length >= _maxOpaqueSharedMediaBatches) {
+      return;
+    }
+    _opaqueSharedMediaBatches.add(
+      List<SharedMediaFile>.unmodifiable(
+        files.take(_maxOpaqueSharedMediaItemsPerBatch),
+      ),
+    );
+  }
+
+  void _stageOpaqueSharedMediaBatches() {
+    while (_mayStartExternalIngress() && _opaqueSharedMediaBatches.isNotEmpty) {
+      final batch = _opaqueSharedMediaBatches.first;
+      final sharedText = _firstSharedText(batch);
+      if (sharedText == null) {
+        _opaqueSharedMediaBatches.removeAt(0);
+        continue;
+      }
+      if (!_externalIngress.enqueue(
+        kind: ExternalIngressKind.sharedText,
+        text: sharedText,
+      )) {
+        return;
+      }
+      _opaqueSharedMediaBatches.removeAt(0);
+    }
   }
 
   bool _claimSharedText(String text) {
@@ -300,17 +371,18 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
     }
 
     _sharedTextsInFlight.add(normalized);
-    _recentSharedTexts[normalized] = now;
     return true;
   }
 
-  void _releaseSharedText(String text) {
+  void _releaseSharedText(String text, {required bool processed}) {
     final normalized = text.trim();
     if (normalized.isEmpty) {
       return;
     }
     _sharedTextsInFlight.remove(normalized);
-    _recentSharedTexts[normalized] = DateTime.now();
+    if (processed) {
+      _recentSharedTexts[normalized] = DateTime.now();
+    }
   }
 
   bool _isShareRedirectLink(String text) {
@@ -331,6 +403,13 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
   }
 
   Future<void> _handleIncomingLink(String text) async {
+    if (!_isExternalIngressUnlocked()) {
+      _externalIngress.enqueue(
+        kind: ExternalIngressKind.deepLink,
+        text: text,
+      );
+      return;
+    }
     if (text.length > StegoDecoder.maxCarrierCodeUnits) return;
     final normalized = text.trim();
     if (normalized.isEmpty) {
@@ -341,7 +420,7 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
       return;
     }
     if (_isIdentityLink(normalized)) {
-      await _openSharedIdentity(normalized);
+      _openSharedIdentity(normalized);
       return;
     }
     if (_isMessageLink(normalized)) {
@@ -351,9 +430,11 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
 
     final nav = _navKey.currentState;
     if (nav == null) return;
-    await nav.push(
-      MaterialPageRoute(
-        builder: (_) => AddIdentityView(initialText: normalized),
+    unawaited(
+      nav.push(
+        MaterialPageRoute(
+          builder: (_) => AddIdentityView(initialText: normalized),
+        ),
       ),
     );
   }
@@ -375,29 +456,45 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
     }
   }
 
-  Future<void> _openSharedIdentity(String text) async {
+  void _openSharedIdentity(String text) {
     final nav = _navKey.currentState;
     if (nav == null) return;
-    await nav.push(
-      MaterialPageRoute(
-        builder: (_) => AddIdentityView(initialText: text),
+    unawaited(
+      nav.push(
+        MaterialPageRoute(
+          builder: (_) => AddIdentityView(initialText: text),
+        ),
       ),
     );
   }
 
   Future<void> _processSharedText(String text) async {
+    if (!_isExternalIngressUnlocked()) {
+      _externalIngress.enqueue(
+        kind: ExternalIngressKind.sharedText,
+        text: text,
+      );
+      return;
+    }
     if (text.length > StegoDecoder.maxCarrierCodeUnits) return;
     final normalized = text.trim();
     if (normalized.isEmpty) return;
 
     if (_isSharedIdentity(normalized)) {
-      await _openSharedIdentity(normalized);
+      _openSharedIdentity(normalized);
       return;
     }
 
     final outcome =
         await ref.read(homeControllerProvider).decodeHiddenMessage(normalized);
     if (!mounted) return;
+    if (!_isExternalIngressUnlocked()) {
+      _externalIngress.enqueue(
+        kind: ExternalIngressKind.sharedText,
+        text: normalized,
+      );
+      return;
+    }
 
     switch (outcome.kind) {
       case DecodeKind.success:
@@ -407,7 +504,13 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
             : await ref
                 .read(identitiesRepositoryProvider)
                 .getRemoteById(senderId);
-        if (!mounted) return;
+        if (!mounted || !_isExternalIngressUnlocked()) {
+          _externalIngress.enqueue(
+            kind: ExternalIngressKind.sharedText,
+            text: normalized,
+          );
+          return;
+        }
 
         final ctx = _navKey.currentContext;
         if (ctx == null || !ctx.mounted) return;
@@ -450,6 +553,7 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
     final timeout = await service.getTimeoutSeconds();
     final forcePin = await service.getForcePin();
     final biometricSupported = await service.isBiometricSupported();
+    if (!mounted) return;
     ref.read(appLockTimeoutProvider.notifier).state = timeout;
     ref.read(appLockForcePinProvider.notifier).state =
         forcePin || !biometricSupported;
@@ -459,13 +563,18 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
       enabled: enabled,
       timeoutSeconds: timeout,
     );
+    ref.read(appLockStateReadyProvider.notifier).state = true;
+    if (!enabled) {
+      unawaited(_resumePendingExternalInputs());
+    }
   }
 
   void _reloadIdentity() {
-    _identityFuture = ref
-        .read(identityManagerProvider)
-        .getLocalIdentity()
-        .then((identity) async {
+    _identityFuture = _lockStateFuture.then((_) async {
+      if (!mounted || ref.read(appNeedsUnlockProvider)) return null;
+      final identity =
+          await ref.read(identityManagerProvider).getLocalIdentity();
+      if (!mounted || ref.read(appNeedsUnlockProvider)) return null;
       final nextId = identity?.identityId;
       final currentId = ref.read(activeIdentityIdProvider);
       if (currentId != nextId) {
@@ -475,9 +584,114 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
         unawaited(ref.read(homeControllerProvider).warmSessionDisplayKeys());
       }
       // Load persisted FS state after identity is loaded
-      await _loadPersistedFsState();
+      if (!ref.read(appNeedsUnlockProvider)) {
+        await _loadPersistedFsState();
+      }
       return identity;
     });
+  }
+
+  bool _isExternalIngressUnlocked() =>
+      mounted &&
+      ref.read(appLockStateReadyProvider) &&
+      !ref.read(appNeedsUnlockProvider);
+
+  bool _mayStartExternalIngress() =>
+      _isExternalIngressUnlocked() && !_lockRequested;
+
+  void _requestAppLock() {
+    if (!mounted || ref.read(appNeedsUnlockProvider) || _lockRequested) return;
+    _lockRequested = true;
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() {});
+    if (!_externalIngressOperationActive) {
+      _commitRequestedAppLock();
+    }
+  }
+
+  void _commitRequestedAppLock() {
+    if (!mounted || !_lockRequested || _externalIngressOperationActive) return;
+    ref.read(appNeedsUnlockProvider.notifier).state = true;
+    _lockRequested = false;
+    setState(() {});
+  }
+
+  bool _stageExternalIngress(ExternalIngressKind kind, String value) {
+    final accepted = _externalIngress.enqueue(kind: kind, text: value);
+    if (accepted && _mayStartExternalIngress()) {
+      unawaited(_resumePendingExternalInputs());
+    }
+    return accepted;
+  }
+
+  void _stagePendingProviderInputs() {
+    final pendingLink = ref.read(pendingDeepLinkProvider);
+    if (pendingLink != null && pendingLink.isNotEmpty) {
+      if (_externalIngress.enqueue(
+        kind: ExternalIngressKind.deepLink,
+        text: pendingLink,
+      )) {
+        ref.read(pendingDeepLinkProvider.notifier).state = null;
+      }
+    }
+    final pendingShare = ref.read(pendingSharedTextProvider);
+    if (pendingShare != null && pendingShare.isNotEmpty) {
+      if (_externalIngress.enqueue(
+        kind: ExternalIngressKind.sharedText,
+        text: pendingShare,
+      )) {
+        ref.read(pendingSharedTextProvider.notifier).state = null;
+      }
+    }
+  }
+
+  Future<void> _processExternalIngressItem(ExternalIngressItem item) async {
+    _externalIngressOperationActive = true;
+    try {
+      switch (item.kind) {
+        case ExternalIngressKind.deepLink:
+          await _handleIncomingLink(item.text);
+        case ExternalIngressKind.sharedText:
+          final normalized = item.text.trim();
+          if (!_claimSharedText(normalized)) return;
+          var processed = false;
+          try {
+            _sharing.reset();
+            await _sharing.clearPendingShare();
+            await _processSharedText(normalized);
+            processed = _isExternalIngressUnlocked();
+          } finally {
+            _releaseSharedText(normalized, processed: processed);
+          }
+      }
+    } finally {
+      _externalIngressOperationActive = false;
+      _commitRequestedAppLock();
+    }
+  }
+
+  Future<void> _resumePendingExternalInputs() async {
+    if (!_mayStartExternalIngress()) return;
+    _stageOpaqueSharedMediaBatches();
+    _stagePendingProviderInputs();
+    await _identityFuture;
+    if (!_mayStartExternalIngress()) return;
+    // A provider can temporarily retain one deep link and one share if the
+    // bounded coordinator was full. Drain once, restage those spill slots,
+    // then drain them so the user's handoff cannot become stranded.
+    for (var pass = 0; pass < 3; pass++) {
+      await _externalIngress.drain(
+        mayProcess: _mayStartExternalIngress,
+        handler: _processExternalIngressItem,
+      );
+      if (!_mayStartExternalIngress()) return;
+      _stageOpaqueSharedMediaBatches();
+      _stagePendingProviderInputs();
+      if (_externalIngress.pendingCount == 0 &&
+          _opaqueSharedMediaBatches.isEmpty) {
+        return;
+      }
+    }
   }
 
   Future<void> _loadPersistedFsState() async {
@@ -522,7 +736,10 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
     _appLockEnabledSub?.close();
     _appLockTimeoutSub?.close();
     _appNeedsUnlockSub?.close();
+    _appLockRequestSub?.close();
     _passphrasePreferencesSub?.close();
+    _externalIngress.close();
+    _opaqueSharedMediaBatches.clear();
     ref.read(fsPassphraseTimeoutControllerProvider).dispose();
     _appLockIdleController.dispose();
     WidgetsBinding.instance.removeObserver(this);
@@ -532,11 +749,13 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
   @override
   Widget build(BuildContext context) {
     // Keeps the single v3 runtime owner synchronized with identity and
-    // passphrase changes. While the reviewed activation policy is false this
-    // resolves to null without loading a native library.
+    // passphrase and app-lock changes. It resolves to null without loading or
+    // retaining a native runtime while activation is disabled or the app is
+    // locked.
     ref.watch(v3ApplicationSessionRuntimeProvider);
     final themeMode = ref.watch(themeModeProvider);
     final needsUnlock = ref.watch(appNeedsUnlockProvider);
+    final lockStateReady = ref.watch(appLockStateReadyProvider);
     final screenProtectionEnabled = ref.watch(screenProtectionEnabledProvider);
     final privacyShieldVisible = ref.watch(privacyShieldVisibleProvider);
     final tooltipsEnabled = ref.watch(tooltipsEnabledProvider);
@@ -544,32 +763,17 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
         AppPlatform.supportsHoverTooltips && tooltipsEnabled;
 
     ref.listen<String?>(pendingDeepLinkProvider, (prev, next) {
-      if (next == null || next.trim().isEmpty) return;
-      _scheduleIncomingLink(next);
+      if (next == null || next.isEmpty) return;
+      if (_stageExternalIngress(ExternalIngressKind.deepLink, next)) {
+        ref.read(pendingDeepLinkProvider.notifier).state = null;
+      }
     });
 
     ref.listen<String?>(pendingSharedTextProvider, (prev, next) {
-      if (next == null || next.trim().isEmpty) return;
-      Future.microtask(() async {
-        final normalized = next.trim();
-        if (!_claimSharedText(normalized)) {
-          if (mounted && ref.read(pendingSharedTextProvider) == next) {
-            ref.read(pendingSharedTextProvider.notifier).state = null;
-          }
-          return;
-        }
-
-        try {
-          _sharing.reset();
-          await _sharing.clearPendingShare();
-          await _processSharedText(normalized);
-        } finally {
-          _releaseSharedText(normalized);
-          if (mounted && ref.read(pendingSharedTextProvider) == next) {
-            ref.read(pendingSharedTextProvider.notifier).state = null;
-          }
-        }
-      });
+      if (next == null || next.isEmpty) return;
+      if (_stageExternalIngress(ExternalIngressKind.sharedText, next)) {
+        ref.read(pendingSharedTextProvider.notifier).state = null;
+      }
     });
 
     return MaterialApp(
@@ -594,7 +798,19 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
             child: Stack(
               fit: StackFit.expand,
               children: [
-                LayergramBackground(child: child ?? const SizedBox()),
+                AppLockGate(
+                  lockStateReady: lockStateReady && !_lockRequested,
+                  needsUnlock: needsUnlock,
+                  lockNavigatorKey: _lockNavKey,
+                  unlockBuilder: (_) => UnlockView(
+                    onUnlocked: () {
+                      ref.read(appNeedsUnlockProvider.notifier).state = false;
+                    },
+                  ),
+                  child: LayergramBackground(
+                    child: child ?? const SizedBox(),
+                  ),
+                ),
                 if (screenProtectionEnabled && privacyShieldVisible)
                   const PrivacyShieldOverlay(),
               ],
@@ -630,13 +846,6 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
                       myIdentityIndex;
                 }
                 setState(() {});
-              },
-            );
-          }
-          if (needsUnlock) {
-            return UnlockView(
-              onUnlocked: () {
-                ref.read(appNeedsUnlockProvider.notifier).state = false;
               },
             );
           }

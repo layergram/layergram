@@ -19,6 +19,7 @@ command -v rustup >/dev/null 2>&1 || fail 'rustup is required'
 command -v xcrun >/dev/null 2>&1 || fail 'Xcode tools are required'
 [ "$(rustc --version | awk '{ print $2 }')" = 1.87.0 ] ||
   fail 'Layergram SCKA packaging requires Rust 1.87.0'
+"$SCRIPT_DIR/verify_scka_export_contract.sh"
 
 build_target() {
   target=$1
@@ -27,6 +28,8 @@ build_target() {
   cargo build --release --locked --offline --features candidate-ffi \
     --manifest-path "$CRATE_DIR/Cargo.toml" \
     --target-dir "$TARGET_DIR" --target "$target"
+  "$SCRIPT_DIR/verify_scka_export_contract.sh" namespace xcrun \
+    "$TARGET_DIR/$target/release/liblayergram_scka.a"
 }
 
 for target in \

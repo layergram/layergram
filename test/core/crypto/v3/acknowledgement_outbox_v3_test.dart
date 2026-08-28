@@ -19,11 +19,13 @@ void main() {
     await first.restore();
     final entry = await first.getOrCreate(
       targetAssemblyId: _id(32, 0x21),
+      partitionKey: _sessionPartition(),
       builder: _ackFrame,
       createdAt: DateTime.utc(2026, 8, 19),
     );
     final duplicate = await first.getOrCreate(
       targetAssemblyId: entry.targetAssemblyId,
+      partitionKey: _sessionPartition(),
       builder: (_) => throw StateError('must not reseal'),
     );
     _expectExactFrame(entry.frame, duplicate.frame);
@@ -47,6 +49,7 @@ void main() {
     await expectLater(
       first.getOrCreate(
         targetAssemblyId: _id(32, 0x41),
+        partitionKey: _sessionPartition(),
         builder: _ackFrame,
       ),
       throwsStateError,
@@ -75,14 +78,24 @@ void main() {
     );
     await outbox.restore();
     final firstTarget = _id(32, 0x21);
-    await outbox.preflightGetOrCreate(firstTarget);
+    await outbox.preflightGetOrCreate(
+      firstTarget,
+      partitionKey: _sessionPartition(),
+    );
     await outbox.getOrCreate(
       targetAssemblyId: firstTarget,
+      partitionKey: _sessionPartition(),
       builder: _ackFrame,
     );
-    await outbox.preflightGetOrCreate(firstTarget);
+    await outbox.preflightGetOrCreate(
+      firstTarget,
+      partitionKey: _sessionPartition(),
+    );
     await expectLater(
-      outbox.preflightGetOrCreate(_id(32, 0x41)),
+      outbox.preflightGetOrCreate(
+        _id(32, 0x41),
+        partitionKey: _sessionPartition(),
+      ),
       throwsA(isA<V3LmfPersistenceLimitException>()),
     );
     await outbox.close();
@@ -93,11 +106,73 @@ void main() {
     );
     await byteLimited.restore();
     await expectLater(
-      byteLimited.preflightGetOrCreate(firstTarget),
+      byteLimited.preflightGetOrCreate(
+        firstTarget,
+        partitionKey: _sessionPartition(),
+      ),
       throwsA(isA<V3LmfPersistenceLimitException>()),
     );
     await byteLimited.close();
   });
+
+  test('one contact partition cannot consume another contact headroom',
+      () async {
+    final outbox = V3AcknowledgementOutbox(
+      store: _FaultStore(),
+      maxEntries: 2,
+      maxEntriesPerPartition: 1,
+      maxTotalBytes: V3AcknowledgementOutbox.acknowledgementFrameBytes * 2,
+      maxTotalBytesPerPartition:
+          V3AcknowledgementOutbox.acknowledgementFrameBytes,
+    );
+    await outbox.restore();
+    final firstPartition = _id(48, 0x11);
+    final secondPartition = _id(48, 0x61);
+    await outbox.getOrCreate(
+      targetAssemblyId: _id(32, 0x21),
+      partitionKey: firstPartition,
+      builder: _ackFrame,
+    );
+    await expectLater(
+      outbox.preflightGetOrCreate(
+        _id(32, 0x41),
+        partitionKey: firstPartition,
+      ),
+      throwsA(isA<V3LmfPersistenceLimitException>()),
+    );
+    await outbox.preflightGetOrCreate(
+      _id(32, 0x71),
+      partitionKey: secondPartition,
+    );
+    await outbox.close();
+  });
+
+  for (final durableDelete in <bool>[false, true]) {
+    test(
+        'ambiguous ACK delete requires restore '
+        '(${durableDelete ? 'durable delete' : 'failed delete'})', () async {
+      final store = _FaultStore();
+      final outbox = V3AcknowledgementOutbox(store: store);
+      await outbox.restore();
+      await outbox.getOrCreate(
+        targetAssemblyId: _id(32, 0x21),
+        partitionKey: _sessionPartition(),
+        builder: _ackFrame,
+        createdAt: DateTime.utc(2026, 1, 1),
+      );
+      store
+        ..deleteAndThrowOnce = true
+        ..removeBeforeDeleteThrow = durableDelete;
+
+      await expectLater(
+        outbox.deleteOlderThan(DateTime.utc(2026, 2, 1)),
+        throwsStateError,
+      );
+      expect(outbox.requiresRecovery, isTrue);
+      await expectLater(outbox.entries(), throwsStateError);
+      await outbox.close();
+    });
+  }
 }
 
 Future<V3LmfFrame> _ackFrame(Uint8List messageId) async {
@@ -144,6 +219,15 @@ void _expectExactFrame(V3LmfFrame left, V3LmfFrame right) {
 String _id(int length, int start) =>
     base64UrlEncode(_bytes(length, start)).replaceAll('=', '');
 
+String _sessionPartition() {
+  final sessionId = _bytes(16, 0xd1);
+  final expanded = Uint8List(48);
+  for (var index = 0; index < expanded.length; index++) {
+    expanded[index] = sessionId[index % sessionId.length];
+  }
+  return base64UrlEncode(expanded).replaceAll('=', '');
+}
+
 Uint8List _bytes(int length, int start) => Uint8List.fromList(
       List<int>.generate(length, (index) => (start + index) & 0xff),
     );
@@ -152,6 +236,8 @@ final class _FaultStore implements V3LmfRecordStore {
   final Map<String, Map<String, dynamic>> records = {};
   int _nextId = 0;
   bool persistAndThrowOnce = false;
+  bool deleteAndThrowOnce = false;
+  bool removeBeforeDeleteThrow = false;
 
   @override
   Future<String> write(Map<String, dynamic> payload) async {
@@ -176,6 +262,11 @@ final class _FaultStore implements V3LmfRecordStore {
 
   @override
   Future<void> delete(String storageId) async {
+    if (deleteAndThrowOnce) {
+      deleteAndThrowOnce = false;
+      if (removeBeforeDeleteThrow) records.remove(storageId);
+      throw StateError('ambiguous delete');
+    }
     records.remove(storageId);
   }
 }

@@ -79,14 +79,7 @@ if [ -n "$SIGN_IDENTITY" ]; then
   fi
   codesign --verify --deep --strict --verbose=2 "$APP"
 fi
-actual="$PACKAGE_ROOT/macos-process-symbols.txt"
-xcrun nm -gU "$EXECUTABLE" |
-  awk '{ name = $NF; sub(/^_/, "", name); if (name ~ /^lg_scka_v1_/) print name }' |
-  sort -u >"$actual"
-cmp -s "$SYMBOLS" "$actual" || {
-  diff -u "$SYMBOLS" "$actual" >&2 || true
-  fail 'Unexpected packaged macOS SCKA export surface'
-}
+"$SCRIPT_DIR/verify_scka_export_contract.sh" namespace xcrun "$EXECUTABLE"
 
 output=$($EXECUTABLE 2>&1)
 printf '%s\n' "$output"

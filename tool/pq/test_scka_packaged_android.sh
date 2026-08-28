@@ -47,14 +47,8 @@ mkdir -p "$EXTRACT_ROOT"
 for abi in arm64-v8a armeabi-v7a x86_64; do
   archive_path="lib/$abi/liblayergram_scka.so"
   unzip -q "$APK" "$archive_path" -d "$EXTRACT_ROOT"
-  actual="$PACKAGE_ROOT/$abi-symbols.txt"
-  "$NDK_NM" -D --defined-only "$EXTRACT_ROOT/$archive_path" |
-    awk '{ name = $NF; sub(/@@.*/, "", name); if (name ~ /^lg_scka_v1_/) print name }' |
-    sort -u >"$actual"
-  cmp -s "$SYMBOLS" "$actual" || {
-    diff -u "$SYMBOLS" "$actual" >&2 || true
-    fail "Unexpected packaged Android SCKA exports for $abi"
-  }
+  "$SCRIPT_DIR/verify_scka_export_contract.sh" dynamic "$NDK_NM" \
+    "$EXTRACT_ROOT/$archive_path"
 done
 
 printf '%s\n' 'LAYERGRAM_SCKA_PACKAGED_ANDROID_OK'

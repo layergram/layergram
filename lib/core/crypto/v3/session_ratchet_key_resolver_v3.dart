@@ -26,6 +26,10 @@ import 'sparse_pq_ratchet_v3.dart';
 import 'triple_ratchet_engine_v3.dart';
 import 'triple_ratchet_state_v3.dart';
 
+typedef V3SkippedKeyLifetimeResolver = Future<int> Function(
+  Uint8List sessionId,
+);
+
 /// Resolves exact receive keys without committing a Triple Ratchet candidate.
 ///
 /// Only one candidate per session may be pending. Competing fragment-zero
@@ -36,21 +40,28 @@ final class V3SessionRatchetKeyResolver {
   V3SessionRatchetKeyResolver({
     required V3SckaBackend backend,
     required V3SessionCommitController controller,
-    this.skippedKeyLifetimeSeconds =
-        V3RetentionPolicy.normalSkippedKeyLifetimeSeconds,
+    this.skippedKeyLifetimeSeconds,
+    this.skippedKeyLifetimeResolver,
   })  : _backend = backend,
         _controller = controller {
-    if (skippedKeyLifetimeSeconds <= 0) {
+    if (skippedKeyLifetimeSeconds != null && skippedKeyLifetimeSeconds! <= 0) {
       throw ArgumentError.value(
         skippedKeyLifetimeSeconds,
         'skippedKeyLifetimeSeconds',
+      );
+    }
+    if (skippedKeyLifetimeSeconds != null &&
+        skippedKeyLifetimeResolver != null) {
+      throw ArgumentError(
+        'Provide either a fixed skipped-key lifetime or a session resolver',
       );
     }
   }
 
   final V3SckaBackend _backend;
   final V3SessionCommitController _controller;
-  final int skippedKeyLifetimeSeconds;
+  final int? skippedKeyLifetimeSeconds;
+  final V3SkippedKeyLifetimeResolver? skippedKeyLifetimeResolver;
   final Map<String, _PendingCandidate> _pendingBySession =
       <String, _PendingCandidate>{};
   Future<void> _operationTail = Future<void>.value();
@@ -84,6 +95,16 @@ final class V3SessionRatchetKeyResolver {
       final snapshot = await _controller.snapshotForSession(sessionId);
       V3TripleRatchetTransition? transition;
       try {
+        final resolvedSkippedKeyLifetimeSeconds =
+            skippedKeyLifetimeResolver == null
+                ? skippedKeyLifetimeSeconds ??
+                    V3RetentionPolicy.normalSkippedKeyLifetimeSeconds
+                : await skippedKeyLifetimeResolver!(sessionId);
+        if (resolvedSkippedKeyLifetimeSeconds <= 0) {
+          throw StateError(
+            'Layergram v3 session has an invalid skipped-key lifetime',
+          );
+        }
         transition = await V3TripleRatchetEngine.receiveFirstFragment(
           snapshot: snapshot,
           backend: _backend,
@@ -94,7 +115,7 @@ final class V3SessionRatchetKeyResolver {
           assembledPlaintextLength: frame.assembledPlaintextLength,
           nowUnixSeconds: nowUnixSeconds ??
               DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000,
-          skippedKeyLifetimeSeconds: skippedKeyLifetimeSeconds,
+          skippedKeyLifetimeSeconds: resolvedSkippedKeyLifetimeSeconds,
         );
         final pending = _PendingCandidate(
           assemblyId: assemblyId,

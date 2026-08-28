@@ -428,6 +428,30 @@ void main() {
     expect(await auxiliaryKey.extractBytes(), hasLength(32));
   });
 
+  test('scope lease rejects a second owner and releases after close', () async {
+    final first = await V3SessionPersistenceScope.open(
+      scopeToken: 'scopeleasetest01',
+      auxStorageKey: auxiliaryKey,
+      sckaBackend: scopeBackend,
+    );
+    await expectLater(
+      V3SessionPersistenceScope.open(
+        scopeToken: 'scopeleasetest01',
+        auxStorageKey: auxiliaryKey,
+        sckaBackend: scopeBackend,
+      ),
+      throwsStateError,
+    );
+    await first.close();
+
+    final reopened = await V3SessionPersistenceScope.open(
+      scopeToken: 'scopeleasetest01',
+      auxStorageKey: auxiliaryKey,
+      sckaBackend: scopeBackend,
+    );
+    await reopened.close();
+  });
+
   test('scope owns a detached Aux key and fails stopped after restore errors',
       () async {
     final callerKey = SecretKeyData(
@@ -540,6 +564,7 @@ void main() {
         scopeToken: 'owned-receive-01',
         auxStorageKey: auxiliaryKey,
         sckaBackend: backend,
+        testOnlySkippedKeyLifetimeSeconds: 100,
       );
       final firstRestore = await first.restore(
         checkpoints: <V3TripleRatchetState>[pair.bob],
@@ -558,6 +583,7 @@ void main() {
         scopeToken: 'owned-receive-01',
         auxStorageKey: auxiliaryKey,
         sckaBackend: backend,
+        testOnlySkippedKeyLifetimeSeconds: 100,
       );
       final restoredState = await restored.restore(
         checkpoints: const <V3TripleRatchetState>[],
@@ -591,6 +617,7 @@ void main() {
         scopeToken: 'owned-receive-01',
         auxStorageKey: auxiliaryKey,
         sckaBackend: backend,
+        testOnlySkippedKeyLifetimeSeconds: 100,
       );
       final afterState = await afterRestart.restore(
         checkpoints: const <V3TripleRatchetState>[],
@@ -676,6 +703,7 @@ void main() {
         scopeToken: 'owned-filter-001',
         auxStorageKey: auxiliaryKey,
         sckaBackend: backend,
+        testOnlySkippedKeyLifetimeSeconds: 100,
       );
       final restored = await scope.restore(
         checkpoints: <V3TripleRatchetState>[
@@ -747,6 +775,7 @@ void main() {
         scopeToken: 'owned-preflight1',
         auxStorageKey: auxiliaryKey,
         sckaBackend: backend,
+        testOnlySkippedKeyLifetimeSeconds: 100,
         maxInboxPersistedFrames: 1,
       );
       await scope.restore(

@@ -236,6 +236,15 @@ void main() {
   // ── Repository stripEncryptedPlaintext ──────────────────────────────────
 
   group('stripEncryptedPlaintext', () {
+    test('fails closed without an active storage scope', () async {
+      final repo = MessagesRepository();
+      await expectLater(
+        repo.stripEncryptedPlaintext(),
+        throwsA(isA<StateError>()),
+      );
+      repo.dispose();
+    });
+
     test('strips text from all messages with ciphertextBase64', () async {
       final storageKey = await deriveStorageKey('orig');
       final repo = await openRepo(storageKey);
@@ -363,6 +372,74 @@ void main() {
 
       final messages = await repo.getAllMessages();
       expect(messages.single.text, isNull);
+      repo.dispose();
+    });
+  });
+
+  group('identity-reset multi-context sanitization', () {
+    test('strips known contexts and preserves opaque ciphertext aggregates',
+        () async {
+      final primaryKey = await deriveStorageKey('primary');
+      final activePassphraseKey = await deriveStorageKey('active-passphrase');
+      final unknownContextKey = await deriveStorageKey('unknown-context');
+      final repo = await openRepo(primaryKey);
+
+      Future<void> addForCurrentContext(String id, String text) {
+        return repo.add(MessageRecord(
+          id: id,
+          senderId: 'alice',
+          recipientId: 'bob',
+          direction: 'incoming',
+          timestamp: 100,
+          text: text,
+          ciphertextBase64: 'cipher-$id',
+          nonceBase64: 'nonce-$id',
+          keyTag: id,
+        ));
+      }
+
+      await addForCurrentContext('primary', 'primary plaintext');
+      await repo.setActiveContext(
+        scopeToken: 'test-scope',
+        storageKey: activePassphraseKey,
+      );
+      await addForCurrentContext('active-passphrase', 'passphrase plaintext');
+      await repo.setActiveContext(
+        scopeToken: 'test-scope',
+        storageKey: unknownContextKey,
+      );
+      await addForCurrentContext('unknown-context', 'opaque plaintext');
+
+      await repo.setActiveContext(
+        scopeToken: null,
+        storageKey: null,
+      );
+      await repo.stripEncryptedPlaintextAcrossKnownContexts(
+        scopeToken: 'test-scope',
+        additionalStorageKeys: [primaryKey, activePassphraseKey],
+      );
+
+      await repo.setActiveContext(
+        scopeToken: 'test-scope',
+        storageKey: primaryKey,
+      );
+      expect((await repo.getAllMessages()).single.text, isNull);
+
+      await repo.setActiveContext(
+        scopeToken: 'test-scope',
+        storageKey: activePassphraseKey,
+      );
+      expect((await repo.getAllMessages()).single.text, isNull);
+
+      await repo.setActiveContext(
+        scopeToken: 'test-scope',
+        storageKey: unknownContextKey,
+      );
+      expect(
+        (await repo.getAllMessages()).single.text,
+        'opaque plaintext',
+        reason: 'unknown ciphertext contexts preserve plausible deniability',
+      );
       repo.dispose();
     });
   });

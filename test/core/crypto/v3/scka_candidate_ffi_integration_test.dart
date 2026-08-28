@@ -63,6 +63,7 @@ void main() {
           scopeToken: 'native-send-0001',
           auxStorageKey: auxiliaryKey,
           sckaBackend: backend,
+          testOnlySkippedKeyLifetimeSeconds: 100,
         );
         await aliceScope.restore(
           checkpoints: <V3TripleRatchetState>[pair.alice],
@@ -95,6 +96,7 @@ void main() {
           scopeToken: 'native-send-0001',
           auxStorageKey: auxiliaryKey,
           sckaBackend: backend,
+          testOnlySkippedKeyLifetimeSeconds: 100,
         );
         final aliceRestore = await restoredAlice.restore(
           checkpoints: const <V3TripleRatchetState>[],
@@ -115,6 +117,7 @@ void main() {
           scopeToken: 'native-recv-0001',
           auxStorageKey: auxiliaryKey,
           sckaBackend: backend,
+          testOnlySkippedKeyLifetimeSeconds: 100,
         );
         await bobScope.restore(
           checkpoints: <V3TripleRatchetState>[pair.bob],
@@ -136,6 +139,7 @@ void main() {
           scopeToken: 'native-recv-0001',
           auxStorageKey: auxiliaryKey,
           sckaBackend: backend,
+          testOnlySkippedKeyLifetimeSeconds: 100,
         );
         final resumedState = await resumedBob.restore(
           checkpoints: const <V3TripleRatchetState>[],
@@ -176,6 +180,7 @@ void main() {
           scopeToken: 'native-recv-0001',
           auxStorageKey: auxiliaryKey,
           sckaBackend: backend,
+          testOnlySkippedKeyLifetimeSeconds: 100,
         );
         final bobRestore = await restoredBob.restore(
           checkpoints: const <V3TripleRatchetState>[],

@@ -17,7 +17,12 @@ Layergram is an end-to-end encrypted messaging tool that is transport-agnostic: 
 - **Pairwise authenticity.** If Alice imports what she believes to be Bob's public key and verifies it out-of-band, only Bob can produce messages that decrypt successfully with that key.
 - **Deniable wire format.** An encrypted payload in isolation carries no sender or recipient identifiers, so no party in the transport chain can attribute it on a per-message basis.
 - **Minimal infrastructure.** Layergram does not operate a server. There is no account, no key directory, no backend under Layergram's control. The absence of a server is itself part of the threat model — Layergram cannot be compelled to hand over data it never has.
-- **Readable, auditable source.** All client code is public. The cryptographic choices are deliberately plain (X25519 + AES-GCM-256 + HKDF-SHA256) rather than exotic, so third parties can verify the implementation.
+- **Readable, auditable source.** All client code is public. Protocol v3 uses
+  X25519, ML-KEM-768, HKDF, AES-256-GCM, AES-GCM-SIV, a classical Double
+  Ratchet, and the documented sparse-PQ/SCKA construction. The custom
+  composition is intentionally published for independent review and is not
+  described as externally approved. The simpler X25519 + AES-GCM legacy model
+  remains documented below for historical data and older releases.
 
 ## What Layergram protects against
 
@@ -52,7 +57,15 @@ Layergram is honest about its limits. The following concerns are explicitly out 
 - **Rubber-hose / coercion.** Layergram does not provide a formal duress PIN, panic mode, or a cryptographically separate decoy vault with strong anti-forensic guarantees. The optional passphrase can create a limited deniability layer because passphrase-derived keys are not present unless the user activates them, but this should not be treated as a strong guarantee against coercion, repeated questioning, device seizure, side-channel observation, or forensic correlation.
 - **Compromised or rooted device.** Layergram relies on the platform to enforce process isolation and on the OS keystore for hardware-backed key material. A device that is rooted, jailbroken, or compromised by malware running with screen-recording, input-injection or memory-dumping privileges can read or influence anything Layergram does while it is unlocked.
 - **Compromised recipient.** If the recipient's device is compromised, or if they share their recovery phrase, the content you sent them can be recovered. End-to-end encryption protects the transport, not the endpoint.
-- **Future compromise of long-term keys (partial forward secrecy).** Base (legacy) message encryption uses static–static X25519 between identity keys; if a long-term identity key is later compromised, past messages encrypted for the corresponding peer can be decrypted. Layergram now also supports **opportunistic Forward Secrecy**: new contacts default to Advanced FS, and compatible clients automatically try to negotiate an FS session during normal message exchange. Until a session is confirmed — and for contacts/devices that never negotiate FS — Layergram falls back to the legacy model for compatibility, so protection of past messages after a future key compromise is only guaranteed for messages sent under a confirmed FS session. See the "Forward Secrecy" section below and [specs/FORWARD_SECRECY.md](specs/FORWARD_SECRECY.md).
+- **Future compromise of long-term keys in legacy data (partial forward
+  secrecy).** Base v1/v2 message encryption uses static–static X25519 between
+  identity keys; if a long-term identity key is later compromised, past
+  legacy messages for that peer can be decrypted. V2 opportunistic Forward
+  Secrecy protects only messages sent under a confirmed FS session. Protocol
+  v3 has its separate mandatory hybrid ratchet and no silent v2 fallback, with
+  its exact guarantees and review status defined in the v3 security goals.
+  See the "Forward Secrecy" section below and
+  [specs/FORWARD_SECRECY.md](specs/FORWARD_SECRECY.md).
 - **Recovery of messages without device state.** Messages are stored locally and are not automatically backed up anywhere. Loss or wipe of the device (without a user-managed backup) means loss of access to previously received messages, even if the recovery phrase is known.
 - **Backup exclusion limits.** When a message is marked `backupExcluded`, official Layergram clients must exclude it from official Layergram backups and exports. This is an interoperability contract between official clients, not remote deletion control: it cannot prevent screenshots, screen recordings, modified clients, operating-system or device-level backups, or external copies.
 - **Anonymity of the user on the underlying transport.** If the transport requires a phone number or account, that identity is visible to the transport operator. Layergram does not anonymize the user at the transport layer.

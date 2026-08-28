@@ -41,6 +41,8 @@ build_abi() {
   mkdir -p "$JNI_DIR/$abi"
   cp "$TARGET_DIR/$target/release/liblayergram_scka.so" \
     "$JNI_DIR/$abi/liblayergram_scka.so"
+  "$SCRIPT_DIR/verify_scka_export_contract.sh" dynamic \
+    "$TOOLCHAIN/llvm-nm" "$JNI_DIR/$abi/liblayergram_scka.so"
 }
 
 build_abi arm64-v8a aarch64-linux-android aarch64-linux-android21-clang \
