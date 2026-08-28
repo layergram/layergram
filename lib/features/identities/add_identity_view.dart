@@ -165,12 +165,15 @@ class _AddIdentityViewState extends ConsumerState<AddIdentityView> {
             Expanded(
               child: TabBarView(
                 children: [
-                  Padding(
+                  SingleChildScrollView(
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
                     padding: const EdgeInsets.all(16),
                     child: Card(
                       child: Padding(
                         padding: const EdgeInsets.all(12),
                         child: Column(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             TextField(
                               controller: _controller,

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -41,6 +42,44 @@ class _InMemorySecureStorageService extends SecureStorageService {
   }
 }
 
+class _DelayedSecureStorageService extends _InMemorySecureStorageService {
+  final firstRead = Completer<String?>();
+  var _delayed = false;
+
+  @override
+  Future<String?> read(String key) {
+    if (!_delayed) {
+      _delayed = true;
+      return firstRead.future;
+    }
+    return super.read(key);
+  }
+}
+
+class _ThrowingSecureStorageService extends _InMemorySecureStorageService {
+  @override
+  Future<String?> read(String key) {
+    throw StateError('test identity storage failure');
+  }
+}
+
+class _FailOnceSecureStorageService extends _InMemorySecureStorageService {
+  var _failNextRegistryRead = false;
+
+  void failNextRegistryRead() {
+    _failNextRegistryRead = true;
+  }
+
+  @override
+  Future<String?> read(String key) {
+    if (_failNextRegistryRead) {
+      _failNextRegistryRead = false;
+      throw StateError('transient test identity storage failure');
+    }
+    return super.read(key);
+  }
+}
+
 class _RecordingClipboardService extends ClipboardService {
   String? lastWritten;
 
@@ -58,6 +97,96 @@ void main() {
     AppStrings.registerStrings({
       'en': strings.map((key, value) => MapEntry(key, value as String)),
     });
+  });
+
+  testWidgets('identity loading never exposes the create identity action', (
+    tester,
+  ) async {
+    final storage = _DelayedSecureStorageService();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          secureStorageProvider.overrideWithValue(storage),
+          protocolV3IdentityEnabledProvider.overrideWithValue(false),
+        ],
+        child: MaterialApp(
+          theme: ThemeData(useMaterial3: true),
+          home: const MyIdentityView(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text('Create identity'), findsNothing);
+
+    storage.firstRead.complete(null);
+    await tester.pumpAndSettle();
+
+    expect(find.text('No active identity'), findsOneWidget);
+    expect(find.text('Retry'), findsOneWidget);
+    expect(find.text('Create identity'), findsNothing);
+  });
+
+  testWidgets('identity load errors are visible and never create an identity', (
+    tester,
+  ) async {
+    final storage = _ThrowingSecureStorageService();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          secureStorageProvider.overrideWithValue(storage),
+          protocolV3IdentityEnabledProvider.overrideWithValue(false),
+        ],
+        child: MaterialApp(
+          theme: ThemeData(useMaterial3: true),
+          home: const MyIdentityView(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('No active identity'), findsOneWidget);
+    expect(find.text('Retry'), findsOneWidget);
+    expect(find.text('Create identity'), findsNothing);
+  });
+
+  testWidgets('retry recovers the existing identity after a transient error', (
+    tester,
+  ) async {
+    final storage = _FailOnceSecureStorageService();
+    final manager = IdentityManager(
+      seedService: SeedService(),
+      localIdentityVault: LocalIdentityVault(secureStorage: storage),
+    );
+    await manager.restoreIdentityFromMnemonic(
+      'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+      displayName: 'Alice',
+    );
+    storage.failNextRegistryRead();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          secureStorageProvider.overrideWithValue(storage),
+          protocolV3IdentityEnabledProvider.overrideWithValue(false),
+        ],
+        child: MaterialApp(
+          theme: ThemeData(useMaterial3: true),
+          home: const MyIdentityView(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('No active identity'), findsOneWidget);
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Alice'), findsOneWidget);
+    expect(find.text('Create identity'), findsNothing);
   });
 
   testWidgets('identity QR exposes a save/share image action', (tester) async {

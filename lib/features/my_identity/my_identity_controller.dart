@@ -163,3 +163,15 @@ class MyIdentityController {
 
 final myIdentityControllerProvider =
     Provider((ref) => MyIdentityController(ref));
+
+/// The identity presented by [MyIdentityView].
+///
+/// Keep the asynchronous load in Riverpod so ordinary widget rebuilds do not
+/// restart native v3 identity restoration. Loading, missing-data, and error
+/// states must remain distinct in the UI: an error must never look like an
+/// invitation to overwrite or create identity material.
+final presentedLocalIdentityProvider = FutureProvider<LocalIdentity?>((ref) {
+  ref.watch(passphraseProvider);
+  ref.watch(identityReloadTokenProvider);
+  return ref.read(myIdentityControllerProvider).getActiveIdentity();
+});

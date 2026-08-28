@@ -196,8 +196,7 @@ class _MyIdentityViewState extends ConsumerState<MyIdentityView> {
 
   @override
   Widget build(BuildContext context) {
-    // Watch the passphrase state so the view rebuilds when the active key changes
-    ref.watch(passphraseProvider);
+    final presentedIdentity = ref.watch(presentedLocalIdentityProvider);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -205,25 +204,15 @@ class _MyIdentityViewState extends ConsumerState<MyIdentityView> {
         title: Text(AppStrings.t(context, 'myIdentity')),
         actions: const [PassphraseButton(), SizedBox(width: 8)],
       ),
-      body: FutureBuilder(
-        future: ref.read(myIdentityControllerProvider).getActiveIdentity(),
-        builder: (fbContext, snapshot) {
-          final local = snapshot.data;
+      body: presentedIdentity.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, stackTrace) => _IdentityUnavailable(
+          onRetry: () => ref.invalidate(presentedLocalIdentityProvider),
+        ),
+        data: (local) {
           if (local == null) {
-            return Center(
-              child: FilledButton(
-                onPressed: () async {
-                  final created = await ref
-                      .read(identityManagerProvider)
-                      .createNewIdentity();
-                  ref.read(activeIdentityIdProvider.notifier).state =
-                      created.identityId;
-                  ref.read(identityReloadTokenProvider.notifier).state++;
-                  if (!mounted) return;
-                  setState(() {});
-                },
-                child: Text(AppStrings.t(context, 'createIdentity')),
-              ),
+            return _IdentityUnavailable(
+              onRetry: () => ref.invalidate(presentedLocalIdentityProvider),
             );
           }
 
@@ -561,6 +550,44 @@ class _MyIdentityViewState extends ConsumerState<MyIdentityView> {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _IdentityUnavailable extends StatelessWidget {
+  const _IdentityUnavailable({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.person_off_outlined,
+              size: 44,
+              color: colorScheme.error,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              AppStrings.t(context, 'noActiveIdentity'),
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              label: Text(AppStrings.t(context, 'retry')),
+            ),
+          ],
+        ),
       ),
     );
   }
