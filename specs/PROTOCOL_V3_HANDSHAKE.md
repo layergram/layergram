@@ -45,14 +45,15 @@ This checkpoint defines and implements:
 It deliberately does not, by itself:
 
 - approve the ML-KEM Braid transition backend or custom possession proof;
-- activate the contact/device coordinator, application content, migration, or
-  downstream capability paths;
+- approve the contact/device policy, application content, migration, or
+  downstream capability paths merely because the HP3 primitive is present;
 - prove real external-carrier preservation or signed release packaging;
 - provide a third-party-verifiable signature or a non-repudiation claim.
 
 The cryptographic implementation remains under `lib/core/crypto/v3/`. Its
-ordinary application/provider seams are integrated only behind the single
-fail-closed selector, so the active v2 runtime cannot construct the v3 scope.
+ordinary application/provider seams are active only behind the single
+fail-closed selector. App lock closes the v3 scope and prevents carrier
+parsing, decryption, durable protocol mutation, and navigation until unlock.
 
 ## 2. Participants and keys
 
@@ -347,9 +348,11 @@ and wall-clock time do not participate.
 An exact duplicate is not a second handshake. The persistence
 controller keys pending state by handshake ID, retains the exact canonical
 offer or reply bytes for resend, and enforces a global and per-remote-identity
-pending cap before expensive handshake cryptography. The active contact/device
-coordinator is integrated behind the false selector and applies the crossed-
-offer tie-break and Normal/Maximum device policy only after activation.
+pending cap before expensive handshake cryptography. The pure crossed-offer
+tie-break is frozen and tested, but the active persistence coordinator does not
+yet consume it; this is an explicit open audit finding rather than an
+activation claim. Normal/Maximum device policy is enforced by the active
+application coordinator.
 
 Old offer/reply/confirmation tuples cannot be relabelled into a new run because
 the derived identifiers, ordered roles, complete records, KEM ciphertexts,

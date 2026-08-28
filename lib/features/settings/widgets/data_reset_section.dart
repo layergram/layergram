@@ -12,8 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:cryptography/cryptography.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/crypto/message_record_cipher.dart';
 import '../../../core/providers.dart';
 import '../../../l10n/app_strings.dart';
 
@@ -91,8 +96,11 @@ class DataResetSection extends ConsumerWidget {
             }
 
             if (second.deleteIdentities) {
-              await ref.read(identityManagerProvider).clearLocalIdentity();
-              await ref.read(passphraseProvider.notifier).deactivate();
+              // Fail closed while the original identity and encrypted scope
+              // are still available. If any deletion fails, the mnemonic is
+              // retained so the user can retry instead of leaving decryptable
+              // records orphaned behind a destroyed identity context.
+              await ref.read(v3ApplicationRuntimeOwnerProvider).closeCurrent();
 
               // ── Reset FS state per spec §8.6.3 ─────────────────────────────
               // Mark all sessions as broken, wipe ratchet keys, clear persisted state
@@ -109,6 +117,90 @@ class DataResetSection extends ConsumerWidget {
               // Clear in-memory ratchet state cache
               ref.read(fsRatchetStateCacheProvider.notifier).state = {};
 
+              // §12.3: Strip persisted plaintext while the original scoped
+              // message repository is still decryptable. FS plaintext Aux
+              // records must also be removed before invalidating their scoped
+              // repository.
+              if (!second.deleteMessages) {
+                final identityManager = ref.read(identityManagerProvider);
+                final activePassphrase = ref.read(passphraseProvider);
+                final localIdentity = await identityManager.getLocalIdentity();
+                final primaryPrivateKey =
+                    await identityManager.getLocalPrivateKeyBase64();
+                final primaryKeyTag =
+                    await ref.read(originalKeyTagProvider.future);
+                if (localIdentity == null ||
+                    primaryPrivateKey == null ||
+                    primaryKeyTag == null) {
+                  throw StateError(
+                    'Cannot sanitize retained messages without the primary key',
+                  );
+                }
+                final knownKeyMaterial = <({String privateKey, String keyTag})>[
+                  (privateKey: primaryPrivateKey, keyTag: primaryKeyTag),
+                ];
+                if (activePassphrase.isActive) {
+                  final passphrasePrivateKey =
+                      activePassphrase.privateKeyBase64;
+                  final passphraseKeyTag = activePassphrase.keyTag;
+                  if (passphrasePrivateKey == null ||
+                      passphraseKeyTag == null) {
+                    throw StateError(
+                      'Cannot sanitize the active passphrase message context',
+                    );
+                  }
+                  if (passphraseKeyTag != primaryKeyTag) {
+                    knownKeyMaterial.add((
+                      privateKey: passphrasePrivateKey,
+                      keyTag: passphraseKeyTag,
+                    ));
+                  }
+                }
+
+                final storageContext = await ref
+                    .read(localStorageSecurityProvider)
+                    .contextForIdentity(localIdentity.identityId);
+                if (storageContext == null) {
+                  throw StateError(
+                    'Cannot sanitize retained messages without their scope',
+                  );
+                }
+
+                final knownStorageKeys = <SecretKey>[];
+                try {
+                  for (final material in knownKeyMaterial) {
+                    final keyBytes = Uint8List.fromList(
+                      base64Decode(material.privateKey),
+                    );
+                    try {
+                      knownStorageKeys.add(
+                        await MessageRecordCipher.deriveKey(
+                          keyBytes,
+                          keyTag: material.keyTag,
+                        ),
+                      );
+                    } finally {
+                      keyBytes.fillRange(0, keyBytes.length, 0);
+                    }
+                  }
+                  await messagesRepo.stripEncryptedPlaintextAcrossKnownContexts(
+                    scopeToken: storageContext.scopeToken,
+                    additionalStorageKeys: knownStorageKeys,
+                  );
+                } finally {
+                  storageContext.destroy();
+                  for (final storageKey in knownStorageKeys) {
+                    storageKey.destroy();
+                  }
+                }
+              }
+              await ref.read(fsPlaintextPersistenceServiceProvider).removeAll();
+
+              // Only after every scope-bound erasure has succeeded may the
+              // recovery identity and passphrase context be destroyed.
+              await ref.read(passphraseProvider.notifier).deactivate();
+              await ref.read(identityManagerProvider).clearLocalIdentity();
+
               // Invalidate ALL FS-related providers to ensure fresh state after reset
               // Note: Provider.family instances are invalidated when their parent is invalidated
               // or when they have no more listeners (which happens after logout)
@@ -121,16 +213,6 @@ class DataResetSection extends ConsumerWidget {
               ref.invalidate(fsRatchetPersistenceServiceProvider);
               // CRITICAL: Also invalidate aux repository so clearByKind has proper scope
               ref.invalidate(auxRecordRepositoryProvider);
-
-              // §12.3: Strip persisted plaintext from ALL encrypted messages.
-              // After identity restore, legacy messages will be re-decrypted
-              // on demand (same keys restored from seed), while FS messages
-              // will fail inner-layer decryption (ratchet gone) → placeholder.
-              if (!second.deleteMessages) {
-                await messagesRepo.stripEncryptedPlaintext();
-              }
-              // §12.3: Wipe FS plaintext aux records on identity reset
-              await ref.read(fsPlaintextPersistenceServiceProvider).removeAll();
 
               // Increment registry version to trigger UI refresh
               ref.read(fsRegistryVersionProvider.notifier).state++;

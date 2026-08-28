@@ -134,14 +134,8 @@ for abi in arm64-v8a armeabi-v7a x86_64; do
   [ "$(zipinfo -1 "$AAB" | grep -Fxc "$archive_path")" -eq 1 ] ||
     fail "Android App Bundle must contain exactly one SCKA library for $abi"
   unzip -oq "$AAB" "$archive_path" -d "$EXTRACT_ROOT"
-  actual=$PACKAGE_ROOT/$abi-aab-symbols.txt
-  "$NDK_NM" -D --defined-only "$EXTRACT_ROOT/$archive_path" |
-    awk '{ name = $NF; sub(/@@.*/, "", name); if (name ~ /^lg_scka_v1_/) print name }' |
-    sort -u >"$actual"
-  cmp -s "$SYMBOLS" "$actual" || {
-    diff -u "$SYMBOLS" "$actual" >&2 || true
-    fail "Unexpected Android App Bundle SCKA exports for $abi"
-  }
+  "$SCRIPT_DIR/verify_scka_export_contract.sh" dynamic "$NDK_NM" \
+    "$EXTRACT_ROOT/$archive_path"
 done
 
 bundletool_version=$(java -cp "$BUNDLETOOL_CP" "$BUNDLETOOL_MAIN" version)

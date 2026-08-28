@@ -25,12 +25,14 @@ final class V3AcknowledgementOutboxEntry {
   const V3AcknowledgementOutboxEntry._({
     required this.storageId,
     required this.targetAssemblyId,
+    required this.partitionKey,
     required this.frame,
     required this.createdAt,
   });
 
   final String storageId;
   final String targetAssemblyId;
+  final String partitionKey;
   final V3LmfFrame frame;
   final DateTime createdAt;
 }
@@ -49,6 +51,10 @@ typedef V3AcknowledgementFrameBuilder = Future<V3LmfFrame> Function(
   Uint8List freshMessageId,
 );
 
+typedef V3AcknowledgementPartitionResolver = FutureOr<String> Function(
+  V3LmfFrame frame,
+);
+
 /// Durable exact-byte retry storage for receiver-generated ACK frames.
 ///
 /// A cumulative ACK gets a fresh message ID before it is sealed. If the same
@@ -61,15 +67,33 @@ final class V3AcknowledgementOutbox {
     this.maxEntries = 4096,
     this.maxStoredRecords = 8192,
     this.maxTotalBytes = 4 * 1024 * 1024,
+    int? maxEntriesPerPartition,
+    int? maxTotalBytesPerPartition,
+    V3AcknowledgementPartitionResolver? partitionResolver,
   })  : _store = store,
-        _secureRandom = secureRandom ?? Random.secure() {
+        _secureRandom = secureRandom ?? Random.secure(),
+        maxEntriesPerPartition = maxEntriesPerPartition ??
+            _defaultMaxEntriesPerPartition(maxEntries),
+        maxTotalBytesPerPartition = maxTotalBytesPerPartition ??
+            _defaultMaxBytesPerPartition(maxTotalBytes),
+        _partitionResolver =
+            partitionResolver ?? _defaultSessionPartitionResolver {
     if (maxEntries <= 0 || maxStoredRecords <= 0 || maxTotalBytes <= 0) {
       throw ArgumentError('Layergram v3 ACK-outbox limits are invalid');
+    }
+    if (this.maxEntriesPerPartition <= 0 ||
+        this.maxEntriesPerPartition > maxEntries ||
+        this.maxTotalBytesPerPartition <= 0 ||
+        this.maxTotalBytesPerPartition > maxTotalBytes) {
+      throw ArgumentError(
+        'Layergram v3 ACK-outbox partition limits are invalid',
+      );
     }
   }
 
   static const String recordKind = 'v3_acknowledgement_outbox_v1';
-  static const int _formatVersion = 1;
+  static const int _legacyFormatVersion = 1;
+  static const int _formatVersion = 2;
   static const int _maxTimestampMillis = 253402300799999;
   static const int acknowledgementFrameBytes = V3LmfFrameCodec.headerBytes +
       V3LmfAcknowledgementCodec.encodedBytes +
@@ -80,6 +104,9 @@ final class V3AcknowledgementOutbox {
   final int maxEntries;
   final int maxStoredRecords;
   final int maxTotalBytes;
+  final int maxEntriesPerPartition;
+  final int maxTotalBytesPerPartition;
+  final V3AcknowledgementPartitionResolver _partitionResolver;
 
   final Map<String, V3AcknowledgementOutboxEntry> _entries = {};
   Future<void> _operationTail = Future<void>.value();
@@ -90,11 +117,23 @@ final class V3AcknowledgementOutbox {
 
   bool get requiresRecovery => _writeRecoveryRequired;
 
-  Future<void> preflightGetOrCreate(String targetAssemblyId) {
+  Future<void> preflightGetOrCreate(
+    String targetAssemblyId, {
+    required String partitionKey,
+  }) {
     return _serialized(() async {
       _ensureReady();
       _validateArmoredId(targetAssemblyId, 32, 'targetAssemblyId');
-      if (_entries.containsKey(targetAssemblyId)) return;
+      _validateArmoredId(partitionKey, 48, 'partitionKey');
+      final existing = _entries[targetAssemblyId];
+      if (existing != null) {
+        if (existing.partitionKey != partitionKey) {
+          throw const V3LmfPersistenceConflictException(
+            'v3 ACK target changed contact partition',
+          );
+        }
+        return;
+      }
       if (_entries.length >= maxEntries) {
         throw const V3LmfPersistenceLimitException(
           'v3 ACK-outbox capacity exceeded',
@@ -105,6 +144,7 @@ final class V3AcknowledgementOutbox {
           'v3 ACK-outbox byte capacity exceeded',
         );
       }
+      _ensurePartitionCapacity(partitionKey);
     });
   }
 
@@ -124,7 +164,7 @@ final class V3AcknowledgementOutbox {
       }
       final grouped = <String, List<V3AcknowledgementOutboxEntry>>{};
       for (final record in records) {
-        final entry = _decode(record);
+        final entry = await _decode(record);
         grouped.putIfAbsent(entry.targetAssemblyId, () => []).add(entry);
       }
       if (grouped.length > maxEntries) {
@@ -134,6 +174,8 @@ final class V3AcknowledgementOutbox {
       }
       final selected = <String, V3AcknowledgementOutboxEntry>{};
       final duplicates = <V3AcknowledgementOutboxEntry>[];
+      final partitionEntries = <String, int>{};
+      final partitionBytes = <String, int>{};
       var total = 0;
       for (final candidates in grouped.values) {
         candidates.sort((left, right) {
@@ -167,6 +209,19 @@ final class V3AcknowledgementOutbox {
             'v3 ACK-outbox byte limit exceeded',
           );
         }
+        final nextPartitionEntries =
+            (partitionEntries[canonical.partitionKey] ?? 0) + 1;
+        final nextPartitionBytes =
+            (partitionBytes[canonical.partitionKey] ?? 0) +
+                acknowledgementFrameBytes;
+        if (nextPartitionEntries > maxEntriesPerPartition ||
+            nextPartitionBytes > maxTotalBytesPerPartition) {
+          throw const V3LmfPersistenceLimitException(
+            'v3 ACK-outbox contact partition limit exceeded',
+          );
+        }
+        partitionEntries[canonical.partitionKey] = nextPartitionEntries;
+        partitionBytes[canonical.partitionKey] = nextPartitionBytes;
         selected[canonical.targetAssemblyId] = canonical;
       }
       for (final duplicate in duplicates) {
@@ -188,19 +243,29 @@ final class V3AcknowledgementOutbox {
 
   Future<V3AcknowledgementOutboxEntry> getOrCreate({
     required String targetAssemblyId,
+    required String partitionKey,
     required V3AcknowledgementFrameBuilder builder,
     DateTime? createdAt,
   }) {
     return _serialized(() async {
       _ensureReady();
       _validateArmoredId(targetAssemblyId, 32, 'targetAssemblyId');
+      _validateArmoredId(partitionKey, 48, 'partitionKey');
       final existing = _entries[targetAssemblyId];
-      if (existing != null) return existing;
+      if (existing != null) {
+        if (existing.partitionKey != partitionKey) {
+          throw const V3LmfPersistenceConflictException(
+            'v3 ACK target changed contact partition',
+          );
+        }
+        return existing;
+      }
       if (_entries.length >= maxEntries) {
         throw const V3LmfPersistenceLimitException(
           'v3 ACK-outbox capacity exceeded',
         );
       }
+      _ensurePartitionCapacity(partitionKey);
       final messageId = _newMessageId();
       try {
         final frame = await builder(messageId);
@@ -222,6 +287,7 @@ final class V3AcknowledgementOutbox {
             'kind': recordKind,
             'version': _formatVersion,
             'targetAssemblyId': targetAssemblyId,
+            'partitionKey': partitionKey,
             'frame': base64UrlEncode(encoded).replaceAll('=', ''),
             'createdAt': timestamp.millisecondsSinceEpoch,
             'reserved': 0,
@@ -231,6 +297,7 @@ final class V3AcknowledgementOutbox {
             final entry = V3AcknowledgementOutboxEntry._(
               storageId: storageId,
               targetAssemblyId: targetAssemblyId,
+              partitionKey: partitionKey,
               frame: frame,
               createdAt: timestamp,
             );
@@ -267,7 +334,12 @@ final class V3AcknowledgementOutbox {
       for (final entry in expired) {
         final encoded = V3LmfFrameCodec.encodeBinary(entry.frame);
         try {
-          await _store.delete(entry.storageId);
+          try {
+            await _store.delete(entry.storageId);
+          } catch (_) {
+            _writeRecoveryRequired = true;
+            rethrow;
+          }
           _entries.remove(entry.targetAssemblyId);
           _totalBytes -= encoded.length;
         } finally {
@@ -286,12 +358,17 @@ final class V3AcknowledgementOutbox {
     }, allowClosed: true);
   }
 
-  V3AcknowledgementOutboxEntry _decode(V3LmfStoredRecord stored) {
+  Future<V3AcknowledgementOutboxEntry> _decode(
+    V3LmfStoredRecord stored,
+  ) async {
     final payload = stored.payload;
-    if (payload.length != 6 ||
+    final version = payload['version'];
+    final legacy = version == _legacyFormatVersion;
+    if ((legacy ? payload.length != 6 : payload.length != 7) ||
         payload['kind'] != recordKind ||
-        payload['version'] != _formatVersion ||
+        (!legacy && version != _formatVersion) ||
         payload['targetAssemblyId'] is! String ||
+        (!legacy && payload['partitionKey'] is! String) ||
         payload['frame'] is! String ||
         payload['createdAt'] is! int ||
         payload['reserved'] != 0) {
@@ -306,9 +383,20 @@ final class V3AcknowledgementOutbox {
     try {
       final frame = V3LmfFrameCodec.decodeBinary(frameBytes);
       _validateAcknowledgementFrame(frame);
+      final resolvedPartitionKey = await _partitionResolver(frame);
+      _validateArmoredId(resolvedPartitionKey, 48, 'partitionKey');
+      final partitionKey =
+          legacy ? resolvedPartitionKey : payload['partitionKey'] as String;
+      _validateArmoredId(partitionKey, 48, 'partitionKey');
+      if (partitionKey != resolvedPartitionKey) {
+        throw const V3LmfPersistenceConflictException(
+          'v3 ACK contact partition does not match its session binding',
+        );
+      }
       return V3AcknowledgementOutboxEntry._(
         storageId: stored.storageId,
         targetAssemblyId: targetAssemblyId,
+        partitionKey: partitionKey,
         frame: frame,
         createdAt: _validatedTimestampMillis(payload['createdAt'] as int),
       );
@@ -334,6 +422,57 @@ final class V3AcknowledgementOutbox {
       throw const FormatException(
         'Invalid Layergram v3 ACK-outbox frame',
       );
+    }
+  }
+
+  void _ensurePartitionCapacity(String partitionKey) {
+    var entries = 0;
+    var bytes = 0;
+    for (final entry in _entries.values) {
+      if (entry.partitionKey != partitionKey) continue;
+      entries++;
+      bytes += acknowledgementFrameBytes;
+    }
+    if (entries >= maxEntriesPerPartition) {
+      throw const V3LmfPersistenceLimitException(
+        'v3 ACK-outbox contact capacity exceeded',
+      );
+    }
+    if (bytes + acknowledgementFrameBytes > maxTotalBytesPerPartition) {
+      throw const V3LmfPersistenceLimitException(
+        'v3 ACK-outbox contact byte capacity exceeded',
+      );
+    }
+  }
+
+  static int _defaultMaxEntriesPerPartition(int maxEntries) {
+    if (maxEntries <= 4) return maxEntries;
+    return maxEntries - max(1, maxEntries ~/ 4);
+  }
+
+  static int _defaultMaxBytesPerPartition(int maxTotalBytes) {
+    if (maxTotalBytes <= acknowledgementFrameBytes * 4) {
+      return maxTotalBytes;
+    }
+    return maxTotalBytes -
+        max(
+          acknowledgementFrameBytes,
+          maxTotalBytes ~/ 4,
+        );
+  }
+
+  static String _defaultSessionPartitionResolver(V3LmfFrame frame) {
+    final sessionId = frame.metadata.sessionId;
+    try {
+      // Test-only/default isolation. Production supplies the durable remote
+      // identity binding so one contact cannot rotate sessions around a cap.
+      final expanded = Uint8List(48);
+      for (var index = 0; index < expanded.length; index++) {
+        expanded[index] = sessionId[index % sessionId.length];
+      }
+      return base64UrlEncode(expanded).replaceAll('=', '');
+    } finally {
+      _wipe(sessionId);
     }
   }
 

@@ -48,14 +48,8 @@ linker_flags() {
 check_symbols() {
   binary=$1
   label=$2
-  actual="$PACKAGE_ROOT/$label-process-symbols.txt"
-  xcrun nm -gU "$binary" |
-    awk '{ name = $NF; sub(/^_/, "", name); if (name ~ /^lg_scka_v1_/) print name }' |
-    sort -u >"$actual"
-  cmp -s "$SYMBOLS" "$actual" || {
-    diff -u "$SYMBOLS" "$actual" >&2 || true
-    fail "Unexpected packaged iOS SCKA export surface for $label"
-  }
+  "$SCRIPT_DIR/verify_scka_export_contract.sh" namespace xcrun "$binary" ||
+    fail "Unexpected packaged iOS SCKA namespace surface for $label"
 }
 
 "$SCRIPT_DIR/build_scka_packaged_apple.sh"

@@ -424,6 +424,11 @@ class MessagesRepositoryCore {
   /// placeholder.
   Future<void> stripEncryptedPlaintext() => _serialized(() async {
         await _ensureLoaded();
+        if (!_hasScope || _storageKey == null) {
+          throw StateError(
+            'Cannot strip message plaintext without an active storage scope',
+          );
+        }
         var changed = false;
         for (var i = 0; i < _messages.length; i++) {
           final m = _messages[i];
@@ -434,6 +439,104 @@ class MessagesRepositoryCore {
         }
         if (changed) {
           await _persistAll();
+          _controller.add(List.unmodifiable(_messages));
+        }
+      });
+
+  /// Strips plaintext from every aggregate decryptable with a known key.
+  ///
+  /// Opaque aggregates are preserved verbatim: deleting them would reveal
+  /// which ciphertext belongs to the identity being reset and would break the
+  /// plausible-deniability contract. Callers may supply the primary key while
+  /// a passphrase context is active so both currently knowable contexts are
+  /// sanitized before identity destruction.
+  Future<void> stripEncryptedPlaintextAcrossKnownContexts({
+    String? scopeToken,
+    Iterable<SecretKey> additionalStorageKeys = const <SecretKey>[],
+  }) =>
+      _serialized(() async {
+        await _ensureLoaded();
+        final effectiveScopeToken = scopeToken ?? _scopeToken;
+        final activeKey = _storageKey;
+        final candidateKeys = <SecretKey>[
+          if (activeKey != null && _scopeToken == effectiveScopeToken)
+            activeKey,
+          ...additionalStorageKeys,
+        ];
+        if ((effectiveScopeToken ?? '').isEmpty || candidateKeys.isEmpty) {
+          throw StateError(
+            'Cannot strip message plaintext without a known scope and key',
+          );
+        }
+
+        final keyPrefix = 'm|$effectiveScopeToken|';
+        final scopedKeys = _box.keys
+            .where((key) => key is String && key.startsWith(keyPrefix))
+            .toList(growable: false);
+        for (final boxKey in scopedKeys) {
+          final raw = _box.get(boxKey);
+          if (raw == null) continue;
+          final persisted = Map<dynamic, dynamic>.from(raw);
+          if (!_isSealedPersistedRecord(persisted)) continue;
+
+          Map<String, dynamic>? decrypted;
+          SecretKey? matchingKey;
+          for (final candidateKey in candidateKeys) {
+            try {
+              decrypted = await _decryptPersistedRecord(
+                persisted,
+                storageKey: candidateKey,
+              );
+            } catch (_) {
+              decrypted = null;
+            }
+            if (decrypted != null) {
+              matchingKey = candidateKey;
+              break;
+            }
+          }
+          final rawMessages = decrypted?['messages'];
+          if (decrypted == null ||
+              matchingKey == null ||
+              rawMessages is! List) {
+            continue;
+          }
+
+          final sanitizedMessages = <Map<String, dynamic>>[];
+          var valid = true;
+          var changed = false;
+          for (final rawMessage in rawMessages) {
+            if (rawMessage is! Map) {
+              valid = false;
+              break;
+            }
+            try {
+              final message = MessageRecord.fromMap(rawMessage);
+              final sanitized =
+                  message.text != null && message.ciphertextBase64 != null
+                      ? message.copyWith(clearText: true)
+                      : message;
+              changed = changed || sanitized.text != message.text;
+              sanitizedMessages.add(sanitized.toMap());
+            } catch (_) {
+              valid = false;
+              break;
+            }
+          }
+          if (!valid || !changed) continue;
+
+          final sanitizedState = Map<String, dynamic>.from(decrypted)
+            ..['messages'] = sanitizedMessages;
+          final encryptedRecord = await SealedMapCipher.encrypt(
+            record: sanitizedState,
+            key: matchingKey,
+          );
+          await _box.put(boxKey, {'encryptedRecord': encryptedRecord});
+        }
+
+        if (_scopeToken == effectiveScopeToken) {
+          _loadFuture = _reloadFromBox();
+          await _loadFuture;
           _controller.add(List.unmodifiable(_messages));
         }
       });

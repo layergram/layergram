@@ -302,12 +302,15 @@ release invariants hold:
 - every security review completed for a release has no unresolved critical
   or high-severity finding.
 
-Layergram 2.0 satisfied this activation gate using the public implementation,
-automated security review, cross-platform packaging, physical-device, carrier,
-QR, fuzzing, migration, and downstream compatibility evidence available for
-the release candidate. Independent external review remains a priority ongoing
-assurance objective and any validated critical or high-severity issue fails the
-next release gate. The required incompatible user transition is defined in
+Layergram 2.0 was activated using the public implementation, automated
+security review, cross-platform packaging, physical-device, carrier, QR,
+fuzzing, migration, and downstream compatibility evidence available for the
+release candidate. That internal release decision is not an external
+cryptographic acceptance of the research construction described above. The
+missing independent review is an explicit open gate being submitted for audit;
+if review does not accept the construction, Layergram must disable or migrate
+it without a silent v2 downgrade. Any validated critical or high-severity
+issue fails the next release gate. The required incompatible user transition is defined in
 [Protocol v3 Migration](PROTOCOL_V3_MIGRATION.md).
 
 ## Primary references

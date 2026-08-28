@@ -191,9 +191,15 @@ This avoids deleting ordinary message records or future opaque archive formats b
 
 Decrypted plaintext for display lives in an in-memory cache
 (`fs_plaintext_cache.dart`) and is cleared on lock, timeout, passphrase expulsion, and app
-lifecycle events (`fs_passphrase_timeout_controller.dart`). On identity reset, all auxiliary
-plaintext records are removed; only the legacy archive (re-derivable from the identity key)
-survives.
+lifecycle events (`fs_passphrase_timeout_controller.dart`). Identity deletion and message
+deletion are independent user choices. If the identity is deleted while messages are retained,
+Layergram strips persisted plaintext from every message aggregate and auxiliary plaintext record
+that can be opened with the primary or currently active passphrase key before destroying those
+keys. Opaque aggregates that cannot be attributed or decrypted with a then-known key are
+preserved verbatim: deleting them merely because the active identity is being removed would
+weaken plausible deniability by linking the ciphertext set to that identity. This is a deliberate
+limited-deniability trade-off, not an anti-forensic guarantee; an unknown historical context may
+still contain encrypted cached plaintext that can become readable if its key is supplied later.
 
 Passphrase-derived contexts are never persisted as profile entries; their settings live only
 inside `fs_pp_v1` records and are visible only while the passphrase is active.
@@ -284,8 +290,9 @@ available Layergram feature.
 - **Decrypted FS plaintext persistence.** To survive app restarts without re-running the
   handshake, decrypted FS plaintext is persisted as an encrypted, padded `fs_pt_v1` auxiliary
   record (not in `MessageRecord.text`). This is a deliberate, documented choice consistent with
-  established clients (Signal/Matrix store decrypted history locally) and preserves plausible
-  deniability because the record is opaque and removed on identity reset.
+  established clients (Signal/Matrix store decrypted history locally). On identity deletion,
+  decryptable records for then-known contexts are removed before their keys are destroyed;
+  unattributable opaque records are preserved so deletion does not identify their owner.
 
 ## References
 

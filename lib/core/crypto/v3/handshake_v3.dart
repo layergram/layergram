@@ -932,7 +932,8 @@ final class V3InitiatorHandshakeResult {
 /// The proof tags are HMACs derived from both the five ordered X25519 outputs
 /// and both ordered ML-KEM shared secrets. Either participant knows the MAC
 /// keys after a valid run, so the wire transcript is not a transferable
-/// signature. No application message path is wired to this class.
+/// signature. The active application runtime reaches this class only through
+/// the durable HP3 controller and the all-or-nothing v3 activation selector.
 abstract final class V3HybridHandshake {
   /// Deterministically resolves two crossed offers for the same identity pair.
   ///

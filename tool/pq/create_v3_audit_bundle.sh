@@ -34,6 +34,12 @@ for required in \
   THREAT_MODEL.md \
   pubspec.yaml \
   pubspec.lock \
+  android/gradlew \
+  android/gradlew.bat \
+  android/gradle/wrapper/gradle-wrapper.jar \
+  android/gradle/wrapper/gradle-wrapper.properties \
+  android/gradle/verification-metadata.xml \
+  android/app/gradle.lockfile \
   third_party/mlkem-native/LICENSE \
   native/layergram_scka/Cargo.toml \
   native/layergram_scka/Cargo.lock \
@@ -44,6 +50,25 @@ for required in \
   specs/PROTOCOL_V3_AUDIT_PACKAGE.md; do
   [[ -f "$required" ]] || fail "Missing required audit input: $required"
 done
+
+expected_gradle_wrapper_jar_sha256='7d3a4ac4de1c32b59bc6a4eb8ecb8e612ccd0cf1ae1e99f66902da64df296172'
+actual_gradle_wrapper_jar_sha256="$({
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum android/gradle/wrapper/gradle-wrapper.jar
+  else
+    shasum -a 256 android/gradle/wrapper/gradle-wrapper.jar
+  fi
+} | awk '{print $1}')"
+[[ "$actual_gradle_wrapper_jar_sha256" == "$expected_gradle_wrapper_jar_sha256" ]] ||
+  fail 'Android Gradle wrapper JAR does not match the official Gradle 8.14 checksum'
+grep -Fxq \
+  'distributionSha256Sum=efe9a3d147d948d7528a9887fa35abcf24ca1a43ad06439996490f77569b02d1' \
+  android/gradle/wrapper/gradle-wrapper.properties ||
+  fail 'Android Gradle 8.14 distribution checksum is missing or changed'
+grep -q '<verification-metadata ' android/gradle/verification-metadata.xml ||
+  fail 'Android strict dependency-verification metadata is empty'
+grep -q '^empty=' android/app/gradle.lockfile ||
+  fail 'Android application dependency lock state is incomplete'
 
 if git ls-files 'specs/private/**' | grep -q .; then
   fail 'Private specifications must not be tracked in the OSS audit snapshot'

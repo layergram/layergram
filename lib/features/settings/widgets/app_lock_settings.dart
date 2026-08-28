@@ -53,10 +53,12 @@ class AppLockSettings extends ConsumerWidget {
     String describeTimeout(BuildContext context, int seconds) {
       if (seconds == 0) return AppStrings.t(context, 'timeoutNow');
       if (seconds < 60) {
-        return AppStrings.t(context, 'timeoutSeconds').replaceAll('{s}', seconds.toString());
+        return AppStrings.t(context, 'timeoutSeconds')
+            .replaceAll('{s}', seconds.toString());
       }
       final mins = (seconds / 60).round();
-      return AppStrings.t(context, 'timeoutMinutes').replaceAll('{m}', mins.toString());
+      return AppStrings.t(context, 'timeoutMinutes')
+          .replaceAll('{m}', mins.toString());
     }
 
     Widget timeoutOption(
@@ -67,7 +69,9 @@ class AppLockSettings extends ConsumerWidget {
     }) {
       final isSelected = value == currentValue;
       return ListTile(
-        leading: isSelected ? const Icon(Icons.check, color: Colors.green) : const SizedBox(width: 24),
+        leading: isSelected
+            ? const Icon(Icons.check, color: Colors.green)
+            : const SizedBox(width: 24),
         title: Text(label),
         onTap: () => Navigator.of(context).pop(value),
       );
@@ -96,7 +100,7 @@ class AppLockSettings extends ConsumerWidget {
 
               await ref.read(appLockServiceProvider).setEnabled(true);
               ref.read(appLockEnabledProvider.notifier).state = true;
-              ref.read(appNeedsUnlockProvider.notifier).state = true;
+              ref.read(appLockRequestTokenProvider.notifier).state++;
             } else {
               await ref.read(appLockServiceProvider).setEnabled(false);
               ref.read(appLockEnabledProvider.notifier).state = false;
@@ -107,27 +111,30 @@ class AppLockSettings extends ConsumerWidget {
         ),
         if (lockEnabled)
           FutureBuilder<bool>(
-          future: lockService.isBiometricSupported(),
-          builder: (context, snapshot) {
-            final supported = snapshot.data ?? false;
-            final isPinOnly = ref.watch(appLockForcePinProvider) || !supported;
+            future: lockService.isBiometricSupported(),
+            builder: (context, snapshot) {
+              final supported = snapshot.data ?? false;
+              final isPinOnly =
+                  ref.watch(appLockForcePinProvider) || !supported;
 
-            return SwitchListTile.adaptive(
-              value: !isPinOnly,
-              title: Text(t(context, 'biometricUnlock')),
-              subtitle: supported ? Text(t(context, 'biometricAvailable')) : null,
-              onChanged: supported
-                  ? (useBiometrics) async {
-                      final usePin = !useBiometrics;
-                      if (usePin && !await ensurePinConfigured()) {
-                        return;
+              return SwitchListTile.adaptive(
+                value: !isPinOnly,
+                title: Text(t(context, 'biometricUnlock')),
+                subtitle:
+                    supported ? Text(t(context, 'biometricAvailable')) : null,
+                onChanged: supported
+                    ? (useBiometrics) async {
+                        final usePin = !useBiometrics;
+                        if (usePin && !await ensurePinConfigured()) {
+                          return;
+                        }
+                        ref.read(appLockForcePinProvider.notifier).state =
+                            usePin;
+                        await lockService.setForcePin(usePin);
                       }
-                      ref.read(appLockForcePinProvider.notifier).state = usePin;
-                      await lockService.setForcePin(usePin);
-                    }
-                  : null,
-            );
-          },
+                    : null,
+              );
+            },
           ),
         if (lockEnabled) ...[
           Padding(
@@ -141,54 +148,85 @@ class AppLockSettings extends ConsumerWidget {
                     subtitle: Text(describeTimeout(context, timeoutSeconds)),
                     contentPadding: EdgeInsets.zero,
                     onTap: () async {
-              final selected = await showModalBottomSheet<int>(
-                context: context,
-                builder: (context) => SafeArea(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 24.0),
-                        child: Text(
-                          t(context, 'chooseTimeout'),
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                      const Divider(height: 1),
-                      Flexible(
-                        child: SingleChildScrollView(
+                      final selected = await showModalBottomSheet<int>(
+                        context: context,
+                        builder: (context) => SafeArea(
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              timeoutOption(context, label: describeTimeout(context, 0), value: 0, currentValue: timeoutSeconds),
-                              timeoutOption(context, label: describeTimeout(context, 15), value: 15, currentValue: timeoutSeconds),
-                              timeoutOption(context, label: describeTimeout(context, 30), value: 30, currentValue: timeoutSeconds),
-                              timeoutOption(context, label: describeTimeout(context, 60), value: 60, currentValue: timeoutSeconds),
-                              timeoutOption(context, label: describeTimeout(context, 120), value: 120, currentValue: timeoutSeconds),
-                              timeoutOption(context, label: describeTimeout(context, 300), value: 300, currentValue: timeoutSeconds),
-                              timeoutOption(context, label: describeTimeout(context, 600), value: 600, currentValue: timeoutSeconds),
-                              timeoutOption(context, label: describeTimeout(context, 900), value: 900, currentValue: timeoutSeconds),
-                              const SizedBox(height: 8),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 16.0, horizontal: 24.0),
+                                child: Text(
+                                  t(context, 'chooseTimeout'),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleLarge
+                                      ?.copyWith(fontWeight: FontWeight.bold),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                              const Divider(height: 1),
+                              Flexible(
+                                child: SingleChildScrollView(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      timeoutOption(context,
+                                          label: describeTimeout(context, 0),
+                                          value: 0,
+                                          currentValue: timeoutSeconds),
+                                      timeoutOption(context,
+                                          label: describeTimeout(context, 15),
+                                          value: 15,
+                                          currentValue: timeoutSeconds),
+                                      timeoutOption(context,
+                                          label: describeTimeout(context, 30),
+                                          value: 30,
+                                          currentValue: timeoutSeconds),
+                                      timeoutOption(context,
+                                          label: describeTimeout(context, 60),
+                                          value: 60,
+                                          currentValue: timeoutSeconds),
+                                      timeoutOption(context,
+                                          label: describeTimeout(context, 120),
+                                          value: 120,
+                                          currentValue: timeoutSeconds),
+                                      timeoutOption(context,
+                                          label: describeTimeout(context, 300),
+                                          value: 300,
+                                          currentValue: timeoutSeconds),
+                                      timeoutOption(context,
+                                          label: describeTimeout(context, 600),
+                                          value: 600,
+                                          currentValue: timeoutSeconds),
+                                      timeoutOption(context,
+                                          label: describeTimeout(context, 900),
+                                          value: 900,
+                                          currentValue: timeoutSeconds),
+                                      const SizedBox(height: 8),
+                                    ],
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
+                      );
 
-              if (selected == null) return;
-              await ref.read(appLockServiceProvider).setTimeoutSeconds(selected);
-              ref.read(appLockTimeoutProvider.notifier).state = selected;
-            },
+                      if (selected == null) return;
+                      await ref
+                          .read(appLockServiceProvider)
+                          .setTimeoutSeconds(selected);
+                      ref.read(appLockTimeoutProvider.notifier).state =
+                          selected;
+                    },
                   ),
                 ),
                 const SizedBox(width: 8),
                 IconButton(
                   onPressed: () {
-                    ref.read(appNeedsUnlockProvider.notifier).state = true;
+                    ref.read(appLockRequestTokenProvider.notifier).state++;
                   },
                   icon: const Icon(Icons.lock),
                   tooltip: t(context, 'lockNow'),
@@ -202,7 +240,7 @@ class AppLockSettings extends ConsumerWidget {
             onTap: () async {
               final hasPin = await lockService.hasPin();
               if (!hasPin) return;
-              
+
               if (!context.mounted) return;
               final newPin = await ChangePinDialog(
                 validateCurrentPin: lockService.validatePin,
