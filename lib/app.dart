@@ -21,6 +21,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/capabilities/chat_folders_capability.dart';
 import 'core/crypto/fs_passphrase_preferences.dart';
 import 'core/crypto/fs_startup_restore.dart';
+import 'core/crypto/models.dart';
 import 'core/crypto/stego_decoder.dart';
 import 'core/providers.dart';
 import 'core/security/app_lock_idle_controller.dart';
@@ -41,6 +42,72 @@ import 'utils/app_platform.dart';
 import 'utils/deep_links.dart';
 import 'utils/sharing.dart';
 
+class IdentityStartupGate extends StatelessWidget {
+  const IdentityStartupGate({
+    super.key,
+    required this.identityFuture,
+    required this.onRetry,
+    required this.missingIdentityBuilder,
+    required this.readyBuilder,
+  });
+
+  final Future<LocalIdentity?> identityFuture;
+  final VoidCallback onRetry;
+  final WidgetBuilder missingIdentityBuilder;
+  final WidgetBuilder readyBuilder;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<LocalIdentity?>(
+      future: identityFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Scaffold(
+            backgroundColor: Colors.transparent,
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (snapshot.hasError) {
+          return Scaffold(
+            backgroundColor: Colors.transparent,
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.person_off_outlined,
+                      size: 44,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      AppStrings.t(context, 'noActiveIdentity'),
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                      onPressed: onRetry,
+                      icon: const Icon(Icons.refresh),
+                      label: Text(AppStrings.t(context, 'retry')),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+        if (snapshot.data == null) {
+          return missingIdentityBuilder(context);
+        }
+        return readyBuilder(context);
+      },
+    );
+  }
+}
+
 class LayergramApp extends ConsumerStatefulWidget {
   const LayergramApp({super.key});
 
@@ -50,7 +117,7 @@ class LayergramApp extends ConsumerStatefulWidget {
 
 class _LayergramAppState extends ConsumerState<LayergramApp>
     with WidgetsBindingObserver {
-  late Future _identityFuture;
+  late Future<LocalIdentity?> _identityFuture;
   late final Future<void> _lockStateFuture;
   late final AppLockIdleController _appLockIdleController;
   late final ExternalIngressCoordinator _externalIngress;
@@ -818,39 +885,33 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
           ),
         );
       },
-      home: FutureBuilder(
-        future: _identityFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Scaffold(
-              backgroundColor: Colors.transparent,
-              body: Center(child: CircularProgressIndicator()),
-            );
-          }
-          if (snapshot.data == null) {
-            return CreateOrRestoreView(
-              onCompleted: (bool isRestore) {
-                _reloadIdentity();
-                if (isRestore) {
-                  // After restore, go to messages (default index 0)
-                  ref.read(appShellInitialIndexProvider.notifier).state = null;
-                } else {
-                  // After create, go to my identity page
-                  // Calculate index: 1 (home) + extraFolders + 1 (identities) = myIdentity index
-                  final caps = ref.read(layergramCapabilitiesProvider);
-                  final extraFolders = caps.chatFolders.isAvailable
-                      ? (ref.read(chatFoldersProvider).valueOrNull ?? const [])
-                      : const <ChatFolder>[];
-                  final myIdentityIndex = 1 + extraFolders.length + 1;
-                  ref.read(appShellInitialIndexProvider.notifier).state =
-                      myIdentityIndex;
-                }
-                setState(() {});
-              },
-            );
-          }
-          return const AppShell();
+      home: IdentityStartupGate(
+        identityFuture: _identityFuture,
+        onRetry: () {
+          _reloadIdentity();
+          setState(() {});
         },
+        missingIdentityBuilder: (context) => CreateOrRestoreView(
+          onCompleted: (bool isRestore) {
+            _reloadIdentity();
+            if (isRestore) {
+              // After restore, go to messages (default index 0)
+              ref.read(appShellInitialIndexProvider.notifier).state = null;
+            } else {
+              // After create, go to my identity page
+              // Calculate index: 1 (home) + extraFolders + 1 (identities) = myIdentity index
+              final caps = ref.read(layergramCapabilitiesProvider);
+              final extraFolders = caps.chatFolders.isAvailable
+                  ? (ref.read(chatFoldersProvider).valueOrNull ?? const [])
+                  : const <ChatFolder>[];
+              final myIdentityIndex = 1 + extraFolders.length + 1;
+              ref.read(appShellInitialIndexProvider.notifier).state =
+                  myIdentityIndex;
+            }
+            setState(() {});
+          },
+        ),
+        readyBuilder: (context) => const AppShell(),
       ),
     );
   }
