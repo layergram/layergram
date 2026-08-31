@@ -286,7 +286,8 @@ impl Participant {
     fn record_secret(&mut self, epoch: u64, secret: [u8; EPOCH_SECRET_BYTES as usize]) {
         if let Some(existing) = self.epoch_secrets.insert(epoch, secret) {
             if existing != secret {
-                panic!("epoch {epoch} produced divergent secrets");
+                // Do not route secret-derived values or branches through the test logger.
+                std::process::abort();
             }
         }
     }
@@ -521,7 +522,8 @@ fn run_stateful_session(session_index: u8) {
     for (epoch, alice_secret) in &alice.epoch_secrets {
         if let Some(bob_secret) = bob.epoch_secrets.get(epoch) {
             if alice_secret != bob_secret {
-                panic!("session {session_index}, epoch {epoch}");
+                // Do not route secret-derived values or branches through the test logger.
+                std::process::abort();
             }
             matching_secrets += 1;
         }
