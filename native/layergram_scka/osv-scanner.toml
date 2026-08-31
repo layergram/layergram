@@ -1,0 +1,4 @@
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0173"
+ignoreUntil = 2027-02-28
+reason = "Transitive build-time proc macro from pinned libcrux 0.0.10; no maintained fixed release is available. Reassess with the upstream cryptography update before expiry."
