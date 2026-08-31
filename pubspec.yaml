@@ -50,7 +50,7 @@ dev_dependencies:
   flutter_launcher_icons: ^0.14.1
   msix: ^3.16.13
   mockito: ^5.4.4
-  build_runner: ^2.4.9
+  build_runner: ^2.16.0
 
 msix_config:
   display_name: Layergram
