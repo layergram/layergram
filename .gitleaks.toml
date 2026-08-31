@@ -1,0 +1,78 @@
+title = "Layergram secret-scanning policy"
+
+[extend]
+useDefault = true
+
+# The default generic API-key rule mistakes checksums, public conformance
+# vectors, and deliberately opaque test scope tokens for credentials. These
+# allowlists are rule-specific: provider-token and private-key rules continue
+# to scan every listed file.
+[[rules]]
+id = "generic-api-key"
+
+  [[rules.allowlists]]
+  description = "Package-manager integrity checksums"
+  paths = [
+    '''(?:^|/)Cargo\.lock$''',
+    '''(?:^|/)Podfile\.lock$''',
+  ]
+
+  [[rules.allowlists]]
+  description = "Published cryptographic conformance vector"
+  paths = [
+    '''^native/layergram_scka/testdata/braid_r1_cross_impl_vector\.txt$''',
+  ]
+
+  [[rules.allowlists]]
+  description = "Synthetic opaque values in narrowly scoped regression tests"
+  paths = [
+    '''^test/core/crypto/v3/application_runtime_owner_v3_test\.dart$''',
+    '''^test/core/crypto/v3/lmf_v3_aux_record_store_test\.dart$''',
+    '''^tool/pq/test_scka_scaffold_windows\.ps1$''',
+  ]
+
+  [[rules.allowlists]]
+  description = "Private-handle field assignment, not embedded key material"
+  condition = "AND"
+  regexTarget = "line"
+  paths = [
+    '''^lib/core/crypto/v3/local_identity_v3\.dart$''',
+  ]
+  regexes = [
+    '''_mlKem768PrivateKeyHandle\s*=\s*mlKem768PrivateKeyHandle''',
+  ]
+
+[[rules]]
+id = "layergram-hardcoded-password"
+description = "Quoted password-like value assigned in source"
+regex = '''(?i)(?:password|passwd|pwd)[a-z0-9_ .-]{0,24}[:=]\s*["']([^\s"']{12,})["']'''
+secretGroup = 1
+entropy = 2.5
+keywords = ["password", "passwd", "pwd"]
+tags = ["credential", "non-provider"]
+
+  [[rules.allowlists]]
+  description = "Explicitly synthetic sentinel values"
+  stopwords = [
+    "dummy",
+    "example",
+    "not-a-secret",
+    "synthetic",
+    "test-only",
+  ]
+
+[[rules]]
+id = "layergram-production-recovery-phrase"
+description = "Recovery phrase embedded outside the test tree"
+path = '''^(?:lib|tool|scripts|\.github|android|ios|macos|linux|windows)/'''
+regex = '''(?i)(?:mnemonic|recovery[_ -]?phrase|seed[_ -]?phrase)[a-z0-9_ .-]{0,40}[:=]\s*["']([a-z]{3,12}(?:\s+[a-z]{3,12}){11,23})["']'''
+secretGroup = 1
+keywords = ["mnemonic", "recovery", "seed"]
+tags = ["identity", "non-provider"]
+
+[[allowlists]]
+description = "Untracked local build and analyzer output"
+paths = [
+  '''^\.dart_tool/''',
+  '''^build/''',
+]

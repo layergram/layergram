@@ -1,0 +1,46 @@
+name: Dart security analysis
+
+on:
+  pull_request:
+    branches:
+      - main
+  merge_group:
+    types:
+      - checks_requested
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dart-security-analysis-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyzer and security invariants
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out the tested revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the pinned Flutter SDK
+        uses: subosito/flutter-action@fd55f4c5af5b953cc57a2be44cb082c8f6635e8e # v2.21.0
+        with:
+          channel: stable
+          flutter-version: 3.41.1
+
+      - name: Resolve locked dependencies
+        run: flutter pub get
+
+      - name: Run the full Dart analyzer
+        run: flutter analyze --fatal-infos --fatal-warnings
+
+      - name: Verify source-level security invariants
+        run: flutter test test/security
