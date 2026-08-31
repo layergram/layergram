@@ -16,7 +16,9 @@ For a complete description of what Layergram protects against, what is explicitl
 
 Please **do not open a public issue** for security vulnerabilities.
 
-Instead, report them privately to **security@layergram.app** with as much of the following information as you can safely share:
+Use [GitHub private vulnerability reporting](https://github.com/layergram/layergram/security/advisories/new) whenever possible. It provides a structured private channel for the report and any coordinated fix. If GitHub reporting is unavailable, email **security@layergram.app**.
+
+Include as much of the following information as you can safely share:
 
 - Affected version or commit
 - Platform and OS version
@@ -27,6 +29,8 @@ Instead, report them privately to **security@layergram.app** with as much of the
 
 If the issue touches cryptography, identity recovery, passphrases, deep links, or steganographic decoding, include a minimal reproducible example whenever possible.
 
+Do not send real private keys, credentials, plaintext conversations, or personal data. If sensitive evidence is necessary, first ask through one of the private reporting channels how to transfer a minimized, redacted sample.
+
 ## Response Expectations
 
 Layergram will make a best effort to:
@@ -35,6 +39,8 @@ Layergram will make a best effort to:
 - Confirm whether the report is in scope and reproducible
 - Work on a fix or mitigation before public disclosure when appropriate
 - Coordinate disclosure timing when a fix is required
+
+The public triage, remediation, verification, and disclosure process is documented in [`SECURITY_RESPONSE.md`](SECURITY_RESPONSE.md). Active incident evidence and pre-disclosure discussion remain private.
 
 ## Scope
 
@@ -47,4 +53,4 @@ This policy covers vulnerabilities affecting the public Layergram repository, in
 - Steganographic encoding and decoding behavior
 - Official release and distribution artifacts produced from this repository
 
-General product questions and non-security bugs should go through the normal public repository channels once the repository is live.
+General product questions and non-security bugs should go through the normal public repository channels.
