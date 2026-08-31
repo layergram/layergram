@@ -285,7 +285,10 @@ impl Participant {
 
     fn record_secret(&mut self, epoch: u64, secret: [u8; EPOCH_SECRET_BYTES as usize]) {
         if let Some(existing) = self.epoch_secrets.insert(epoch, secret) {
-            assert_eq!(existing, secret, "epoch {epoch} produced divergent secrets");
+            assert!(
+                existing == secret,
+                "epoch {epoch} produced divergent secrets"
+            );
         }
     }
 
@@ -518,8 +521,8 @@ fn run_stateful_session(session_index: u8) {
     let mut matching_secrets = 0_usize;
     for (epoch, alice_secret) in &alice.epoch_secrets {
         if let Some(bob_secret) = bob.epoch_secrets.get(epoch) {
-            assert_eq!(
-                alice_secret, bob_secret,
+            assert!(
+                alice_secret == bob_secret,
                 "session {session_index}, epoch {epoch}"
             );
             matching_secrets += 1;

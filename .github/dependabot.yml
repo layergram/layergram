@@ -1,0 +1,56 @@
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "03:19"
+      timezone: Atlantic/Canary
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: pub
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "03:29"
+      timezone: Atlantic/Canary
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: cargo
+    directory: /native/layergram_scka
+    schedule:
+      interval: weekly
+      day: monday
+      time: "03:39"
+      timezone: Atlantic/Canary
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: cargo
+    directory: /native/layergram_scka/fuzz
+    schedule:
+      interval: weekly
+      day: monday
+      time: "03:49"
+      timezone: Atlantic/Canary
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: gradle
+    directory: /android
+    schedule:
+      interval: weekly
+      day: monday
+      time: "04:09"
+      timezone: Atlantic/Canary
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: pip
+    directory: /tool/pq
+    schedule:
+      interval: weekly
+      day: monday
+      time: "04:19"
+      timezone: Atlantic/Canary
+    open-pull-requests-limit: 3
