@@ -49,5 +49,8 @@ the tracked lockfiles and treat unsupported ecosystems, build-tool downloads,
 platform SDKs, and store-side processing as explicit scope boundaries.
 
 Dependency vulnerability monitoring is complementary to the SBOM. The scheduled
-OSV scan covers recognized lockfiles, while [`SECURITY.md`](SECURITY.md) explains
-how to report gaps or vulnerable components privately.
+OSV scan covers the recognized source lockfiles and a filtered Android release
+runtime lock. Gradle verification metadata and non-release configurations remain
+available for provenance and build review without being treated as shipped app
+dependencies. [`SECURITY.md`](SECURITY.md) explains how to report gaps or
+vulnerable components privately.
