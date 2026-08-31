@@ -1,9 +1,12 @@
-// Verification test: given the real mnemonics of Alex and Sofia, derive both
-// v1 and v2 public keys and check which one matches the previously shared
-// identity links. This pinpoints whether the app is generating v2 links correctly.
+// Regression coverage for deterministic v1/v2 identity derivation and the
+// encryption behavior when peers use matching or mismatched key versions.
+//
+// Mnemonics are generated from fixed, published test entropy. No production
+// identity, recovery phrase, private key, or diagnostic identity is embedded.
 
 import 'dart:convert';
 
+import 'package:bip39/bip39.dart' as bip39;
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -14,24 +17,15 @@ import 'package:layergram/core/storage/secure_storage.dart';
 
 import '../../test_diagnostics.dart';
 
-// ── Real mnemonics (demo accounts for manual) ─────────────────────────────
+const _alexEntropyHex =
+    '000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f';
+const _sofiaEntropyHex =
+    'f0e0d0c0b0a0908070605040302010000f1e2d3c4b5a69788796a5b4c3d2e1f0';
 
-const _alexMnemonic =
-    'flush walk occur casino private boat impact snake tunnel marine mercy trigger '
-    'shallow cycle welcome fantasy spare rough rescue once cage gloom tennis reason';
+final _alexMnemonic = bip39.entropyToMnemonic(_alexEntropyHex);
+final _sofiaMnemonic = bip39.entropyToMnemonic(_sofiaEntropyHex);
 
-const _sofiaMnemonic =
-    'undo journey error milk end march couple reunion sugar depth educate marriage '
-    'aware agent dial simple cloud stem parade melody cheap marble junior grain';
-
-// Public keys decoded from the previously shared links:
-//   layergram://i/eyJ2IjoxLCJpZCI6IlNKNDU2NkJUM09aVFVSUlRaN0lNNVFaS0JSTjRKWUdLWUVBMkhaSU5WUDdEWEFOVElKT0EiLCJwayI6IllhSTZzT2l0c0dpNWxFSHhpTGxLdUJ0UVNFU2RLZ2hjMTlNbWltVFo2Z1k9IiwiZnAiOiI5Mi03OS1ERi03OC0zMy1EQi1CMy0zQSIsIm4iOiJBbGV4In0.z3O9g58_
-//   layergram://i/eyJ2IjoxLCJpZCI6IlhFVTQyTFFXTzNDWEkyTVRJNFRMSFdZS0RMUTJERjNPVFpUN1ZEUlRLRUk2MkNGSklZS0EiLCJwayI6IjFsb2gxYnhPQllxUXVqaGUwMkM0Q1ZzWmNFK005KzZsa0pRY3Zmc1ZTRTg9IiwiZnAiOiJCOS0yOS1DRC0yRS0xNi03Ni1DNS03NCIsIm4iOiJTb2ZpYSJ9.AYtqi696
-
-const _alexLinkPk = 'YaI6sOitsGi5lEHxiLlKuBtQSESdKghc19MmimTZ6gY=';
-const _sofiaLinkPk = '1loh1bxOBYqQujhe02C4CVsZcE+M9+6lkJQcvfsVSE8=';
-
-// ── In-memory vault ───────────────────────────────────────────────────────
+// In-memory vault used only by this regression suite.
 
 class _MemStorage extends SecureStorageService {
   final _s = <String, String>{};
@@ -77,31 +71,6 @@ void main() {
       diagnosticLog('Alex v2  id: ${id.identityId}');
       expect(id.publicKeyBase64, isNotEmpty);
     });
-
-    test('WHICH VERSION matches the shared Alex link?', () async {
-      final mgrV1 = _mgr();
-      final mgrV2 = _mgr();
-
-      final v1 = await mgrV1.restoreIdentityFromMnemonic(_alexMnemonic,
-          displayName: 'Alex', derivationVersion: IdentityDerivationVersion.v1);
-      final v2 = await mgrV2.restoreIdentityFromMnemonic(_alexMnemonic,
-          displayName: 'Alex', derivationVersion: IdentityDerivationVersion.v2);
-
-      final matchesV1 = v1.publicKeyBase64 == _alexLinkPk;
-      final matchesV2 = v2.publicKeyBase64 == _alexLinkPk;
-      diagnosticLog('\n>>> Alex link pk: $_alexLinkPk');
-      diagnosticLog(
-          '>>> Alex v1   pk: ${v1.publicKeyBase64}  match=$matchesV1');
-      diagnosticLog(
-          '>>> Alex v2   pk: ${v2.publicKeyBase64}  match=$matchesV2');
-
-      // NOTE: the links provided were from identities created with createNewIdentity
-      // (random keypairs, v2) — not from these mnemonics. After the bug fix,
-      // restoring from mnemonic now uses v2. The test below verifies the important
-      // property: create and restore from same mnemonic must yield the same key.
-      diagnosticLog(
-          '>>> (Links were from different random keypairs, not these mnemonics)');
-    });
   });
 
   group('Mnemonic → public key derivation (Sofia)', () {
@@ -129,28 +98,6 @@ void main() {
       diagnosticLog('Sofia v2  fp: ${id.fingerprint}');
       diagnosticLog('Sofia v2  id: ${id.identityId}');
       expect(id.publicKeyBase64, isNotEmpty);
-    });
-
-    test('WHICH VERSION matches the shared Sofia link?', () async {
-      final mgrV1 = _mgr();
-      final mgrV2 = _mgr();
-
-      final v1 = await mgrV1.restoreIdentityFromMnemonic(_sofiaMnemonic,
-          displayName: 'Sofia',
-          derivationVersion: IdentityDerivationVersion.v1);
-      final v2 = await mgrV2.restoreIdentityFromMnemonic(_sofiaMnemonic,
-          displayName: 'Sofia',
-          derivationVersion: IdentityDerivationVersion.v2);
-
-      final matchesV1 = v1.publicKeyBase64 == _sofiaLinkPk;
-      final matchesV2 = v2.publicKeyBase64 == _sofiaLinkPk;
-      diagnosticLog('\n>>> Sofia link pk: $_sofiaLinkPk');
-      diagnosticLog(
-          '>>> Sofia v1   pk: ${v1.publicKeyBase64}  match=$matchesV1');
-      diagnosticLog(
-          '>>> Sofia v2   pk: ${v2.publicKeyBase64}  match=$matchesV2');
-      diagnosticLog(
-          '>>> (Links were from different random keypairs, not these mnemonics)');
     });
   });
 
@@ -197,7 +144,8 @@ void main() {
               'ECDH shared secret must be equal for both parties with v2 keys');
     });
 
-    test('v2 keys: full encryption roundtrip Sofia→Alex with real mnemonics',
+    test(
+        'v2 keys: full encryption roundtrip Sofia→Alex with synthetic mnemonics',
         () async {
       final seedSvc = SeedService();
 
@@ -224,21 +172,16 @@ void main() {
       final alexPubB64 = base64Encode(alexPubBytes);
       final sofiaPubB64 = base64Encode(sofiaPubBytes);
       diagnosticLog('\n>>> Alex v2 pub (derived from mnemonic): $alexPubB64');
-      diagnosticLog('>>> Alex link pk (from shared link):     $_alexLinkPk');
-      diagnosticLog('>>> Alex pub matches link: ${alexPubB64 == _alexLinkPk}');
       diagnosticLog('');
       diagnosticLog('>>> Sofia v2 pub (derived from mnemonic): $sofiaPubB64');
-      diagnosticLog('>>> Sofia link pk (from shared link):     $_sofiaLinkPk');
-      diagnosticLog(
-          '>>> Sofia pub matches link: ${sofiaPubB64 == _sofiaLinkPk}');
 
       // Sofia encrypts to Alex.
-      const secret = 'user: admin\npassword: jusg-Yets!gJdh@GTfJ';
+      const payload = 'Layergram test-only encrypted payload.';
       final enc = _SimpleEncryptionService();
       final (nonce: nonce, ciphertext: ct) = await enc.encrypt(
         senderPriv: sofiaPrivB64,
         recipientPub: alexPubB64,
-        plaintext: secret,
+        plaintext: payload,
       );
 
       // Alex decrypts with correct v2 key.
@@ -250,13 +193,13 @@ void main() {
       );
       diagnosticLog('\n>>> Decrypted text: $decrypted');
 
-      expect(decrypted, equals(secret),
+      expect(decrypted, equals(payload),
           reason:
               'Alex must be able to decrypt Sofia\'s message using v2 keys');
     });
 
     test(
-        'v1 keys: full encryption roundtrip Sofia→Alex with real mnemonics (should also work)',
+        'v1 keys: full encryption roundtrip Sofia→Alex with synthetic mnemonics (should also work)',
         () async {
       final seedSvc = SeedService();
 
@@ -283,16 +226,13 @@ void main() {
       final alexPubB64 = base64Encode(alexPubBytes);
       final sofiaPubB64 = base64Encode(sofiaPubBytes);
       diagnosticLog('\n>>> Alex v1 pub (derived from mnemonic): $alexPubB64');
-      diagnosticLog('>>> Alex link pk (from shared link):     $_alexLinkPk');
-      diagnosticLog(
-          '>>> Alex v1 pub matches link: ${alexPubB64 == _alexLinkPk}');
 
-      const secret = 'user: admin\npassword: jusg-Yets!gJdh@GTfJ';
+      const payload = 'Layergram test-only encrypted payload.';
       final enc = _SimpleEncryptionService();
       final (nonce: nonce, ciphertext: ct) = await enc.encrypt(
         senderPriv: sofiaPrivB64,
         recipientPub: alexPubB64,
-        plaintext: secret,
+        plaintext: payload,
       );
 
       final decrypted = await enc.decrypt(
@@ -302,7 +242,7 @@ void main() {
         ciphertext: ct,
       );
 
-      expect(decrypted, equals(secret));
+      expect(decrypted, equals(payload));
     });
 
     test('KEY VERSION MISMATCH: Sofia v2 → Alex v1 link CANNOT decrypt',
@@ -344,7 +284,7 @@ void main() {
       final (nonce: n1, ciphertext: c1) = await enc.encrypt(
         senderPriv: sofiaPrivV2B64,
         recipientPub: alexPubV2,
-        plaintext: 'secret message',
+        plaintext: 'synthetic test message',
       );
       final okDecrypt = await enc.decrypt(
         recipientPriv: alexPrivV2B64,
@@ -352,7 +292,8 @@ void main() {
         nonce: n1,
         ciphertext: c1,
       );
-      expect(okDecrypt, equals('secret message'), reason: 'v2→v2 must work');
+      expect(okDecrypt, equals('synthetic test message'),
+          reason: 'v2→v2 must work');
 
       // Sofia (v2) encrypts TO Alex v2 public key → Alex tries to decrypt with v1 → FAIL
       final wrongDecrypt = await enc.decrypt(
@@ -410,68 +351,12 @@ void main() {
           derivationVersion: IdentityDerivationVersion.v1);
       expect(restoredV1.publicKeyBase64, isNot(equals(alexPubV2)),
           reason:
-              'v1 restore must NOT equal v2 create — confirms the bug was real');
+              'v1 restore must NOT equal v2 create — confirms the derivation versions differ');
       diagnosticLog('\n>>> Alex v2 create pk: $alexPubV2');
       diagnosticLog(
           '>>> Alex v2 restore pk: ${restoredV2.publicKeyBase64}  match=${restoredV2.publicKeyBase64 == alexPubV2}');
       diagnosticLog(
           '>>> Alex v1 restore pk: ${restoredV1.publicKeyBase64}  (must differ)');
-    });
-
-    test('SUMMARY: link pk matches v1 or v2 for both Alex and Sofia', () async {
-      final seedSvc = SeedService();
-      final x25519 = X25519();
-
-      Future<String> pubB64(
-          String mnemonic, IdentityDerivationVersion ver) async {
-        final seed = seedSvc.mnemonicToSeed(mnemonic);
-        final priv = await seedSvc.deriveIdentityPrivateKey(seed, version: ver);
-        final pub =
-            await (await x25519.newKeyPairFromSeed(priv)).extractPublicKey();
-        return base64Encode(pub.bytes);
-      }
-
-      final alexV1 = await pubB64(_alexMnemonic, IdentityDerivationVersion.v1);
-      final alexV2 = await pubB64(_alexMnemonic, IdentityDerivationVersion.v2);
-      final sofiaV1 =
-          await pubB64(_sofiaMnemonic, IdentityDerivationVersion.v1);
-      final sofiaV2 =
-          await pubB64(_sofiaMnemonic, IdentityDerivationVersion.v2);
-      diagnosticLog(
-          '\n╔══════════════════════════════════════════════════════╗');
-      diagnosticLog('║              KEY VERSION SUMMARY                     ║');
-      diagnosticLog('╠══════════════════════════════════════════════════════╣');
-      diagnosticLog('║ Alex  link pk: $_alexLinkPk');
-      diagnosticLog(
-          '║ Alex  v1   pk: $alexV1  [match=${alexV1 == _alexLinkPk}]');
-      diagnosticLog(
-          '║ Alex  v2   pk: $alexV2  [match=${alexV2 == _alexLinkPk}]');
-      diagnosticLog('╠══════════════════════════════════════════════════════╣');
-      diagnosticLog('║ Sofia link pk: $_sofiaLinkPk');
-      diagnosticLog(
-          '║ Sofia v1   pk: $sofiaV1  [match=${sofiaV1 == _sofiaLinkPk}]');
-      diagnosticLog(
-          '║ Sofia v2   pk: $sofiaV2  [match=${sofiaV2 == _sofiaLinkPk}]');
-      diagnosticLog('╚══════════════════════════════════════════════════════╝');
-
-      // The links were generated from random keypairs (createNewIdentity) on the device,
-      // NOT from these demo mnemonics. So no version will match — that is expected and
-      // confirms the bug scenario: the user shared links from original random-key identities,
-      // then "restored" using these mnemonics which produced different v1 keys.
-      // After the fix, a fresh restore from mnemonic will produce v2 keys and new links
-      // must be shared.
-      final alexMatches = alexV1 == _alexLinkPk || alexV2 == _alexLinkPk;
-      final sofiaMatches = sofiaV1 == _sofiaLinkPk || sofiaV2 == _sofiaLinkPk;
-      diagnosticLog(
-          '>>> Alex  link matches a mnemonic-derived key: $alexMatches  (expected: false)');
-      diagnosticLog(
-          '>>> Sofia link matches a mnemonic-derived key: $sofiaMatches (expected: false)');
-      expect(alexMatches, isFalse,
-          reason:
-              'Confirms: links were from different random keypairs, not these mnemonics');
-      expect(sofiaMatches, isFalse,
-          reason:
-              'Confirms: links were from different random keypairs, not these mnemonics');
     });
   });
 

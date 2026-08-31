@@ -1,11 +1,14 @@
-// Diagnostic tests using the real public keys from Alex and Sofia's identity
-// links to reproduce and pinpoint the decryption failure.
+// Regression coverage for identity-link binding, deterministic SAS, legacy
+// derivation mismatches, and the complete encryption/steganography round trip.
 //
-// Alex link:  layergram://i/eyJ2IjoxLCJpZCI6IlNKNDU2NkJUM09aVFVSUlRaN0lNNVFaS0JSTjRKWUdLWUVBMkhaSU5WUDdEWEFOVElKT0EiLCJwayI6IllhSTZzT2l0c0dpNWxFSHhpTGxLdUJ0UVNFU2RLZ2hjMTlNbWltVFo2Z1k9IiwiZnAiOiI5Mi03OS1ERi03OC0zMy1EQi1CMy0zQSIsIm4iOiJBbGV4In0.z3O9g58_
-// Sofia link: layergram://i/eyJ2IjoxLCJpZCI6IlhFVTQyTFFXTzNDWEkyTVRJNFRMSFdZS0RMUTJERjNPVFpUN1ZEUlRLRUk2MkNGSklZS0EiLCJwayI6IjFsb2gxYnhPQllxUXVqaGUwMkM0Q1ZzWmNFK005KzZsa0pRY3Zmc1ZTRTg9IiwiZnAiOiJCOS0yOS1DRC0yRS0xNi03Ni1DNS03NCIsIm4iOiJTb2ZpYSJ9.AYtqi696
+// All identities and message content in this file are synthetic test fixtures.
+// No production identity, private key, recovery phrase, or credential is used.
 
 import 'dart:convert';
+import 'dart:typed_data';
 
+import 'package:base32/base32.dart';
+import 'package:crypto/crypto.dart';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -22,22 +25,50 @@ import 'package:layergram/features/contact_verification/contact_sas_service.dart
 
 import '../../test_diagnostics.dart';
 
-// ── Real identity data decoded from the provided links ──────────────────────
+final _alexIdentity = _syntheticLegacyIdentity(
+  displayName: 'Synthetic Alex',
+  domain: 'alex',
+);
+final _sofiaIdentity = _syntheticLegacyIdentity(
+  displayName: 'Synthetic Sofia',
+  domain: 'sofia',
+);
+final _alexLink = IdentityLinkCodec.encode(_alexIdentity);
+final _sofiaLink = IdentityLinkCodec.encode(_sofiaIdentity);
 
-// Alex:  id=SJ4566BT3OZTURRTZ7IM5QZKBRN4JYGKYEA2HZINVP7DXANTIJOA  pk=YaI6sOitsGi5lEHxiLlKuBtQSESdKghc19MmimTZ6gY=
-// Sofia: id=XEU42LQWO3CXI2MTI4TLHWYKDLQ2DF3OTZT7VDRTKEI62CFJIYKA   pk=1loh1bxOBYqQujhe02C4CVsZcE+M9+6lkJQcvfsVSE8=
+const _coverText =
+    'This deliberately synthetic cover message is long enough for the '
+    'regression payload while remaining ordinary prose. It represents content '
+    'transported through another application and contains no credential or '
+    'private information.';
+const _payload = 'Layergram test-only encrypted payload.';
 
-const _alexLink =
-    'layergram://i/eyJ2IjoxLCJpZCI6IlNKNDU2NkJUM09aVFVSUlRaN0lNNVFaS0JSTjRKWUdLWUVBMkhaSU5WUDdEWEFOVElKT0EiLCJwayI6IllhSTZzT2l0c0dpNWxFSHhpTGxLdUJ0UVNFU2RLZ2hjMTlNbWltVFo2Z1k9IiwiZnAiOiI5Mi03OS1ERi03OC0zMy1EQi1CMy0zQSIsIm4iOiJBbGV4In0.z3O9g58_';
-const _sofiaLink =
-    'layergram://i/eyJ2IjoxLCJpZCI6IlhFVTQyTFFXTzNDWEkyTVRJNFRMSFdZS0RMUTJERjNPVFpUN1ZEUlRLRUk2MkNGSklZS0EiLCJwayI6IjFsb2gxYnhPQllxUXVqaGUwMkM0Q1ZzWmNFK005KzZsa0pRY3Zmc1ZTRTg9IiwiZnAiOiJCOS0yOS1DRC0yRS0xNi03Ni1DNS03NCIsIm4iOiJTb2ZpYSJ9.AYtqi696';
+LocalIdentity _syntheticLegacyIdentity({
+  required String displayName,
+  required String domain,
+}) {
+  final publicKey = sha256
+      .convert(
+        utf8.encode('layergram-public-test-only:$domain'),
+      )
+      .bytes;
+  final bindingHash = sha256.convert(publicKey).bytes;
+  final identityId =
+      base32.encode(Uint8List.fromList(bindingHash)).replaceAll('=', '');
+  final fingerprint = bindingHash
+      .take(8)
+      .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+      .join('-')
+      .toUpperCase();
 
-// The cover + secret message provided by the user
-const _cover =
-    'Hi Alex, I\'m sending you the login credentials to access the backend panel. '
-    'Please keep them secure and remember to log out at the end of each work session '
-    'or whenever you leave your desk unattended.';
-const _secret = 'user: admin\npassword: jusg-Yets!gJdh@GTfJ';
+  return LocalIdentity(
+    identityId: identityId,
+    publicKeyBase64: base64Encode(publicKey),
+    fingerprint: fingerprint,
+    displayName: displayName,
+    mnemonic: 'test-only synthetic identity without private material',
+  );
+}
 
 class _MemStorage extends SecureStorageService {
   final _s = <String, String>{};
@@ -62,19 +93,17 @@ void main() {
   group('Identity link parsing', () {
     test('Alex link parses to the expected public key and fingerprint', () {
       final alex = IdentityLinkCodec.decode(_alexLink);
-      expect(alex.publicKeyBase64,
-          equals('YaI6sOitsGi5lEHxiLlKuBtQSESdKghc19MmimTZ6gY='));
-      expect(alex.fingerprint, equals('92-79-DF-78-33-DB-B3-3A'));
-      expect(alex.displayName, equals('Alex'));
+      expect(alex.publicKeyBase64, equals(_alexIdentity.publicKeyBase64));
+      expect(alex.fingerprint, equals(_alexIdentity.fingerprint));
+      expect(alex.displayName, equals(_alexIdentity.displayName));
       expect(alex.publicKeyBase64.length, greaterThan(30));
     });
 
     test('Sofia link parses to the expected public key and fingerprint', () {
       final sofia = IdentityLinkCodec.decode(_sofiaLink);
-      expect(sofia.publicKeyBase64,
-          equals('1loh1bxOBYqQujhe02C4CVsZcE+M9+6lkJQcvfsVSE8='));
-      expect(sofia.fingerprint, equals('B9-29-CD-2E-16-76-C5-74'));
-      expect(sofia.displayName, equals('Sofia'));
+      expect(sofia.publicKeyBase64, equals(_sofiaIdentity.publicKeyBase64));
+      expect(sofia.fingerprint, equals(_sofiaIdentity.fingerprint));
+      expect(sofia.displayName, equals(_sofiaIdentity.displayName));
     });
 
     test('Alex and Sofia have different public keys', () {
@@ -83,7 +112,8 @@ void main() {
       expect(alex.publicKeyBase64, isNot(equals(sofia.publicKeyBase64)));
     });
 
-    test('Both public keys are valid 32-byte X25519 points', () {
+    test('Both synthetic legacy public keys use the canonical 32-byte form',
+        () {
       final alex = IdentityLinkCodec.decode(_alexLink);
       final sofia = IdentityLinkCodec.decode(_sofiaLink);
       expect(base64Decode(alex.publicKeyBase64).length, equals(32));
@@ -99,7 +129,7 @@ void main() {
     final sofia = IdentityLinkCodec.decode(_sofiaLink);
 
     test(
-        'SAS digits derived from real keys are the same on every call (not time-based)',
+        'SAS digits derived from synthetic keys are the same on every call (not time-based)',
         () async {
       final r1 = await sas.derive(
           localPublicKeyBase64: alex.publicKeyBase64,
@@ -128,12 +158,12 @@ void main() {
           reason: 'Both must see identical emoji');
     });
 
-    test('Print the expected SAS so user can compare with device', () async {
+    test('synthetic SAS has stable presentation fields', () async {
       final code = await sas.derive(
         localPublicKeyBase64: alex.publicKeyBase64,
         peerPublicKeyBase64: sofia.publicKeyBase64,
       );
-      // This test always passes — it just prints the ground-truth SAS.
+      // Diagnostic output is derived exclusively from synthetic inputs.
       diagnosticLog('\n>>> Expected SAS (Alex ↔ Sofia)');
       diagnosticLog('    digits: ${code.digits}');
       diagnosticLog('    emoji indices: ${code.emojiIndices}');
@@ -210,7 +240,7 @@ void main() {
         payload: PlaintextPayload(
           senderId: sofiaV2.identityId,
           recipientId: 'alex',
-          text: _secret,
+          text: _payload,
           timestamp: 1700000000,
           senderDisplayName: 'Sofia',
         ),
@@ -228,7 +258,7 @@ void main() {
       expect(correctDecrypt, isNotNull,
           reason:
               'Alex must decrypt when using Sofia\'s correct v2 public key');
-      expect(correctDecrypt!.text, equals(_secret));
+      expect(correctDecrypt!.text, equals(_payload));
 
       // Alex decrypts with Sofia's V1 public key → FAIL (wrong key, different ECDH).
       final wrongDecrypt = await enc.tryDecryptWithKey(
@@ -246,12 +276,12 @@ void main() {
 
   // ── 4. Full stego roundtrip with Sofia→Alex cover message ────────────────
 
-  group('Stego roundtrip: Sofia cover message to Alex', () {
+  group('Stego roundtrip: synthetic cover message to Alex', () {
     test('cover text is long enough to embed a typical secret payload', () {
       final estimatedBytes =
-          StegoEncoder.estimatedEncryptedPayloadBytes(_secret);
+          StegoEncoder.estimatedEncryptedPayloadBytes(_payload);
       final minCover = StegoEncoder.minCoverLengthForBytes(estimatedBytes);
-      final coverLen = StegoEncoder.visibleCharacterCount(_cover);
+      final coverLen = StegoEncoder.visibleCharacterCount(_coverText);
       diagnosticLog('\n>>> Secret payload estimate: $estimatedBytes bytes');
       diagnosticLog('>>> Min cover chars needed:  $minCover');
       diagnosticLog('>>> Actual cover chars:      $coverLen');
@@ -261,7 +291,7 @@ void main() {
           reason: 'Cover text must be long enough to embed the secret');
     });
 
-    test('full stego+encryption roundtrip with the provided cover and secret',
+    test('full stego+encryption roundtrip with the synthetic cover and payload',
         () async {
       // We don't have Sofia's private key, so we use a fresh key pair whose
       // PUBLIC key we will tell "Alex" to expect (simulating the protocol).
@@ -288,7 +318,7 @@ void main() {
         payload: PlaintextPayload(
           senderId: 'sofia',
           recipientId: 'alex',
-          text: _secret,
+          text: _payload,
           timestamp: 1700000000,
           senderDisplayName: 'Sofia',
         ),
@@ -296,7 +326,7 @@ void main() {
       final encrypted = encResult.message;
 
       // Sofia embeds in cover text.
-      final hiddenMsg = encoder.encodeBytes(_cover, encrypted.toRawBytes());
+      final hiddenMsg = encoder.encodeBytes(_coverText, encrypted.toRawBytes());
 
       // Alex decodes and decrypts.
       final candidates = decoder.decodeByteCandidates(hiddenMsg);
@@ -321,12 +351,12 @@ void main() {
 
       expect(decrypted, isNotNull,
           reason: 'Alex must be able to decrypt Sofia\'s message');
-      expect(decrypted!.text, equals(_secret));
+      expect(decrypted!.text, equals(_payload));
     });
 
     test('wrong key (v1 public key mismatch) cannot decrypt stego message',
         () async {
-      // This reproduces the exact reported failure:
+      // This reproduces the key-version mismatch failure:
       // Sofia uses v2, Alex imported a v1 link → decryption fails silently.
       final sofiaV2Pair = await X25519().newKeyPair();
       final sofiaV2Priv =
@@ -351,13 +381,13 @@ void main() {
         payload: PlaintextPayload(
           senderId: 'sofia',
           recipientId: 'alex',
-          text: _secret,
+          text: _payload,
           timestamp: 1700000000,
         ),
       );
 
       final hiddenMsg =
-          encoder.encodeBytes(_cover, encResult.message.toRawBytes());
+          encoder.encodeBytes(_coverText, encResult.message.toRawBytes());
       final candidates = decoder.decodeByteCandidates(hiddenMsg);
       expect(candidates, isNotEmpty);
 
@@ -381,7 +411,7 @@ void main() {
       expect(wrongDecrypt, isNull,
           reason:
               'With wrong public key for Sofia, decryption must silently fail — '
-              'this is exactly what the user experiences');
+              'this is the expected key-version mismatch behavior');
     });
   });
 

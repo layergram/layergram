@@ -1,0 +1,38 @@
+name: Non-provider secret scanning
+
+on:
+  pull_request:
+    branches:
+      - main
+  merge_group:
+    types:
+      - checks_requested
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: '11 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: non-provider-secret-scanning-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  history:
+    name: Gitleaks full-history scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out the complete scanned history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Scan provider and non-provider secret patterns
+        shell: bash
+        run: tool/security/gitleaks.sh history

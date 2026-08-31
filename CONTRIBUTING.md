@@ -127,6 +127,25 @@ As a general rule:
 
 Before submitting a PR, run the relevant tooling used by the repository, including formatting, analysis, and tests.
 
+For the public repository, the minimum security checks are:
+
+```bash
+flutter analyze --fatal-infos --fatal-warnings
+flutter test test/security
+tool/security/gitleaks.sh working-tree
+```
+
+Run `tool/security/install_git_hooks.sh` once after cloning to enable the
+repository-managed pre-commit secret scan. The hook downloads the pinned
+Gitleaks release on first use, verifies its SHA-256 checksum, and scans staged
+content with redacted output before a commit is created.
+
+Test vectors must use clearly synthetic, reproducible material. Never paste a
+real recovery phrase, private key, credential, or diagnostic identity into a
+fixture. When a cryptographic public vector triggers a false positive, add the
+narrowest rule-specific allowlist with an explanatory comment; do not exclude
+the complete test tree from secret scanning.
+
 ---
 
 ## 8. Security and cryptography

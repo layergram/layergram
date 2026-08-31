@@ -31,6 +31,27 @@ If the issue touches cryptography, identity recovery, passphrases, deep links, o
 
 Do not send real private keys, credentials, plaintext conversations, or personal data. If sensitive evidence is necessary, first ask through one of the private reporting channels how to transfer a minimized, redacted sample.
 
+## Automated Security Baseline
+
+Layergram uses complementary controls because no single scanner covers every
+language and security boundary in this repository:
+
+- CodeQL scans the languages it supports in the repository.
+- The complete Flutter/Dart source is checked with fatal analyzer diagnostics
+  and strict cast analysis on every pull request and default-branch update.
+- Source-level security invariant tests reject direct runtime logging,
+  non-secure randomness in cryptographic and encrypted-storage code,
+  certificate-validation bypasses, and plaintext preference dependencies in
+  the cryptographic core.
+- GitHub secret scanning and push protection are complemented by a pinned,
+  checksum-verified Gitleaks scan of the complete Git history and by an
+  optional repository-managed local pre-commit hook.
+- Dependency lockfiles are checked with OSV-Scanner.
+
+Automated analysis reduces preventable mistakes but is not presented as a
+substitute for independent cryptographic review, protocol analysis, or a
+professional security audit.
+
 ## Response Expectations
 
 Layergram will make a best effort to:
