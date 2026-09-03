@@ -34,8 +34,11 @@ records both exploitability and user impact rather than relying on a label alone
 
 ## Lifecycle
 
-1. **Receive privately.** Keep reports out of public issues and discussions.
-   Acknowledge receipt within the target stated in [`SECURITY.md`](SECURITY.md).
+1. **Receive privately.** Keep reports, exploit details, and proposed security
+   fixes out of public issues and pull requests. Acknowledge receipt within the
+   target stated in [`SECURITY.md`](SECURITY.md). A public patch is not a
+   substitute for private triage and may be closed without review to limit
+   disclosure.
 2. **Protect evidence.** Ask reporters to remove real credentials, private keys,
    plaintext, and personal data. Do not run untrusted proof-of-concept material
    on signing, release, or everyday development machines.

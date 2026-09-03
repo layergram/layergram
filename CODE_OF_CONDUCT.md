@@ -135,6 +135,9 @@ This Code of Conduct works together with:
 - The project license and any future Contributor License Agreement (CLA), which define legal terms for contributions.
 
 By participating in this project, you agree to follow this Code of Conduct in all project-related spaces.
+Following the Code of Conduct does not create a right to have an issue or pull
+request reviewed, accepted, merged, or released. Contribution scope and review
+capacity are governed by `CONTRIBUTING.md`.
 
 ---
 

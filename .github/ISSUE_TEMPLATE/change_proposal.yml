@@ -1,0 +1,71 @@
+name: Change proposal
+description: Propose a focused change and request scope approval before implementation.
+title: "[Proposal]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Layergram is maintainer-led and review capacity is limited. Open this proposal **before writing code**.
+
+        An open or positively discussed proposal is not approval to implement. Wait for an explicit maintainer statement accepting the exact scope before opening a pull request. Approval does not guarantee merge or a review timeline.
+
+        Do not disclose vulnerabilities here. Use [GitHub private vulnerability reporting](https://github.com/layergram/layergram/security/advisories/new).
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight
+      options:
+        - label: I read CONTRIBUTING.md and searched for existing proposals.
+          required: true
+        - label: This proposal contains no vulnerability details, secrets, private material, or personal data.
+          required: true
+        - label: I will wait for explicit scope approval before implementing or opening a pull request.
+          required: true
+        - label: I understand that the proposal may be declined or deferred because of scope, roadmap, maintenance cost, review capacity, compatibility, or security risk.
+          required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Primary area
+      options:
+        - User interface or accessibility
+        - Platform integration
+        - Local storage or migration
+        - Cryptography, identity, or protocol
+        - Steganography or transport compatibility
+        - Tests or developer tooling
+        - Documentation or specifications
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: Describe the observable problem, who encounters it, and why it belongs in the public repository.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Describe the result without assuming a particular implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach
+      description: Optional outline, including alternatives considered. Do not submit a completed patch here.
+  - type: textarea
+    id: implications
+    attributes:
+      label: Compatibility, security, and maintenance implications
+      description: Note affected platforms, migrations, dependencies, protocol behavior, long-term maintenance, and public/private boundaries.
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Suggested validation
+      description: Explain how the outcome could be tested or falsified with synthetic data.
