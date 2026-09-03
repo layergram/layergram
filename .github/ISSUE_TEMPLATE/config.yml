@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability privately
+    url: https://github.com/layergram/layergram/security/advisories/new
+    about: Do not disclose vulnerabilities, exploit details, or proposed fixes in a public issue or pull request.
+  - name: Read the contribution policy
+    url: https://github.com/layergram/layergram/blob/main/CONTRIBUTING.md
+    about: Pull requests require explicit scope approval before implementation.
+  - name: General project information
+    url: https://layergram.app
+    about: Read about Layergram, supported platforms, privacy boundaries, and official downloads.

@@ -3,9 +3,46 @@
 Thanks for your interest in contributing to Layergram.
 This document explains how to propose changes, what belongs in this public repository, and how we work together.
 
+Layergram is a **maintainer-led** open-source project. The source is available
+for inspection, use, modification, and independent forks under the project
+license, while the official upstream repository remains deliberately curated.
+Review capacity is limited, particularly for security-sensitive changes.
+
 ---
 
-## 1. Scope of this repository
+## 1. Governance and review capacity
+
+Opening an issue or pull request does not create an obligation for the
+maintainer to review, accept, merge, or release the proposed work. There is no
+general response-time or review-time commitment for issues, feature requests,
+or pull requests.
+
+Before opening **any pull request**:
+
+1. Open a change proposal using the repository issue form, unless the
+   maintainer has invited the contribution directly.
+2. Wait for an explicit written confirmation from the maintainer that the
+   specific scope is accepted for implementation.
+3. Keep the pull request within that approved scope.
+
+An open issue, positive feedback, or an assignment is not by itself approval
+to implement. Approval to implement also does not guarantee a
+merge: the final change must still satisfy the project's technical, security,
+licensing, compatibility, maintenance, and release requirements.
+
+Unsolicited, unapproved, oversized, or substantially out-of-scope pull
+requests may be closed without a complete code review. The maintainer may also
+decline or defer a proposal because of roadmap fit, long-term maintenance cost,
+review capacity, compatibility risk, or security risk, even when the idea or
+implementation is technically reasonable.
+
+Independent experimentation remains welcome in personal forks. Contributors
+should keep unapproved implementation work in their own forks rather than
+assuming that it will be reviewed or merged upstream.
+
+---
+
+## 2. Scope of this repository
 
 This repository contains the official public source code of the Layergram app.
 It includes:
@@ -22,11 +59,12 @@ This repository is **not** the place for:
 - Internal-only planning material or one-off maintenance scripts.
 - Changes that would blur the distinction between official Layergram releases and third-party forks.
 
-Maintainers may decline contributions that are out of scope for this repository, even if they are technically sound.
+The maintainer may decline contributions that are out of scope for this
+repository, even if they are technically sound.
 
 ---
 
-## 2. Public repository boundary and future add-ons
+## 3. Public repository boundary and future add-ons
 
 Layergram is open source and freely compilable from this repository.
 Layergram may also distribute official free binaries under the Layergram name through the Apple App Store, Google Play, and Microsoft Store.
@@ -41,25 +79,27 @@ To keep the public repository clear and sustainable:
 This does **not** prevent independent experimentation.
 It simply means that not every feature is guaranteed to be merged into the official public Layergram repository.
 
-If you are unsure whether an idea fits, please open an issue before investing significant time in implementation.
+If you are unsure whether an idea fits, open a change proposal and wait for an
+explicit scope decision before investing time in implementation.
 
 ---
 
-## 3. Ways to contribute
+## 4. Ways to contribute
 
-You can contribute in many ways, not only with code:
+The most useful initial contributions do not require submitting code:
 
 - Bug reports with clear reproduction steps.
-- Bug fixes and edge-case hardening.
-- Documentation and specification improvements.
-- Tests and tooling that improve confidence and maintainability.
-- UX and accessibility improvements that stay within the public repository scope.
+- Narrow documentation corrections proposed through an issue.
+- Reproduction cases and synthetic test vectors that contain no sensitive data.
+- Focused suggestions for tests, tooling, UX, or accessibility improvements.
+- Design feedback grounded in the public specifications and threat model.
 
-Before starting a larger change, please open an issue or discussion so we can align early.
+Code, documentation, tests, and tooling may be submitted as pull requests only
+after the exact scope has been accepted as described in Section 1.
 
 ---
 
-## 4. Reporting bugs
+## 5. Reporting bugs
 
 When you open a bug report, please include:
 
@@ -71,19 +111,24 @@ When you open a bug report, please include:
 
 Clear, reproducible reports make fixes much easier and faster.
 
+Submitting a bug report does not guarantee a fix or a response time. Reports
+are prioritized according to reproducibility, user impact, security relevance,
+supported versions, and available maintenance capacity.
+
 ---
 
-## 5. Proposing new features
+## 6. Proposing changes and new features
 
 For new features or significant changes:
 
-1. Open a feature request issue or discussion.
+1. Open a change proposal issue.
 2. Describe:
    - The problem you want to solve.
    - Why it belongs in the public Layergram repository.
    - Any protocol, storage, UX, or compatibility implications.
    - A rough idea of the solution, if you already have one.
-3. Wait for maintainer feedback before implementing large or security-sensitive work.
+3. Wait for explicit maintainer approval before implementing or opening a pull
+   request.
 
 This is especially important for changes that touch:
 
@@ -93,29 +138,49 @@ This is especially important for changes that touch:
 - Deep links, identity exchange, or protocol compatibility.
 - Capability boundaries for future optional add-ons.
 
+For these security-sensitive areas, a public change proposal may discuss goals
+and non-sensitive design constraints, but it is not authorization to submit
+code. The maintainer may require additional design work, independent review,
+or a different implementation path before accepting any patch.
+
 ---
 
-## 6. Pull Request guidelines
+## 7. Pull request gate and guidelines
+
+Do not open a pull request unless its exact scope has been explicitly approved
+in a linked issue or the maintainer invited the contribution directly. Pull
+requests without that approval may be closed without technical review.
 
 When you open a PR:
 
+- Link the issue and the maintainer comment that approved implementation.
 - Keep the change focused and as small as reasonably possible.
 - Ensure the code builds and tests pass locally.
 - Follow the existing project structure, naming, and style.
 - Add or update tests when you change behavior.
 - Update documentation and specifications when public behavior changes.
+- Disclose third-party or automated-tool-generated material and confirm that
+  you have the right to contribute it under Apache-2.0.
+- Do not include secrets, real identities, recovery phrases, plaintext,
+  private URLs, internal project material, or unpublished add-on details.
 
 In the PR description, please include:
 
 - A short summary of the change.
 - Which issue it closes or relates to, if any.
 - Any migration, compatibility, or security notes.
+- Exact validation commands and their results.
+- Provenance and licensing notes for generated, copied, adapted, or vendored
+  material.
 
-Maintainers may ask for design clarification, more tests, or follow-up changes before merging.
+The maintainer may ask for design clarification, more tests, independent
+review, or follow-up changes before merging. Review may be paused or stopped if
+the change exceeds the approved scope or the remaining maintenance cost is not
+sustainable.
 
 ---
 
-## 7. Code style and testing
+## 8. Code style and testing
 
 Layergram aims to have readable, consistent code.
 As a general rule:
@@ -148,7 +213,7 @@ the complete test tree from secret scanning.
 
 ---
 
-## 8. Security and cryptography
+## 9. Security and cryptography
 
 Layergram is a privacy-focused project.
 Extra care is required for any change that touches:
@@ -160,16 +225,20 @@ Extra care is required for any change that touches:
 
 For these areas:
 
-- Prefer discussing the design before shipping a large patch.
+- Obtain explicit design and implementation approval before opening a patch.
 - Document assumptions, trade-offs, and compatibility impacts.
 - Avoid making silent protocol or persistence changes without tests.
+- Expect a higher review threshold and the possibility that the maintainer
+  cannot accept the contribution without independent specialist review.
 
 If you believe you have found a **security vulnerability**, please do **not** open a public issue.
-Instead, contact the maintainers privately at **security@layergram.app**.
+Do not open a public pull request containing the vulnerability or a proposed
+fix. Use [GitHub private vulnerability reporting](https://github.com/layergram/layergram/security/advisories/new)
+or contact the maintainer privately at **security@layergram.app**.
 
 ---
 
-## 9. Licensing, trademarks, and contributor rights
+## 10. Licensing, trademarks, and contributor rights
 
 By contributing to Layergram, you agree that:
 
@@ -183,7 +252,7 @@ The project may adopt a Contributor License Agreement (CLA) or similar mechanism
 
 ---
 
-## 10. Forward Secrecy implementation invariant
+## 11. Forward Secrecy implementation invariant
 
 Any contribution to the Forward Secrecy subsystem must respect the following non-negotiable design constraint:
 
@@ -206,7 +275,7 @@ This invariant is essential for Layergram's transport-agnostic design and for th
 
 ---
 
-## 11. Code of Conduct
+## 12. Code of Conduct
 
 We want a welcoming and respectful community.
 
@@ -218,11 +287,18 @@ The terms in `CODE_OF_CONDUCT.md` apply to all project spaces.
 
 ---
 
-## 11. Questions and support
+## 13. Questions and support
 
-If you are unsure about scope, design choices, or contribution fit, please:
+If you are unsure about scope, design choices, or contribution fit:
 
-- Open a discussion or question issue in the repository, or
-- Use the official project information published at https://layergram.app.
+- Read the issue forms and open a focused change proposal.
+- Wait for a maintainer decision before preparing a pull request.
+- Use the official project information at https://layergram.app for general
+  product information.
+
+The repository does not currently operate a guaranteed support, proposal, or
+pull-request response service. The separate best-effort target in
+[`SECURITY.md`](SECURITY.md) applies only to privately submitted vulnerability
+reports.
 
 Thank you for helping build a public, auditable, privacy-focused communication tool.

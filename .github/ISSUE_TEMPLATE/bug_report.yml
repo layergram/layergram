@@ -1,0 +1,85 @@
+name: Bug report
+description: Report a reproducible, non-security problem in a supported Layergram version.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a problem. Submission does not guarantee a response time or fix.
+
+        **Security vulnerabilities must not be reported here.** Use [GitHub private vulnerability reporting](https://github.com/layergram/layergram/security/advisories/new).
+
+        Do not include real conversations, recovery phrases, private keys, credentials, personal data, or internal project material.
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight
+      options:
+        - label: I searched existing issues and did not find the same report.
+          required: true
+        - label: This is not a security vulnerability or a request to disclose sensitive security details.
+          required: true
+        - label: I removed or replaced all secrets, identities, plaintext, and personal data with synthetic values.
+          required: true
+  - type: input
+    id: version
+    attributes:
+      label: Layergram version or commit
+      description: Use the app version shown in Layergram or the exact commit hash.
+      placeholder: "The version shown in the app, or a full commit hash"
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Android
+        - iOS
+        - macOS
+        - Windows
+        - Linux
+        - Multiple platforms
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: os_version
+    attributes:
+      label: Operating system version
+      placeholder: "Platform name and exact version"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Provide the smallest repeatable sequence using synthetic data.
+      placeholder: |
+        1. Open ...
+        2. Select ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Minimized evidence
+      description: Optional redacted logs, screenshots, or synthetic samples. Do not upload sensitive material.
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: Additional context
+      description: Include frequency, regressions, workarounds, or other relevant non-sensitive details.

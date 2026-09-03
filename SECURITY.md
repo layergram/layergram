@@ -18,6 +18,10 @@ Please **do not open a public issue** for security vulnerabilities.
 
 Use [GitHub private vulnerability reporting](https://github.com/layergram/layergram/security/advisories/new) whenever possible. It provides a structured private channel for the report and any coordinated fix. If GitHub reporting is unavailable, email **security@layergram.app**.
 
+Do not open a public pull request that reveals the vulnerability or contains a
+proposed fix before private triage. The maintainer will coordinate any private
+patch, review, release, and disclosure path that is appropriate for the report.
+
 Include as much of the following information as you can safely share:
 
 - Affected version or commit
@@ -60,6 +64,10 @@ Layergram will make a best effort to:
 - Confirm whether the report is in scope and reproducible
 - Work on a fix or mitigation before public disclosure when appropriate
 - Coordinate disclosure timing when a fix is required
+
+This best-effort target applies only to vulnerability reports submitted through
+the private channels above. It is not a response-time commitment for public
+issues, feature requests, support questions, or ordinary pull requests.
 
 The public triage, remediation, verification, and disclosure process is documented in [`SECURITY_RESPONSE.md`](SECURITY_RESPONSE.md). Active incident evidence and pre-disclosure discussion remain private.
 

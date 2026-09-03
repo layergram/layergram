@@ -1,0 +1,3 @@
+# The official Layergram upstream is maintainer-led. This file identifies the
+# reviewer for external changes; repository rules may add enforcement.
+* @simone-riccetti

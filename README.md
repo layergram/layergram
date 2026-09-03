@@ -200,8 +200,16 @@ the threat model.
 
 ## Contributing
 
-Contributions are welcome.
-Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a large feature PR, especially for work that touches cryptography, storage, protocol behavior, or the boundary between the public app and future optional add-ons.
+Layergram is a maintainer-led open-source project. Reproducible bug reports and
+focused change proposals are welcome, but pull requests require explicit scope
+approval in a linked issue before they are opened. Unsolicited or
+unapproved pull requests may be closed without a complete review, and there is
+no guaranteed review or merge timeline.
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before proposing work, especially for
+cryptography, storage, protocol behavior, or the boundary between the public
+app and future optional add-ons. Independent experimentation remains welcome
+in personal forks under the project license.
 
 ## Security
 
