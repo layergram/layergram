@@ -41,14 +41,13 @@ personal data in evidence.
 command -> result
 ```
 
-## Provenance and licensing
+## Third-party material and licensing
 
-- Automated tools used to generate or substantially transform code or text:
 - Third-party code, specifications, examples, or other material used:
 - Required licenses, notices, or attribution:
 
 - [ ] I have the right to contribute every part of this change under Apache-2.0.
-- [ ] Generated, copied, adapted, or vendored material is disclosed above with its provenance and applicable license.
+- [ ] Copied, adapted, or vendored third-party material is disclosed above with its source and applicable license.
 - [ ] No source from an incompatible or undisclosed license was copied, adapted, linked, or embedded.
 
 ## Maintainer notes

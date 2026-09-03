@@ -159,7 +159,7 @@ When you open a PR:
 - Follow the existing project structure, naming, and style.
 - Add or update tests when you change behavior.
 - Update documentation and specifications when public behavior changes.
-- Disclose third-party or automated-tool-generated material and confirm that
+- Disclose third-party material incorporated into the change and confirm that
   you have the right to contribute it under Apache-2.0.
 - Do not include secrets, real identities, recovery phrases, plaintext,
   private URLs, internal project material, or unpublished add-on details.
@@ -170,7 +170,7 @@ In the PR description, please include:
 - Which issue it closes or relates to, if any.
 - Any migration, compatibility, or security notes.
 - Exact validation commands and their results.
-- Provenance and licensing notes for generated, copied, adapted, or vendored
+- Licensing and attribution notes for copied, adapted, or vendored third-party
   material.
 
 The maintainer may ask for design clarification, more tests, independent
