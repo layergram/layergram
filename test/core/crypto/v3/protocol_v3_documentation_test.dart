@@ -11,6 +11,12 @@ String _normalized(String value) => value
 void main() {
   test('public documentation describes active protocol v3 honestly', () {
     final readme = _normalized(File('README.md').readAsStringSync());
+    final protocol = _normalized(
+      File('specs/PROTOCOL_V3_DRAFT.md').readAsStringSync(),
+    );
+    final schedule = _normalized(
+      File('specs/PROTOCOL_V3_KEY_SCHEDULE.md').readAsStringSync(),
+    );
     final migration = _normalized(
       File('specs/PROTOCOL_V3_MIGRATION.md').readAsStringSync(),
     );
@@ -28,6 +34,16 @@ void main() {
     expect(
       migration,
       contains('active protocol v3'),
+    );
+    expect(protocol, contains('The active protocol suite is:'));
+    expect(schedule, contains('Protocol v3 is active in Layergram 2.0'));
+    expect(schedule, isNot(contains('Protocol v2 remains the only active')));
+    expect(readme, contains('cargo fetch --locked'));
+    expect(readme, contains('layergramSckaCandidatePackage=true'));
+    expect(readme, contains('plain flutter run is not a functional'));
+    expect(
+      readme,
+      contains('not yet received an independent cryptographic audit'),
     );
   });
 

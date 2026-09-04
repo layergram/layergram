@@ -122,7 +122,7 @@ requires exact byte equality, canonical decode/re-encode, and an aggregate
 type/length/record digest. This is implementation-independent conformance
 evidence, not an external review or an activation decision.
 
-Activation still requires production LS3/LB3/TR3 atomic revision binding,
-recurring fuzzing and sanitizer evidence, signed packaged traversal for every
-shipped architecture, release registration review, and independent
-cryptographic and implementation review.
+Production release evidence must continue to cover LS3/LB3/TR3 atomic revision
+binding, recurring fuzzing and sanitizers, signed packaged traversal for every
+shipped architecture, and release registration review. Independent
+cryptographic and implementation review remains outstanding.

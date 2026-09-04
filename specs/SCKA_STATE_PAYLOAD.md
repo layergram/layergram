@@ -191,7 +191,8 @@ payload format 1 and `libcrux-ml-kem = 0.0.10`; a changed format or length fails
 closed. Same-length opaque contents remain protected by authenticated LS3 and
 are not claimed to be semantically validated by LB3.
 
-Activation still requires production LS3/TR3 journal composition, recurring
-fuzzing and sanitizer evidence, signed packaged traversal for every shipped
-architecture, release registration review, and independent cryptographic and
-implementation review of the complete frozen boundary.
+Production release evidence must continue to cover LS3/TR3 journal
+composition, recurring fuzzing and sanitizers, signed packaged traversal for
+every shipped architecture, and release registration review. Independent
+cryptographic and implementation review of the complete frozen boundary
+remains outstanding.

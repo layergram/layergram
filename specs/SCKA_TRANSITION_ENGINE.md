@@ -419,8 +419,8 @@ opaque 2,080-byte continuation.
 The oracle and vector add no runtime dependency and use no AGPL implementation
 source.
 
-Activation still requires durable terminal MAC-failure handling, a serialized
-authority that prevents divergent recomputation under one role/revision nonce,
-the public C ABI and panic containment, atomic TR3/journal composition,
-fuzzing/sanitizers, every shipped target, and an independent cryptographic and
-implementation audit.
+Production release evidence must continue to cover durable terminal MAC-failure
+handling, serialized authority against divergent recomputation under one
+role/revision nonce, the public C ABI and panic containment, atomic TR3/journal
+composition, fuzzing and sanitizers, and every shipped target. An independent
+cryptographic and implementation audit remains outstanding.

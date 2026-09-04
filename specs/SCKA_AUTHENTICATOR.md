@@ -180,9 +180,9 @@ success/failure behavior, domain separation, exact input sizes, signed-63 epoch
 bounds, detached successor semantics, restore length checks, and explicit wipe
 paths.
 
-Activation still requires independent approval of the complete revision-1
-engine and authenticated composition, hosted/release-matrix checks, current
-physical-device and real-carrier traversal, and independent cryptographic and
-implementation review. The canonical BM3/LS3/LB3 composition, atomic LS3/TR3
-binding, hostile corpus, sanitizers, crash/restart, rollback, and concurrency
-coverage are integrated candidate evidence, not substitutes for that review.
+The complete revision-1 engine and authenticated composition remain priorities
+for independent cryptographic and implementation review. Hosted and
+release-matrix checks, current physical-device and real-carrier traversal, the
+canonical BM3/LS3/LB3 composition, atomic LS3/TR3 binding, hostile corpus,
+sanitizers, crash/restart, rollback, and concurrency coverage are integrated
+release evidence, not substitutes for that review.
