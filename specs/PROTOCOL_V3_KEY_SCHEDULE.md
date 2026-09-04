@@ -2,7 +2,7 @@
 
 Status: **normative active implementation in Layergram 2.0 and later**
 
-This document freezes the first testable Layergram-v3 key-expansion boundary,
+This document freezes the Layergram-v3 key-expansion boundary,
 hybrid message-key combination, fragment nonce derivation, acknowledgement
 schedule, committed application/control record, and Triple Ratchet snapshot
 envelope. The separate `PROTOCOL_V3_HANDSHAKE.md` defines the active handshake
@@ -20,9 +20,10 @@ backend only after the single production activation policy is true. That policy
 is true in official Layergram 2.0 packages, which load only the exact
 allowlisted native implementation.
 
-`PROTOCOL_V3_SECURITY_GOALS.md` remains authoritative. This draft and its code
-must change if later transcript design, ML-KEM Braid integration, persistence
-review, or independent cryptographic review finds an unsafe construction.
+`PROTOCOL_V3_SECURITY_GOALS.md` remains authoritative. This specification and
+its code must change if later transcript design, ML-KEM Braid integration,
+persistence review, or independent cryptographic review finds an unsafe
+construction.
 
 The design follows the hybrid composition in Signal's Triple Ratchet: the
 elliptic-curve Double Ratchet and Sparse Post-Quantum Ratchet produce separate
@@ -106,17 +107,19 @@ It deliberately does not provide:
 
 - an independently approved handshake or deniability claim (the separate
   candidate remains externally unreviewed);
-- a production ML-KEM Braid/SCKA implementation or reviewed native state
-  exporter;
-- production activation of the contact/device bootstrap policy, durable
-  coordinator, or AR3 projection path;
-- production activation in contacts, messaging, UI, backup, migration, or
-  downstream capability paths. The providers and UI seams described in Section
-  10 are registered only behind the single fail-closed selector.
+- independent cryptographic or implementation review of the production
+  ML-KEM Braid/SCKA implementation;
+- delivery, ordering, availability, or metadata guarantees from the external
+  transport platform;
+- guarantees for backup or downstream capabilities outside the protocol
+  boundary. The providers and UI seams described in Section 10 remain behind
+  the single fail-closed selector.
 
 Protocol-v3 cryptography remains isolated under `lib/core/crypto/v3/`; the
-application seams live in their ordinary provider/UI layers. Protocol
-v2 remains the only active messaging protocol.
+application seams live in their ordinary provider/UI layers. Protocol v3 is
+active in Layergram 2.0 and later; protocol-v2 handling is limited to the
+explicit migration and compatibility boundaries in
+`PROTOCOL_V3_MIGRATION.md`.
 
 ## 2. Canonical notation
 

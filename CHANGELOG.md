@@ -6,6 +6,31 @@ The format is inspired by Keep a Changelog and reflects the public GitHub Releas
 
 ## [Unreleased]
 
+## [2.0.3+30] - 2026-08-28
+
+### Changed
+- Completed strict Gradle dependency verification metadata for Android release
+  builds.
+- Added CI coverage for the Android release APK dependency graph.
+
+### Notes
+- Includes the identity-loading and tablet-layout fixes introduced in
+  2.0.2+29.
+
+## [2.0.2+29] - 2026-08-28
+
+### Fixed
+- Waited for secure identity storage before routing startup or showing the
+  create-identity action.
+- Added recoverable loading, error, and retry states when identity storage
+  cannot be read.
+- Kept contact-link import controls reachable above the on-screen keyboard on
+  tablet layouts.
+
+### Testing
+- Added regression coverage for identity loading, storage errors, retry,
+  startup routing, and keyboard-constrained contact import.
+
 ## [2.0.1+28] - 2026-08-27
 
 ### Fixed

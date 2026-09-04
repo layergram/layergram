@@ -1,17 +1,23 @@
 # Layergram
 
-**Privacy-first encrypted messaging — transport agnostic, fully local, zero servers.**
+**Privacy-first encrypted messaging — transport agnostic, fully local, with no Layergram message relay.**
 
 Layergram is the official open-source Layergram app built with Flutter.
 It lets users encrypt sensitive content locally and share it through **any** existing text-based communication channel — WhatsApp, Telegram, Signal, iMessage, email, social networks, or any other platform that preserves Unicode text.
 
-Messages are hidden inside ordinary-looking text using zero-width Unicode steganography, making them visually indistinguishable from a normal conversation while keeping the cryptographic workflow fully local to the device.
+Layergram can carry encrypted payloads inside ordinary-looking cover text using
+zero-width Unicode steganography. This can make the protected payload less
+obvious to a casual reader, but it is not intended to defeat technical
+detection, normalization, or filtering by the transport platform. The
+cryptographic workflow remains local to the device.
 
 For transport channels that do not support invisible Unicode characters (or when steganography fails), Layergram also supports sending messages as **direct text payloads** (`<payload>`) or **direct deep links** (`layergram://m/<payload>`). Direct text payloads are not clickable, but they avoid exposing the Layergram URI scheme. Deep links are useful where custom URI schemes are interpreted, but make the presence of a Layergram message visibly obvious to anyone seeing the link.
 
 ## Official Project Links
 
 - **Website:** https://layergram.app
+- **Latest release:** https://github.com/layergram/layergram/releases/latest
+- **Verified Android APKs:** https://layergram.app/apk/
 - **GitHub organization:** https://github.com/layergram
 
 ## Protocol v3 Post-Quantum Protection
@@ -24,6 +30,8 @@ user-facing forms: direct text, deep link, and zero-width steganography.
 **Protocol v3 is active in Layergram 2.0 and later.** Its security design,
 implementation, test evidence, migration contract, and release tooling remain
 public so researchers can inspect and audit the complete protocol boundary.
+The custom composition has not yet received an independent cryptographic
+audit; the published tests and release evidence are not a substitute for one.
 
 The migration is deliberately explicit:
 
@@ -46,7 +54,7 @@ be shared with a contact.
 - This repository contains the public source code for the official Layergram app.
 - Anyone may inspect, compile, modify, and run the app under the terms of the [Apache License 2.0](LICENSE).
 - Official Layergram builds may also be distributed free of charge by Layergram through the Apple App Store, Google Play, and Microsoft Store.
-- The first public open-source release intentionally does **not** ship a web distribution target.
+- This repository does **not** ship a web distribution target.
 - This public release ships without premium functionality enabled.
 - Future optional paid add-ons may be developed separately and are **not** part of this repository.
 
@@ -142,24 +150,37 @@ A future optional add-on may provide an in-app secure keyboard for touch devices
 ### Prerequisites
 - Flutter SDK >= 3.4
 - Dart SDK >= 3.4
+- Rust 1.87.0 and Cargo for protocol-v3 native builds
 - Platform-specific tooling (Xcode for iOS/macOS, Android SDK, Visual Studio for Windows, Linux toolchain as needed)
 
-### Build and Run
+### Fetch Dependencies and Run Checks
 
 ```bash
 flutter pub get
-flutter run
-flutter run -d macos
-flutter run -d windows
-flutter run -d linux
-```
-
-### Validation
-
-```bash
 flutter analyze
 flutter test
 ```
+
+### Build a Functional Android App
+
+Protocol v3 uses a native Rust SCKA backend. The default native ABI is
+deliberately fail-closed, so a plain `flutter run` is not a functional
+protocol-v3 build. To compile the active backend from this repository and
+package it into an Android build:
+
+```bash
+cargo fetch --locked --manifest-path native/layergram_scka/Cargo.toml
+tool/pq/prepare_scka_packaged_android.sh
+ORG_GRADLE_PROJECT_layergramSckaCandidatePackage=true \
+  flutter run -d <android-device>
+```
+
+The first command populates the Cargo cache from the exact lockfile; the
+packaging step then runs offline. This path also requires Android NDK tooling
+and the Android Rust targets checked by the preparation script. Generated
+native libraries stay under the ignored `.dart_tool/` directory. The complete
+release-container and cross-platform verification commands are documented in
+[the post-quantum packaging guide](tool/pq/README.md).
 
 ### Generate API Docs
 
@@ -173,8 +194,8 @@ dart doc
 - [Forward Secrecy](specs/FORWARD_SECRECY.md)
 - [Protocol v3 migration guide](specs/PROTOCOL_V3_MIGRATION.md)
 - [Protocol v3 security goals](specs/PROTOCOL_V3_SECURITY_GOALS.md)
-- [Protocol v3 identity and protocol draft](specs/PROTOCOL_V3_DRAFT.md)
-- [LMF v3 canonical framing](specs/LMF_V3_DRAFT.md)
+- [Protocol v3 identity and protocol specification](specs/PROTOCOL_V3_DRAFT.md)
+- [LMF v3 canonical framing specification](specs/LMF_V3_DRAFT.md)
 - [Protocol v3 handshake](specs/PROTOCOL_V3_HANDSHAKE.md)
 - [Protocol v3 key schedule and ratchet](specs/PROTOCOL_V3_KEY_SCHEDULE.md)
 - [Protocol v3 application messages](specs/APPLICATION_MESSAGE_V3.md)

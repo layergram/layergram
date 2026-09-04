@@ -8,13 +8,13 @@ reassembly, cumulative acknowledgements, and crash-consistent sealed-frame
 storage. The separate handshake and key-schedule specifications complete the
 active hybrid protocol.
 
-`PROTOCOL_V3_SECURITY_GOALS.md` remains authoritative. This draft must change if
-the later handshake, ratchet, persistence design, or external review finds that
-the layout cannot meet those goals.
+`PROTOCOL_V3_SECURITY_GOALS.md` remains authoritative. This specification must
+change if the later handshake, ratchet, persistence design, or external review
+finds that the layout cannot meet those goals.
 
 ## 1. Scope and non-goals
 
-This checkpoint provides:
+This specification defines:
 
 - one canonical binary frame;
 - AES-256-GCM authentication of every header field and encrypted fragment;
@@ -37,11 +37,12 @@ This checkpoint provides:
 This framing specification deliberately does not, by itself:
 
 - authenticate a contact before the separate v3 handshake and SAS ceremony;
-- approve the candidate ML-KEM Braid construction or native state export;
+- serve as independent review of the ML-KEM Braid construction or native state
+  export;
 - make side effects outside the v3 effect journal atomic;
 - prove that real external carriers preserve every supported representation;
-- activate identity, contact, messaging, UI, storage, or downstream capability
-  paths;
+- define UI, backup, or downstream capability behavior outside the protocol
+  boundary;
 - replace independent cryptographic and implementation review.
 
 ## 2. Integer and canonicalization rules
@@ -101,7 +102,7 @@ The fixed base header is exactly 180 bytes:
 | 74 | 16 | message ID | non-zero, unique in its context |
 | 90 | 16 | session ID | non-zero |
 | 106 | 8 | epoch | authenticated value, 0–2^63−1 |
-| 114 | 8 | message counter | 0–2^63−1 in this candidate |
+| 114 | 8 | message counter | 0–2^63−1 in protocol v3 |
 | 122 | 4 | expiry | Unix seconds; zero means no sender-declared expiry |
 | 126 | 2 | fragment index | zero based |
 | 128 | 2 | fragment count | 1–64 |
@@ -125,8 +126,8 @@ and ACK frames require zero HR3 length and an all-zero HR3 digest.
 The 32-byte sender and recipient values are routing/context bindings, not public
 identity IDs and not proof of an owner's identity. Their derivation must be
 defined by the reviewed handshake and must bind the complete identities in the
-session transcript. This draft does not authorize using truncated public keys
-or treating these fields as contact verification.
+session transcript. This specification does not authorize using truncated
+public keys or treating these fields as contact verification.
 
 The authenticated expiry is sender policy input, not a trusted timestamp.
 Layergram has no shared trusted clock. Parsing alone must not discard a message
@@ -159,8 +160,9 @@ claim.
 
 The implemented EC transition engine and SCKA boundary produce the canonical
 `HR3` container holding the 56-byte `DR3` header and bounded `SK3` message.
-This draft carries and authenticates that exact container. Activation still
-requires a reviewed native SCKA engine and one serialized controller that binds
+This specification carries and authenticates that exact container. The active
+implementation requires the allowlisted native SCKA engine and one serialized
+controller that binds
 the accepted ratchet candidate to the atomic application effect.
 
 ## 6. Canonical fragmentation
@@ -307,8 +309,8 @@ now binds an exact candidate snapshot into that controller after complete LMF
 authentication. A clean commit failure is retryable only while the controller
 still exposes the candidate's expected revision; a concurrently superseded
 candidate is wiped instead of being requeued. Reviewed native SCKA semantics,
-active product wiring, and visible message-repository projection remain
-activation gates.
+active product wiring, and visible message-repository projection are required
+parts of the active boundary.
 
 Commit-tombstone retention is local and explicit. A tombstone may be purged only
 after the durable ratchet/application replay window will independently reject
@@ -416,8 +418,8 @@ automatic replay is assembly-scoped; the explicit all-assembly replay surface
 returns every delivery it completes. Close drains the resolver, handoff,
 handshake, session, and inbox controllers in dependency order before removing
 the repository context and destroying the owned key copy. A restore error is
-fail-stop for that owner and requires reconstruction. This boundary is not
-registered in providers and does not activate protocol v3.
+fail-stop for that owner and requires reconstruction. This boundary is
+registered only through the single fail-closed production activation policy.
 
 ### 7.4 Atomic-effect record invariants
 
@@ -638,18 +640,19 @@ Canonical direct token:
 m3.TE0zAwEBALQAGQECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gQUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVpbXF1eX2CBgoOEhYaHiImKi4yNjo-QoaKjpKWmp6ipqqusra6vsAAAAAAAAAAHAAAAAAAAAAl3NZQAAAAAAQAAABmgoaKjpKWmp6ipqqsAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAqnkFSDescN4PRfHgJx2vshTJNzD0xSMB-c1kgXath8yE3FMsvssWRWk
 ```
 
-## 10. Activation boundary
+## 10. Release and activation boundary
 
 The cryptographic implementation lives under `lib/core/crypto/v3/`; its
 identity, contact, repository, and UI seams are integrated in their ordinary
 application layers only behind the single fail-closed activation selector.
 Protocol v2 remains active while that selector is false.
 
-Before activation, the native ML-KEM Braid engine and every opaque export must
-pass independent review; the crash-consistent coordinator and recovery paths
-must pass hosted and release-matrix checks; supported physical devices and real
-text/link/steganographic carrier workflows must pass; the established signed
-distribution-artifact flows must be verified; and the complete design and
-implementation must have no unresolved high or critical audit finding. See
+For every release, the native ML-KEM Braid engine and every opaque export must
+remain bound to the reviewed allowlist; the crash-consistent coordinator and
+recovery paths must pass hosted and release-matrix checks; supported physical
+devices and real text/link/steganographic carrier workflows must pass; the
+established signed distribution-artifact flows must be verified; and the
+complete design and implementation must have no unresolved high or critical
+audit finding. See
 [Protocol v3 Migration](PROTOCOL_V3_MIGRATION.md) for the explicit incompatible
 user transition.

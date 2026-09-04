@@ -8,9 +8,9 @@ behind a fail-closed selector and the production backend is exact-build
 allowlisted on every supported platform.
 
 The normative threat boundary and activation properties are defined in
-`PROTOCOL_V3_SECURITY_GOALS.md`. If this draft conflicts with those goals, the
-security-goals document wins and the implementation must be corrected before a
-further release.
+`PROTOCOL_V3_SECURITY_GOALS.md`. If this specification conflicts with those
+goals, the security-goals document wins and the implementation must be
+corrected before a further release.
 
 ## Recovery, public identity, and session proof are different operations
 
@@ -25,7 +25,7 @@ Layergram still has no account, key directory, or Layergram-operated server.
 
 ## Selected hybrid identity suite
 
-The first experimental suite is:
+The active protocol suite is:
 
 - X25519 public key: exactly 32 bytes;
 - ML-KEM-768 encapsulation key: exactly 1,184 bytes;
