@@ -153,7 +153,7 @@
   "contactNameHelper": "Pour plus de confidentialité, choisissez un pseudonyme anonyme ou un nom inventé.",
   "aboutApp": "À propos de Layergram",
   "appVersion": "Version {v}",
-  "screenProtectionSubtitle": "Protège les messages des captures d'écran et de l'enregistrement d'écran",
+  "screenProtectionSubtitle": "Aide à limiter les captures d’écran et l’enregistrement lorsque cette fonction est prise en charge. Ne peut pas protéger contre un appareil compromis.",
   "hideChatPreview": "Masquer l'aperçu du dernier message",
   "hideChatPreviewSubtitle": "Masquer les aperçus dans la liste des conversations (visibles pendant la recherche)",
   "clear": "Effacer",

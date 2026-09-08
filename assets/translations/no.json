@@ -153,7 +153,7 @@
   "contactNameHelper": "For mer personvern, velg et anonymt kallenavn eller oppdiktet navn.",
   "aboutApp": "Om Layergram",
   "appVersion": "Versjon {v}",
-  "screenProtectionSubtitle": "Beskytter meldinger mot skjermbilder og skjermopptak",
+  "screenProtectionSubtitle": "Bidrar til å begrense skjermbilder og opptak der det støttes. Kan ikke beskytte mot en kompromittert enhet.",
   "hideChatPreview": "Skjul forhåndsvisning av siste melding",
   "hideChatPreviewSubtitle": "Skjul meldingsforhåndsvisninger i samtalelisten (synlig under søk)",
   "clear": "Tøm",

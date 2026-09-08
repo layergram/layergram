@@ -153,7 +153,7 @@
   "contactNameHelper": "För mer integritet, välj ett anonymt smeknamn eller påhittat namn.",
   "aboutApp": "Om Layergram",
   "appVersion": "Version {v}",
-  "screenProtectionSubtitle": "Skyddar meddelanden från skärmdumpar och skärminspelning",
+  "screenProtectionSubtitle": "Hjälper till att begränsa skärmdumpar och inspelning där det stöds. Kan inte skydda mot en komprometterad enhet.",
   "hideChatPreview": "Dölj förhandsgranskning av senaste meddelandet",
   "hideChatPreviewSubtitle": "Dölj förhandsgranskningar i konversationslistan (synlig vid sökning)",
   "clear": "Rensa",

@@ -41,6 +41,34 @@ Layergram is an end-to-end encrypted messaging tool that is transport-agnostic: 
 - **Recovery-phrase-only compromise.** Knowledge of the mnemonic alone is enough to recreate identity keys by design — Layergram inherits the BIP39 semantics — but identity-scoped data in the encrypted vault and in session caches is never exposed until the device is unlocked.
 - **Limited deniability for passphrase-protected data.** When the optional passphrase feature is used, Layergram derives a separate identity/keyspace from the mnemonic+passphrase and keeps the passphrase-derived keys in memory only while active. If the user unlocks the app without activating the passphrase, the base vault remains visible while passphrase-scoped messages stay absent. This can provide a practical, limited form of plausible deniability against casual inspection.
 
+## Screen protection and local access
+
+Screen protection is enabled by default on supported mobile platforms and can
+be disabled in Settings. It is defense in depth for content displayed inside
+Layergram. It does not change message encryption or the app-lock timeout, and
+does not protect plaintext that the user copies or shares into another app.
+
+| Layer | Protection and limits |
+| --- | --- |
+| Android screen capture | `FLAG_SECURE` asks Android to exclude the app window from ordinary screenshots, recordings and non-secure displays. Enforcement depends on Android and the device; ordinary capture permission is not equivalent to control of the OS. |
+| Android overlays and touch | On Android 12 and later, Layergram asks the system to hide non-system overlay windows. While protection is enabled, it rejects touches marked as obscured; partially obscured touches are also rejected on Android 10 and later. These controls depend on the system supplying the correct flags and do not block every trusted/system window or input path. |
+| Android accessibility | On Android 14 and later, the window and Flutter host are marked as sensitive. Android can restrict access by services that do not declare themselves accessibility tools. This is not a trust check on a service: declared accessibility tools retain access, and Flutter's virtual accessibility nodes are not individually marked sensitive. Do not assume this control revokes information or node references obtained before protection was enabled. |
+| iOS capture and backgrounding | Layergram uses an opaque native shield when its scene is inactive or its screen reports active capture. It also retains its secure-text-entry host as a best-effort screenshot mitigation. iOS does not offer a general app-wide guarantee that arbitrary UI cannot be captured; detection, notification timing and secure-host behavior depend on the OS. |
+| Inactive app content | The Flutter privacy shield is opaque and excludes the underlying UI from accessibility, pointer input and focus while it is shown, including during external sharing. The native iOS shield also hides and disables its underlying root view and restores its prior state on return. |
+
+The app preserves its normal accessibility content while active and unlocked;
+Android's sensitive-data policy determines which services can access it. App
+lock remains a separate access boundary: covering a screen is not the same as
+locking the app or expelling keys. Neither screen protection nor app lock can
+guarantee confidentiality against an attacker who controls the OS or can
+inspect the app process. External cameras, an untrusted accessibility service
+with sufficient access, and plaintext already observed or copied remain risks.
+
+Platform references: [Android secure activities](https://developer.android.com/security/fraud-prevention/activities),
+[Android tapjacking guidance](https://developer.android.com/privacy-and-security/risks/tapjacking),
+[Android accessibility sensitivity](https://developer.android.com/reference/android/view/View#setAccessibilityDataSensitive(int)),
+and [Apple screen-capture detection](https://developer.apple.com/library/archive/qa/qa1970/_index.html).
+
 ## What Layergram does *not* protect against
 
 Layergram is honest about its limits. The following concerns are explicitly out of scope or only partially mitigated, and users who require these protections should combine Layergram with additional tools or choose a different solution.
@@ -55,7 +83,7 @@ Layergram is honest about its limits. The following concerns are explicitly out 
   complete public identity but cannot prove who controls it. V3 still requires
   verification through an independent channel.
 - **Rubber-hose / coercion.** Layergram does not provide a formal duress PIN, panic mode, or a cryptographically separate decoy vault with strong anti-forensic guarantees. The optional passphrase can create a limited deniability layer because passphrase-derived keys are not present unless the user activates them, but this should not be treated as a strong guarantee against coercion, repeated questioning, device seizure, side-channel observation, or forensic correlation.
-- **Compromised or rooted device.** Layergram relies on the platform to enforce process isolation and on the OS keystore for hardware-backed key material. A device that is rooted, jailbroken, or compromised by malware running with screen-recording, input-injection or memory-dumping privileges can read or influence anything Layergram does while it is unlocked.
+- **Compromised or rooted device.** Layergram relies on the platform to enforce process isolation and on OS secure storage. An attacker who controls the OS or can inspect or modify the app process can read plaintext or influence operations while the relevant content and keys are available. Ordinary screen-recording permission alone does not imply that capability: platform screen protection can still block capture. Abusive accessibility services and input injection are separate risks with the partial mitigations described above.
 - **Compromised recipient.** If the recipient's device is compromised, or if they share their recovery phrase, the content you sent them can be recovered. End-to-end encryption protects the transport, not the endpoint.
 - **Future compromise of long-term keys in legacy data (partial forward
   secrecy).** Base v1/v2 message encryption uses static–static X25519 between

@@ -153,7 +153,7 @@
   "contactNameHelper": "Për më shumë privatësi, zgjidhni një pseudonim anonim ose emër fiktiv.",
   "aboutApp": "Rreth Layergram",
   "appVersion": "Versioni {v}",
-  "screenProtectionSubtitle": "Mbron mesazhet nga screenshotet dhe regjistrimi i ekranit",
+  "screenProtectionSubtitle": "Ndihmon në kufizimin e pamjeve të ekranit dhe regjistrimit aty ku mbështetet. Nuk mund të mbrojë nga një pajisje e komprometuar.",
   "hideChatPreview": "Fshih pamjen e mesazhit të fundit",
   "hideChatPreviewSubtitle": "Fshih pamjet e mesazheve në listë (e dukshme gjatë kërkimit)",
   "clear": "Pastro",

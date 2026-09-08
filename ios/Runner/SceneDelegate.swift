@@ -19,6 +19,100 @@ private final class SecureContentTextField: UITextField {
   }
 }
 
+final class ScreenPrivacyShield {
+  private final class ProtectedContentState {
+    let view: UIView
+    let isHidden: Bool
+    let isUserInteractionEnabled: Bool
+    let accessibilityElementsHidden: Bool
+
+    init(view: UIView) {
+      self.view = view
+      isHidden = view.isHidden
+      isUserInteractionEnabled = view.isUserInteractionEnabled
+      accessibilityElementsHidden = view.accessibilityElementsHidden
+    }
+
+    func restore() {
+      view.isHidden = isHidden
+      view.isUserInteractionEnabled = isUserInteractionEnabled
+      view.accessibilityElementsHidden = accessibilityElementsHidden
+    }
+  }
+
+  private var protectedContentState: ProtectedContentState?
+  private weak var protectedWindow: UIWindow?
+  private(set) var shieldView: UIView?
+
+  static func shouldBeVisible(
+    protectionEnabled: Bool,
+    isCaptured: Bool,
+    isForegroundActive: Bool
+  ) -> Bool {
+    protectionEnabled && (isCaptured || !isForegroundActive)
+  }
+
+  func setVisible(_ visible: Bool, in window: UIWindow) {
+    guard visible else {
+      hideAndRestoreContent()
+      return
+    }
+
+    let rootView = window.rootViewController?.view
+    let hasChangedWindow = protectedWindow !== window
+    let hasChangedRootView = protectedContentState?.view !== rootView
+    if hasChangedWindow || hasChangedRootView {
+      hideAndRestoreContent()
+    }
+
+    protectedWindow = window
+    if let rootView, protectedContentState == nil {
+      protectedContentState = ProtectedContentState(view: rootView)
+      rootView.isHidden = true
+      rootView.isUserInteractionEnabled = false
+      rootView.accessibilityElementsHidden = true
+    }
+
+    let shield = makeShieldView(for: window)
+    if shield.superview !== window {
+      shield.removeFromSuperview()
+      window.addSubview(shield)
+    }
+    window.bringSubviewToFront(shield)
+    shield.isHidden = false
+  }
+
+  func clear() {
+    hideAndRestoreContent()
+  }
+
+  private func hideAndRestoreContent() {
+    protectedContentState?.restore()
+    protectedContentState = nil
+    protectedWindow = nil
+    shieldView?.isHidden = true
+    shieldView?.removeFromSuperview()
+  }
+
+  private func makeShieldView(for window: UIWindow) -> UIView {
+    if let shieldView {
+      shieldView.frame = window.bounds
+      return shieldView
+    }
+
+    let view = UIView(frame: window.bounds)
+    view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    view.backgroundColor = .black
+    view.isOpaque = true
+    view.isUserInteractionEnabled = true
+    view.isAccessibilityElement = true
+    view.accessibilityLabel = "Layergram"
+    view.accessibilityViewIsModal = true
+    shieldView = view
+    return view
+  }
+}
+
 private final class ScreenProtectedHostingViewController: UIViewController {
   let contentViewController: UIViewController
 
@@ -143,7 +237,7 @@ class SceneDelegate: FlutterSceneDelegate {
   private static let appGroupIdInfoKey = "AppGroupId"
 
   private var protectionEnabled: Bool = true
-  private var privacyShieldView: UIView?
+  private let screenPrivacyShield = ScreenPrivacyShield()
   private weak var flutterViewController: FlutterViewController?
   private var protectedRootViewController: ScreenProtectedHostingViewController?
   private var qrBrightnessRequested = false
@@ -182,6 +276,7 @@ class SceneDelegate: FlutterSceneDelegate {
 
   override func sceneDidDisconnect(_ scene: UIScene) {
     restorePreviousScreenBrightness(clearRequest: true)
+    screenPrivacyShield.clear()
     super.sceneDidDisconnect(scene)
   }
 
@@ -409,42 +504,30 @@ class SceneDelegate: FlutterSceneDelegate {
       return
     }
 
-    // If screen recording / mirroring is active, keep shield visible even while active.
-    if UIScreen.main.isCaptured {
-      showPrivacyShield()
-      return
-    }
-
+    let isCaptured = window?.screen.isCaptured ?? UIScreen.main.isCaptured
     let isForegroundActive = window?.windowScene?.activationState == .foregroundActive
-    if isForegroundActive {
-      hidePrivacyShield()
-    } else {
+    if ScreenPrivacyShield.shouldBeVisible(
+      protectionEnabled: protectionEnabled,
+      isCaptured: isCaptured,
+      isForegroundActive: isForegroundActive
+    ) {
       showPrivacyShield()
+    } else {
+      hidePrivacyShield()
     }
   }
 
   private func showPrivacyShield() {
-    guard let window = window else { return }
-
-    if privacyShieldView == nil {
-      let view = UIView(frame: window.bounds)
-      view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-      view.backgroundColor = UIColor.black
-      view.isUserInteractionEnabled = true
-      privacyShieldView = view
-    }
-
-    guard let shield = privacyShieldView else { return }
-    if shield.superview == nil {
-      window.addSubview(shield)
-    } else {
-      window.bringSubviewToFront(shield)
-    }
-    shield.isHidden = false
+    guard let window else { return }
+    screenPrivacyShield.setVisible(true, in: window)
   }
 
   private func hidePrivacyShield() {
-    privacyShieldView?.isHidden = true
+    guard let window else {
+      screenPrivacyShield.clear()
+      return
+    }
+    screenPrivacyShield.setVisible(false, in: window)
   }
 
 }

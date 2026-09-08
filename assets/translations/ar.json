@@ -153,7 +153,7 @@
   "contactNameHelper": "لمزيد من الخصوصية، اختر لقباً مجهولاً أو اسماً مخترعاً.",
   "aboutApp": "حول Layergram",
   "appVersion": "الإصدار {v}",
-  "screenProtectionSubtitle": "يحمي الرسائل من لقطات الشاشة وتسجيل الشاشة",
+  "screenProtectionSubtitle": "يساعد على الحد من لقطات الشاشة والتسجيل حيثما كان ذلك مدعومًا. لا يمكنه الحماية من جهاز مخترق.",
   "hideChatPreview": "إخفاء معاينة آخر رسالة",
   "hideChatPreviewSubtitle": "إخفاء معاينات الرسائل في قائمة المحادثات (تظل مرئية أثناء البحث)",
   "clear": "مسح",

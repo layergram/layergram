@@ -20,6 +20,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/capabilities/chat_folders_capability.dart';
 import 'core/crypto/fs_passphrase_preferences.dart';
+import 'core/crypto/fs_passphrase_timeout_controller.dart';
 import 'core/crypto/fs_startup_restore.dart';
 import 'core/crypto/models.dart';
 import 'core/crypto/stego_decoder.dart';
@@ -120,6 +121,7 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
   late Future<LocalIdentity?> _identityFuture;
   late final Future<void> _lockStateFuture;
   late final AppLockIdleController _appLockIdleController;
+  late final FsPassphraseTimeoutController _passphraseTimeoutController;
   late final ExternalIngressCoordinator _externalIngress;
   final _deepLinks = DeepLinks();
   final _sharing = Sharing();
@@ -129,6 +131,7 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
   StreamSubscription<List<SharedMediaFile>>? _sharedTextSub;
   ProviderSubscription<int>? _identityReloadSub;
   ProviderSubscription<bool>? _appLockEnabledSub;
+  ProviderSubscription<bool>? _screenProtectionEnabledSub;
   ProviderSubscription<int>? _appLockTimeoutSub;
   ProviderSubscription<bool>? _appNeedsUnlockSub;
   ProviderSubscription<int>? _appLockRequestSub;
@@ -149,6 +152,8 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
   @override
   void initState() {
     super.initState();
+    _passphraseTimeoutController =
+        ref.read(fsPassphraseTimeoutControllerProvider);
     _appLockIdleController = AppLockIdleController(
       onLockRequired: () {
         if (!mounted) return;
@@ -169,6 +174,10 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
         setState(() {});
       },
     )..read();
+    _screenProtectionEnabledSub = ref.listenManual<bool>(
+      screenProtectionEnabledProvider,
+      (prev, next) => _updatePrivacyShield(),
+    );
     _appLockEnabledSub = ref.listenManual<bool>(
       appLockEnabledProvider,
       (prev, next) {
@@ -224,7 +233,7 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
     _passphrasePreferencesSub = ref.listenManual<PassphrasePreferences>(
       passphrasePreferencesProvider,
       (prev, next) {
-        final tc = ref.read(fsPassphraseTimeoutControllerProvider);
+        final tc = _passphraseTimeoutController;
         tc.configure(
           timeout: next.timeout,
           expelOnScreenLock: next.expelOnScreenLock,
@@ -288,7 +297,9 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
   Future<void> _loadScreenProtectionState() async {
     final service = ref.read(screenProtectionServiceProvider);
     final enabled = await service.isEnabled();
+    if (!mounted) return;
     ref.read(screenProtectionEnabledProvider.notifier).state = enabled;
+    _updatePrivacyShield();
     await service.applyToPlatform(enabled);
   }
 
@@ -765,16 +776,17 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
     await restorePersistedFsRuntimeState(ref.read);
   }
 
+  void _updatePrivacyShield({AppLifecycleState? state}) {
+    final lifecycle = state ?? WidgetsBinding.instance.lifecycleState;
+    ref.read(privacyShieldVisibleProvider.notifier).state =
+        ref.read(screenProtectionEnabledProvider) &&
+            lifecycle != null &&
+            lifecycle != AppLifecycleState.resumed;
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    final screenProtectionEnabled = ref.read(screenProtectionEnabledProvider);
-    final isSharing = ref.read(isSharingProvider);
-    if (screenProtectionEnabled && !isSharing) {
-      ref.read(privacyShieldVisibleProvider.notifier).state =
-          state != AppLifecycleState.resumed;
-    } else {
-      ref.read(privacyShieldVisibleProvider.notifier).state = false;
-    }
+    _updatePrivacyShield(state: state);
 
     if (state == AppLifecycleState.resumed) {
       Future.microtask(_loadPendingSharedText);
@@ -786,9 +798,7 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
     }
 
     // Passphrase timeout controller lifecycle (§11.3)
-    ref
-        .read(fsPassphraseTimeoutControllerProvider)
-        .onAppLifecycleChanged(state);
+    _passphraseTimeoutController.onAppLifecycleChanged(state);
 
     final lockEnabled = ref.read(appLockEnabledProvider);
     if (!lockEnabled) return;
@@ -801,13 +811,14 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
     _sharedTextSub?.cancel();
     _identityReloadSub?.close();
     _appLockEnabledSub?.close();
+    _screenProtectionEnabledSub?.close();
     _appLockTimeoutSub?.close();
     _appNeedsUnlockSub?.close();
     _appLockRequestSub?.close();
     _passphrasePreferencesSub?.close();
     _externalIngress.close();
     _opaqueSharedMediaBatches.clear();
-    ref.read(fsPassphraseTimeoutControllerProvider).dispose();
+    _passphraseTimeoutController.dispose();
     _appLockIdleController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -825,6 +836,9 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
     final lockStateReady = ref.watch(appLockStateReadyProvider);
     final screenProtectionEnabled = ref.watch(screenProtectionEnabledProvider);
     final privacyShieldVisible = ref.watch(privacyShieldVisibleProvider);
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    final isInactive =
+        lifecycle != null && lifecycle != AppLifecycleState.resumed;
     final tooltipsEnabled = ref.watch(tooltipsEnabledProvider);
     final tooltipsVisible =
         AppPlatform.supportsHoverTooltips && tooltipsEnabled;
@@ -862,25 +876,22 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
               _appLockIdleController.onUserInteraction(),
           child: TooltipVisibility(
             visible: tooltipsVisible,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                AppLockGate(
-                  lockStateReady: lockStateReady && !_lockRequested,
-                  needsUnlock: needsUnlock,
-                  lockNavigatorKey: _lockNavKey,
-                  unlockBuilder: (_) => UnlockView(
-                    onUnlocked: () {
-                      ref.read(appNeedsUnlockProvider.notifier).state = false;
-                    },
-                  ),
-                  child: LayergramBackground(
-                    child: child ?? const SizedBox(),
-                  ),
+            child: PrivacyShieldGate(
+              visible: screenProtectionEnabled &&
+                  (privacyShieldVisible || isInactive),
+              child: AppLockGate(
+                lockStateReady: lockStateReady && !_lockRequested,
+                needsUnlock: needsUnlock,
+                lockNavigatorKey: _lockNavKey,
+                unlockBuilder: (_) => UnlockView(
+                  onUnlocked: () {
+                    ref.read(appNeedsUnlockProvider.notifier).state = false;
+                  },
                 ),
-                if (screenProtectionEnabled && privacyShieldVisible)
-                  const PrivacyShieldOverlay(),
-              ],
+                child: LayergramBackground(
+                  child: child ?? const SizedBox(),
+                ),
+              ),
             ),
           ),
         );

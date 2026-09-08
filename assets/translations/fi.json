@@ -153,7 +153,7 @@
   "contactNameHelper": "Yksityisyyden vuoksi valitse anonyymi nimimerkki tai keksitty nimi.",
   "aboutApp": "Tietoja Layergramista",
   "appVersion": "Versio {v}",
-  "screenProtectionSubtitle": "Suojaa viestit kuvakaappauksilta ja näytön tallennuksilta",
+  "screenProtectionSubtitle": "Auttaa rajoittamaan kuvakaappauksia ja tallennusta tuetuissa tilanteissa. Ei voi suojata vaarantuneelta laitteelta.",
   "hideChatPreview": "Piilota viimeisen viestin esikatselu",
   "hideChatPreviewSubtitle": "Piilota viestien esikatselut keskustelulistassa (näkyvillä haun aikana)",
   "clear": "Tyhjennä",

@@ -153,7 +153,7 @@
   "contactNameHelper": "為了更多隱私，請選擇匿名暱稱或虛構名稱。",
   "aboutApp": "Quant a Layergram",
   "appVersion": "Versió {v}",
-  "screenProtectionSubtitle": "保護訊息免於截圖和螢幕錄製",
+  "screenProtectionSubtitle": "在支援的情況下，有助於限制截圖和錄製。無法防護遭入侵的裝置。",
   "hideChatPreview": "隐藏最后消息预览",
   "hideChatPreviewSubtitle": "在聊天列表中隐藏消息预览（搜索时仍可见）",
   "clear": "清除",

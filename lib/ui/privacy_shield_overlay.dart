@@ -16,6 +16,39 @@ import 'package:flutter/material.dart';
 
 import '../l10n/app_strings.dart';
 
+/// Keeps [child] mounted while preventing it from being exposed or interactive
+/// whenever the privacy shield is visible.
+class PrivacyShieldGate extends StatelessWidget {
+  const PrivacyShieldGate({
+    super.key,
+    required this.visible,
+    required this.child,
+  });
+
+  final bool visible;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        ExcludeSemantics(
+          excluding: visible,
+          child: IgnorePointer(
+            ignoring: visible,
+            child: ExcludeFocus(
+              excluding: visible,
+              child: TickerMode(enabled: !visible, child: child),
+            ),
+          ),
+        ),
+        if (visible) const Positioned.fill(child: PrivacyShieldOverlay()),
+      ],
+    );
+  }
+}
+
 class PrivacyShieldOverlay extends StatelessWidget {
   const PrivacyShieldOverlay({super.key});
 
@@ -23,12 +56,13 @@ class PrivacyShieldOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     return AbsorbPointer(
       child: ColoredBox(
-        color: Colors.black.withValues(alpha: 0.92),
+        color: Colors.black,
         child: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.shield_outlined, size: 44, color: Colors.white70),
+              const Icon(Icons.shield_outlined,
+                  size: 44, color: Colors.white70),
               const SizedBox(height: 12),
               Text(
                 AppStrings.t(context, 'privacyShieldOverlay'),
