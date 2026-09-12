@@ -22,12 +22,12 @@ named `layergram-<version>.spdx.json`. They are generated from the exact release
 tag in a clean source tree and reviewed before publication.
 
 The current public release inventory was generated with Syft 1.51.1 from tag
-`v2.0.3+30` (`71035e163c4afdb7aab454c906634088020b683d`):
+`v2.0.4+31` (`75d8a146749cfd6c1778f9b3c1a1e788845fe27d`):
 
-- [SPDX 2.3 SBOM for v2.0.3+30](https://github.com/layergram/layergram/releases/download/v2.0.3%2B30/layergram-v2.0.3%2B30.spdx.json)
-- [SHA-256 checksum](https://github.com/layergram/layergram/releases/download/v2.0.3%2B30/layergram-v2.0.3%2B30.spdx.json.sha256)
+- [SPDX 2.3 SBOM for v2.0.4+31](https://github.com/layergram/layergram/releases/download/v2.0.4%2B31/layergram-v2.0.4%2B31.spdx.json)
+- [SHA-256 checksum](https://github.com/layergram/layergram/releases/download/v2.0.4%2B31/layergram-v2.0.4%2B31.spdx.json.sha256)
 
-That inventory contains 727 package records discovered from the release source,
+That inventory contains 732 package records discovered from the release source,
 including Pub, Cargo, Maven/Gradle, CocoaPods, GitHub Actions, and Python package
 metadata. Duplicate package names can be intentional when different platforms,
 versions, or lockfiles resolve the same dependency independently.
