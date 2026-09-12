@@ -36,5 +36,26 @@ jobs:
       - name: Resolve locked dependencies
         run: flutter pub get
 
-      - name: Build the non-distribution release APK
+      - name: Install the pinned Rust toolchain and Android targets
+        run: |
+          rustup toolchain install 1.87.0 --profile minimal
+          rustup override set 1.87.0
+          rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+
+      - name: Fetch the locked protocol backend dependencies
+        run: cargo fetch --locked --manifest-path native/layergram_scka/Cargo.toml
+
+      - name: Package the functional Android protocol backend
+        run: tool/pq/prepare_scka_packaged_android.sh
+
+      - name: Build the functional non-distribution release APK
+        env:
+          ORG_GRADLE_PROJECT_layergramSckaCandidatePackage: "true"
         run: flutter build apk --release --target lib/main.dart
+
+      - name: Require every supported protocol backend ABI
+        run: |
+          unzip -l build/app/outputs/flutter-apk/app-release.apk > apk-contents.txt
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            grep -F "lib/$abi/liblayergram_scka.so" apk-contents.txt
+          done

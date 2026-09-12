@@ -51,3 +51,9 @@ jobs:
           test/ui/privacy_shield_overlay_test.dart
           test/app_privacy_lifecycle_test.dart
           test/features/security/app_lock_gate_test.dart
+
+      - name: Verify release version and source-build contracts
+        run: >-
+          flutter test
+          test/core/platform_version_contract_test.dart
+          test/core/source_build_contract_test.dart

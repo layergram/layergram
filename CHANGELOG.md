@@ -6,6 +6,27 @@ The format is inspired by Keep a Changelog and reflects the public GitHub Releas
 
 ## [Unreleased]
 
+## [2.0.4+31] - 2026-09-12
+
+### Security
+- Applied screen protection before Flutter content is attached on Android and
+  retained the secure-window policy while the protection setting is active.
+- Rejected fully and partially obscured Android touch gestures, hid application
+  overlays where the platform supports it, and marked sensitive host content on
+  supported Android versions.
+- Hardened the iOS privacy shield during capture and inactive states while
+  preserving and restoring the prior window state.
+- Kept protected Flutter content out of semantics, pointer input, focus, and
+  tickers while the privacy shield is visible.
+
+### Documentation and testing
+- Clarified the platform limits of screen protection in the threat model and
+  localized settings text.
+- Added Android instrumentation, iOS native, Flutter lifecycle, and privacy
+  shield regression coverage.
+- Verified the documented Android build path from a fresh public clone with the
+  pinned Flutter 3.41.1 and Rust 1.87.0 toolchains.
+
 ## [2.0.3+30] - 2026-08-28
 
 ### Changed
