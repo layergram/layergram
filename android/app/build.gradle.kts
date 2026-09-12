@@ -39,7 +39,7 @@ plugins {
 
 dependencies {
     implementation("com.google.android.play:feature-delivery:2.1.0")
-    implementation("com.google.android.play:core-common:2.0.3")
+    implementation("com.google.android.play:core-common:2.0.4")
     androidTestImplementation("androidx.test:rules:1.2.0")
     androidTestImplementation("androidx.test:runner:1.2.0")
     androidTestImplementation("junit:junit:4.12")
