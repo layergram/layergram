@@ -148,10 +148,14 @@ A future optional add-on may provide an in-app secure keyboard for touch devices
 ## Getting Started
 
 ### Prerequisites
-- Flutter SDK >= 3.4
-- Dart SDK >= 3.4
+- Flutter SDK 3.41.1 (the version pinned by this repository's CI)
+- Dart SDK 3.11.0 (included with Flutter 3.41.1)
 - Rust 1.87.0 and Cargo for protocol-v3 native builds
 - Platform-specific tooling (Xcode for iOS/macOS, Android SDK, Visual Studio for Windows, Linux toolchain as needed)
+
+The committed dependency lock currently requires Dart 3.11.0 and Flutter
+3.38.4 or newer. Using Flutter 3.41.1 reproduces the toolchain used for release
+verification and avoids resolving a different dependency graph.
 
 ### Fetch Dependencies and Run Checks
 
