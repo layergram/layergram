@@ -153,7 +153,7 @@
   "contactNameHelper": "プライバシーのために、匿名のニックネームまたは架空の名前を選択してください。",
   "aboutApp": "レイヤーグラムについて",
   "appVersion": "バージョン {v}",
-  "screenProtectionSubtitle": "スクリーンショットと画面録画からメッセージを保護",
+  "screenProtectionSubtitle": "対応している場合にスクリーンショットや録画を制限するのに役立ちます。侵害されたデバイスから保護することはできません。",
   "hideChatPreview": "最後のメッセージプレビューを非表示",
   "hideChatPreviewSubtitle": "チャットリストのメッセージプレビューを非表示にする（検索中は表示）",
   "clear": "クリア",

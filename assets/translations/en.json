@@ -170,7 +170,7 @@
   "contactNameHelper": "For more privacy, choose an anonymous nickname or a made-up name.",
   "aboutApp": "About Layergram",
   "appVersion": "Version {v}",
-  "screenProtectionSubtitle": "Protect messages from screenshots and screen recording",
+  "screenProtectionSubtitle": "Helps limit screenshots and recording where supported. Cannot protect against a compromised device.",
   "newPin": "New PIN",
   "hideChatPreview": "Hide last message preview",
   "hideChatPreviewSubtitle": "Hide message previews in the chat list (still visible during search)",

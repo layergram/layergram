@@ -688,6 +688,7 @@
 				CUSTOM_GROUP_ID = group.app.layergram.app;
 				DEVELOPMENT_TEAM = B8CJ52364L;
 				ENABLE_BITCODE = NO;
+				ENABLE_TESTABILITY = YES;
 				INFOPLIST_FILE = Runner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Layergram;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";

@@ -153,7 +153,7 @@
   "contactNameHelper": "Per a més privadesa, trieu un pseudònim anònim o un nom fictici.",
   "aboutApp": "Quant a Layergram",
   "appVersion": "Versió {v}",
-  "screenProtectionSubtitle": "Protegeix els missatges de captures de pantalla i gravació de pantalla",
+  "screenProtectionSubtitle": "Ajuda a limitar les captures de pantalla i la gravació allà on és compatible. No pot protegir contra un dispositiu compromès.",
   "hideChatPreview": "Amaga la previsualització de l'últim missatge",
   "hideChatPreviewSubtitle": "Amaga les previsualitzacions a la llista de xats (visibles durant la cerca)",
   "clear": "Esborra",

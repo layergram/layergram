@@ -44,3 +44,10 @@ jobs:
 
       - name: Verify source-level security invariants
         run: flutter test test/security
+
+      - name: Verify privacy and app-lock gates
+        run: >-
+          flutter test
+          test/ui/privacy_shield_overlay_test.dart
+          test/app_privacy_lifecycle_test.dart
+          test/features/security/app_lock_gate_test.dart
