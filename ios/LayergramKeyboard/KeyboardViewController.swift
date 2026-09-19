@@ -212,10 +212,10 @@ final class KeyboardViewController: UIInputViewController {
 
     private var monotonicNow: Int64 { MailboxClock.system().monotonicMillis }
 
-    /// The opaque editor binding. iOS exposes `documentIdentifier` as a `UUID`;
-    /// only its string form is compared, never displayed, logged or stored.
-    private var documentIdentifier: String {
-        textDocumentProxy.documentIdentifier.uuidString
+    /// The proxy may not have a document during initial layout or detachment.
+    /// Only its opaque identifier is compared, never host text.
+    private var documentIdentifier: String? {
+        LGKeyboardDocumentIdentifier(textDocumentProxy)
     }
 
     /// The live capture state of the screen this input view is actually on.
@@ -246,6 +246,11 @@ final class KeyboardViewController: UIInputViewController {
         }
         guard hasFullAccess else {
             status = Copy.noFullAccess(locale)
+            render()
+            return
+        }
+        guard let documentIdentifier, !documentIdentifier.isEmpty else {
+            status = Copy.openApp(locale)
             render()
             return
         }

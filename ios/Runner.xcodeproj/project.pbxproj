@@ -12,6 +12,8 @@
 		2B0E8BE88549A7C47214B659 /* SystemKeyboardCore in Frameworks */ = {isa = PBXBuildFile; productRef = C70C1FE1307BC40FA7CA9BF7 /* SystemKeyboardCore */; };
 		331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C807B294A618700263BE5 /* RunnerTests.swift */; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
+		6B39A9E0982A4989B6F1338E /* KeyboardViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C630BAE7184EB359F991F397 /* KeyboardViewController.swift */; };
+		6B96C861CC07442D924E89D9 /* KeyboardViewControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6810C22CBA11D6CCE21E408 /* KeyboardViewControllerTests.swift */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
 		781B731D95C6803CFE46CF98 /* KeyboardViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C630BAE7184EB359F991F397 /* KeyboardViewController.swift */; };
 		7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */; };
@@ -84,6 +86,7 @@
 		74858FAE1ED2DC5600515810 /* AppDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Flutter/Release.xcconfig; sourceTree = "<group>"; };
+		7D0AF2D3A1F575645A7A4074 /* KeyboardDocumentIdentifier.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = KeyboardDocumentIdentifier.h; sourceTree = "<group>"; };
 		81E781A3A3E805B3846EDF19 /* LayergramKeyboard.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = LayergramKeyboard.entitlements; sourceTree = "<group>"; };
 		9740EEB21CF90195004384FC /* Debug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Debug.xcconfig; path = Flutter/Debug.xcconfig; sourceTree = "<group>"; };
 		9740EEB31CF90195004384FC /* Generated.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Generated.xcconfig; path = Flutter/Generated.xcconfig; sourceTree = "<group>"; };
@@ -93,6 +96,7 @@
 		97C147001CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		9FFF046CA62208B80B72A7A6 /* libPods-RunnerTests.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-RunnerTests.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		A6810C22CBA11D6CCE21E408 /* KeyboardViewControllerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = KeyboardViewControllerTests.swift; sourceTree = "<group>"; };
 		BE798624E4219E80254E93E1 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		BEF088D7627B02C058233169 /* SystemKeyboardHost.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SystemKeyboardHost.swift; sourceTree = "<group>"; };
 		C42C10D244C8F90964DC606F /* LayergramKeyboard.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = LayergramKeyboard.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -173,6 +177,7 @@
 			children = (
 				331C807B294A618700263BE5 /* RunnerTests.swift */,
 				1F40DDB1BCDF21F44CBF2AE0 /* SystemKeyboardHostTests.swift */,
+				A6810C22CBA11D6CCE21E408 /* KeyboardViewControllerTests.swift */,
 			);
 			path = RunnerTests;
 			sourceTree = "<group>";
@@ -193,6 +198,7 @@
 				BE798624E4219E80254E93E1 /* Info.plist */,
 				81E781A3A3E805B3846EDF19 /* LayergramKeyboard.entitlements */,
 				C630BAE7184EB359F991F397 /* KeyboardViewController.swift */,
+				7D0AF2D3A1F575645A7A4074 /* KeyboardDocumentIdentifier.h */,
 			);
 			name = LayergramKeyboard;
 			path = LayergramKeyboard;
@@ -597,6 +603,8 @@
 			files = (
 				331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */,
 				C6B013FE5D4C7E3886C84554 /* SystemKeyboardHostTests.swift in Sources */,
+				6B96C861CC07442D924E89D9 /* KeyboardViewControllerTests.swift in Sources */,
+				6B39A9E0982A4989B6F1338E /* KeyboardViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -743,6 +751,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = app.layergram.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OBJC_BRIDGING_HEADER = LayergramKeyboard/KeyboardDocumentIdentifier.h;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Runner.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Runner";
@@ -761,6 +770,7 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.layergram.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = LayergramKeyboard/KeyboardDocumentIdentifier.h;
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Runner.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Runner";
 			};
@@ -778,6 +788,7 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.layergram.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = LayergramKeyboard/KeyboardDocumentIdentifier.h;
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Runner.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Runner";
 			};
@@ -806,7 +817,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
-				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_OBJC_BRIDGING_HEADER = LayergramKeyboard/KeyboardDocumentIdentifier.h;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VALIDATE_PRODUCT = YES;
@@ -953,7 +964,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
-				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_OBJC_BRIDGING_HEADER = LayergramKeyboard/KeyboardDocumentIdentifier.h;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VALIDATE_PRODUCT = YES;
@@ -983,7 +994,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
-				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_OBJC_BRIDGING_HEADER = LayergramKeyboard/KeyboardDocumentIdentifier.h;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
