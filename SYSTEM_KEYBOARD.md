@@ -105,6 +105,23 @@ lock or suspension prevents the acknowledgement, the prepared export stays
 recoverable as pending; no delivery or transport-app acceptance is inferred.
 Own-insertion callbacks are not suppressed to make acknowledgement appear reliable.
 
+Native host tests use a synthetic Dart peer and real protected App Group
+storage. On a physical device they check the directory and every final mailbox
+leaf for complete file protection, plus backup exclusion and removal of staging
+files. A real-clock test keeps sending heartbeats and verifies that the finite
+window closes and is purged without renewal. Notification tests explicitly
+simulate protection-loss and capture events; they do not prove behavior during
+an actual device lock or screen recording.
+
+For native host tests on a physical device, use the Profile configuration with
+`ENABLE_TESTABILITY=YES`, build the keyboard first, and explicitly enable its
+embedding and experimental Runner entitlements. Profile avoids the Flutter
+Debug engine's debugger/JIT requirement. Use separately provisioned test bundle
+identifiers and App Groups when testing on a personal device. Runner's Profile
+configuration is separate from the project defaults; the test bundle carries no
+App Group entitlement, and the native keyboard does not inherit Flutter linker
+flags.
+
 The experiment is not ready for distribution. Physical-device validation must
 cover Full Access, data protection on lock, suspension/termination, app-lock and
 identity changes, capture, extension memory pressure and real V3 exchanges.
