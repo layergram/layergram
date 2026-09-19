@@ -76,6 +76,21 @@ heartbeats never renew that window. Hiding or switching the keyboard ends the
 session immediately, including its transport keys. A window admits one keyboard
 appearance; return to Layergram to start another one.
 
+The iOS composer uses conventional letter, number and symbol rows, with
+backspace on the right and a wide space key. Choose a recipient, compose locally,
+then use **Encrypt & insert** and the transport app's own send control.
+**Paste & decrypt** opens a reading panel with the authenticated sender and a
+scrollable message. Decoding does not choose a recipient. Tapping **Reply to**
+explicitly selects that sender after the app validates the selection; **Compose**
+returns to typing without choosing anyone. The globe remains available on each
+panel. English, Italian and Spanish labels are included.
+
+The fixed window above is still a prototype limitation. An inactivity-based
+session, renewed only by actual keyboard interaction and with a configurable
+duration, is not implemented yet. Increasing a software timeout alone does not
+keep the containing iOS app executable. Manual lock, device lock and identity
+revocation must remain authoritative in any replacement architecture.
+
 ### iOS owner and extension boundary
 
 The extension never opens the vault or V3 runtime. A finite background task in

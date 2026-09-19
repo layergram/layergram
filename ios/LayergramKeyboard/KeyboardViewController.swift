@@ -26,105 +26,323 @@ import UIKit
 final class KeyboardViewController: UIInputViewController {
     // MARK: - Copy
 
-    /// Local Italian and English labels. No passphrase, identity reason, icon or
-    /// lock detail is ever shown.
-    private enum Copy {
+    /// User-facing copy. English, Italian and Spanish are carried locally; any
+    /// other system language falls back to English. No passphrase, identity
+    /// reason, icon or lock detail is ever shown. Nothing here is secret.
+    enum Language: Equatable {
+        case english, italian, spanish
+
+        static func forLocale(_ locale: Locale) -> Language {
+            switch locale.languageCode?.lowercased() {
+            case "it": return .italian
+            case "es": return .spanish
+            default: return .english
+            }
+        }
+    }
+
+    enum StringKey: CaseIterable {
+        case space, returnKey, deleteKey
+        case contacts, paste, encryptInsert, pasteDecrypt
+        case confirm, cancel, newMessage, recipient, draft, window, fingerprint, previewTitle, compose, readMessage
+        case globeSwitch
+        case confirmPrompt, emptyDraftHint
+        case minimumSystem, openApp, unavailable, noFullAccess
+        case starting, sessionActive, waiting, exported, sessionExpired
+        case tooLong, pasteTooLong, emptyPaste, noContacts, rejected, chooseRecipient
+        case handOffNote
+        /// The decoded sender line and the explicit reply shortcut.
+        case from, to, replyTo, senderTapHint
+    }
+
+    enum Copy {
+        static func locale(_ language: Language) -> Locale {
+            switch language {
+            case .english: return Locale(identifier: "en_US")
+            case .italian: return Locale(identifier: "it_IT")
+            case .spanish: return Locale(identifier: "es_ES")
+            }
+        }
+
+        static func language(_ locale: Locale) -> Language { Language.forLocale(locale) }
+
+        /// Localized string for an explicit language. The table is total, so a
+        /// missing translation is a compile-time gap, not a silent raw key.
+        static func string(_ key: StringKey, in language: Language) -> String {
+            switch key {
+            case .space:
+                if language == .italian { return "spazio" }
+                if language == .spanish { return "espacio" }
+                return "space"
+            case .returnKey:
+                if language == .italian { return "invio" }
+                if language == .spanish { return "intro" }
+                return "return"
+            case .deleteKey:
+                if language == .italian { return "canc" }
+                if language == .spanish { return "borrar" }
+                return "del"
+            case .contacts:
+                if language == .italian { return "Rubrica" }
+                if language == .spanish { return "Contactos" }
+                return "Contacts"
+            case .paste:
+                if language == .italian { return "Incolla" }
+                if language == .spanish { return "Pegar" }
+                return "Paste"
+            case .encryptInsert:
+                if language == .italian { return "Cifra e inserisci" }
+                if language == .spanish { return "Cifrar e insertar" }
+                return "Encrypt & insert"
+            case .pasteDecrypt:
+                if language == .italian { return "Incolla e decifra" }
+                if language == .spanish { return "Pegar y descifrar" }
+                return "Paste & decrypt"
+            case .confirm:
+                if language == .italian { return "Conferma" }
+                if language == .spanish { return "Confirmar" }
+                return "Confirm"
+            case .cancel:
+                if language == .italian { return "Annulla" }
+                if language == .spanish { return "Cancelar" }
+                return "Cancel"
+            case .newMessage:
+                if language == .italian { return "Nuovo" }
+                if language == .spanish { return "Nuevo" }
+                return "New"
+            case .compose:
+                if language == .italian { return "Scrivi" }
+                if language == .spanish { return "Escribir" }
+                return "Compose"
+            case .readMessage:
+                if language == .italian { return "Leggi" }
+                if language == .spanish { return "Leer" }
+                return "Read"
+            case .recipient:
+                if language == .italian { return "Destinatario" }
+                if language == .spanish { return "Destinatario" }
+                return "Recipient"
+            case .draft:
+                if language == .italian { return "Bozza" }
+                if language == .spanish { return "Borrador" }
+                return "Draft"
+            case .window:
+                if language == .italian { return "Finestra" }
+                if language == .spanish { return "Ventana" }
+                return "Window"
+            case .fingerprint:
+                if language == .italian { return "Impronta" }
+                if language == .spanish { return "Huella" }
+                return "Fingerprint"
+            case .previewTitle:
+                if language == .italian { return "Anteprima" }
+                if language == .spanish { return "Vista previa" }
+                return "Preview"
+            case .globeSwitch:
+                if language == .italian { return "Cambia tastiera" }
+                if language == .spanish { return "Cambiar teclado" }
+                return "Next keyboard"
+            case .confirmPrompt:
+                if language == .italian { return "Conferma il destinatario e verifica l'impronta." }
+                if language == .spanish { return "Confirma el destinatario y revisa la huella." }
+                return "Confirm the recipient and check the fingerprint."
+            case .emptyDraftHint:
+                if language == .italian { return "Scrivi un messaggio, poi tocca Cifra e inserisci." }
+                if language == .spanish { return "Escribe un mensaje y toca Cifrar e insertar." }
+                return "Type a message, then tap Encrypt & insert."
+            case .minimumSystem:
+                if language == .italian { return "La tastiera richiede iOS 26 o successivo." }
+                if language == .spanish { return "El teclado requiere iOS 26 o posterior." }
+                return "The keyboard requires iOS 26 or later."
+            case .openApp:
+                if language == .italian {
+                    return "Apri e sblocca Layergram manualmente, poi torna qui."
+                }
+                if language == .spanish {
+                    return "Abre y desbloquea Layergram manualmente y vuelve aquí."
+                }
+                return "Open and unlock Layergram manually, then come back here."
+            case .unavailable:
+                if language == .italian { return "Layergram non è disponibile." }
+                if language == .spanish { return "Layergram no está disponible." }
+                return "Layergram is unavailable."
+            case .noFullAccess:
+                if language == .italian {
+                    return "Serve l'accesso completo per la tastiera Layergram. Attivalo in Impostazioni > Tastiere."
+                }
+                if language == .spanish {
+                    return "Se necesita acceso completo para el teclado Layergram. Actívalo en Ajustes > Teclados."
+                }
+                return "Full Access is required for the Layergram keyboard. Enable it in Settings > Keyboards."
+            case .starting:
+                if language == .italian { return "Avvio sicuro in corso…" }
+                if language == .spanish { return "Iniciando de forma segura…" }
+                return "Starting securely…"
+            case .sessionActive:
+                if language == .italian { return "Sessione attiva." }
+                if language == .spanish { return "Sesión activa." }
+                return "Session active."
+            case .waiting:
+                if language == .italian { return "In attesa dell'app…" }
+                if language == .spanish { return "Esperando la app…" }
+                return "Waiting for the app…"
+            case .exported:
+                // `insertText` returns `Void`: the keyboard can only say the
+                // encrypted text was handed to the host app. It never claims the
+                // host accepted, inserted or delivered anything.
+                if language == .italian {
+                    return "Testo cifrato passato all'app. Premi invio nell'app per spedirlo. Nessuna conferma di consegna."
+                }
+                if language == .spanish {
+                    return "Texto cifrado pasado a la app. Pulsa enviar en la app para mandarlo. Sin confirmación de entrega."
+                }
+                return "Encrypted text passed to the app. Press send in the app to post it. No delivery confirmation."
+            case .sessionExpired:
+                if language == .italian {
+                    return "Sessione scaduta. Torna in Layergram per aprirne una nuova."
+                }
+                if language == .spanish {
+                    return "Sesión caducada. Vuelve a Layergram para abrir una nueva."
+                }
+                return "Session expired. Return to Layergram to open a new one."
+            case .tooLong:
+                if language == .italian { return "Testo troppo lungo." }
+                if language == .spanish { return "El texto es demasiado largo." }
+                return "Text is too long."
+            case .pasteTooLong:
+                if language == .italian { return "Contenuto incollato troppo lungo." }
+                if language == .spanish { return "El contenido pegado es demasiado largo." }
+                return "Pasted content is too long."
+            case .emptyPaste:
+                if language == .italian { return "Negli appunti non c'è testo." }
+                if language == .spanish { return "El portapapeles no contiene texto." }
+                return "The clipboard has no text."
+            case .noContacts:
+                if language == .italian { return "Nessun contatto disponibile." }
+                if language == .spanish { return "No hay contactos disponibles." }
+                return "No contacts available."
+            case .rejected:
+                if language == .italian { return "Messaggio non supportato." }
+                if language == .spanish { return "Mensaje no compatible." }
+                return "Unsupported message."
+            case .chooseRecipient:
+                if language == .italian { return "Scegli un destinatario." }
+                if language == .spanish { return "Elige un destinatario." }
+                return "Choose a recipient."
+            case .handOffNote:
+                if language == .italian {
+                    return "Dopo l'inserimento premi invio nell'app di destinazione."
+                }
+                if language == .spanish {
+                    return "Tras insertar, pulsa enviar en la app de destino."
+                }
+                return "After insertion, press send in the host app."
+            case .from:
+                if language == .italian { return "Da" }
+                if language == .spanish { return "De" }
+                return "From"
+            case .to:
+                if language == .italian { return "A" }
+                if language == .spanish { return "Para" }
+                return "To"
+            case .replyTo:
+                if language == .italian { return "Rispondi a" }
+                if language == .spanish { return "Responder a" }
+                return "Reply to"
+            case .senderTapHint:
+                if language == .italian { return "Tocca per rispondere a questo mittente." }
+                if language == .spanish { return "Toca para responder a este remitente." }
+                return "Tap to reply to this sender."
+            }
+        }
+
+        static func string(_ key: StringKey, in locale: Locale) -> String {
+            string(key, in: language(locale))
+        }
+
         static func isItalian(_ locale: Locale) -> Bool {
-            locale.languageCode?.lowercased() == "it"
+            language(locale) == .italian
         }
 
-        static func space(_ l: Locale) -> String { isItalian(l) ? "spazio" : "space" }
-        static func returnKey(_ l: Locale) -> String { isItalian(l) ? "invio" : "return" }
-        static func deleteKey(_ l: Locale) -> String { isItalian(l) ? "canc" : "del" }
-        static func contacts(_ l: Locale) -> String { isItalian(l) ? "Rubrica" : "Contacts" }
-        static func paste(_ l: Locale) -> String { isItalian(l) ? "Incolla" : "Paste" }
-        static func send(_ l: Locale) -> String { isItalian(l) ? "Cifra" : "Encrypt" }
-        static func confirm(_ l: Locale) -> String { isItalian(l) ? "Conferma" : "Confirm" }
-        static func cancel(_ l: Locale) -> String { isItalian(l) ? "Annulla" : "Cancel" }
-        static func newMessage(_ l: Locale) -> String { isItalian(l) ? "Nuovo" : "New" }
-        static func recipient(_ l: Locale) -> String { isItalian(l) ? "Destinatario" : "Recipient" }
-        static func draft(_ l: Locale) -> String { isItalian(l) ? "Bozza" : "Draft" }
-        static func window(_ l: Locale) -> String { isItalian(l) ? "Finestra" : "Window" }
-        static func fp(_ l: Locale) -> String { isItalian(l) ? "Impronta" : "Fingerprint" }
-        static func previewTitle(_ l: Locale) -> String { isItalian(l) ? "Anteprima" : "Preview" }
-
-        static func confirmPrompt(_ l: Locale) -> String {
-            isItalian(l)
-                ? "Conferma il destinatario e verifica l'impronta."
-                : "Confirm the recipient and check the fingerprint."
-        }
-        static func minimumSystem(_ l: Locale) -> String {
-            isItalian(l) ? "La tastiera richiede iOS 26 o successivo."
-                : "The keyboard requires iOS 26 or later."
-        }
-        static func openApp(_ l: Locale) -> String {
-            isItalian(l)
-                ? "Apri e sblocca Layergram manualmente, poi torna qui."
-                : "Open and unlock Layergram manually, then come back here."
-        }
-        static func unavailable(_ l: Locale) -> String {
-            isItalian(l) ? "Layergram non è disponibile." : "Layergram is unavailable."
-        }
-        static func noFullAccess(_ l: Locale) -> String {
-            isItalian(l)
-                ? "Serve l'accesso completo per la tastiera Layergram. Attivalo in Impostazioni > Tastiere."
-                : "Full Access is required for the Layergram keyboard. Enable it in Settings > Keyboards."
-        }
-        static func starting(_ l: Locale) -> String {
-            isItalian(l) ? "Avvio sicuro in corso…" : "Starting securely…"
-        }
-        static func idle(_ l: Locale) -> String {
-            isItalian(l) ? "Sessione attiva." : "Session active."
-        }
-        static func waiting(_ l: Locale) -> String {
-            isItalian(l) ? "In attesa dell'app…" : "Waiting for the app…"
-        }
-        static func exported(_ l: Locale) -> String {
-            isItalian(l)
-                ? "Cifratura passata alla tastiera di sistema (nessuna conferma di consegna)."
-                : "Ciphertext handed to the system keyboard (no delivery confirmation)."
-        }
-        static func sessionOver(_ l: Locale) -> String {
-            isItalian(l)
-                ? "Sessione scaduta. Torna in Layergram per aprirne una nuova."
-                : "Session expired. Return to Layergram to open a new one."
-        }
-        static func tooLong(_ l: Locale) -> String {
-            isItalian(l) ? "Testo troppo lungo." : "Text is too long."
-        }
-        static func pasteTooLong(_ l: Locale) -> String {
-            isItalian(l) ? "Contenuto incollato troppo lungo." : "Pasted content is too long."
-        }
-        static func emptyPaste(_ l: Locale) -> String {
-            isItalian(l) ? "Negli appunti non c'è testo." : "The clipboard has no text."
-        }
-        static func noContacts(_ l: Locale) -> String {
-            isItalian(l) ? "Nessun contatto disponibile." : "No contacts available."
-        }
-        static func rejected(_ l: Locale) -> String {
-            isItalian(l) ? "Messaggio non supportato." : "Unsupported message."
-        }
-        static func noRecipient(_ l: Locale) -> String {
-            isItalian(l) ? "Scegli un destinatario." : "Choose a recipient."
+        static func localeCode(_ locale: Locale) -> String {
+            switch language(locale) {
+            case .english: return "en"
+            case .italian: return "it"
+            case .spanish: return "es"
+            }
         }
     }
 
     // MARK: - State
 
-    private enum ShiftState { case off, on, locked }
-    private enum Layer { case letters, numbers, symbols }
-    private enum Surface { case keys, contacts, confirmation }
-    private enum KeyAction: String {
+    enum ShiftState { case off, on, locked }
+    enum Layer { case letters, numbers, symbols }
+    enum Surface { case keys, contacts, confirmation, preview }
+
+    /// Action keys are positional: the neutral scramble never moves them and
+    /// they keep the same identifier whatever the current layer is.
+    enum KeyAction: String, CaseIterable {
         case shift, backspace, space, newline, globe, layer, symbols
 
-        var identifier: String { "layergram.key.\(rawValue)" }
+        static let identifierPrefix = "layergram.key."
+
+        var identifier: String { "\(Self.identifierPrefix)\(rawValue)" }
 
         static func from(_ identifier: String?) -> KeyAction? {
-            guard let identifier else { return nil }
+            guard let identifier, identifier.hasPrefix(Self.identifierPrefix) else { return nil }
             return KeyAction(
-                rawValue: identifier.replacingOccurrences(of: "layergram.key.", with: "")
+                rawValue: String(identifier.dropFirst(Self.identifierPrefix.count))
             )
         }
+    }
+
+    /// One key of the rendered layout. Text keys carry the character they type
+    /// (already shifted for letters); action keys carry their fixed action.
+    enum KeyKind: Equatable {
+        case text(String)
+        case action(KeyAction)
+    }
+
+    struct KeyboardKey: Equatable {
+        let label: String
+        let kind: KeyKind
+        /// Stable tag used only to resolve a tapped text key. Positional action
+        /// keys are resolved by identifier, so they never need a tag.
+        let textTag: Int?
+
+        var action: KeyAction? {
+            if case .action(let action) = kind { return action }
+            return nil
+        }
+    }
+
+    struct KeyboardRow: Equatable {
+        let keys: [KeyboardKey]
+        let inset: Bool
+    }
+
+    /// What a tap on the primary action does for the current local state. The
+    /// decision is pure, so the empty-draft, admission and no-recipient rules can
+    /// be checked without forging an owner session.
+    enum PrimaryIntent: Equatable {
+        /// No live admission: keep the need-Full-Access / open-the-app message
+        /// instead of overwriting it with a workflow hint.
+        case blockedByAdmission
+        /// Nothing to send yet: explain the workflow and change nothing.
+        case promptEmptyDraft
+        /// A draft exists but no recipient is usable: select one first.
+        case openRecipientSelection
+        /// Recipient usable and draft valid: this tap is the explicit send.
+        case send
+    }
+
+    /// One decoded inbound message as displayed: the sender metadata plus the
+    /// preview text. Display-only; it is never a recipient selection.
+    struct DecodedPreviewDisplay: Equatable {
+        let contactId: String
+        let contactName: String
+        let fingerprint: String
+        let text: String
     }
 
     private let policy = KeyboardEditorPolicy()
@@ -140,14 +358,22 @@ final class KeyboardViewController: UIInputViewController {
     private var repeatTimer: Timer?
     private var lastHeartbeatMonotonicMillis: Int64 = 0
 
-    private var draft = ""
+    // Local editor state. `draft` and `pendingSelection` are readable inside the
+    // module so native tests can drive the flow decisions; they are never
+    // writable from outside and they never grant a session on their own.
+    private(set) var draft = ""
     private var shift: ShiftState = .off
     private var layer: Layer = .letters
-    private var surface: Surface = .keys
+    private(set) var surface: Surface = .keys
     private var contacts: [KeyboardContact] = []
-    private var status = ""
+    private(set) var status = ""
     private var operation: KeyboardOperation?
-    private var pendingSelection: KeyboardContact?
+    private(set) var pendingSelection: KeyboardContact?
+    /// The sender of the last successful authenticated decode, kept only so the
+    /// user can explicitly reply to them. It is deliberately **separate** from
+    /// `pendingSelection`: a decoded message never preselects a recipient, and
+    /// this value never counts as a confirmed selection.
+    private(set) var displayedSender: KeyboardContact?
     private var scrambledIndex: [Int: [Int]] = [:]
     private var scrambleEnabled = false
 
@@ -165,6 +391,20 @@ final class KeyboardViewController: UIInputViewController {
     private let confirmView = UIView()
     private let confirmLabel = UILabel()
     private let shortcutsStack = UIStackView()
+    /// The explicit reply shortcut for a decoded sender. Visible only while a
+    /// sender display exists on the key surface.
+    private let senderButton = UIButton(type: .system)
+    /// The always-available input-mode control for the surfaces where the key
+    /// layout (and therefore its globe key) is hidden. It lives outside
+    /// `keysContainer` so hiding that container can never hide the globe.
+    private let fallbackGlobeButton = UIButton(type: .system)
+    private let footerStack = UIStackView()
+    private let previewContainer = UIStackView()
+    /// Action buttons of the current key layout, keyed by their fixed action.
+    /// They are retained so a shifted character only repaints the shift key
+    /// instead of rebuilding every key of the layout.
+    private var actionButtons: [KeyAction: UIButton] = [:]
+    private var rowsSignature = ""
 
     // MARK: - Lifecycle
 
@@ -240,22 +480,22 @@ final class KeyboardViewController: UIInputViewController {
     private func startSession() {
         guard started, session == nil else { return }
         guard MailboxCryptoAvailability.isSupported else {
-            status = Copy.minimumSystem(locale)
+            status = Copy.string(.minimumSystem, in: locale)
             render()
             return
         }
         guard hasFullAccess else {
-            status = Copy.noFullAccess(locale)
+            status = Copy.string(.noFullAccess, in: locale)
             render()
             return
         }
         guard let documentIdentifier, !documentIdentifier.isEmpty else {
-            status = Copy.openApp(locale)
+            status = Copy.string(.openApp, in: locale)
             render()
             return
         }
         guard let group = appGroupIdentifier, !group.isEmpty else {
-            status = Copy.openApp(locale)
+            status = Copy.string(.openApp, in: locale)
             render()
             return
         }
@@ -265,7 +505,7 @@ final class KeyboardViewController: UIInputViewController {
             let client = self.client ?? MailboxClient(storage: storage)
             self.client = client
             guard client.hasLiveWindow() else {
-                status = Copy.openApp(locale)
+                status = Copy.string(.openApp, in: locale)
                 render()
                 return
             }
@@ -277,7 +517,7 @@ final class KeyboardViewController: UIInputViewController {
                 documentIdentifier: documentIdentifier,
                 windowDeadlineMonotonicMillis: sessionDeadlineMonotonicMillis
             ) else {
-                invalidateEditor(status: Copy.openApp(locale))
+                invalidateEditor(status: Copy.string(.openApp, in: locale))
                 return
             }
             draft = ""
@@ -289,7 +529,7 @@ final class KeyboardViewController: UIInputViewController {
             layer = .letters
             shift = .off
             lastHeartbeatMonotonicMillis = 0
-            status = Copy.starting(locale)
+            status = Copy.string(.starting, in: locale)
             render()
             let begin = try policy.beginRequestData()
             try session.send(payload: begin)
@@ -298,7 +538,7 @@ final class KeyboardViewController: UIInputViewController {
         } catch {
             // Storage, rendezvous and admission problems collapse into one
             // generic state: no reason, no owner detail, no retry of an old send.
-            invalidateEditor(status: Copy.openApp(locale))
+            invalidateEditor(status: Copy.string(.openApp, in: locale))
         }
     }
 
@@ -319,7 +559,7 @@ final class KeyboardViewController: UIInputViewController {
             self.operation = operation
             return true
         } catch {
-            invalidateEditor(status: Copy.openApp(locale))
+            invalidateEditor(status: Copy.string(.openApp, in: locale))
             return false
         }
     }
@@ -353,20 +593,20 @@ final class KeyboardViewController: UIInputViewController {
         }
         // Bootstrap: the first accepted `begin` is bounded to <= 1 s.
         if policy.isBootstrapExpired {
-            invalidateEditor(status: Copy.openApp(locale))
+            invalidateEditor(status: Copy.string(.openApp, in: locale))
             return
         }
         if policy.isBeginAccepted {
             // Every poll needs full admission (Full Access, no capture, exact
             // document binding) plus the live <= 1 s freshness lease.
             if !policy.revalidate(current) {
-                invalidateEditor(status: Copy.sessionOver(locale))
+                invalidateEditor(status: Copy.string(.sessionExpired, in: locale))
                 return
             }
             // A lapsed lease clears everything and drops the client even while
             // the 20 s window is still open.
             if policy.clearIfLeaseExpired(at: monotonicNow) {
-                invalidateEditor(status: Copy.sessionOver(locale))
+                invalidateEditor(status: Copy.string(.sessionExpired, in: locale))
                 return
             }
         }
@@ -380,7 +620,7 @@ final class KeyboardViewController: UIInputViewController {
                     handleResponse(data)
                 }
             } catch {
-                invalidateEditor(status: Copy.sessionOver(locale))
+                invalidateEditor(status: Copy.string(.sessionExpired, in: locale))
             }
             return
         }
@@ -423,11 +663,11 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private func unavailableState() {
-        invalidateEditor(status: Copy.openApp(locale))
+        invalidateEditor(status: Copy.string(.openApp, in: locale))
     }
 
     private func expiredState() {
-        invalidateEditor(status: Copy.sessionOver(locale))
+        invalidateEditor(status: Copy.string(.sessionExpired, in: locale))
     }
 
     /// Complete invalidation: end the editor binding, best-effort `end`, drop the
@@ -449,14 +689,22 @@ final class KeyboardViewController: UIInputViewController {
         draft = ""
         contacts = []
         pendingSelection = nil
+        // The decoded-sender shortcut dies with every other sensitive value, so
+        // an expired, rejected or superseded message can never leave a stale
+        // reply affordance behind.
+        displayedSender = nil
         operation = nil
         surface = .keys
         scrambledIndex = [:]
         scrambleEnabled = false
+        rowsSignature = ""
+        actionButtons = [:]
         draftLabel.text = nil
         draftLabel.accessibilityLabel = nil
         previewLabel.text = nil
         previewLabel.accessibilityLabel = nil
+        senderButton.setTitle(nil, for: .normal)
+        senderButton.accessibilityLabel = nil
         confirmLabel.text = nil
         confirmLabel.accessibilityLabel = nil
         recipientLabel.text = nil
@@ -471,7 +719,7 @@ final class KeyboardViewController: UIInputViewController {
     private func handleResponse(_ data: Data) {
         let completed = operation
         guard let response = policy.acceptResponse(data, snapshot: snapshot()) else {
-            invalidateEditor(status: Copy.sessionOver(locale))
+            invalidateEditor(status: Copy.string(.sessionExpired, in: locale))
             return
         }
         operation = nil
@@ -494,20 +742,20 @@ final class KeyboardViewController: UIInputViewController {
         guard let completed else { return }
         switch completed {
         case .begin:
-            status = Copy.idle(locale)
+            status = Copy.string(.sessionActive, in: locale)
         case .heartbeat:
             break
         case .contacts:
             contacts = policy.contacts() ?? []
             surface = .contacts
-            status = contacts.isEmpty ? Copy.noContacts(locale) : Copy.recipient(locale)
+            status = contacts.isEmpty ? Copy.string(.noContacts, in: locale) : Copy.string(.recipient, in: locale)
         case .select:
             if let confirmed = policy.selection() {
                 pendingSelection = confirmed
-                status = Copy.recipient(locale)
+                status = Copy.string(.recipient, in: locale)
             } else {
                 pendingSelection = nil
-                status = Copy.unavailable(locale)
+                status = Copy.string(.unavailable, in: locale)
             }
             // The confirmation sheet is gone: drop its retained text too.
             confirmLabel.text = nil
@@ -515,27 +763,32 @@ final class KeyboardViewController: UIInputViewController {
             surface = .keys
         case .prepare:
             guard let pendingId = policy.pendingId() else {
-                invalidateEditor(status: Copy.unavailable(locale))
+                invalidateEditor(status: Copy.string(.unavailable, in: locale))
                 return
             }
-            status = Copy.waiting(locale)
+            status = Copy.string(.waiting, in: locale)
             _ = queue(.authorize, payload: ["pendingId": .string(pendingId)])
         case .authorize:
             insertAuthorizedCarrier()
         case .ack:
-            status = Copy.exported(locale)
+            status = Copy.string(.exported, in: locale)
         case .decode:
             if let preview = policy.preview() {
-                previewLabel.text =
-                    "\(Copy.previewTitle(locale)) · \(preview.contactName)\n\(preview.text)"
-                previewLabel.accessibilityLabel = previewLabel.text
-                status = Copy.previewTitle(locale)
+                applyDecodedPreview(
+                    DecodedPreviewDisplay(
+                        contactId: preview.contactId,
+                        contactName: preview.contactName,
+                        fingerprint: preview.fingerprint,
+                        text: preview.text
+                    )
+                )
+                status = Copy.string(.previewTitle, in: locale)
             } else {
                 // A non-`ok` reply and an unprojectable one both leave the
-                // preview empty: there is no ciphertext fallback and no retry.
-                previewLabel.text = nil
-                previewLabel.accessibilityLabel = nil
-                status = Copy.rejected(locale)
+                // preview empty: there is no ciphertext fallback, no retry and no
+                // retained sender shortcut.
+                applyDecodedPreview(nil)
+                status = Copy.string(.rejected, in: locale)
             }
         case .end:
             break
@@ -548,14 +801,14 @@ final class KeyboardViewController: UIInputViewController {
         let newStatus: String
         switch statusCode {
         case KeyboardChannelStatus.oversize:
-            newStatus = Copy.tooLong(locale)
+            newStatus = Copy.string(.tooLong, in: locale)
         case KeyboardChannelStatus.openAppRequired,
              KeyboardChannelStatus.unavailable,
              KeyboardChannelStatus.busy,
              KeyboardChannelStatus.noMessage:
-            newStatus = Copy.openApp(locale)
+            newStatus = Copy.string(.openApp, in: locale)
         default:
-            newStatus = Copy.unavailable(locale)
+            newStatus = Copy.string(.unavailable, in: locale)
         }
         invalidateEditor(status: newStatus)
     }
@@ -577,7 +830,7 @@ final class KeyboardViewController: UIInputViewController {
         do {
             permit = try policy.insertionPermit(snapshot: current)
         } catch {
-            invalidateEditor(status: Copy.sessionOver(locale))
+            invalidateEditor(status: Copy.string(.sessionExpired, in: locale))
             return
         }
         // The one carrier value and the one host write. `insertText` returns
@@ -596,10 +849,10 @@ final class KeyboardViewController: UIInputViewController {
         guard policy.liveControl(snapshot()) else {
             // A host callback invalidated the editor during the insertion: do not
             // resurrect any context to acknowledge.
-            invalidateEditor(status: Copy.sessionOver(locale))
+            invalidateEditor(status: Copy.string(.sessionExpired, in: locale))
             return
         }
-        status = Copy.exported(locale)
+        status = Copy.string(.exported, in: locale)
         _ = queue(.ack, payload: [
             "pendingId": .string(permit.pendingId),
             "commitText": .bool(true)
@@ -614,7 +867,7 @@ final class KeyboardViewController: UIInputViewController {
         guard policy.liveControl(snapshot()) else {
             // A failing edit guard is a complete invalidation, never a status
             // change that keeps the local plaintext around.
-            invalidateEditor(status: Copy.sessionOver(locale))
+            invalidateEditor(status: Copy.string(.sessionExpired, in: locale))
             return false
         }
         return true
@@ -623,12 +876,12 @@ final class KeyboardViewController: UIInputViewController {
     private func insert(_ character: String) {
         guard editable() else { return }
         guard let next = KeyboardTextEdit.append(character, to: draft) else {
-            invalidateEditor(status: Copy.tooLong(locale))
+            invalidateEditor(status: Copy.string(.tooLong, in: locale))
             return
         }
         draft = next
         if case .on = shift { shift = .off }
-        if status == Copy.starting(locale) { status = Copy.idle(locale) }
+        if status == Copy.string(.starting, in: locale) { status = Copy.string(.sessionActive, in: locale) }
         render()
     }
 
@@ -654,42 +907,42 @@ final class KeyboardViewController: UIInputViewController {
 
     private func requestContacts() {
         guard hasFullAccess else {
-            invalidateEditor(status: Copy.noFullAccess(locale))
+            invalidateEditor(status: Copy.string(.noFullAccess, in: locale))
             return
         }
         guard policy.liveControl(snapshot()) else {
-            invalidateEditor(status: Copy.sessionOver(locale))
+            invalidateEditor(status: Copy.string(.sessionExpired, in: locale))
             return
         }
         guard queue(.contacts) else { return }
-        status = Copy.waiting(locale)
+        status = Copy.string(.waiting, in: locale)
         render()
     }
 
-    private func selectContact(_ contact: KeyboardContact) {
+    func selectContact(_ contact: KeyboardContact) {
         guard policy.liveControl(snapshot()) else {
-            invalidateEditor(status: Copy.sessionOver(locale))
+            invalidateEditor(status: Copy.string(.sessionExpired, in: locale))
             return
         }
         pendingSelection = contact
         surface = .confirmation
         confirmLabel.text = """
-        \(Copy.confirmPrompt(locale))
+        \(Copy.string(.confirmPrompt, in: locale))
 
         \(contact.name)
-        \(Copy.fp(locale)): \(contact.fingerprint)
+        \(Copy.string(.fingerprint, in: locale)): \(contact.fingerprint)
         """
         confirmLabel.accessibilityLabel = confirmLabel.text
         render()
     }
 
-    private func confirmSelection() {
+    func confirmSelection() {
         guard policy.liveControl(snapshot()) else {
-            invalidateEditor(status: Copy.sessionOver(locale))
+            invalidateEditor(status: Copy.string(.sessionExpired, in: locale))
             return
         }
         guard let contact = pendingSelection else {
-            invalidateEditor(status: Copy.noRecipient(locale))
+            invalidateEditor(status: Copy.string(.chooseRecipient, in: locale))
             return
         }
         // The explicit confirm is typed as a real JSON boolean.
@@ -702,13 +955,13 @@ final class KeyboardViewController: UIInputViewController {
         // The recipient becomes usable only once the owner re-confirms it in the
         // `select` reply; until then `policy.hasSelection` stays false.
         surface = .keys
-        status = Copy.waiting(locale)
+        status = Copy.string(.waiting, in: locale)
         render()
     }
 
-    private func cancelConfirmation() {
+    func cancelConfirmation() {
         guard policy.liveControl(snapshot()) else {
-            invalidateEditor(status: Copy.sessionOver(locale))
+            invalidateEditor(status: Copy.string(.sessionExpired, in: locale))
             return
         }
         pendingSelection = nil
@@ -718,19 +971,76 @@ final class KeyboardViewController: UIInputViewController {
         render()
     }
 
+    /// Display the sender of an accepted decode, or clear it.
+    ///
+    /// This is deliberately display-only and is the single code path used by the
+    /// decode grant: it never sets `pendingSelection`, never touches
+    /// `policy.hasSelection`, never queues a `select` and never runs from
+    /// `render`, a timer or a completion. The sender stays a shortcut the user
+    /// must tap explicitly.
+    func applyDecodedPreview(_ preview: DecodedPreviewDisplay?) {
+        guard let preview else {
+            displayedSender = nil
+            previewLabel.text = nil
+            previewLabel.accessibilityLabel = nil
+            if surface == .preview { surface = .keys }
+            render()
+            return
+        }
+        displayedSender = KeyboardContact(
+            id: preview.contactId,
+            name: preview.contactName,
+            fingerprint: preview.fingerprint
+        )
+        previewLabel.text = "\(Copy.string(.from, in: locale)): \(preview.contactName)\n\(preview.text)"
+        previewLabel.accessibilityLabel = previewLabel.text
+        surface = .preview
+        render()
+    }
+
+    /// The exact payload of the sender shortcut. It is the same explicit
+    /// `select {contactId, confirm:true}` the manual flow uses: no `prepare`, no
+    /// `authorize` and no client-side ciphertext.
+    func senderSelectPayload(for sender: KeyboardContact) -> [String: KeyboardRequestValue] {
+        ["contactId": .string(sender.id), "confirm": .bool(true)]
+    }
+
+    /// The explicit sender tap. It is the only thing that can turn a decoded
+    /// sender into a recipient, it needs the current live freshness lease, and it
+    /// only queues the request: `To:` appears only after the owner re-confirms the
+    /// selection in the `select` reply.
+    func tapSender() {
+        guard let sender = displayedSender else { return }
+        guard policy.liveControl(snapshot()) else {
+            invalidateEditor(status: Copy.string(.sessionExpired, in: locale))
+            return
+        }
+        // A tap while another request is in flight is ignored: it never claims a
+        // selection and never replaces the outstanding operation.
+        guard operation == nil else { return }
+        guard queue(.select, payload: senderSelectPayload(for: sender)) else {
+            // Refused by admission or the transport: `displayedSender` survives
+            // but no selection is claimed and `To:` stays hidden.
+            return
+        }
+        status = Copy.string(.waiting, in: locale)
+        render()
+    }
+
     /// Explicit, user-initiated paste. This is the only clipboard read in the
     /// extension: no listener, no timer and no automatic read.
     private func pasteAndDecode() {
         guard hasFullAccess else {
-            invalidateEditor(status: Copy.noFullAccess(locale))
+            invalidateEditor(status: Copy.string(.noFullAccess, in: locale))
             return
         }
         guard policy.liveControl(snapshot()) else {
-            invalidateEditor(status: Copy.sessionOver(locale))
+            invalidateEditor(status: Copy.string(.sessionExpired, in: locale))
             return
         }
         // An explicit decode always drops any previously confirmed recipient and
-        // local draft, so a preview can never inherit them.
+        // local draft, so a preview can never inherit them, and it drops the
+        // previous message's sender shortcut before the new one is known.
         draft = ""
         pendingSelection = nil
         policy.clearSelection()
@@ -738,20 +1048,19 @@ final class KeyboardViewController: UIInputViewController {
         draftLabel.accessibilityLabel = nil
         recipientLabel.text = nil
         recipientLabel.accessibilityLabel = nil
-        previewLabel.text = nil
-        previewLabel.accessibilityLabel = nil
+        applyDecodedPreview(nil)
         guard let pasted = UIPasteboard.general.string, !pasted.isEmpty else {
-            status = Copy.emptyPaste(locale)
+            status = Copy.string(.emptyPaste, in: locale)
             render()
             return
         }
         guard pasted.utf16.count <= KeyboardSurfaceBounds.maxInboundCarrierUTF16 else {
-            status = Copy.pasteTooLong(locale)
+            status = Copy.string(.pasteTooLong, in: locale)
             render()
             return
         }
         guard queue(.decode, payload: ["carrier": .string(pasted)]) else { return }
-        status = Copy.waiting(locale)
+        status = Copy.string(.waiting, in: locale)
         render()
     }
 
@@ -761,23 +1070,23 @@ final class KeyboardViewController: UIInputViewController {
     /// authorized carrier.
     private func beginSend() {
         guard hasFullAccess else {
-            invalidateEditor(status: Copy.noFullAccess(locale))
+            invalidateEditor(status: Copy.string(.noFullAccess, in: locale))
             return
         }
         guard policy.liveControl(snapshot()) else {
-            invalidateEditor(status: Copy.sessionOver(locale))
+            invalidateEditor(status: Copy.string(.sessionExpired, in: locale))
             return
         }
         guard policy.hasSelection, pendingSelection != nil else {
-            invalidateEditor(status: Copy.noRecipient(locale))
+            invalidateEditor(status: Copy.string(.chooseRecipient, in: locale))
             return
         }
         guard KeyboardTextEdit.isValidDraft(draft) else {
-            invalidateEditor(status: Copy.tooLong(locale))
+            invalidateEditor(status: Copy.string(.tooLong, in: locale))
             return
         }
         guard queue(.prepare, payload: ["text": .string(draft)]) else { return }
-        status = Copy.waiting(locale)
+        status = Copy.string(.waiting, in: locale)
         render()
     }
 
@@ -802,7 +1111,7 @@ final class KeyboardViewController: UIInputViewController {
     /// Capture cannot be blocked and is never claimed to be blocked: the keyboard
     /// simply drops every sensitive value and asks for a new window.
     @objc private func systemInvalidation() {
-        invalidateEditor(status: Copy.openApp(locale))
+        invalidateEditor(status: Copy.string(.openApp, in: locale))
     }
 
     /// Every host text or selection change invalidates the bound editor
@@ -812,7 +1121,7 @@ final class KeyboardViewController: UIInputViewController {
     /// insertion.
     private func editorInvalidated() {
         guard started else { return }
-        invalidateEditor(status: Copy.sessionOver(locale))
+        invalidateEditor(status: Copy.string(.sessionExpired, in: locale))
     }
 
     override func textWillChange(_ textInput: UITextInput?) {
@@ -833,7 +1142,7 @@ final class KeyboardViewController: UIInputViewController {
 
     override func didReceiveMemoryWarning() {
         super.didReceiveMemoryWarning()
-        invalidateEditor(status: Copy.openApp(locale))
+        invalidateEditor(status: Copy.string(.openApp, in: locale))
     }
 
     // MARK: - Layout
@@ -846,14 +1155,17 @@ final class KeyboardViewController: UIInputViewController {
         statusLabel.font = .preferredFont(forTextStyle: .footnote)
         statusLabel.adjustsFontForContentSizeCategory = true
         statusLabel.textColor = .label
-        statusLabel.numberOfLines = 3
-        statusLabel.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+        statusLabel.numberOfLines = 1
+        statusLabel.lineBreakMode = .byTruncatingTail
+        statusLabel.accessibilityIdentifier = "layergram.status"
+        statusLabel.setContentCompressionResistancePriority(.required, for: .vertical)
 
         draftLabel.font = .preferredFont(forTextStyle: .footnote)
         draftLabel.adjustsFontForContentSizeCategory = true
         draftLabel.textColor = .label
         draftLabel.numberOfLines = 1
         draftLabel.lineBreakMode = .byTruncatingHead
+        draftLabel.setContentCompressionResistancePriority(.required, for: .vertical)
         // The local draft never becomes an accessibility value exposed to the
         // host UI.
         draftLabel.isAccessibilityElement = false
@@ -863,12 +1175,14 @@ final class KeyboardViewController: UIInputViewController {
         recipientLabel.textColor = .secondaryLabel
         recipientLabel.numberOfLines = 1
         recipientLabel.lineBreakMode = .byTruncatingMiddle
+        recipientLabel.setContentCompressionResistancePriority(.required, for: .vertical)
 
         windowLabel.font = .preferredFont(forTextStyle: .caption1)
         windowLabel.adjustsFontForContentSizeCategory = true
         windowLabel.textColor = .secondaryLabel
         windowLabel.textAlignment = .right
         windowLabel.numberOfLines = 1
+        windowLabel.setContentCompressionResistancePriority(.required, for: .vertical)
 
         let infoRow = UIStackView(arrangedSubviews: [recipientLabel, windowLabel])
         infoRow.axis = .horizontal
@@ -894,9 +1208,10 @@ final class KeyboardViewController: UIInputViewController {
             previewLabel.bottomAnchor.constraint(equalTo: previewScroll.bottomAnchor, constant: -6),
             previewLabel.widthAnchor.constraint(equalTo: previewScroll.widthAnchor, constant: -16)
         ])
-        let previewHeight = previewScroll.heightAnchor.constraint(equalToConstant: 46)
-        previewHeight.priority = .defaultHigh
+        let previewHeight = previewScroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 46)
+        previewHeight.priority = UILayoutPriority(999)
         previewHeight.isActive = true
+        previewScroll.accessibilityIdentifier = "layergram.preview"
 
         contactsView.dataSource = self
         contactsView.delegate = self
@@ -930,25 +1245,80 @@ final class KeyboardViewController: UIInputViewController {
         shortcutsStack.axis = .horizontal
         shortcutsStack.spacing = 6
         shortcutsStack.distribution = .fillProportionally
+        shortcutsStack.alignment = .fill
 
-        let header = UIStackView(arrangedSubviews: [
-            statusLabel, infoRow, draftLabel, previewScroll
-        ])
+        // The decoded-sender reply shortcut. It is display-only until tapped and
+        // lives in the header next to the preview it belongs to.
+        senderButton.setTitleColor(.label, for: .normal)
+        senderButton.titleLabel?.font = .preferredFont(forTextStyle: .footnote)
+        senderButton.titleLabel?.adjustsFontForContentSizeCategory = true
+        senderButton.titleLabel?.numberOfLines = 1
+        senderButton.titleLabel?.lineBreakMode = .byTruncatingTail
+        senderButton.backgroundColor = .secondarySystemFill
+        senderButton.layer.cornerRadius = 6
+        senderButton.accessibilityIdentifier = "layergram.action.sender"
+        senderButton.addTarget(self, action: #selector(tapSenderButton), for: .touchUpInside)
+        senderButton.isHidden = true
+        let senderHeight = senderButton.heightAnchor.constraint(equalToConstant: 44)
+        senderHeight.priority = UILayoutPriority(999)
+        senderHeight.isActive = true
+
+        // The persistent fallback globe lives outside `keysContainer`, so the
+        // globe stays reachable on the contacts and confirmation surfaces where
+        // the whole key layout (including its bottom-row globe) is hidden.
+        fallbackGlobeButton.setTitle("🌐", for: .normal)
+        fallbackGlobeButton.titleLabel?.font = .preferredFont(forTextStyle: .body)
+        fallbackGlobeButton.titleLabel?.adjustsFontForContentSizeCategory = true
+        fallbackGlobeButton.setTitleColor(.label, for: .normal)
+        fallbackGlobeButton.backgroundColor = .secondarySystemFill
+        fallbackGlobeButton.layer.cornerRadius = 6
+        fallbackGlobeButton.accessibilityIdentifier = "layergram.action.globe"
+        fallbackGlobeButton.accessibilityLabel = Copy.string(.globeSwitch, in: locale)
+        fallbackGlobeButton.addTarget(
+            self,
+            action: #selector(tapFallbackGlobe),
+            for: .touchUpInside
+        )
+        fallbackGlobeButton.isHidden = true
+        footerStack.axis = .horizontal
+        footerStack.distribution = .fill
+        footerStack.addArrangedSubview(fallbackGlobeButton)
+        footerStack.addArrangedSubview(UIView())
+        fallbackGlobeButton.heightAnchor.constraint(
+            equalToConstant: Self.keyRowHeight
+        ).isActive = true
+        fallbackGlobeButton.widthAnchor.constraint(equalToConstant: 64).isActive = true
+
+        let header = UIStackView(arrangedSubviews: [statusLabel, infoRow, draftLabel])
         header.axis = .vertical
-        header.spacing = 6
+        header.spacing = 2
+        header.setContentHuggingPriority(.required, for: .vertical)
 
-        let content = UIStackView(arrangedSubviews: [contactsView, confirmView, keysContainer])
+        // Reading uses the key area, so plaintext and its reply action keep
+        // usable frames instead of competing with four fixed-height key rows.
+        previewContainer.axis = .vertical
+        previewContainer.spacing = 6
+        previewContainer.addArrangedSubview(previewScroll)
+        previewContainer.addArrangedSubview(senderButton)
+
+        let content = UIStackView(arrangedSubviews: [contactsView, confirmView, keysContainer, previewContainer])
         content.axis = .vertical
         content.setContentHuggingPriority(.defaultLow, for: .vertical)
 
-        let nextKeyboard = makeActionButton("🌐", action: .globe)
-        nextKeyboard.accessibilityLabel = Copy.isItalian(locale)
-            ? "Cambia tastiera" : "Next keyboard"
-        let footer = UIStackView(arrangedSubviews: [nextKeyboard, shortcutsStack])
-        footer.axis = .horizontal
-        footer.spacing = 6
-        nextKeyboard.setContentHuggingPriority(.required, for: .horizontal)
-        let root = UIStackView(arrangedSubviews: [header, content, footer])
+        // The action bar is always present: choosing a recipient, encrypting and
+        // pasting are discoverable before any recipient exists. The globe lives
+        // inside the key layout's bottom row and, when that row is hidden, in the
+        // persistent footer instead of this bar.
+        let actions = UIStackView(arrangedSubviews: [shortcutsStack])
+        actions.axis = .vertical
+        actions.spacing = 6
+        let actionHeight = actions.heightAnchor.constraint(
+            greaterThanOrEqualToConstant: Self.actionBarMinimumHeight
+        )
+        actionHeight.priority = .required
+        actionHeight.isActive = true
+
+        let root = UIStackView(arrangedSubviews: [header, content, actions, footerStack])
         root.axis = .vertical
         root.spacing = 6
         root.translatesAutoresizingMaskIntoConstraints = false
@@ -971,15 +1341,16 @@ final class KeyboardViewController: UIInputViewController {
         let remaining = sessionDeadlineMonotonicMillis - monotonicNow
         guard remaining > 0 else { return nil }
         let seconds = (remaining + 999) / 1000
-        return "\(Copy.window(locale)): \(seconds)s"
+        return "\(Copy.string(.window, in: locale)): \(seconds)s"
     }
 
     private func render() {
         statusLabel.text = status
-        draftLabel.text = draft.isEmpty ? nil : "\(Copy.draft(locale)): \(draft)"
+        draftLabel.text = draft.isEmpty ? nil : "\(Copy.string(.draft, in: locale)): \(draft)"
+        draftLabel.isHidden = draft.isEmpty
         draftLabel.accessibilityLabel = nil
         if let name = pendingSelection?.name {
-            recipientLabel.text = "\(Copy.recipient(locale)): \(name)"
+            recipientLabel.text = "\(Copy.string(.to, in: locale)): \(name)"
         } else {
             recipientLabel.text = nil
         }
@@ -988,52 +1359,394 @@ final class KeyboardViewController: UIInputViewController {
         windowLabel.accessibilityLabel = nil
         let hasPreview = !(previewLabel.text ?? "").isEmpty
         previewScroll.isHidden = !hasPreview
+        // The sender shortcut is shown only while a decoded sender exists on the
+        // key surface. Rendering never selects it: only an explicit tap does.
+        if let sender = displayedSender, surface == .preview {
+            senderButton.setTitle(
+                "\(Copy.string(.replyTo, in: locale)) \(sender.name)",
+                for: .normal
+            )
+            senderButton.accessibilityLabel =
+                "\(Copy.string(.replyTo, in: locale)) \(sender.name)"
+            senderButton.accessibilityHint = Copy.string(.senderTapHint, in: locale)
+            senderButton.isHidden = false
+        } else {
+            senderButton.setTitle(nil, for: .normal)
+            senderButton.accessibilityLabel = nil
+            senderButton.accessibilityHint = nil
+            senderButton.isHidden = true
+        }
         contactsView.isHidden = (surface != .contacts)
         confirmView.isHidden = (surface != .confirmation)
         keysContainer.isHidden = (surface != .keys)
+        previewContainer.isHidden = (surface != .preview)
+        // The fallback globe is exactly the inverse of the key surface: when the
+        // key layout (and its bottom-row globe) is hidden, this control keeps
+        // input-mode switching available.
+        fallbackGlobeButton.isHidden = (surface == .keys)
+        footerStack.isHidden = (surface == .keys)
         if surface == .contacts { contactsView.reloadData() }
         if surface == .keys { renderKeys() }
         renderShortcuts()
     }
 
+    // MARK: - Key layout
+
+    /// Width removed on each side of the second and third letter rows, so the
+    /// familiar iPhone rows are visibly inset under the ten-key top row.
+    static let insetRowInset: CGFloat = 14
+    /// Rows are laid out at a fixed, tappable height. The height is fixed
+    /// precisely so an ordinary character can repaint labels without rebuilding
+    /// or re-measuring the whole key layout.
+    static let keyRowHeight: CGFloat = 44
+    private static let keySpacing: CGFloat = 5
+    /// Minimum height of the persistent action bar that always holds recipient,
+    /// encrypt and paste controls.
+    static let actionBarMinimumHeight: CGFloat = 44
+
+    /// The complete, layer-dependent key layout. It is pure: it takes the layer,
+    /// shift and an explicit text permutation and builds no view. Only the text
+    /// slots of the letter rows are ever permuted; the surrounding action keys are
+    /// not part of these rows at all.
+    static func layout(
+        layer: Layer,
+        shift: ShiftState,
+        permutation: [Int: [Int]]?
+    ) -> [KeyboardRow] {
+        switch layer {
+        case .letters:
+            var tag = 0
+            return letterRowCharacters.enumerated().map { index, letters in
+                let ordered = permuted(letters, order: permutation?[index])
+                let keys = ordered.map { character -> KeyboardKey in
+                    let label = shifted(character, shift: shift)
+                    let key = KeyboardKey(label: label, kind: .text(label), textTag: tag)
+                    tag += 1
+                    return key
+                }
+                return KeyboardRow(keys: keys, inset: index > 0)
+            }
+        case .numbers:
+            return rows(from: numericRows)
+        case .symbols:
+            return rows(from: symbolRows)
+        }
+    }
+
+    /// Instance view of `layout(layer:shift:permutation:)` using the live local
+    /// state. The neutral permutation only exists once the owner reported the
+    /// scramble capability; it is chosen once per keyboard open.
+    func keyboardLayout() -> [KeyboardRow] {
+        Self.layout(layer: layer, shift: shift, permutation: currentPermutation())
+    }
+
+    private func currentPermutation() -> [Int: [Int]]? {
+        guard scrambleEnabled else { return nil }
+        for index in Self.letterRowCharacters.indices where scrambledIndex[index] == nil {
+            scrambledIndex[index] = Array(Self.letterRowCharacters[index].indices).shuffled()
+        }
+        return scrambledIndex
+    }
+
+    /// Reorders one text run by an explicit permutation. `nil` is the identity,
+    /// and a malformed order is ignored rather than silently mis-mapping a key.
+    static func permuted(_ characters: [String], order: [Int]?) -> [String] {
+        guard let order,
+              order.count == characters.count,
+              Set(order) == Set(characters.indices) else { return characters }
+        return order.map { characters[$0] }
+    }
+
+    static func shifted(_ character: String, shift: ShiftState) -> String {
+        switch shift {
+        case .off: return character.lowercased()
+        case .on, .locked: return character.uppercased()
+        }
+    }
+
+    /// Builds the rows of an explicit non-letter layer. Every row is a complete,
+    /// hand-chosen keyset, so no key is ever silently dropped to fit geometry.
+    static func rows(from source: [[String]]) -> [KeyboardRow] {
+        source.enumerated().map { index, characters in
+            let keys = characters.map { character in
+                KeyboardKey(label: character, kind: .text(character), textTag: nil)
+            }
+            return KeyboardRow(keys: keys, inset: index > 0)
+        }
+    }
+
+    /// The unwrapped order of each letter row. Only these characters are ever
+    /// permuted; the surrounding action keys are not part of the rows.
+    static let letterRowCharacters: [[String]] = [
+        ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p"],
+        ["a", "s", "d", "f", "g", "h", "j", "k", "l"],
+        ["z", "x", "c", "v", "b", "n", "m"]
+    ]
+
+    /// The numeric page. The third row holds exactly seven keys because it sits
+    /// between the layer toggle and backspace, so the common operators (`+`, `=`,
+    /// `*`) live on the reachable `#+=` page instead of being trimmed away.
+    static let numericRows: [[String]] = [
+        ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"],
+        ["-", "/", ":", ";", "(", ")", "$", "&", "@", "\""],
+        [".", ",", "?", "!", "'", "#", "%"]
+    ]
+
+    /// The explicit `#+=` page. It keeps the common operators (`+`, `=`, `*`) and
+    /// the currency/typographic symbols reachable in one extra tap from numbers.
+    static let symbolRows: [[String]] = [
+        ["[", "]", "{", "}", "#", "%", "^", "*", "+", "="],
+        ["_", "\\", "|", "~", "<", ">", "€", "£", "¥", "•"],
+        ["…", "—", "°", "±", "§", "¶", "×"]
+    ]
+
+    /// Positional bottom row: layer, globe, wide space, return. The globe is
+    /// always present and always before space, even when the session is
+    /// unavailable, so switching keyboards never depends on Layergram.
+    private func bottomRow() -> UIStackView {
+        let row = UIStackView()
+        row.axis = .horizontal
+        row.spacing = Self.keySpacing
+        row.distribution = .fill
+
+        let layerPresentation = Self.layerPresentation(for: layer)
+        let layerButton = makeActionButton(layerPresentation.title, action: layerPresentation.action)
+        layerButton.widthAnchor.constraint(equalToConstant: 44).isActive = true
+        let globe = makeActionButton("🌐", action: .globe)
+        globe.accessibilityLabel = Copy.string(.globeSwitch, in: locale)
+        globe.widthAnchor.constraint(equalToConstant: 44).isActive = true
+        let space = makeActionButton(Copy.string(.space, in: locale), action: .space)
+        // The space key stays the widest control without letting the spacers
+        // collapse it on a narrow 320 pt input view.
+        let spaceWidth = space.widthAnchor.constraint(greaterThanOrEqualToConstant: 120)
+        spaceWidth.priority = .defaultHigh
+        spaceWidth.isActive = true
+        let newline = makeActionButton(Copy.string(.returnKey, in: locale), action: .newline)
+        newline.widthAnchor.constraint(equalToConstant: 64).isActive = true
+        newline.titleLabel?.adjustsFontSizeToFitWidth = true
+        newline.titleLabel?.minimumScaleFactor = 0.7
+        space.setContentHuggingPriority(.defaultLow, for: .horizontal)
+
+        for key in [layerButton, globe, space, newline] {
+            key.heightAnchor.constraint(equalToConstant: Self.keyRowHeight).isActive = true
+        }
+        row.addArrangedSubview(layerButton)
+        row.addArrangedSubview(globe)
+        row.addArrangedSubview(space)
+        row.addArrangedSubview(newline)
+        return row
+    }
+
     private func renderKeys() {
+        // Build the (pure) layout first: shift is applied to the labels here, so
+        // the signature below also covers the shift and permutation state.
+        let layout = keyboardLayout()
+        let leading = Self.thirdRowLeadingPresentation(for: layer, shift: shift)
+        let signature = "\(layer)|\(leading.title)|\(leading.action.rawValue)|" + layout
+            .map { $0.keys.map(\.label).joined(separator: ",") }
+            .joined(separator: "/")
+        // Rebuild only when the layout itself changed: an ordinary character
+        // only repaints the draft label, never the key views.
+        guard signature != rowsSignature else {
+            refreshShiftTitles()
+            return
+        }
         for view in keysStack.arrangedSubviews {
             keysStack.removeArrangedSubview(view)
             view.removeFromSuperview()
         }
+        actionButtons = [:]
+        // Stable identity for every text key view, used by accessibility and the
+        // native layout tests. The typed character still comes from the button
+        // title, so a permuted label keeps typing what it shows.
+        var textSlot = 0
 
-        var index = 0
-        for labels in keyRows() {
+        for (index, descriptor) in layout.enumerated() {
+            if index == layout.count - 1 { continue }
             let row = UIStackView()
             row.axis = .horizontal
-            row.spacing = 5
+            row.spacing = Self.keySpacing
             row.distribution = .fillEqually
-            for label in labels {
-                let button = makeKeyButton(label)
-                button.tag = index
-                index += 1
+            for key in descriptor.keys {
+                guard case .text(let character) = key.kind else { continue }
+                let button = makeKeyButton(character)
+                button.tag = key.textTag ?? 0
+                Self.identifyTextKey(button, slot: textSlot)
+                textSlot += 1
+                button.heightAnchor.constraint(equalToConstant: Self.keyRowHeight).isActive = true
                 row.addArrangedSubview(button)
             }
-            keysStack.addArrangedSubview(row)
+            keysStack.addArrangedSubview(insetRow(row, descriptor.inset))
         }
 
-        let bottom = UIStackView()
-        bottom.axis = .horizontal
-        bottom.spacing = 5
-        bottom.distribution = .fillProportionally
-        let controls: [(String, KeyAction?)] = [
-            (shift == .off ? "⇧" : (shift == .on ? "⇧" : "⇪"), .shift),
-            (Copy.deleteKey(locale), .backspace),
-            (Copy.space(locale), .space),
-            (Copy.returnKey(locale), .newline),
-            (layer == .letters ? "123" : "ABC", .layer),
-            ("#+=", .symbols)
-        ]
-        for (label, action) in controls {
-            guard let action else { continue }
-            bottom.addArrangedSubview(makeActionButton(label, action: action))
+        // The third row is the familiar leading action / seven text keys /
+        // backspace run. On the letters layer the leading action is Shift; on the
+        // numeric and symbol pages it is the `#+=` / `123` page toggle, so the
+        // action keys never sit inside the permuted text run.
+        let actionRow = UIStackView()
+        actionRow.axis = .horizontal
+        actionRow.spacing = Self.keySpacing
+        actionRow.distribution = .fillEqually
+        let leadingButton: UIButton
+        if leading.action == .shift {
+            leadingButton = makeActionButton(Self.shiftGlyph(for: shift), action: .shift)
+        } else {
+            leadingButton = makeActionButton(leading.title, action: leading.action)
         }
-        keysStack.addArrangedSubview(bottom)
+        let backspaceButton = makeActionButton(Copy.string(.deleteKey, in: locale), action: .backspace)
+        backspaceButton.setImage(deleteSymbolImage(), for: .normal)
+        actionRow.addArrangedSubview(leadingButton)
+        for key in layout.last?.keys ?? [] {
+            guard case .text(let character) = key.kind else { continue }
+            let button = makeKeyButton(character)
+            button.tag = key.textTag ?? 0
+            Self.identifyTextKey(button, slot: textSlot)
+            textSlot += 1
+            button.heightAnchor.constraint(equalToConstant: Self.keyRowHeight).isActive = true
+            actionRow.addArrangedSubview(button)
+        }
+        actionRow.addArrangedSubview(backspaceButton)
+        for button in actionRow.arrangedSubviews.compactMap({ $0 as? UIButton }) {
+            button.heightAnchor.constraint(equalToConstant: Self.keyRowHeight).isActive = true
+        }
+        keysStack.addArrangedSubview(insetRow(actionRow, true))
+        keysStack.addArrangedSubview(bottomRow())
+        rowsSignature = signature
+        refreshShiftTitles()
+    }
+
+    /// The layout as [row][keys] with the action keys included, in render order.
+    /// Pure: tests can assert every layer and an explicit permutation without a
+    /// live owner session, and this is the exact geometry the keyboard renders.
+    static func renderedLayout(
+        layer: Layer,
+        shift: ShiftState,
+        permutation: [Int: [Int]]?,
+        language: Language
+    ) -> [[KeyboardKey]] {
+        let rows = layout(layer: layer, shift: shift, permutation: permutation)
+        var result: [[KeyboardKey]] = rows.dropLast().map(\.keys)
+        let third = rows.last?.keys ?? []
+        let leading = thirdRowLeadingPresentation(for: layer, shift: shift)
+        let backspace = KeyboardKey(
+            label: Copy.string(.deleteKey, in: language),
+            kind: .action(.backspace),
+            textTag: nil
+        )
+        result.append(
+            [KeyboardKey(label: leading.title, kind: .action(leading.action), textTag: nil)]
+                + third + [backspace]
+        )
+        let layerPresentation = layerPresentation(for: layer)
+        result.append([
+            KeyboardKey(
+                label: layerPresentation.title,
+                kind: .action(layerPresentation.action),
+                textTag: nil
+            ),
+            KeyboardKey(label: "🌐", kind: .action(.globe), textTag: nil),
+            KeyboardKey(
+                label: Copy.string(.space, in: language),
+                kind: .action(.space),
+                textTag: nil
+            ),
+            KeyboardKey(
+                label: Copy.string(.returnKey, in: language),
+                kind: .action(.newline),
+                textTag: nil
+            )
+        ])
+        return result
+    }
+
+    /// Instance view of the pure `renderedLayout` using the live local state.
+    func renderedLayout() -> [[KeyboardKey]] {
+        Self.renderedLayout(
+            layer: layer,
+            shift: shift,
+            permutation: currentPermutation(),
+            language: Copy.language(locale)
+        )
+    }
+
+    static func shiftGlyph(for state: ShiftState) -> String {
+        switch state {
+        case .off, .on: return "⇧"
+        case .locked: return "⇪"
+        }
+    }
+
+    /// The leading action of the third row. Letters keep the familiar Shift key;
+    /// the numeric and symbol pages put their page toggle there, so no useless
+    /// Shift key appears and no layer needs a three-step cycle back to letters.
+    static func thirdRowLeadingPresentation(
+        for layer: Layer,
+        shift: ShiftState
+    ) -> (title: String, action: KeyAction) {
+        switch layer {
+        case .letters: return (shiftGlyph(for: shift), .shift)
+        case .numbers: return ("#+=", .symbols)
+        case .symbols: return ("123", .symbols)
+        }
+    }
+
+    /// The title and action of the bottom-left layer key. Letters offer `123`;
+    /// the numeric and symbol pages offer `ABC` and return straight to letters.
+    static func layerPresentation(for layer: Layer) -> (title: String, action: KeyAction) {
+        switch layer {
+        case .letters: return ("123", .layer)
+        case .numbers, .symbols: return ("ABC", .layer)
+        }
+    }
+
+    /// Pure layer transition for the two layer controls. `.layer` is the
+    /// bottom-left key: letters <-> numbers, and both non-letter pages return
+    /// directly to letters. `.symbols` is the third-row toggle between the two
+    /// non-letter pages.
+    static func layerAfter(_ layer: Layer, tapped action: KeyAction) -> Layer {
+        switch action {
+        case .layer:
+            return (layer == .letters) ? .numbers : .letters
+        case .symbols:
+            if layer == .numbers { return .symbols }
+            if layer == .symbols { return .numbers }
+            return layer
+        default:
+            return layer
+        }
+    }
+
+    /// Repaint only the titles that depend on the shift state, leaving the key
+    /// views in place.
+    private func refreshShiftTitles() {
+        actionButtons[.shift]?.setTitle(Self.shiftGlyph(for: shift), for: .normal)
+        actionButtons[.backspace]?.setTitle(nil, for: .normal)
+        actionButtons[.backspace]?.accessibilityLabel = Copy.string(.deleteKey, in: locale)
+    }
+
+    private func insetRow(_ row: UIStackView, _ inset: Bool) -> UIView {
+        guard inset else { return row }
+        let container = UIView()
+        row.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(row)
+        NSLayoutConstraint.activate([
+            row.leadingAnchor.constraint(
+                equalTo: container.leadingAnchor,
+                constant: Self.insetRowInset
+            ),
+            row.trailingAnchor.constraint(
+                equalTo: container.trailingAnchor,
+                constant: -Self.insetRowInset
+            ),
+            row.topAnchor.constraint(equalTo: container.topAnchor),
+            row.bottomAnchor.constraint(equalTo: container.bottomAnchor)
+        ])
+        return container
+    }
+
+    private func deleteSymbolImage() -> UIImage? {
+        guard #available(iOS 13.0, *) else { return nil }
+        return UIImage(systemName: "delete.left")
     }
 
     private func renderShortcuts() {
@@ -1043,38 +1756,125 @@ final class KeyboardViewController: UIInputViewController {
         }
         if surface == .confirmation {
             shortcutsStack.addArrangedSubview(
-                makeShortcut(Copy.cancel(locale), action: #selector(tapCancel))
+                makeShortcut(
+                    Copy.string(.cancel, in: locale),
+                    action: #selector(tapCancel),
+                    identifier: "layergram.action.cancel"
+                )
             )
             shortcutsStack.addArrangedSubview(
-                makeShortcut(Copy.confirm(locale), action: #selector(tapConfirm))
+                makeShortcut(
+                    Copy.string(.confirm, in: locale),
+                    action: #selector(tapConfirm),
+                    identifier: "layergram.action.confirm"
+                )
             )
             return
         }
-        if surface == .contacts {
+        if surface == .contacts || surface == .preview {
             shortcutsStack.addArrangedSubview(
-                makeShortcut(Copy.newMessage(locale), action: #selector(tapBackToKeys))
+                makeShortcut(
+                    Copy.string(.compose, in: locale),
+                    action: #selector(tapBackToKeys),
+                    identifier: "layergram.action.back"
+                )
             )
             return
         }
+        // Persistent, always visible: choosing the recipient, encrypting and
+        // pasting are discoverable before any recipient exists. The primary
+        // action never disappears and is never hidden behind a selection.
         shortcutsStack.addArrangedSubview(
-            makeShortcut(Copy.contacts(locale), action: #selector(tapContacts))
-        )
-        shortcutsStack.addArrangedSubview(
-            makeShortcut(Copy.paste(locale), action: #selector(tapPaste))
-        )
-        if policy.hasSelection {
-            shortcutsStack.addArrangedSubview(
-                makeShortcut(Copy.send(locale), action: #selector(tapSend))
+            makeShortcut(
+                Copy.string(.contacts, in: locale),
+                action: #selector(tapContacts),
+                identifier: "layergram.action.recipient"
             )
+        )
+        if displayedSender != nil {
+            shortcutsStack.addArrangedSubview(makeShortcut(
+                Copy.string(.readMessage, in: locale), action: #selector(tapReadMessage),
+                identifier: "layergram.action.read"
+            ))
         }
-        if !draft.isEmpty {
+        let primary = makeShortcut(
+            primaryActionTitle(),
+            action: #selector(tapPrimary),
+            identifier: "layergram.action.primary"
+        )
+        primary.titleLabel?.font = .preferredFont(forTextStyle: .subheadline)
+        shortcutsStack.addArrangedSubview(primary)
+        shortcutsStack.addArrangedSubview(
+            makeShortcut(
+                Copy.string(.pasteDecrypt, in: locale),
+                action: #selector(tapPaste),
+                identifier: "layergram.action.paste"
+            )
+        )
+        if !draft.isEmpty || pendingSelection != nil {
             shortcutsStack.addArrangedSubview(
-                makeShortcut(Copy.newMessage(locale), action: #selector(tapNewMessage))
+                makeShortcut(
+                    Copy.string(.newMessage, in: locale),
+                    action: #selector(tapNewMessage),
+                    identifier: "layergram.action.new"
+                )
             )
         }
     }
 
-    private func makeShortcut(_ title: String, action: Selector) -> UIButton {
+    /// The pure primary-action decision.
+    ///
+    /// Admission is decided first: without a live session the action must not
+    /// replace the need-Full-Access / open-the-app message with a workflow hint.
+    /// With admission, a usable recipient needs both the owner-confirmed
+    /// selection and a non-empty draft; anything else selects a recipient and
+    /// never sends.
+    func primaryIntent(
+        admitted: Bool,
+        draft: String,
+        recipient: Bool,
+        candidate: Bool
+    ) -> PrimaryIntent {
+        guard admitted else { return .blockedByAdmission }
+        guard !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return .promptEmptyDraft
+        }
+        return (recipient && candidate) ? .send : .openRecipientSelection
+    }
+
+    func primaryIntentForCurrentState() -> PrimaryIntent {
+        primaryIntent(
+            admitted: policy.liveControl(snapshot()),
+            draft: draft,
+            recipient: policy.hasSelection,
+            candidate: pendingSelection != nil
+        )
+    }
+
+    private func primaryActionTitle() -> String {
+        Copy.string(.encryptInsert, in: locale)
+    }
+
+    /// A tap on the primary action. It only ever opens recipient selection or
+    /// queues the explicit send: it never sends by itself, never clears the
+    /// draft to reach a recipient, and never revokes a valid session because the
+    /// draft happens to be empty.
+    private func receivePrimaryTap() {
+        switch primaryIntentForCurrentState() {
+        case .blockedByAdmission:
+            // Keep the admission status untouched and revoke nothing.
+            render()
+        case .promptEmptyDraft:
+            status = Copy.string(.emptyDraftHint, in: locale)
+            render()
+        case .openRecipientSelection:
+            requestContacts()
+        case .send:
+            beginSend()
+        }
+    }
+
+    private func makeShortcut(_ title: String, action: Selector, identifier: String) -> UIButton {
         let button = UIButton(type: .system)
         button.setTitle(title, for: .normal)
         button.titleLabel?.font = .preferredFont(forTextStyle: .footnote)
@@ -1083,8 +1883,15 @@ final class KeyboardViewController: UIInputViewController {
         button.titleLabel?.textAlignment = .center
         button.backgroundColor = .tertiarySystemFill
         button.layer.cornerRadius = 6
+        button.accessibilityIdentifier = identifier
         button.addTarget(self, action: action, for: .touchUpInside)
         return button
+    }
+
+    /// Give a text key view a stable, non-action identity. `KeyAction.from`
+    /// rejects it, so it can never be mistaken for a positional action key.
+    private static func identifyTextKey(_ button: UIButton, slot: Int) {
+        button.accessibilityIdentifier = "\(KeyAction.identifierPrefix)text.\(slot)"
     }
 
     private func makeKeyButton(_ label: String) -> UIButton {
@@ -1117,71 +1924,47 @@ final class KeyboardViewController: UIInputViewController {
             hold.minimumPressDuration = 0.4
             button.addGestureRecognizer(hold)
         }
+        actionButtons[action] = button
         return button
     }
 
-    // MARK: - Key data
-
-    private func keyRows() -> [[String]] {
-        switch layer {
-        case .letters:
-            return letterRows()
-        case .numbers:
-            return [
-                ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"],
-                ["-", "/", ":", ";", "(", ")", "$", "&", "@", "\""],
-                [".", ",", "?", "!", "'", "#", "%", "+", "=", "*"]
-            ]
-        case .symbols:
-            return [
-                ["[", "]", "{", "}", "<", ">", "€", "£", "¥", "•"],
-                ["_", "\\", "|", "~", "^", "`", "°", "±", "§", "¶"],
-                ["…", "—", "–", "«", "»", "“", "”", "‘", "’", "×"]
-            ]
-        }
+    /// Resolve a tapped action key from its stable identifier. Kept free of any
+    /// admission check so the globe can be exercised directly.
+    func resolveKeyAction(_ identifier: String?) -> KeyAction? {
+        KeyAction.from(identifier)
     }
 
-    /// The displayed letter rows. A session-stable permutation is chosen once per
-    /// keyboard open when the owner reported the neutral scramble capability, so
-    /// the same key always types the same character while the layout is shuffled.
-    private func letterRows() -> [[String]] {
-        let rows = [
-            ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p"],
-            ["a", "s", "d", "f", "g", "h", "j", "k", "l"],
-            ["z", "x", "c", "v", "b", "n", "m"]
-        ]
-        guard scrambleEnabled else { return rows }
-        for index in rows.indices where scrambledIndex[index] == nil {
-            scrambledIndex[index] = Array(rows[index].indices).shuffled()
-        }
-        return rows.enumerated().map { index, row in
-            let order = scrambledIndex[index] ?? Array(row.indices)
-            return order.compactMap { row.indices.contains($0) ? row[$0] : nil }
-        }
+    /// Seed the local draft so the workflow decisions can be exercised without a
+    /// live owner session. This only sets display state: it grants no admission,
+    /// no lease and no recipient, so it cannot be used to bypass a policy gate.
+    func setLocalDraft(_ text: String) {
+        draft = KeyboardTextEdit.isValidDraft(text) ? text : draft
+        render()
     }
 
-    private func letterKey(_ label: String) -> String {
-        switch shift {
-        case .off: return label.lowercased()
-        case .on, .locked: return label.uppercased()
-        }
+    /// Put the keyboard on one surface so the persistent-control and visibility
+    /// rules can be asserted. Display state only: it grants no admission, no
+    /// lease, no recipient and cannot queue anything.
+    func setSurfaceForDisplay(_ newSurface: Surface) {
+        surface = newSurface
+        render()
     }
+
+    /// Read-only view of the key container, so tests can prove the fallback globe
+    /// is not inside the container that gets hidden off the key surface.
+    var keysContainerView: UIView { keysContainer }
+
+    /// Read-only proof of the owner-confirmed recipient. A decoded sender must
+    /// never make this `true` on its own.
+    var hasConfirmedOwnerSelection: Bool { policy.hasSelection }
 
     // MARK: - Key handling
 
+    /// The tapped character comes from the button title itself, so the tagged
+    /// text buttons stay correct even when the neutral scramble is active.
     @objc private func tapKey(_ sender: UIButton) {
-        let rows = keyRows()
-        var remaining = sender.tag
-        var label: String?
-        for row in rows {
-            if remaining < row.count {
-                label = row[remaining]
-                break
-            }
-            remaining -= row.count
-        }
-        guard let label else { return }
-        insert(layer == .letters ? letterKey(label) : label)
+        guard let label = sender.title(for: .normal), !label.isEmpty else { return }
+        insert(label)
     }
 
     @objc private func tapAction(_ sender: UIButton) {
@@ -1193,7 +1976,7 @@ final class KeyboardViewController: UIInputViewController {
             return
         }
         guard policy.liveControl(snapshot()) else {
-            invalidateEditor(status: Copy.sessionOver(locale))
+            invalidateEditor(status: Copy.string(.sessionExpired, in: locale))
             return
         }
         switch action {
@@ -1212,11 +1995,8 @@ final class KeyboardViewController: UIInputViewController {
             insertNewline()
         case .globe:
             advanceToNextInputMode()
-        case .layer:
-            layer = (layer == .letters) ? .numbers : .letters
-            render()
-        case .symbols:
-            layer = (layer == .symbols) ? .numbers : .symbols
+        case .layer, .symbols:
+            layer = Self.layerAfter(layer, tapped: action)
             render()
         }
     }
@@ -1240,13 +2020,13 @@ final class KeyboardViewController: UIInputViewController {
 
     @objc private func tapContacts() {
         switch surface {
-        case .keys:
+        case .keys, .preview:
             requestContacts()
         case .contacts:
             tapBackToKeys()
         case .confirmation:
             guard policy.liveControl(snapshot()) else {
-                invalidateEditor(status: Copy.sessionOver(locale))
+                invalidateEditor(status: Copy.string(.sessionExpired, in: locale))
                 return
             }
             surface = .contacts
@@ -1256,10 +2036,16 @@ final class KeyboardViewController: UIInputViewController {
 
     @objc private func tapBackToKeys() {
         guard policy.liveControl(snapshot()) else {
-            invalidateEditor(status: Copy.sessionOver(locale))
+            invalidateEditor(status: Copy.string(.sessionExpired, in: locale))
             return
         }
         surface = .keys
+        render()
+    }
+
+    @objc private func tapReadMessage() {
+        guard displayedSender != nil, policy.liveControl(snapshot()) else { return }
+        surface = .preview
         render()
     }
 
@@ -1267,8 +2053,24 @@ final class KeyboardViewController: UIInputViewController {
         pasteAndDecode()
     }
 
-    @objc private func tapSend() {
-        beginSend()
+    /// The explicit sender shortcut. There is no other path from a decoded
+    /// message to a recipient, and this one still requires the owner to accept
+    /// the `select`.
+    @objc private func tapSenderButton() {
+        tapSender()
+    }
+
+    /// The persistent fallback globe. Like the bottom-row globe it is never
+    /// admission gated, so switching keyboards always works.
+    @objc private func tapFallbackGlobe() {
+        advanceToNextInputMode()
+    }
+
+    /// The persistent primary control. Kept internal so the flow rules can be
+    /// exercised directly; it only decides between explanation, recipient
+    /// selection and one explicit send.
+    @objc func tapPrimary() {
+        receivePrimaryTap()
     }
 
     @objc private func tapConfirm() {
@@ -1281,18 +2083,19 @@ final class KeyboardViewController: UIInputViewController {
 
     @objc private func tapNewMessage() {
         guard policy.liveControl(snapshot()) else {
-            invalidateEditor(status: Copy.sessionOver(locale))
+            invalidateEditor(status: Copy.string(.sessionExpired, in: locale))
             return
         }
         draft = ""
         policy.clearSelection()
         pendingSelection = nil
-        previewLabel.text = nil
-        previewLabel.accessibilityLabel = nil
+        // A new message drops the previous decode, its preview and its sender
+        // shortcut.
+        applyDecodedPreview(nil)
         confirmLabel.text = nil
         confirmLabel.accessibilityLabel = nil
         surface = .keys
-        status = Copy.idle(locale)
+        status = Copy.string(.sessionActive, in: locale)
         render()
     }
 }
@@ -1338,7 +2141,7 @@ extension KeyboardViewController: UITableViewDataSource, UITableViewDelegate {
         }
         let contact = contacts[indexPath.row]
         configuration.text = contact.name
-        configuration.secondaryText = "\(Copy.fp(locale)): \(contact.fingerprint)"
+        configuration.secondaryText = "\(Copy.string(.fingerprint, in: locale)): \(contact.fingerprint)"
         cell.contentConfiguration = configuration
         return cell
     }
@@ -1346,7 +2149,7 @@ extension KeyboardViewController: UITableViewDataSource, UITableViewDelegate {
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: false)
         guard policy.liveControl(snapshot()), indexPath.row < contacts.count else {
-            invalidateEditor(status: Copy.sessionOver(locale))
+            invalidateEditor(status: Copy.string(.sessionExpired, in: locale))
             return
         }
         // An explicit tap opens confirmation; a decoded contact is never selected
