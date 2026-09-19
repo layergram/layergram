@@ -229,6 +229,7 @@ _Harness _buildHarness({
   bool platformSupported = true,
   bool featureFlagEnabled = true,
   bool configureResult = true,
+  Duration? maximumBackgroundDuration,
 }) {
   final _TestClock clock = _TestClock();
   final _OwnerState owner = _OwnerState();
@@ -248,6 +249,7 @@ _Harness _buildHarness({
     readScramble: () => false,
     monotonicNow: clock.call,
     observeLifecycle: false,
+    maximumBackgroundDuration: maximumBackgroundDuration,
   );
   service.attachBackend(backend);
   return _Harness(
@@ -649,6 +651,72 @@ void main() {
   });
 
   group('background deadline', () {
+    test('iOS requests wait for observed departure and obey immediate lock',
+        () async {
+      final _Harness h = _buildHarness(
+        maximumBackgroundDuration: const Duration(seconds: 20),
+      );
+      await h.service.start();
+      expect(h.service.isEnabled, isTrue);
+      _expectNoData(await h.request('begin'));
+      expect(h.owner.samples, 0);
+      h.service.seedAppLockConfig(enabled: true, timeoutSeconds: 0);
+      h.service.onAppLifecycleChanged(AppLifecycleState.inactive);
+      _expectNoData(await h.request('begin'));
+      expect(h.backend.listCalls, 0);
+    });
+
+    test('iOS window expires with app lock disabled and cannot be renewed',
+        () async {
+      final _Harness h = _buildHarness(
+        maximumBackgroundDuration: const Duration(seconds: 20),
+      );
+      await h.service.start();
+      h.service.onAppLifecycleChanged(AppLifecycleState.inactive);
+      expect(_status(await h.request('begin')), SystemKeyboardChannelStatus.ok);
+      h.clock.advance(const Duration(seconds: 19));
+      h.service.onAppLifecycleChanged(AppLifecycleState.paused);
+      h.service.onAppLockConfigChanged(enabled: false, timeoutSeconds: 60);
+      expect(_status(await h.request('begin')), SystemKeyboardChannelStatus.ok);
+      h.clock.advance(const Duration(seconds: 1));
+      _expectNoData(await h.request('heartbeat'));
+      _expectNoData(await h.request('begin'));
+      expect(h.service.admits(h.service.generation, 'id-1'), isFalse);
+      // Even an unlock notification cannot renew the platform window.
+      h.service.onAppNeedsUnlockChanged(false);
+      _expectNoData(await h.request('begin'));
+      h.service.onAppLifecycleChanged(AppLifecycleState.resumed);
+      h.service.onAppLifecycleChanged(AppLifecycleState.inactive);
+      expect(_status(await h.request('begin')), SystemKeyboardChannelStatus.ok);
+    });
+
+    test('shorter app lock wins over the iOS maximum window', () async {
+      final _Harness h = _buildHarness(
+        maximumBackgroundDuration: const Duration(seconds: 20),
+      );
+      h.service.seedAppLockConfig(enabled: true, timeoutSeconds: 2);
+      await h.service.start();
+      h.service.onAppLifecycleChanged(AppLifecycleState.inactive);
+      expect(_status(await h.request('begin')), SystemKeyboardChannelStatus.ok);
+      h.clock.advance(const Duration(seconds: 2));
+      _expectNoData(await h.request('heartbeat'));
+    });
+
+    test('iOS expiry suppresses an in-flight owner reply', () async {
+      final _Harness h = _buildHarness(
+        maximumBackgroundDuration: const Duration(seconds: 20),
+      );
+      await h.service.start();
+      h.service.onAppLifecycleChanged(AppLifecycleState.inactive);
+      expect(_status(await h.request('begin')), SystemKeyboardChannelStatus.ok);
+      h.backend.listBarrier = Completer<void>();
+      final Future<Map<String, Object?>> pending = h.request('contacts');
+      await _tick();
+      h.clock.advance(const Duration(seconds: 20));
+      h.backend.listBarrier!.complete();
+      _expectNoData(await pending);
+    });
+
     test('inactive then paused never extends the recorded background instant',
         () async {
       final _Harness h = _buildHarness();

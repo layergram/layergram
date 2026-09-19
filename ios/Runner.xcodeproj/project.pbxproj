@@ -7,16 +7,23 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0B2A81730C25F5CAB20252BD /* SystemKeyboardCore in Frameworks */ = {isa = PBXBuildFile; productRef = 89B8B650B6C50DD141132DC9 /* SystemKeyboardCore */; };
 		1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
+		2B0E8BE88549A7C47214B659 /* SystemKeyboardCore in Frameworks */ = {isa = PBXBuildFile; productRef = C70C1FE1307BC40FA7CA9BF7 /* SystemKeyboardCore */; };
 		331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C807B294A618700263BE5 /* RunnerTests.swift */; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
+		781B731D95C6803CFE46CF98 /* KeyboardViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C630BAE7184EB359F991F397 /* KeyboardViewController.swift */; };
 		7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */; };
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
 		A2D80A2FA5CDC421915D00F0 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6C58253FA3E9AB2EC24B4101 /* Pods_Runner.framework */; };
+		A9EFFFA081559AE6013DCC77 /* SystemKeyboardCore in Frameworks */ = {isa = PBXBuildFile; productRef = E7750D1046DA95CB3954EDEB /* SystemKeyboardCore */; };
 		B5521F2FD7CA92453BCA93F0 /* libPods-RunnerTests.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 9FFF046CA62208B80B72A7A6 /* libPods-RunnerTests.a */; };
+		BFB5E9F364CBC48D838E5270 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CC6064F609A07B5690D6EC8B /* Foundation.framework */; };
+		C6B013FE5D4C7E3886C84554 /* SystemKeyboardHostTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F40DDB1BCDF21F44CBF2AE0 /* SystemKeyboardHostTests.swift */; };
+		F2101CF8C1C4ECD1CC83101C /* SystemKeyboardHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEF088D7627B02C058233169 /* SystemKeyboardHost.swift */; };
 		FC60A4892F44787F001F9AAB /* Share Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = FC60A47F2F44787F001F9AAB /* Share Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
@@ -65,6 +72,8 @@
 		053E495660D75569A9B01488 /* Pods-RunnerTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.release.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.release.xcconfig"; sourceTree = "<group>"; };
 		1498D2321E8E86230040F4C2 /* GeneratedPluginRegistrant.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GeneratedPluginRegistrant.h; sourceTree = "<group>"; };
 		1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GeneratedPluginRegistrant.m; sourceTree = "<group>"; };
+		1F40DDB1BCDF21F44CBF2AE0 /* SystemKeyboardHostTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SystemKeyboardHostTests.swift; sourceTree = "<group>"; };
+		32D1BB6B29D4A213A7B1AA86 /* RunnerKeyboard.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = RunnerKeyboard.entitlements; sourceTree = "<group>"; };
 		331C807B294A618700263BE5 /* RunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerTests.swift; sourceTree = "<group>"; };
 		331C8081294A63A400263BE5 /* RunnerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RunnerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		34E921FF4DCA3D1FDA055A6F /* Pods-RunnerTests.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.profile.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.profile.xcconfig"; sourceTree = "<group>"; };
@@ -75,6 +84,7 @@
 		74858FAE1ED2DC5600515810 /* AppDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Flutter/Release.xcconfig; sourceTree = "<group>"; };
+		81E781A3A3E805B3846EDF19 /* LayergramKeyboard.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = LayergramKeyboard.entitlements; sourceTree = "<group>"; };
 		9740EEB21CF90195004384FC /* Debug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Debug.xcconfig; path = Flutter/Debug.xcconfig; sourceTree = "<group>"; };
 		9740EEB31CF90195004384FC /* Generated.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Generated.xcconfig; path = Flutter/Generated.xcconfig; sourceTree = "<group>"; };
 		97C146EE1CF9000F007C117D /* Runner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Runner.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -83,7 +93,13 @@
 		97C147001CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		9FFF046CA62208B80B72A7A6 /* libPods-RunnerTests.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-RunnerTests.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		BE798624E4219E80254E93E1 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		BEF088D7627B02C058233169 /* SystemKeyboardHost.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SystemKeyboardHost.swift; sourceTree = "<group>"; };
+		C42C10D244C8F90964DC606F /* LayergramKeyboard.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = LayergramKeyboard.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		C630BAE7184EB359F991F397 /* KeyboardViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = KeyboardViewController.swift; sourceTree = "<group>"; };
+		CC6064F609A07B5690D6EC8B /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		CD2802147D5B65D619BA3F79 /* Pods-Runner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"; sourceTree = "<group>"; };
+		E7ABA792C2D98F19C6984943 /* embed_system_keyboard.sh */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.script.sh; path = embed_system_keyboard.sh; sourceTree = "<group>"; };
 		E869E80D5F4CD01E98AFC55B /* Pods-Runner.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"; sourceTree = "<group>"; };
 		F0DB8AAE5965B67678004787 /* Pods-RunnerTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.debug.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.debug.xcconfig"; sourceTree = "<group>"; };
 		FC60A47F2F44787F001F9AAB /* Share Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Share Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -120,6 +136,16 @@
 			buildActionMask = 2147483647;
 			files = (
 				B5521F2FD7CA92453BCA93F0 /* libPods-RunnerTests.a in Frameworks */,
+				A9EFFFA081559AE6013DCC77 /* SystemKeyboardCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		51ADD5F1F5B6F9528323D525 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BFB5E9F364CBC48D838E5270 /* Foundation.framework in Frameworks */,
+				2B0E8BE88549A7C47214B659 /* SystemKeyboardCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -128,6 +154,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A2D80A2FA5CDC421915D00F0 /* Pods_Runner.framework in Frameworks */,
+				0B2A81730C25F5CAB20252BD /* SystemKeyboardCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -145,6 +172,7 @@
 			isa = PBXGroup;
 			children = (
 				331C807B294A618700263BE5 /* RunnerTests.swift */,
+				1F40DDB1BCDF21F44CBF2AE0 /* SystemKeyboardHostTests.swift */,
 			);
 			path = RunnerTests;
 			sourceTree = "<group>";
@@ -154,8 +182,20 @@
 			children = (
 				6C58253FA3E9AB2EC24B4101 /* Pods_Runner.framework */,
 				9FFF046CA62208B80B72A7A6 /* libPods-RunnerTests.a */,
+				F394EA1E16F6D25CBC1DA9A0 /* iOS */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		55A1B1AA0B55A07DFCA4C795 /* LayergramKeyboard */ = {
+			isa = PBXGroup;
+			children = (
+				BE798624E4219E80254E93E1 /* Info.plist */,
+				81E781A3A3E805B3846EDF19 /* LayergramKeyboard.entitlements */,
+				C630BAE7184EB359F991F397 /* KeyboardViewController.swift */,
+			);
+			name = LayergramKeyboard;
+			path = LayergramKeyboard;
 			sourceTree = "<group>";
 		};
 		9740EEB11CF90186004384FC /* Flutter */ = {
@@ -179,6 +219,7 @@
 				331C8082294A63A400263BE5 /* RunnerTests */,
 				9BFEDB9E11D657CC8F10E2F7 /* Pods */,
 				35CA5D90C48965DA49FEF42B /* Frameworks */,
+				55A1B1AA0B55A07DFCA4C795 /* LayergramKeyboard */,
 			);
 			sourceTree = "<group>";
 		};
@@ -188,6 +229,7 @@
 				97C146EE1CF9000F007C117D /* Runner.app */,
 				331C8081294A63A400263BE5 /* RunnerTests.xctest */,
 				FC60A47F2F44787F001F9AAB /* Share Extension.appex */,
+				C42C10D244C8F90964DC606F /* LayergramKeyboard.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -204,6 +246,9 @@
 				74858FAE1ED2DC5600515810 /* AppDelegate.swift */,
 				7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
+				BEF088D7627B02C058233169 /* SystemKeyboardHost.swift */,
+				E7ABA792C2D98F19C6984943 /* embed_system_keyboard.sh */,
+				32D1BB6B29D4A213A7B1AA86 /* RunnerKeyboard.entitlements */,
 			);
 			path = Runner;
 			sourceTree = "<group>";
@@ -219,6 +264,14 @@
 				34E921FF4DCA3D1FDA055A6F /* Pods-RunnerTests.profile.xcconfig */,
 			);
 			path = Pods;
+			sourceTree = "<group>";
+		};
+		F394EA1E16F6D25CBC1DA9A0 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				CC6064F609A07B5690D6EC8B /* Foundation.framework */,
+			);
+			name = iOS;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -239,6 +292,9 @@
 				331C8086294A63A400263BE5 /* PBXTargetDependency */,
 			);
 			name = RunnerTests;
+			packageProductDependencies = (
+				E7750D1046DA95CB3954EDEB /* SystemKeyboardCore */,
+			);
 			productName = RunnerTests;
 			productReference = 331C8081294A63A400263BE5 /* RunnerTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -257,6 +313,7 @@
 				3B06AD1E1E4923F5004D2608 /* Thin Binary */,
 				A1B2C3D4E5F60718293A4B5C /* Postprocess Native Assets */,
 				D7F7631C02E46EB0C3B654CB /* [CP] Copy Pods Resources */,
+				C07EBDC1149D7173595C7B30 /* Embed Experimental Keyboard */,
 			);
 			buildRules = (
 			);
@@ -264,9 +321,32 @@
 				FC60A4882F44787F001F9AAB /* PBXTargetDependency */,
 			);
 			name = Runner;
+			packageProductDependencies = (
+				89B8B650B6C50DD141132DC9 /* SystemKeyboardCore */,
+			);
 			productName = Runner;
 			productReference = 97C146EE1CF9000F007C117D /* Runner.app */;
 			productType = "com.apple.product-type.application";
+		};
+		B2B6FF7BCDBB3B798FD6A2C1 /* LayergramKeyboard */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5B9E4F7030F652DC6F28EDBB /* Build configuration list for PBXNativeTarget "LayergramKeyboard" */;
+			buildPhases = (
+				25CD99CB4FE869714D729DF1 /* Sources */,
+				51ADD5F1F5B6F9528323D525 /* Frameworks */,
+				3651B760D9E97DDC13BF3C05 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = LayergramKeyboard;
+			packageProductDependencies = (
+				C70C1FE1307BC40FA7CA9BF7 /* SystemKeyboardCore */,
+			);
+			productName = LayergramKeyboard;
+			productReference = C42C10D244C8F90964DC606F /* LayergramKeyboard.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 		FC60A47E2F44787F001F9AAB /* Share Extension */ = {
 			isa = PBXNativeTarget;
@@ -321,6 +401,9 @@
 				Base,
 			);
 			mainGroup = 97C146E51CF9000F007C117D;
+			packageReferences = (
+				91B1313767D3AFB35585162F /* XCLocalSwiftPackageReference "SystemKeyboardCore" */,
+			);
 			productRefGroup = 97C146EF1CF9000F007C117D /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -328,12 +411,20 @@
 				97C146ED1CF9000F007C117D /* Runner */,
 				331C8080294A63A400263BE5 /* RunnerTests */,
 				FC60A47E2F44787F001F9AAB /* Share Extension */,
+				B2B6FF7BCDBB3B798FD6A2C1 /* LayergramKeyboard */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		331C807F294A63A400263BE5 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3651B760D9E97DDC13BF3C05 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -430,6 +521,26 @@
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
 			showEnvVarsInLog = 0;
 		};
+		C07EBDC1149D7173595C7B30 /* Embed Experimental Keyboard */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed Experimental Keyboard";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "/bin/sh \"${PROJECT_DIR}/Runner/embed_system_keyboard.sh\"";
+			showEnvVarsInLog = 0;
+		};
 		D7F7631C02E46EB0C3B654CB /* [CP] Copy Pods Resources */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -472,11 +583,20 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		25CD99CB4FE869714D729DF1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				781B731D95C6803CFE46CF98 /* KeyboardViewController.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		331C807D294A63A400263BE5 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */,
+				C6B013FE5D4C7E3886C84554 /* SystemKeyboardHostTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -487,6 +607,7 @@
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */,
+				F2101CF8C1C4ECD1CC83101C /* SystemKeyboardHost.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -562,8 +683,10 @@
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_ENTITLEMENTS = "$(LAYERGRAM_RUNNER_ENTITLEMENTS)";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
 				COPY_PHASE_STRIP = NO;
+				CUSTOM_KEYBOARD_GROUP_ID = "$(CUSTOM_GROUP_ID).keyboard";
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -571,6 +694,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Layergram;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.5;
+				LAYERGRAM_RUNNER_ENTITLEMENTS = Runner/Runner.entitlements;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_VERSION = 5.0;
 			};
@@ -623,6 +747,35 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Runner.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Runner";
+			};
+			name = Profile;
+		};
+		90C662A1E054A5D774462980 /* Profile */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 9740EEB31CF90195004384FC /* Generated.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = LayergramKeyboard/LayergramKeyboard.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CUSTOM_GROUP_ID = group.app.layergram.app;
+				CUSTOM_KEYBOARD_GROUP_ID = "$(CUSTOM_GROUP_ID).keyboard";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = LayergramKeyboard/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.5;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.layergram.app.keyboard;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
 			};
 			name = Profile;
 		};
@@ -681,17 +834,19 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
+				CODE_SIGN_ENTITLEMENTS = "$(LAYERGRAM_RUNNER_ENTITLEMENTS)";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				CUSTOM_GROUP_ID = group.app.layergram.app;
+				CUSTOM_KEYBOARD_GROUP_ID = "$(CUSTOM_GROUP_ID).keyboard";
 				DEVELOPMENT_TEAM = B8CJ52364L;
 				ENABLE_BITCODE = NO;
 				ENABLE_TESTABILITY = YES;
 				INFOPLIST_FILE = Runner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Layergram;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
+				LAYERGRAM_RUNNER_ENTITLEMENTS = Runner/Runner.entitlements;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -713,17 +868,19 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
+				CODE_SIGN_ENTITLEMENTS = "$(LAYERGRAM_RUNNER_ENTITLEMENTS)";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				CUSTOM_GROUP_ID = group.app.layergram.app;
+				CUSTOM_KEYBOARD_GROUP_ID = "$(CUSTOM_GROUP_ID).keyboard";
 				DEVELOPMENT_TEAM = B8CJ52364L;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = Runner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Layergram;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.5;
+				LAYERGRAM_RUNNER_ENTITLEMENTS = Runner/Runner.entitlements;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -738,6 +895,63 @@
 				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Release;
+		};
+		9D89B6E62E8AB6AC13BD33F8 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 9740EEB31CF90195004384FC /* Generated.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = LayergramKeyboard/LayergramKeyboard.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CUSTOM_GROUP_ID = group.app.layergram.app;
+				CUSTOM_KEYBOARD_GROUP_ID = "$(CUSTOM_GROUP_ID).keyboard";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = LayergramKeyboard/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.5;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.layergram.app.keyboard;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		A997E106A295C66C588C4EAF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 9740EEB31CF90195004384FC /* Generated.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = LayergramKeyboard/LayergramKeyboard.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CUSTOM_GROUP_ID = group.app.layergram.app;
+				CUSTOM_KEYBOARD_GROUP_ID = "$(CUSTOM_GROUP_ID).keyboard";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = LayergramKeyboard/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.5;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.layergram.app.keyboard;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
 		};
 		FC60A48B2F44787F001F9AAB /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -997,6 +1211,16 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		5B9E4F7030F652DC6F28EDBB /* Build configuration list for PBXNativeTarget "LayergramKeyboard" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9D89B6E62E8AB6AC13BD33F8 /* Release */,
+				A997E106A295C66C588C4EAF /* Debug */,
+				90C662A1E054A5D774462980 /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		97C146E91CF9000F007C117D /* Build configuration list for PBXProject "Runner" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -1028,6 +1252,31 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		91B1313767D3AFB35585162F /* XCLocalSwiftPackageReference "SystemKeyboardCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = SystemKeyboardCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		89B8B650B6C50DD141132DC9 /* SystemKeyboardCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 91B1313767D3AFB35585162F /* XCLocalSwiftPackageReference "SystemKeyboardCore" */;
+			productName = SystemKeyboardCore;
+		};
+		C70C1FE1307BC40FA7CA9BF7 /* SystemKeyboardCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 91B1313767D3AFB35585162F /* XCLocalSwiftPackageReference "SystemKeyboardCore" */;
+			productName = SystemKeyboardCore;
+		};
+		E7750D1046DA95CB3954EDEB /* SystemKeyboardCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 91B1313767D3AFB35585162F /* XCLocalSwiftPackageReference "SystemKeyboardCore" */;
+			productName = SystemKeyboardCore;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 97C146E61CF9000F007C117D /* Project object */;
 }

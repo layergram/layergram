@@ -3,7 +3,8 @@
 Status: **experimental, local increment, not release-ready.** The capability is
 disabled in ordinary builds: the gate is a compile-time flag that defaults to
 off, and it stays off until the user both consents in the app and selects the
-keyboard in Android input-method settings.
+keyboard in system settings. The iOS extension is embedded only by the explicit
+experimental build procedure below.
 
 ## What it does
 
@@ -13,7 +14,7 @@ material to that other application's editor. Outbound text is encrypted by the
 already running Layergram app: the *outbound result* the keyboard holds is only
 an opaque pending id and, after an explicit authorization, the encrypted
 carrier. Composing and previewing happen inside Layergram's own keyboard window,
-which is drawn by the Layergram process; plaintext is never inserted into the
+which is drawn by Layergram's native keyboard component; plaintext is never inserted into the
 host application's editor. The native side also receives approved contact names
 and fingerprints for the explicit chooser, and, for an authenticated ordinary
 inbound message, a transient plaintext preview that the app authenticates.
@@ -30,7 +31,7 @@ Non-negotiable properties of the current increment:
   app lock applies the same lock deadline; the keyboard can never unlock the app
   and never receives a biometric or PIN prompt.
 * The outbound result crossing the channel is only the opaque pending id and
-  the final ciphertext; contacts are non-secret display references and an inbound
+  the final ciphertext; contacts are private display references and an inbound
   preview is transient authenticated plaintext for Layergram's own window. No
   clipboard export, no send-button automation, and the host editor is never
   touched with plaintext.
@@ -43,8 +44,73 @@ flutter run --dart-define=LAYERGRAM_EXPERIMENTAL_SYSTEM_KEYBOARD=true
 
 Then, in the app: open Settings, enable the experimental system keyboard entry,
 accept the consent dialog, and use the provided button to open the Android input
-method settings and select the Layergram keyboard. Android only. iOS has no
-keyboard extension in this increment.
+method settings and select the Layergram keyboard.
+
+The iOS keyboard requires iOS 26 or later for native hybrid post-quantum IPC.
+The containing app retains its existing minimum OS version. For a simulator
+preview on macOS with Flutter, CocoaPods and Xcode 26 or later installed:
+
+```sh
+./tool/build_ios_system_keyboard.sh
+```
+
+The script builds the standalone `LayergramKeyboard` scheme, then Runner with
+`LAYERGRAM_KEYBOARD_EMBED=YES` and the Dart feature flag enabled. Ordinary Runner
+builds do not depend on or embed the keyboard target; an incremental ordinary
+build also removes a previously embedded experimental keyboard. Device builds
+need signing/provisioning for `app.layergram.app.keyboard` and the dedicated
+`group.app.layergram.app.keyboard` App Group. Experimental Runner builds select
+`LAYERGRAM_RUNNER_ENTITLEMENTS=Runner/RunnerKeyboard.entitlements`; ordinary
+builds retain the existing entitlements. The existing share extension has no
+access to the keyboard group. Simulator builds use local ad-hoc signing and do not prove provisioning.
+The Simulator filesystem does not implement iOS complete file protection; that
+protection is mandatory in real-device builds and needs physical-device tests.
+
+Enable the switch in Layergram, then add Layergram in iOS keyboard settings and
+allow Full Access. Full Access is required for the local App Group channel; it
+also grants network capability at OS level, but the extension uses no network.
+Return to Layergram, unlock if required, and switch to the transport app. A
+session lasts **at most 20 seconds after leaving Layergram**, or less if the
+existing app-lock deadline or iOS background execution expires. Requests and
+heartbeats never renew that window. Hiding or switching the keyboard ends the
+session immediately, including its transport keys. A window admits one keyboard
+appearance; return to Layergram to start another one.
+
+### iOS owner and extension boundary
+
+The extension never opens the vault or V3 runtime. A finite background task in
+the containing app services the existing Dart owner. There is no attempt to
+wake a suspended app, keep it alive indefinitely, or move its identity/session
+keys into an extension. Owner revocation invalidates pending replies. The
+extension clears its draft, preview and contact selection when its short live
+grant expires, capture is detected, its editor changes, or its view disappears.
+
+The dedicated App Group admits only the app and keyboard extension; its OS
+entitlement is the peer admission boundary. Ephemeral public keys alone do not
+authenticate a binary independently of that boundary. The mailbox contains only public ephemeral rendezvous data
+and encrypted request/response envelopes. Ephemeral transport keys exist only
+in memory. CryptoKit X-Wing (ML-KEM-768 + X25519), HKDF-SHA256 and AES-GCM-256 protect
+this local transport, with no classical-only fallback; all
+Layergram message cryptography remains in the existing app owner. Session,
+direction, request and sequence binding reject stale or substituted envelopes.
+File size bounds, complete file protection and backup exclusion limit storage.
+Dropping key references and clearing UI values do not promise memory zeroization.
+
+The keyboard only reads the clipboard following an explicit paste action. It
+does not read host surrounding text or infer a chat recipient. iOS insertion
+uses `textDocumentProxy.insertText`, which returns no acceptance result: history
+already contains the prepared message. The best-effort `ack` marks an export
+attempt only while the same editor is still authorized. If an editor callback,
+lock or suspension prevents the acknowledgement, the prepared export stays
+recoverable as pending; no delivery or transport-app acceptance is inferred.
+Own-insertion callbacks are not suppressed to make acknowledgement appear reliable.
+
+The experiment is not ready for distribution. Physical-device validation must
+cover Full Access, data protection on lock, suspension/termination, app-lock and
+identity changes, capture, extension memory pressure and real V3 exchanges.
+Apple's keyboard guidelines also require useful operation without Full Access;
+the encrypted live-owner feature depends on it, so store eligibility remains an
+unresolved release gate. No insecure plaintext fallback is added to satisfy it.
 
 ## Design
 
@@ -110,8 +176,16 @@ ask for scrambled layout if it already supports it.
 ## Tests
 
 ```
-flutter test test/features/system_keyboard/
+flutter test test/features/system_keyboard/ test/security/
+swift test --package-path ios/SystemKeyboardCore
 ```
+
+The Swift package tests the hybrid IPC and editor policy. The iOS
+`SystemKeyboardHostTests` suite runs in the experimental embedded Runner build:
+it verifies live forwarding through the Flutter channel codec, disable/resume
+revocation and suppression of a delayed response. Its Dart peer is synthetic;
+it does not prove a complete keyboard interaction with real V3 peers.
+The existing Runner screen-shield tests remain part of that native suite.
 
 The app-service suite drives an injected backend, monotonic clock and native
 channel. It covers: feature-disabled and unsupported-platform denial with native
@@ -156,11 +230,10 @@ adapters test flow wiring, not cryptographic algorithm correctness.
   dialog.
 * The keyboard requires the Layergram process to be alive. If the process is
   killed, carriers cannot be prepared or authenticated until the app runs again.
-* iOS is not supported in this increment. A keyboard extension runs in a separate
-  process and the host application can be suspended, so there is no safe
-  suspended-process key owner. No shared key store, app-group secret or duplicate
-  database workaround is used or planned here; iOS needs a different design before
-  any crypto work is attempted.
+* iOS uses a separate extension process and a bounded live owner. A suspended
+  or terminated containing app cannot serve the keyboard. iOS or the host app
+  may replace or reject custom keyboards, including in secure text fields.
+  Screenshots cannot be reliably prevented in the extension.
 * Identity reloads, passphrase activation and app-lock changes intentionally
   revoke the current keyboard session and require a fresh explicit selection.
   Contact list changes are not subscribed as a revocation trigger: the selected

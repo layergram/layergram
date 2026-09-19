@@ -23,6 +23,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../utils/app_platform.dart';
 import 'system_keyboard_app_service.dart';
 
 /// Settings tile for the experimental SYSTEM keyboard.
@@ -125,8 +126,50 @@ class _SystemKeyboardStrings {
   static _SystemKeyboardStrings of(BuildContext context) {
     final String code =
         Localizations.maybeLocaleOf(context)?.languageCode ?? 'en';
-    return code == 'it' ? _italian : _english;
+    final bool italian = code == 'it';
+    final _SystemKeyboardStrings base = italian ? _italian : _english;
+    if (!AppPlatform.isIOS) return base;
+    return _SystemKeyboardStrings(
+      title: base.title,
+      subtitle: italian
+          ? 'Richiede iOS 26+. Sessioni brevi dopo aver lasciato Layergram.'
+          : 'Requires iOS 26+. Short sessions after leaving Layergram.',
+      dialogTitle: base.dialogTitle,
+      dialogBody:
+          '${base.dialogBody}\n\n${italian ? _iosItalian : _iosEnglish}',
+      confirm: base.confirm,
+      cancel: base.cancel,
+      openSettings: italian ? 'Apri impostazioni di iOS' : 'Open iOS settings',
+      openSettingsSubtitle: italian
+          ? 'Aggiungi Layergram in Generali → Tastiera → Tastiere; consenti Accesso completo.'
+          : 'Add Layergram under General → Keyboard → Keyboards; allow Full Access.',
+    );
   }
+
+  static const String _iosItalian =
+      'Richiede iOS 26 o successivo per proteggere anche il collegamento locale '
+      'con crittografia post-quantum. Su iOS, dopo essere usciti da Layergram, ogni sessione dura al massimo '
+      '20 secondi. Nascondere o cambiare tastiera termina la sessione. '
+      'iOS può interromperla prima; il blocco app può abbreviarla. '
+      'Per riprendere, torna in Layergram e sbloccalo se richiesto. La tastiera '
+      'richiede Accesso completo per comunicare localmente con l’app: iOS '
+      'concede anche la possibilità di usare la rete, ma questa estensione '
+      'non la utilizza. I contenuti temporanei scambiati sono cifrati; chiavi '
+      'di identità e database restano nell’app. La tastiera non può impedire '
+      'gli screenshot. L’inserimento del messaggio cifrato non conferma '
+      'l’invio da parte dell’app ospite.';
+
+  static const String _iosEnglish =
+      'Requires iOS 26 or later to protect the local connection with '
+      'post-quantum cryptography. On iOS, each session lasts at most 20 seconds after leaving Layergram. '
+      'Hiding or switching keyboards ends the session. iOS may end it earlier; '
+      'the app lock can shorten it. To resume, return '
+      'to Layergram and unlock it if requested. The keyboard requires Full '
+      'Access to communicate locally with the app: iOS also grants network '
+      'capability, but this extension does not use it. Temporary exchanged '
+      'content is encrypted; identity keys and databases remain in the app. '
+      'The keyboard cannot prevent screenshots. Inserting ciphertext does '
+      'not confirm that the host app has sent the message.';
 
   static const _SystemKeyboardStrings _english = _SystemKeyboardStrings(
     title: 'System keyboard (experimental)',

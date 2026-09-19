@@ -18,7 +18,7 @@
 /// app owner at all, and the only place that answers the native `request`
 /// channel. It owns:
 ///
-/// * the off-by-default, Android-only, compile-time feature gate and the
+/// * the off-by-default mobile compile-time feature gate and the
 ///   independent user opt-in stored through the existing secure storage;
 /// * the admission snapshot consumed by [SystemKeyboardController], including a
 ///   synchronous "a lock has been requested" flag and an independent monotonic
@@ -278,6 +278,7 @@ class SystemKeyboardAppService extends ChangeNotifier
     required bool Function() readScramble,
     required SystemKeyboardMonotonicNow monotonicNow,
     bool observeLifecycle = true,
+    Duration? maximumBackgroundDuration,
   })  : _nativeChannel = nativeChannel,
         _optInStore = optInStore,
         _platformSupported = platformSupported,
@@ -285,7 +286,8 @@ class SystemKeyboardAppService extends ChangeNotifier
         _ownerState = ownerState,
         _readScramble = readScramble,
         _now = monotonicNow,
-        _observeLifecycle = observeLifecycle;
+        _observeLifecycle = observeLifecycle,
+        _maximumBackgroundDuration = maximumBackgroundDuration;
 
   final SystemKeyboardNativeChannel _nativeChannel;
   final SystemKeyboardOptInStore _optInStore;
@@ -295,6 +297,15 @@ class SystemKeyboardAppService extends ChangeNotifier
   final bool Function() _readScramble;
   final SystemKeyboardMonotonicNow _now;
   final bool _observeLifecycle;
+  final Duration? _maximumBackgroundDuration;
+  Duration? _platformBackgroundDeadline;
+
+  Duration? get _effectiveBackgroundDeadline {
+    final Duration? platform = _platformBackgroundDeadline;
+    return platform == null
+        ? _backgroundDeadline
+        : _earlier(_backgroundDeadline, platform);
+  }
 
   SystemKeyboardController? _controller;
   SystemKeyboardBackend? _backend;
@@ -352,6 +363,9 @@ class SystemKeyboardAppService extends ChangeNotifier
     // disabled build never initializes identity-adjacent providers.
     if (!_platformSupported ||
         !_featureFlagEnabled ||
+        // A bounded iOS extension session starts only after Flutter observed
+        // departure. An early native request cannot race a zero-timeout lock.
+        (_maximumBackgroundDuration != null && _backgroundAt == null) ||
         !_optInLoaded ||
         !_optIn ||
         !_nativeConfigured ||
@@ -679,6 +693,7 @@ class SystemKeyboardAppService extends ChangeNotifier
   void onAppLifecycleChanged(AppLifecycleState state) {
     if (_disposed || !_gateActive) return;
     if (state == AppLifecycleState.resumed) {
+      _platformBackgroundDeadline = null;
       _backgroundAt = null;
       _backgroundDeadline = null;
       // Resuming is a full revocation: the integration generation, the core
@@ -706,6 +721,10 @@ class SystemKeyboardAppService extends ChangeNotifier
       return;
     }
     _backgroundAt ??= now;
+    final Duration? maximum = _maximumBackgroundDuration;
+    if (maximum != null) {
+      _platformBackgroundDeadline ??= now + maximum;
+    }
     if (_appLockEnabled) {
       final Duration candidate =
           _backgroundAt! + Duration(seconds: _appLockTimeoutSeconds);
@@ -992,6 +1011,7 @@ class SystemKeyboardAppService extends ChangeNotifier
     // because a native request arrived.
     if (!_platformSupported ||
         !_featureFlagEnabled ||
+        (_maximumBackgroundDuration != null && _backgroundAt == null) ||
         !_optInLoaded ||
         !_optIn ||
         !_nativeConfigured ||
@@ -1005,7 +1025,7 @@ class SystemKeyboardAppService extends ChangeNotifier
         disposed: _disposed,
         stateGeneration: _generation,
         identityContextGeneration: null,
-        backgroundDeadline: _backgroundDeadline,
+        backgroundDeadline: _effectiveBackgroundDeadline,
       );
     }
     SystemKeyboardOwnerState owner;
@@ -1026,7 +1046,7 @@ class SystemKeyboardAppService extends ChangeNotifier
       disposed: _disposed,
       stateGeneration: _generation,
       identityContextGeneration: identityReady ? identity : null,
-      backgroundDeadline: _backgroundDeadline,
+      backgroundDeadline: _effectiveBackgroundDeadline,
     );
   }
 
@@ -1047,7 +1067,7 @@ class SystemKeyboardAppService extends ChangeNotifier
   int? _leaseMillis() {
     final Duration? now = _safeNow();
     if (now == null) return null;
-    final Duration? deadline = _backgroundDeadline;
+    final Duration? deadline = _effectiveBackgroundDeadline;
     if (deadline == null) return 1000;
     final Duration remaining = deadline - now;
     if (remaining <= Duration.zero) return null;
@@ -1232,7 +1252,7 @@ class SystemKeyboardAppService extends ChangeNotifier
 
 /// Whether the platform can host the native SYSTEM keyboard at all.
 final systemKeyboardPlatformSupportedProvider = Provider<bool>(
-  (ref) => AppPlatform.isAndroid,
+  (ref) => AppPlatform.isAndroid || AppPlatform.isIOS,
 );
 
 /// Whether this build was compiled with the experimental feature.
@@ -1325,6 +1345,8 @@ final systemKeyboardAppServiceProvider = Provider<SystemKeyboardAppService>(
             capabilities.secureKeyboard.supportsScramble;
       },
       monotonicNow: ref.watch(systemKeyboardMonotonicNowProvider),
+      maximumBackgroundDuration:
+          AppPlatform.isIOS ? const Duration(seconds: 20) : null,
     );
 
     if (featureActive) {

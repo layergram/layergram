@@ -242,6 +242,7 @@ class SceneDelegate: FlutterSceneDelegate {
   private var protectedRootViewController: ScreenProtectedHostingViewController?
   private var qrBrightnessRequested = false
   private var previousScreenBrightness: CGFloat?
+  private var systemKeyboardHost: SystemKeyboardHost?
 
   override func scene(
     _ scene: UIScene,
@@ -256,17 +257,22 @@ class SceneDelegate: FlutterSceneDelegate {
     setupMethodChannel()
     setupQrBrightnessChannel()
     setupSharingChannel()
+    if let controller = flutterViewController {
+      systemKeyboardHost = SystemKeyboardHost(messenger: controller.binaryMessenger)
+    }
     setupCaptureObservers()
     updatePrivacyShieldForCurrentState()
   }
 
   override func sceneWillResignActive(_ scene: UIScene) {
+    systemKeyboardHost?.willResignActive()
     restorePreviousScreenBrightness(clearRequest: false)
     super.sceneWillResignActive(scene)
     showPrivacyShieldIfNeeded()
   }
 
   override func sceneDidBecomeActive(_ scene: UIScene) {
+    systemKeyboardHost?.didBecomeActive()
     super.sceneDidBecomeActive(scene)
     if qrBrightnessRequested {
       applyQrScreenBrightness()
@@ -275,6 +281,8 @@ class SceneDelegate: FlutterSceneDelegate {
   }
 
   override func sceneDidDisconnect(_ scene: UIScene) {
+    systemKeyboardHost?.disconnect()
+    systemKeyboardHost = nil
     restorePreviousScreenBrightness(clearRequest: true)
     screenPrivacyShield.clear()
     super.sceneDidDisconnect(scene)
