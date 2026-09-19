@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Optional SYSTEM keyboard strings (Italian). Same generic wording as the
+     default locale: no lock, passphrase, identity or protocol detail. -->
+<resources>
+    <string name="system_keyboard_service_label">Tastiera Layergram</string>
+
+    <string name="sk_status_ready">Pronta</string>
+    <string name="sk_status_connecting">Connessione a Layergram...</string>
+    <string name="sk_status_unavailable">Tastiera non disponibile</string>
+    <string name="sk_status_rejected_field">Questo campo non può usare la tastiera Layergram</string>
+    <string name="sk_status_select_recipient">Seleziona prima un destinatario</string>
+    <string name="sk_status_nothing_to_insert">Scrivi prima un messaggio</string>
+    <string name="sk_status_loading">Caricamento...</string>
+    <string name="sk_status_contacts_empty">Nessun contatto disponibile</string>
+    <string name="sk_status_carrier_loaded">Messaggio cifrato caricato (%1$d caratteri)</string>
+    <string name="sk_status_selected">Destinatario confermato: %1$s</string>
+    <string name="sk_status_decoded">Messaggio decodificato</string>
+    <string name="sk_status_insert_done">Messaggio cifrato inserito</string>
+    <string name="sk_status_insert_uncertain">Testo cifrato inserito. Conferma in corso.</string>
+    <string name="sk_status_insert_open_app">Inserito, ma conferma non riuscita. Apri Layergram per verificare.</string>
+
+    <string name="sk_error_unavailable">Tastiera Layergram non disponibile</string>
+    <string name="sk_error_busy">Un\'altra operazione è in corso</string>
+    <string name="sk_error_invalid_selection">Destinatario non confermato</string>
+    <string name="sk_error_oversize">Contenuto troppo lungo</string>
+    <string name="sk_error_unsupported_export">Apri Layergram per inviare questo messaggio</string>
+    <string name="sk_error_invalid_request">Richiesta non valida</string>
+    <string name="sk_error_no_pending_export">Niente da inserire</string>
+    <string name="sk_error_no_message">Nessun messaggio trovato</string>
+    <string name="sk_error_open_app_required">Apri Layergram per leggere questo messaggio</string>
+    <string name="sk_error_duplicate_request">Richiesta già gestita</string>
+    <string name="sk_error_backend">Operazione non riuscita</string>
+
+    <string name="sk_draft_hint">Scrivi qui. Nulla viene inviato al campo dell\'app finché non è cifrato.</string>
+    <string name="sk_contacts_title">Destinatario</string>
+    <string name="sk_contacts_clear">Svuota elenco</string>
+    <string name="sk_preview_title">Messaggio da %1$s\nImpronta: %2$s</string>
+    <string name="sk_preview_clear">Chiudi anteprima</string>
+    <string name="sk_contact_entry">%1$s\n%2$s</string>
+    <string name="sk_contact_confirm_title">Conferma destinatario</string>
+    <string name="sk_contact_confirm_message">Inserire un messaggio cifrato per %1$s?\nImpronta: %2$s</string>
+    <string name="sk_confirm_yes">Conferma</string>
+    <string name="sk_confirm_no">Annulla</string>
+
+    <string name="sk_action_paste">Incolla</string>
+    <string name="sk_action_contacts">Contatti</string>
+    <string name="sk_action_decode">Decodifica</string>
+    <string name="sk_action_next_keyboard">Tastiera successiva</string>
+    <string name="sk_action_insert_idle">Cifra e inserisci</string>
+    <string name="sk_action_insert_for">Cifra per %1$s</string>
+    <string name="sk_action_reconnect">Riconnetti</string>
+    <string name="sk_action_shift">Maiuscole</string>
+    <string name="sk_action_backspace">Cancella</string>
+    <string name="sk_action_space">Spazio</string>
+    <string name="sk_action_newline">Invio</string>
+    <string name="sk_action_clear">Pulisci</string>
+    <string name="sk_mode_letters">ABC</string>
+    <string name="sk_mode_numbers">123</string>
+    <string name="sk_mode_symbols">Sim</string>
+</resources>

@@ -12,6 +12,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
   private val screenProtectionChannelName = "layergram/screen_protection"
   private val qrBrightnessChannelName = "layergram/screen_brightness"
+  private val systemKeyboardChannelName = SystemKeyboardBroker.CHANNEL_NAME
   private val qrBrightnessFloor = 0.60f
   private val prefsName = "layergram_prefs"
   private val enabledKey = "screen_protection_enabled"
@@ -61,6 +62,20 @@ class MainActivity : FlutterActivity() {
           else -> result.notImplemented()
         }
       }
+
+    // The optional SYSTEM keyboard broker borrows this exact engine; it never
+    // creates one. `cleanUpFlutterEngine` unbinds only this owner.
+    val systemKeyboardChannel =
+      MethodChannel(flutterEngine.dartExecutor.binaryMessenger, systemKeyboardChannelName)
+    SystemKeyboardBroker.bindEngine(systemKeyboardChannel, flutterEngine, applicationContext)
+    systemKeyboardChannel.setMethodCallHandler { call, result ->
+      SystemKeyboardBroker.handleAppCall(call, result)
+    }
+  }
+
+  override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+    SystemKeyboardBroker.unbindEngine(flutterEngine)
+    super.cleanUpFlutterEngine(flutterEngine)
   }
 
   override fun onPause() {

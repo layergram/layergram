@@ -35,6 +35,7 @@ import 'features/onboarding/create_or_restore_view.dart';
 import 'features/security/unlock_view.dart';
 import 'features/security/app_lock_gate.dart';
 import 'features/shell/app_shell.dart';
+import 'features/system_keyboard/system_keyboard_app_service.dart';
 import 'l10n/app_strings.dart';
 import 'theme/app_theme.dart';
 import 'ui/layergram_background.dart';
@@ -123,6 +124,7 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
   late final AppLockIdleController _appLockIdleController;
   late final FsPassphraseTimeoutController _passphraseTimeoutController;
   late final ExternalIngressCoordinator _externalIngress;
+  late final SystemKeyboardAppService _systemKeyboard;
   final _deepLinks = DeepLinks();
   final _sharing = Sharing();
   StreamSubscription<Uri>? _linkSub;
@@ -163,6 +165,10 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
     _externalIngress = ExternalIngressCoordinator(
       maxTotalCodeUnits: StegoDecoder.maxCarrierCodeUnits,
     );
+    // Initialized exactly once here and disposed exactly once below. In
+    // ordinary builds this only configures the native component off.
+    _systemKeyboard = ref.read(systemKeyboardAppServiceProvider);
+    unawaited(_systemKeyboard.start());
     WidgetsBinding.instance.addObserver(this);
     _lockStateFuture = _loadLockState();
     _reloadIdentity();
@@ -678,6 +684,9 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
       _isExternalIngressUnlocked() && !_lockRequested;
 
   void _requestAppLock() {
+    // Synchronous admission signal *before* the delayed provider commit, so the
+    // experimental SYSTEM keyboard can never serve a request in the gap.
+    _systemKeyboard.noteAppLockRequested();
     if (!mounted || ref.read(appNeedsUnlockProvider) || _lockRequested) return;
     _lockRequested = true;
     FocusManager.instance.primaryFocus?.unfocus();
@@ -820,6 +829,7 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
     _opaqueSharedMediaBatches.clear();
     _passphraseTimeoutController.dispose();
     _appLockIdleController.dispose();
+    _systemKeyboard.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }

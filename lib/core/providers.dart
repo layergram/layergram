@@ -241,6 +241,9 @@ final messagesRepositoryProvider = Provider<MessagesRepository>((ref) {
   }
 
   void scheduleStorageContextUpdate() {
+    // Revoke leases before any key material is awaited so an in-flight bridge
+    // cannot keep writing while the replacement context is still loading.
+    repo.invalidateContextLeases();
     final generation = ++contextGeneration;
     late final Future<void> pending;
     pending = updateStorageContext(generation).catchError((_) async {
@@ -264,6 +267,9 @@ final messagesRepositoryProvider = Provider<MessagesRepository>((ref) {
   ref.onDispose(() {
     disposed = true;
     contextGeneration++;
+    // Disposal of the provider is also a synchronous context boundary; the
+    // repository disposal below is deferred until pending updates settle.
+    repo.invalidateContextLeases();
     unawaited(
       Future.wait(pendingUpdates.toList(growable: false))
           .then<void>((_) {}, onError: (_, __) {})

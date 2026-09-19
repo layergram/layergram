@@ -28,6 +28,8 @@ class MessagesRepositoryCore {
   bool _disposeRequested = false;
   int _reloadGeneration = 0;
   String? _visibleRecordKey;
+  int _contextLeaseRevision = 0;
+  bool _contextLeaseAdmissionReady = false;
 
   final Map<String, Map<dynamic, dynamic>> _hiddenPersistedRecords = {};
 
@@ -36,19 +38,42 @@ class MessagesRepositoryCore {
   Future<void> setActiveContext({
     required String? scopeToken,
     required SecretKey? storageKey,
-  }) =>
-      _serialized(() async {
-        final detachedKey = await _detachStorageKey(storageKey);
-        final previousKey = _storageKey;
-        _scopeToken = scopeToken;
-        _storageKey = detachedKey;
-        _destroyStorageKey(previousKey);
-        _loadFuture = _reloadFromBox();
-        final generation = _reloadGeneration;
-        await _loadFuture;
-        if (generation != _reloadGeneration) return;
-        _controller.add(List.unmodifiable(_messages));
-      });
+  }) {
+    // The synchronous call is the context boundary: outstanding leases must
+    // stop being admissible before any key material is loaded, not when the
+    // queued switch eventually runs.
+    invalidateContextLeases();
+    final admissionRevision = _contextLeaseRevision;
+    return _serialized(() async {
+      final detachedKey = await _detachStorageKey(storageKey);
+      final previousKey = _storageKey;
+      _scopeToken = scopeToken;
+      _storageKey = detachedKey;
+      _destroyStorageKey(previousKey);
+      _loadFuture = _reloadFromBox();
+      final generation = _reloadGeneration;
+      await _loadFuture;
+      if (generation != _reloadGeneration) return;
+      _controller.add(List.unmodifiable(_messages));
+      _markContextLeaseAdmissionReadyIfCurrent(admissionRevision);
+    });
+  }
+
+  /// Synchronously revokes every outstanding context lease.
+  ///
+  /// Lease admission stays closed until a subsequent [setActiveContext]
+  /// completes for the current revision with a non-empty scope and key.
+  void invalidateContextLeases() {
+    _contextLeaseRevision++;
+    _contextLeaseAdmissionReady = false;
+  }
+
+  void _markContextLeaseAdmissionReadyIfCurrent(int admissionRevision) {
+    if (_disposeRequested) return;
+    if (admissionRevision != _contextLeaseRevision) return;
+    if (!_hasScope || _storageKey == null) return;
+    _contextLeaseAdmissionReady = true;
+  }
 
   bool get _hasScope => (_scopeToken ?? '').isNotEmpty;
 
@@ -243,18 +268,38 @@ class MessagesRepositoryCore {
             );
           }
         }
-        if (_hasScope && _storageKey == null) {
-          throw StateError('Storage context not initialized');
-        }
-        if (_messages.any((m) => _isDuplicateIncomingMessage(m, message))) {
-          return;
-        }
-        _messages.removeWhere((m) => m.id == message.id);
-        _messages.add(message);
-        _sortAndPrune();
-        await _persistAll();
-        _controller.add(List.unmodifiable(_messages));
+        await _addMessageUnserialized(message);
       });
+
+  /// Serialized write guarded by an ephemeral context lease.
+  ///
+  /// The lease is validated before any mutation. A write that already passed
+  /// that check keeps running to completion in its own context because the
+  /// operation queue serializes any context switch after it; it can never
+  /// start once the lease revision moved on.
+  Future<void> addInContext(
+    MessagesRepositoryContextLease lease,
+    MessageRecord message,
+  ) =>
+      _serialized(() async {
+        _validateContextLease(lease);
+        await _ensureLoaded();
+        await _addMessageUnserialized(message);
+      });
+
+  Future<void> _addMessageUnserialized(MessageRecord message) async {
+    if (_hasScope && _storageKey == null) {
+      throw StateError('Storage context not initialized');
+    }
+    if (_messages.any((m) => _isDuplicateIncomingMessage(m, message))) {
+      return;
+    }
+    _messages.removeWhere((m) => m.id == message.id);
+    _messages.add(message);
+    _sortAndPrune();
+    await _persistAll();
+    _controller.add(List.unmodifiable(_messages));
+  }
 
   Future<void> clearAll() => _serialized(() async {
         _messages.clear();
@@ -286,11 +331,26 @@ class MessagesRepositoryCore {
 
   Future<void> delete(String id) => _serialized(() async {
         await _ensureLoaded();
-        _messages.removeWhere((m) => m.id == id);
-        _sortAndPrune();
-        await _persistAll();
-        _controller.add(List.unmodifiable(_messages));
+        await _deleteMessageUnserialized(id);
       });
+
+  /// Serialized delete guarded by an ephemeral context lease.
+  Future<void> deleteInContext(
+    MessagesRepositoryContextLease lease,
+    String id,
+  ) =>
+      _serialized(() async {
+        _validateContextLease(lease);
+        await _ensureLoaded();
+        await _deleteMessageUnserialized(id);
+      });
+
+  Future<void> _deleteMessageUnserialized(String id) async {
+    _messages.removeWhere((m) => m.id == id);
+    _sortAndPrune();
+    await _persistAll();
+    _controller.add(List.unmodifiable(_messages));
+  }
 
   Future<void> deleteAllForContact(String contactId) => _serialized(() async {
         await _ensureLoaded();
@@ -378,11 +438,77 @@ class MessagesRepositoryCore {
         return thread;
       });
 
-  Future<List<MessageRecord>> getAllMessages() => _serialized(() async {
-        await _ensureLoaded();
-        _sortAndPrune();
-        return List<MessageRecord>.unmodifiable(_messages);
+  Future<List<MessageRecord>> getAllMessages() =>
+      _serialized(_allMessagesUnserialized);
+
+  Future<List<MessageRecord>> _allMessagesUnserialized() async {
+    await _ensureLoaded();
+    _sortAndPrune();
+    return List<MessageRecord>.unmodifiable(_messages);
+  }
+
+  /// Serialized read guarded by an ephemeral context lease.
+  ///
+  /// The lease is validated again after every await so a read that crossed a
+  /// context switch fails closed instead of returning data from the context
+  /// that replaced the leased one.
+  Future<List<MessageRecord>> getAllMessagesInContext(
+    MessagesRepositoryContextLease lease,
+  ) =>
+      _serialized(() async {
+        _validateContextLease(lease);
+        final messages = await _allMessagesUnserialized();
+        _validateContextLease(lease);
+        return messages;
       });
+
+  /// Acquires an ephemeral, repository-bound context lease.
+  ///
+  /// Admission is checked synchronously so an invalidation that happens before
+  /// the key material finishes loading cannot be raced by a fresh acquisition.
+  /// The queued acquisition re-validates the same state before minting the
+  /// lease, so a lease is never handed out for an unready, uninitialized or
+  /// disposed context, and there is no nullable success path.
+  Future<MessagesRepositoryContextLease> acquireContextLease() {
+    if (_disposeRequested || !_contextLeaseAdmissionReady) {
+      return Future<MessagesRepositoryContextLease>.error(
+        StateError('MessagesRepository context lease admission is not ready'),
+      );
+    }
+    return _serialized(() async {
+      _ensureContextLeaseAdmissible();
+      return MessagesRepositoryContextLease._(this, _contextLeaseRevision);
+    });
+  }
+
+  void _ensureContextLeaseAdmissible() {
+    if (_disposeRequested) {
+      throw StateError('MessagesRepository is disposed');
+    }
+    if (!_contextLeaseAdmissionReady) {
+      throw StateError(
+        'MessagesRepository context lease admission is not ready',
+      );
+    }
+    if (!_hasScope || _storageKey == null) {
+      throw StateError('Message storage context not initialized');
+    }
+  }
+
+  void _validateContextLease(MessagesRepositoryContextLease lease) {
+    if (_disposeRequested) {
+      throw StateError('MessagesRepository is disposed');
+    }
+    if (!identical(lease._repository, this)) {
+      throw StateError(
+        'MessagesRepository context lease belongs to another repository',
+      );
+    }
+    if (lease._revision != _contextLeaseRevision) {
+      throw StateError('MessagesRepository context lease was invalidated');
+    }
+    _ensureContextLeaseAdmissible();
+  }
 
   Stream<List<MessageRecord>> watchThread(String contactId,
       {int limit = 50}) async* {
@@ -544,6 +670,7 @@ class MessagesRepositoryCore {
   void dispose() {
     if (_disposeRequested) return;
     _disposeRequested = true;
+    invalidateContextLeases();
     final pending = _operationTail;
     unawaited(
       pending.catchError((_) {}).whenComplete(() async {
@@ -603,4 +730,20 @@ class MessagesRepositoryCore {
     _operationTail = next;
     return completer.future;
   }
+}
+
+/// Opaque proof that one caller observed a ready storage context of one
+/// [MessagesRepositoryCore] instance.
+///
+/// Instances are minted only by [MessagesRepositoryCore.acquireContextLease]
+/// and are bound by object identity to that repository plus the monotonic
+/// context revision current at acquisition. Any later
+/// [MessagesRepositoryCore.invalidateContextLeases], context switch or
+/// [MessagesRepositoryCore.dispose] revokes every lease minted for an earlier
+/// revision; no lease can be renewed, transferred or serialized.
+final class MessagesRepositoryContextLease {
+  MessagesRepositoryContextLease._(this._repository, this._revision);
+
+  final MessagesRepositoryCore _repository;
+  final int _revision;
 }

@@ -45,6 +45,23 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
+        <!-- Optional SYSTEM keyboard surface. Disabled by default: only an
+             explicit app opt-in (`configure {enabled: true}` from the running
+             Flutter app) enables this component. It runs in the default app
+             process (no android:process) and never creates a FlutterEngine. -->
+        <service
+            android:name=".LayergramInputMethodService"
+            android:exported="true"
+            android:enabled="false"
+            android:label="@string/system_keyboard_service_label"
+            android:permission="android.permission.BIND_INPUT_METHOD">
+            <intent-filter>
+                <action android:name="android.view.InputMethod" />
+            </intent-filter>
+            <meta-data
+                android:name="android.view.im"
+                android:resource="@xml/layergram_input_method" />
+        </service>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

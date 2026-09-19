@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Optional SYSTEM keyboard strings. Every message is short and generic: no
+     lock, passphrase, identity or protocol detail is ever displayed. -->
+<resources>
+    <string name="system_keyboard_service_label">Layergram keyboard</string>
+
+    <string name="sk_status_ready">Ready</string>
+    <string name="sk_status_connecting">Connecting to Layergram...</string>
+    <string name="sk_status_unavailable">Keyboard unavailable</string>
+    <string name="sk_status_rejected_field">This field cannot use the Layergram keyboard</string>
+    <string name="sk_status_select_recipient">Select a recipient first</string>
+    <string name="sk_status_nothing_to_insert">Write a message first</string>
+    <string name="sk_status_loading">Loading...</string>
+    <string name="sk_status_contacts_empty">No contacts available</string>
+    <string name="sk_status_carrier_loaded">Encrypted message loaded (%1$d characters)</string>
+    <string name="sk_status_selected">Recipient confirmed: %1$s</string>
+    <string name="sk_status_decoded">Message decoded</string>
+    <string name="sk_status_insert_done">Encrypted message inserted</string>
+    <string name="sk_status_insert_uncertain">Encrypted text inserted. Confirmation pending.</string>
+    <string name="sk_status_insert_open_app">Inserted, but confirmation failed. Open Layergram to check.</string>
+
+    <string name="sk_error_unavailable">Layergram keyboard is unavailable</string>
+    <string name="sk_error_busy">Another operation is in progress</string>
+    <string name="sk_error_invalid_selection">Recipient not confirmed</string>
+    <string name="sk_error_oversize">Content is too long</string>
+    <string name="sk_error_unsupported_export">Open Layergram to send this message</string>
+    <string name="sk_error_invalid_request">Request not valid</string>
+    <string name="sk_error_no_pending_export">Nothing ready to insert</string>
+    <string name="sk_error_no_message">No message found</string>
+    <string name="sk_error_open_app_required">Open Layergram to read this message</string>
+    <string name="sk_error_duplicate_request">Request already handled</string>
+    <string name="sk_error_backend">Operation failed</string>
+
+    <string name="sk_draft_hint">Write here. Nothing is sent to the app field until it is encrypted.</string>
+    <string name="sk_contacts_title">Recipient</string>
+    <string name="sk_contacts_clear">Clear list</string>
+    <string name="sk_preview_title">Message from %1$s\nFingerprint: %2$s</string>
+    <string name="sk_preview_clear">Clear preview</string>
+    <string name="sk_contact_entry">%1$s\n%2$s</string>
+    <string name="sk_contact_confirm_title">Confirm recipient</string>
+    <string name="sk_contact_confirm_message">Insert an encrypted message for %1$s?\nFingerprint: %2$s</string>
+    <string name="sk_confirm_yes">Confirm</string>
+    <string name="sk_confirm_no">Cancel</string>
+
+    <string name="sk_action_paste">Paste</string>
+    <string name="sk_action_contacts">Contacts</string>
+    <string name="sk_action_decode">Decode</string>
+    <string name="sk_action_next_keyboard">Next keyboard</string>
+    <string name="sk_action_insert_idle">Encrypt and insert</string>
+    <string name="sk_action_insert_for">Encrypt for %1$s</string>
+    <string name="sk_action_reconnect">Reconnect</string>
+    <string name="sk_action_shift">Shift</string>
+    <string name="sk_action_backspace">Delete</string>
+    <string name="sk_action_space">Space</string>
+    <string name="sk_action_newline">Enter</string>
+    <string name="sk_action_clear">Clear</string>
+    <string name="sk_mode_letters">ABC</string>
+    <string name="sk_mode_numbers">123</string>
+    <string name="sk_mode_symbols">Sym</string>
+</resources>

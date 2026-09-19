@@ -177,13 +177,16 @@ final class V3ApplicationChatBridge {
     required V3ApplicationSessionRuntime runtime,
     required MessagesRepositoryCore messagesRepository,
     required String? keyTag,
+    MessagesRepositoryContextLease? repositoryContextLease,
   })  : _runtime = runtime,
         _messagesRepository = messagesRepository,
-        _keyTag = keyTag;
+        _keyTag = keyTag,
+        _repositoryContextLease = repositoryContextLease;
 
   final V3ApplicationSessionRuntime _runtime;
   final MessagesRepositoryCore _messagesRepository;
   final String? _keyTag;
+  final MessagesRepositoryContextLease? _repositoryContextLease;
 
   String get localIdentityId =>
       _runtime.localIdentity.publicIdentity.identityId;
@@ -428,6 +431,7 @@ final class V3ApplicationChatBridge {
     await _runtime.reconcileMessageRepository(
       messagesRepository: _messagesRepository,
       keyTag: _keyTag,
+      repositoryContextLease: _repositoryContextLease,
     );
     return V3ChatOutboundExport._(
       purpose: V3ChatOutboundPurpose.application,
@@ -796,6 +800,7 @@ final class V3ApplicationChatBridge {
       await _runtime.reconcileMessageRepository(
         messagesRepository: _messagesRepository,
         keyTag: _keyTag,
+        repositoryContextLease: _repositoryContextLease,
         nowUnixSeconds: nowUnixSeconds,
       );
     }
@@ -808,6 +813,7 @@ final class V3ApplicationChatBridge {
       messagesRepository: _messagesRepository,
       messageRecordId: messageRecordId,
       keyTag: _keyTag,
+      repositoryContextLease: _repositoryContextLease,
     );
   }
 

@@ -1139,12 +1139,14 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
   Future<V3ApplicationProjectionResult> reconcileMessageRepository({
     required MessagesRepositoryCore messagesRepository,
     required String? keyTag,
+    MessagesRepositoryContextLease? repositoryContextLease,
     int? nowUnixSeconds,
   }) {
     return _serialized(() async {
       final projector = await _applicationProjector(
         messagesRepository: messagesRepository,
         keyTag: keyTag,
+        repositoryContextLease: repositoryContextLease,
       );
       try {
         return await projector.reconcile(nowUnixSeconds: nowUnixSeconds);
@@ -1159,11 +1161,13 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     required MessagesRepositoryCore messagesRepository,
     required String messageRecordId,
     required String? keyTag,
+    MessagesRepositoryContextLease? repositoryContextLease,
   }) {
     return _serialized(() async {
       final projector = await _applicationProjector(
         messagesRepository: messagesRepository,
         keyTag: keyTag,
+        repositoryContextLease: repositoryContextLease,
       );
       try {
         return await projector.loadPlaintext(messageRecordId);
@@ -1230,6 +1234,7 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
   Future<V3ApplicationMessageProjector> _applicationProjector({
     required MessagesRepositoryCore messagesRepository,
     required String? keyTag,
+    MessagesRepositoryContextLease? repositoryContextLease,
   }) async {
     final presentationStates = await _scope.presentationStates();
     final classificationsBySessionId = <String, FsMessageClassification>{};
@@ -1244,6 +1249,7 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
       localIdentity: localIdentity.publicIdentity,
       recordLoader: _scope.applicationRecordBytesForProjection,
       keyTag: keyTag,
+      repositoryContextLease: repositoryContextLease,
       presentationStates: presentationStates,
       classificationsBySessionId: classificationsBySessionId,
     );
