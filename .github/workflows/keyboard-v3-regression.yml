@@ -1,0 +1,56 @@
+name: Keyboard and V3 regression
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: keyboard-v3-regression-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dart-contracts:
+    name: V3 and keyboard contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@fd55f4c5af5b953cc57a2be44cb082c8f6635e8e # v2.21.0
+        with:
+          channel: stable
+          flutter-version: 3.41.1
+      - run: flutter pub get
+      - run: bash tool/qa/keyboard_v3_regression.sh dart
+
+  native-contracts:
+    name: Native keyboard policy
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: bash tool/qa/keyboard_v3_regression.sh swift
+
+  android-contracts:
+    name: Android keyboard policy and custody
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@fd55f4c5af5b953cc57a2be44cb082c8f6635e8e # v2.21.0
+        with:
+          channel: stable
+          flutter-version: 3.41.1
+      - run: flutter pub get
+      - run: JAVA_HOME="$JAVA_HOME_17_X64" bash tool/qa/keyboard_v3_regression.sh android

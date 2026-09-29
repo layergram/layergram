@@ -30,6 +30,9 @@ class MainActivity : FlutterActivity() {
 
   override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
     super.configureFlutterEngine(flutterEngine)
+    KeyboardAutonomousHost.initialize(applicationContext)
+    MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "layergram/keyboard_custody")
+      .setMethodCallHandler { call, result -> KeyboardAutonomousHost.handleCustody(call, result) }
 
     MethodChannel(flutterEngine.dartExecutor.binaryMessenger, screenProtectionChannelName)
       .setMethodCallHandler { call, result ->
@@ -63,8 +66,8 @@ class MainActivity : FlutterActivity() {
         }
       }
 
-    // The optional SYSTEM keyboard broker borrows this exact engine; it never
-    // creates one. `cleanUpFlutterEngine` unbinds only this owner.
+    // App admission/delegation uses this engine. The autonomous keyboard owner
+    // keeps its isolated runtime when this Activity is destroyed in background.
     val systemKeyboardChannel =
       MethodChannel(flutterEngine.dartExecutor.binaryMessenger, systemKeyboardChannelName)
     SystemKeyboardBroker.bindEngine(systemKeyboardChannel, flutterEngine, applicationContext)
@@ -79,6 +82,7 @@ class MainActivity : FlutterActivity() {
   }
 
   override fun onPause() {
+    KeyboardAutonomousHost.appDeparted()
     screenProtectionTouchGate.reset()
     restorePreviousScreenBrightness(clearRequest = false)
     super.onPause()
@@ -86,6 +90,7 @@ class MainActivity : FlutterActivity() {
 
   override fun onResume() {
     super.onResume()
+    KeyboardAutonomousHost.appResumed()
     applyAccessibilityDataSensitivity(isScreenProtectionEnabled())
     if (qrBrightnessRequested) {
       applyQrScreenBrightness(capturePrevious = false)

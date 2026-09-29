@@ -89,14 +89,12 @@ void main() {
       'setMarkedText',
       'UITextField(',
       'UITextView(',
-      'UIApplication',
       'URLSession',
       'URLRequest',
       'NWConnection',
       'Socket(',
       'FlutterEngine',
       'SecItem',
-      'UserDefaults',
       'sqlite',
       'print(',
       'NSLog(',
@@ -104,6 +102,20 @@ void main() {
     ]) {
       expect(ui, isNot(contains(forbidden)), reason: forbidden);
     }
+    // The extension reads exactly one shared, non-secret screen-protection
+    // preference. Identity, messages and session state stay outside defaults.
+    final productionUi = ui.replaceAll(
+      RegExp(r'#if LAYERGRAM_KEYBOARD_TRACE\b[\s\S]*?#endif'),
+      '',
+    );
+    expect(RegExp(r'UserDefaults\(').allMatches(productionUi).length, 1);
+    final fixtureReads = RegExp(
+      r'#if LAYERGRAM_KEYBOARD_TRACE\b[\s\S]*?UserDefaults\([\s\S]*?#endif',
+    ).allMatches(ui);
+    expect(fixtureReads.length, 1);
+    expect(fixtureReads.single.group(0),
+        contains('stringArray(forKey: "fixtureHostStages")'));
+    expect(ui, contains('Self.screenProtectionPreferenceKey'));
     expect(ui, contains('hasFullAccess'));
     expect(ui, contains('documentIdentifier'));
     expect(ui, contains('MailboxClient'));
@@ -111,6 +123,9 @@ void main() {
     expect(ui, contains('textWillChange'));
     expect(ui, contains('textDidChange'));
     expect(ui, contains('capturedDidChangeNotification'));
+    expect(ui, contains('userDidTakeScreenshotNotification'));
+    expect(ui, contains('sceneCaptureState'));
+    expect(ui, isNot(contains('UIApplication.shared')));
     expect(ui, contains('advanceToNextInputMode'));
     final List<RegExpMatch> insertions =
         RegExp(r'textDocumentProxy\.insertText\(([^)]*)\)')
@@ -120,6 +135,79 @@ void main() {
     expect(insertions.single.group(1), 'carrier');
     expect(
         RegExp(r'UIPasteboard\.general\.string').allMatches(ui), hasLength(1));
+  });
+
+  test('screenshot protection preference reaches only the keyboard group', () {
+    final String scene = code('ios/Runner/SceneDelegate.swift');
+    final String keyboard =
+        code('ios/LayergramKeyboard/KeyboardViewController.swift');
+    expect(scene, contains('keyboard_screen_protection_enabled'));
+    expect(scene, contains('KeyboardAppGroupId'));
+    expect(scene, contains('syncKeyboardScreenProtectionPreference()'));
+    expect(keyboard, contains('keyboard_screen_protection_enabled'));
+    expect(keyboard, contains('canRetainDraftAfterStillScreenshot'));
+    expect(keyboard, contains('policy.liveControl(snapshot())'));
+  });
+
+  test('biometric shortcut stays device-only, opt-in and revocable', () {
+    final String store = read(
+      'ios/SystemKeyboardCore/Sources/SystemKeyboardCore/KeyboardBiometricResumeStore.swift',
+    );
+    final String ticket = read(
+      'ios/SystemKeyboardCore/Sources/SystemKeyboardCore/KeyboardBiometricResumeTicket.swift',
+    );
+    final String host = read('ios/Runner/SystemKeyboardHost.swift');
+    final String keyboard =
+        read('ios/LayergramKeyboard/KeyboardViewController.swift');
+    expect(store, contains('kSecAttrAccessibleWhenUnlockedThisDeviceOnly'));
+    expect(store, contains('.biometryCurrentSet'));
+    expect(store, contains('kSecAttrAccessGroup'));
+    expect(store, contains('deviceOwnerAuthenticationWithBiometrics'));
+    expect(ticket, contains('lifetimeMillis: Int64 = 600_000'));
+    expect(ticket, contains('expires <= created + Self.lifetimeMillis'));
+    expect(ticket, contains('revocableDeadlineMillis: Int64 = Int64.max'));
+    expect(ticket, contains('"v": 2'));
+    expect(keyboard, contains('KeyboardBiometricResumeTicket.revocableDeadlineMillis'));
+    expect(host, contains('KeyboardBiometricResumeStore.remove'));
+    expect(keyboard, contains('KeyboardBiometricResumeTicket('));
+    expect(keyboard, contains('lastClosureWasIdle'));
+    final int resumeStart =
+        keyboard.indexOf('private func attemptBiometricResume()');
+    final int resumeEnd = keyboard.indexOf(
+        'private func restoreBiometricResumeHint()', resumeStart);
+    expect(resumeStart, greaterThanOrEqualTo(0));
+    expect(resumeEnd, greaterThan(resumeStart));
+    final String resume = keyboard.substring(resumeStart, resumeEnd);
+    expect(resume.indexOf('KeyboardBiometricResumeStore.load('),
+        lessThan(resume.indexOf('allowBiometricEditorRebind: true')));
+    expect(resume, contains('KeyboardBiometricResumeGate.mayAttempt('));
+    expect(resume, isNot(contains('textDocumentProxy.insertText')));
+  });
+
+  test('memory warning preserves only an eligible sealed biometric ticket', () {
+    final String keyboard = read(
+      'ios/LayergramKeyboard/KeyboardViewController.swift',
+    );
+    final int start =
+        keyboard.indexOf('override func didReceiveMemoryWarning()');
+    final int end = keyboard.indexOf('// MARK: - Layout', start);
+    expect(start, greaterThanOrEqualTo(0));
+    expect(end, greaterThan(start));
+    final String handler = keyboard.substring(start, end);
+    expect(
+        handler,
+        contains(
+            'let preserveSealedTicket = canPreserveProtectedBiometricResume() ||'));
+    expect(
+        handler,
+        contains(
+            'invalidateEditor(status: Copy.string(.openApp, in: locale))'));
+    expect(
+        handler, contains('canDeferSealedTicketRevocationBeforeAppearance()'));
+    expect(handler, contains('preserveResumeTicket: preserveSealedTicket'));
+    expect(keyboard, contains('if runtimeBridge == nil && session == nil {'));
+    expect(keyboard, contains('if !self.biometricResumeAvailable {'));
+    expect(keyboard, contains('self.restoreBiometricResumeHint()'));
   });
 
   test('consent explains iOS full access, deadline and screenshot limitations',

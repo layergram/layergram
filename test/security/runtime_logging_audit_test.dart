@@ -32,6 +32,33 @@ void main() {
           'instead.\n${findings.join('\n')}',
     );
   });
+
+  test('Android QA source sets stay outside the release logging audit', () {
+    final fixture = Directory.systemTemp.createTempSync(
+      'layergram-runtime-logging-audit-',
+    );
+    addTearDown(() => fixture.deleteSync(recursive: true));
+
+    final sources = <String>[
+      'android/app/src/main/kotlin/app/layergram/Main.kt',
+      'android/app/src/profile/kotlin/app/layergram/ProfileTrace.kt',
+      'android/app/src/androidTest/kotlin/app/layergram/ProbeTest.kt',
+    ];
+    for (final source in sources) {
+      final file = File('${fixture.path}/$source');
+      file.parent.createSync(recursive: true);
+      file.writeAsStringSync('Log.i("LayergramKeyboardQA", "safeStage")');
+    }
+
+    final audited = _runtimeSourceFiles(fixture)
+        .map((file) => file.path.substring(fixture.path.length + 1))
+        .toList();
+
+    expect(
+      audited,
+      ['android/app/src/main/kotlin/app/layergram/Main.kt'],
+    );
+  });
 }
 
 Iterable<File> _runtimeSourceFiles(Directory root) sync* {
@@ -67,6 +94,8 @@ Iterable<File> _runtimeSourceFiles(Directory root) sync* {
       if (entity is! File) continue;
       final normalizedPath = entity.path.replaceAll('\\', '/');
       if (!extensions.any(normalizedPath.endsWith)) continue;
+      if (normalizedPath.contains('/android/app/src/androidTest/')) continue;
+      if (normalizedPath.contains('/android/app/src/profile/')) continue;
       if (normalizedPath.contains('/flutter/ephemeral/')) continue;
       if (normalizedPath.contains('/GeneratedPluginRegistrant.')) continue;
       yield entity;

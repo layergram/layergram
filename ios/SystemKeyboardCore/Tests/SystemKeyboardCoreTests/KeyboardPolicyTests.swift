@@ -13,6 +13,13 @@ import XCTest
 final class KeyboardPolicyTests: XCTestCase {
     private var clock: Int64 = 1_000_000
 
+    private final class ClearProbe: KeyboardPolicyListener {
+        var onClear: (() -> Void)?
+        func keyboardPolicyReady(scramble: Bool) {}
+        func keyboardPolicyResponse(_ response: KeyboardResponse, operation: KeyboardOperation) {}
+        func keyboardPolicyCleared() { onClear?() }
+    }
+
     // MARK: - Harness
 
     /// A policy bound to a live editor at the current clock reading. Binding does
@@ -150,6 +157,25 @@ final class KeyboardPolicyTests: XCTestCase {
             "carrier": carrier
         ])
         return policy
+    }
+
+    func testSelectedShieldPhaseIsBoundedDisplayDataNotASendPermit() {
+        for raw in ["setupPending", "normalActive", "maximumSetupPending",
+                    "maximumActive", "recoveryRequired",
+                    "forged-green"] {
+            let policy = livePolicy()
+            XCTAssertTrue(acceptBegin(policy))
+            _ = cycle(policy, .contacts, data: [
+                "contacts": [["id": "id-1", "name": "Alice", "fingerprint": "ABCD"]]
+            ])
+            _ = cycle(policy, .select, payload: [
+                "contactId": .string("id-1"), "confirm": .bool(true)
+            ], data: ["id": "id-1", "name": "Alice", "fingerprint": "ABCD",
+                      "securityPhase": raw])
+            XCTAssertEqual(policy.selection()?.securityPhase?.rawValue,
+                           raw == "forged-green" ? nil : raw)
+            XCTAssertNil(policy.readyState(), "shield data cannot authorize insertion")
+        }
     }
 
     // MARK: - Request shape
@@ -678,6 +704,22 @@ final class KeyboardPolicyTests: XCTestCase {
     }
 
     // MARK: - Late callbacks and invalidation
+
+    func testEndEditorNotifiesClearSynchronouslyDuringRebind() {
+        let policy = livePolicy()
+        let probe = ClearProbe()
+        var endingForRebind = true
+        var callbackCount = 0
+        probe.onClear = {
+            XCTAssertTrue(endingForRebind,
+                          "the controller must preserve its native runtime during this callback")
+            callbackCount += 1
+        }
+        policy.listener = probe
+        _ = policy.endEditor()
+        endingForRebind = false
+        XCTAssertEqual(callbackCount, 1)
+    }
 
     func testStaleGenerationCannotInsertAfterAnEnd() throws {
         let policy = policyAfterAuthorize()

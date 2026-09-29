@@ -37,6 +37,7 @@ import '../../core/crypto/v3/application_chat_bridge_v3.dart';
 import '../../core/crypto/v3/local_identity_v3.dart';
 import '../../core/crypto/v3/public_identity_v3.dart';
 import '../../core/providers.dart';
+import 'v3_pending_response_queue.dart';
 
 class DecryptedMessagePreview {
   const DecryptedMessagePreview({
@@ -73,7 +74,7 @@ class HomeController {
   final Ref ref;
   final LinkedHashMap<String, Future<SecretKey?>> _displayKeys =
       LinkedHashMap<String, Future<SecretKey?>>();
-  final Map<String, V3ChatOutboundExport> _pendingV3Responses = {};
+  final V3PendingResponseQueue _pendingV3Responses = V3PendingResponseQueue();
 
   static const int _maxRetainedDisplayKeys = 12;
   static const int _sessionWarmContactLimit = 6;
@@ -217,10 +218,12 @@ class HomeController {
       backupExcluded: backupExcluded,
       eligibilityPolicy: policy,
       eligibilityForContact: bridge.eligibilityForContact,
+      maxCarrierCharacters: ref.read(coverMessageLengthLimitProvider),
     );
-    if (export.purpose == V3ChatOutboundPurpose.handshake) {
-      ref.read(fsRegistryVersionProvider.notifier).state++;
-    }
+    // Normal setup control can advance inside ordinary pre-session or active
+    // messages, so every successful v3 preparation may change the contact
+    // security projection.
+    ref.read(fsRegistryVersionProvider.notifier).state++;
     return export;
   }
 
@@ -234,7 +237,7 @@ class HomeController {
   }
 
   V3ChatOutboundExport? takePendingProtocolV3Response(String contactId) {
-    return _pendingV3Responses.remove(contactId);
+    return _pendingV3Responses.take(contactId);
   }
 
   Future<List<V3ChatOutboundExport>> restorePendingProtocolV3Exports({
@@ -249,6 +252,7 @@ class HomeController {
       contact: contact,
       carrierMode: carrierMode,
       coverText: coverText,
+      maxCarrierCharacters: ref.read(coverMessageLengthLimitProvider),
     );
   }
 
@@ -730,6 +734,14 @@ class HomeController {
         message.readAt != null) {
       return null;
     }
+    if (message.text != null &&
+        message.fsClassification == FsMessageClassification.preFs &&
+        message.direction == 'incoming' &&
+        message.deleteAfterRead &&
+        message.readAt == null) {
+      await markMessageRead(message);
+      return message.text;
+    }
     if (message.text != null) return message.text;
     if (message.isV3Encrypted) {
       final bridge = await _protocolV3Bridge();
@@ -1031,14 +1043,12 @@ class HomeController {
     }
 
     final contact = inbound.contact;
-    final response = inbound.response;
-    if (contact != null && response != null) {
-      _pendingV3Responses[contact.identityId] = response;
+    if (contact != null && inbound.responses.isNotEmpty) {
+      _pendingV3Responses.addAll(contact.identityId, inbound.responses);
     }
     if (contact != null &&
-        (inbound.status == V3ChatInboundStatus.handshakeProgress ||
-            inbound.status == V3ChatInboundStatus.handshakeResponse ||
-            inbound.status == V3ChatInboundStatus.sessionEstablished)) {
+        inbound.status != V3ChatInboundStatus.invalid &&
+        inbound.status != V3ChatInboundStatus.notForThisInstallation) {
       ref.read(fsRegistryVersionProvider.notifier).state++;
     }
 
@@ -1049,9 +1059,11 @@ class HomeController {
           return const DecodeOutcome.notForMe();
         }
         final classification =
-            bridge.modeForContact(contact) == V3HandshakeMode.maximum
-                ? FsMessageClassification.strictFs
-                : FsMessageClassification.fsOnly;
+            inbound.preFs != null || payload.alsoSentIdentityOnly
+                ? FsMessageClassification.preFs
+                : bridge.modeForContact(contact) == V3HandshakeMode.maximum
+                    ? FsMessageClassification.strictFs
+                    : FsMessageClassification.fsOnly;
         return DecodeOutcome.success(
           PlaintextPayload(
             senderId: contact.identityId,

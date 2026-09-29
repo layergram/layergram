@@ -118,6 +118,23 @@ class _FakeBackend implements SystemKeyboardBackend {
   }
 }
 
+class _StatusBackend extends _FakeBackend
+    implements SystemKeyboardContactSecurityProvider {
+  String? phase = 'setupPending';
+  Completer<void>? statusBarrier;
+  int statusCalls = 0;
+
+  @override
+  Future<String?> securityPhaseForContact(
+      String contactId, String fingerprint) async {
+    statusCalls++;
+    expect(contactId, _alice.id);
+    expect(fingerprint, _alice.fingerprint);
+    await statusBarrier?.future;
+    return phase;
+  }
+}
+
 class _Access {
   bool featureOptedIn = true;
   bool lockInitialized = true;
@@ -231,6 +248,53 @@ class _Harness {
 }
 
 void main() {
+  test('selected recipient gets a fresh display-only FS phase', () async {
+    final backend = _StatusBackend();
+    final access = _Access();
+    final controller = SystemKeyboardController(
+      backend: backend,
+      readAccess: access.read,
+      monotonicNow: () => Duration.zero,
+    );
+    expect(controller.beginSession(editorNonce: 'editor').isSuccess, isTrue);
+    for (final phase in [
+      'setupPending',
+      'normalActive',
+      'maximumSetupPending',
+      'maximumActive'
+    ]) {
+      backend.phase = phase;
+      final selected = await controller.selectContact(
+        requestId: 'select-$phase',
+        contactId: _alice.id,
+        confirm: true,
+      );
+      expect(selected.requireValue.securityPhase, phase);
+      expect(controller.selectedContact?.securityPhase, phase);
+    }
+    expect(backend.statusCalls, 4);
+    controller.dispose();
+  });
+
+  test('revocation during FS status lookup cannot confirm a recipient',
+      () async {
+    final backend = _StatusBackend()..statusBarrier = Completer<void>();
+    final access = _Access();
+    final controller = SystemKeyboardController(
+      backend: backend,
+      readAccess: access.read,
+      monotonicNow: () => Duration.zero,
+    );
+    expect(controller.beginSession(editorNonce: 'editor').isSuccess, isTrue);
+    final selection = controller.selectContact(
+        requestId: 'select', contactId: _alice.id, confirm: true);
+    await _tick();
+    controller.revoke();
+    backend.statusBarrier!.complete();
+    expect((await selection).failure, SystemKeyboardFailureCode.unavailable);
+    expect(controller.selectedContact, isNull);
+    controller.dispose();
+  });
   group('admission', () {
     test(
       'every denial state returns the same generic unavailable and never touches the backend',

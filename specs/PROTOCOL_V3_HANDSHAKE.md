@@ -482,3 +482,65 @@ The active handshake must continue to satisfy:
 
 Independent review of the custom interactive construction remains a priority
 post-release objective; this document does not claim that it has occurred.
+
+## Normal pre-session application exception
+
+Normal mode may carry one real application payload from the first ordinary
+message while the hybrid handshake is incomplete. The distinct `p1` envelope
+uses only the long-term X25519 identity pair and is permanently classified
+`preFs`: it is neither forward-secret nor post-quantum. Later session
+establishment never upgrades that historical classification. Long-term key
+compromise therefore has the expected static-DH/KCI consequences.
+
+Each ordinary pre-session carrier contains exactly one independently
+decryptable application payload plus a bounded optional handshake-control
+chunk. Control reassembly is durable and tolerates loss, reorder, duplicates,
+and restart. No empty or control-only user send is required. Local session
+commit remains pending until peer commitment is proved by the matching
+confirmation or valid traffic under that hybrid session.
+
+After that proof, senders normally use the FS session for that device.
+Receivers retain a durable time fence for delayed in-flight envelopes. The
+fence applies to the device that proved FS readiness, not to every
+installation sharing its long-term identity. Normal mode retains the first
+device's session while another device starts its own bootstrap, including when
+both handshakes began before either became active. Concurrent responder
+records are rotated across ordinary user messages; a reply addressed to
+another installation is ignored before pending-state lookup.
+
+An ordinary Normal-mode message always exports one carrier. While any known
+installation is still negotiating, that carrier uses an identity-wide `p1`
+payload readable by all installations sharing the identity; only residual
+space carries one portion of the handshake. This individual message is gray
+(`preFs`) for every recipient, even if another device has an active FS
+session. The active session remains stored and usable after the pending device
+finishes. For multiple active sessions, text/link carriers concatenate their
+independently authenticated application frames into one bounded carrier.
+When steganographic capacity cannot accommodate all device frames, Normal mode
+uses the same explicit gray identity-wide delivery without resetting the
+sessions. Oversized user text is rejected before presenting a fraction for
+copying; technical negotiation continues on later ordinary messages.
+
+Authenticated `p1` format 3 includes sender and recipient device IDs in the
+header and key derivation for existing in-flight targeted exports. Format 2
+carries the sender device ID and now assigns header flag 1 to an explicitly
+identity-wide Normal delivery after an FS session exists. The flag is AEAD
+authenticated and forces gray presentation; ordinary format-2 traffic still
+obeys the established-device fence. Format 1 remains readable and can use a
+complete companion offer to identify a new device, but ambiguous format-1
+traffic keeps the conservative identity-wide fence. Maximum mode rejects
+`preFs` entirely. Static-key compromise can
+backdate that authenticated timestamp; this is part of the stated KCI
+limitation and must not be described as a hybrid downgrade proof. Maximum mode
+is unchanged and permits no pre-session application data. Clients predating
+the `p1` namespace cannot decode this extension.
+
+Once the matching Normal session is active, a mutually capable peer may place
+one ordinary application frame followed by bounded pending ACK frames in a
+single `b3` carrier. Every inner LMF frame keeps its original authenticated
+bytes and is verified independently. Application data has priority: if ACKs do
+not fit, the ordinary message is sent alone and the durable ACK remains queued
+for a later ordinary carrier. Selection across a growing ACK queue is
+probabilistically distributed by each new message ID; it is not a strict
+fairness or delivery-time guarantee. Legacy sessions and Maximum mode do not
+use `b3`.

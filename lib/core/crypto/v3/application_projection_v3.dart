@@ -159,7 +159,7 @@ final class V3ApplicationMessageProjector {
               keyTag: _keyTag,
               isFsEncrypted: true,
               protocolVersion: V3PublicIdentityCodec.protocolVersion,
-              fsClassification: _classificationFor(committed),
+              fsClassification: _classificationFor(committed, payload),
               backupExcluded: payload.backupExcluded,
             ),
           );
@@ -320,7 +320,7 @@ final class V3ApplicationMessageProjector {
             keyTag: _keyTag,
             isFsEncrypted: true,
             protocolVersion: V3PublicIdentityCodec.protocolVersion,
-            fsClassification: _classificationFor(committed),
+            fsClassification: _classificationFor(committed, payload),
             backupExcluded: payload.backupExcluded,
           );
           if (!_sameProjectedMetadata(metadata, expectedMetadata)) {
@@ -410,7 +410,11 @@ final class V3ApplicationMessageProjector {
     }
   }
 
-  FsMessageClassification _classificationFor(V3CommittedRecord committed) {
+  FsMessageClassification _classificationFor(
+      V3CommittedRecord committed, V3ApplicationPayload payload) {
+    if (payload.alsoSentIdentityOnly) {
+      return FsMessageClassification.preFs;
+    }
     final sessionId = committed.sessionId;
     try {
       final encoded = base64UrlEncode(sessionId).replaceAll('=', '');

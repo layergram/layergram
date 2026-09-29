@@ -23,6 +23,7 @@ import 'core/storage/local_identity_vault.dart';
 import 'core/storage/local_storage_security_service.dart';
 import 'core/storage/secure_storage.dart';
 import 'l10n/app_strings.dart';
+import 'features/system_keyboard/system_keyboard_runtime_entry.dart';
 
 Future<void> runLayergramApp({
   List<Override> providerOverrides = const <Override>[],
@@ -53,4 +54,10 @@ Future<void> runLayergramApp({
 
 void main() async {
   await runLayergramApp();
+}
+
+/// Headless AOT entrypoint for the opt-in autonomous system keyboard.
+@pragma('vm:entry-point')
+void layergramKeyboardMain() {
+  runSystemKeyboardRuntime();
 }

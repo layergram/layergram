@@ -318,4 +318,37 @@ class KeyboardGrantRevocationRegressionTest {
     selection.cancelPending()
     assertFalse(selection.update(120, 120))
   }
+
+  @Test fun admittedRestartSelectionIsExactAndOneUse() {
+    val selection = KeyboardCommitSelection()
+    selection.expectRestartSelection(0, 0)
+    assertTrue(selection.update(0, 0))
+    assertFalse(selection.update(0, 0))
+    selection.expectRestartSelection(5, 8)
+    assertFalse(selection.update(5, 5))
+    assertFalse(selection.update(5, 8))
+    selection.expectRestartSelection(-1, -1)
+    assertFalse(selection.update(-1, -1))
+    selection.expectRestartSelection(0, 0)
+    selection.cancelPending()
+    assertFalse(selection.update(0, 0))
+  }
+
+  @Test fun onlySameVisibleLiveEditorCanContinueAfterHostSend() {
+    val hostToken = Any()
+    val binding = KeyboardEditorBinding("transport.qa", 42, 1, 2, 1001, 2001, hostToken)
+    fun admits(next: KeyboardEditorBinding? = binding, restart: Boolean = true,
+        connected: Boolean = true, visible: Boolean = true, native: Boolean = true,
+        usable: Boolean = true, committed: Boolean = true) = KeyboardEditorRestartPolicy.mayContinue(restart, binding,
+          next, connected, visible, native, usable, committed)
+    assertTrue(admits())
+    assertFalse(admits(null)); assertFalse(admits(restart = false))
+    assertFalse(admits(connected = false)); assertFalse(admits(visible = false))
+    assertFalse(admits(native = false)); assertFalse(admits(usable = false))
+    assertFalse(admits(committed = false))
+    for (other in listOf(binding.copy(packageName = "other.host"), binding.copy(fieldId = 43),
+      binding.copy(inputType = 129), binding.copy(imeOptions = 3), binding.copy(uid = 1002),
+      binding.copy(pid = 2002), binding.copy(connectionToken = Any()))) assertFalse(admits(other))
+    assertFalse(KeyboardEditorRestartPolicy.mayContinue(true, null, binding, true, true, true, true, true))
+  }
 }

@@ -170,7 +170,9 @@ class StegoEncoder {
   }
 
   static int minimumEncodedLengthForBytes(String coverText, int byteCount) {
-    return visibleCharacterCount(coverText) +
+    // The portable transport limit is checked with String.length (UTF-16
+    // code units). A grapheme can occupy more than one code unit.
+    return normalizeCoverText(coverText).length +
         minimumHiddenLengthForBytes(byteCount);
   }
 
@@ -180,8 +182,7 @@ class StegoEncoder {
     int maxTotalCharacters,
   ) {
     if (maxTotalCharacters < 0) return false;
-    final visibleChars = visibleCharacterCount(coverText);
-    if (visibleChars > maxTotalCharacters) return false;
+    if (normalizeCoverText(coverText).length > maxTotalCharacters) return false;
     if (byteCount <= 0) return true;
     if (!canEmbedBytes(coverText, byteCount)) return false;
     return minimumEncodedLengthForBytes(coverText, byteCount) <=
@@ -268,7 +269,8 @@ class StegoEncoder {
       );
     }
 
-    if (maxTotalCharacters != null && visChars.length > maxTotalCharacters) {
+    if (maxTotalCharacters != null &&
+        normalizedCoverText.length > maxTotalCharacters) {
       throw ArgumentError.value(
         coverText,
         'coverText',
@@ -343,7 +345,7 @@ class StegoEncoder {
     final noiseOnlySizesBySlot = <int, int>{};
 
     if (enforceTotalCharacterLimit) {
-      final hiddenBudget = totalCharacterLimit! - visChars.length;
+      final hiddenBudget = totalCharacterLimit! - normalizedCoverText.length;
       final extraMixedCapacityBySlot = <int, int>{};
       var minHiddenTotal = 0;
 

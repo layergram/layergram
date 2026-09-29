@@ -61,6 +61,13 @@ public final class MailboxOwner {
     public var isWindowOpen: Bool { core != nil }
     /// True between a successful `pollRequest()` and the matching `respond`.
     public var isAwaitingResponse: Bool { core?.isAwaitingResponse ?? false }
+    /// A caller serialized with this owner must wait for the outstanding
+    /// handle's lease before polling a replacement. This does not renew it.
+    public var hasLivePendingRequest: Bool {
+        guard let core else { return false }
+        let now = clock()
+        return !core.isExpired(at: now) && core.hasLivePendingRequest(at: now)
+    }
 
     /// Open exactly one window. A second call while a window is open fails
     /// closed: windows are never renewed or extended, and the owner must close
@@ -157,6 +164,17 @@ public final class MailboxOwner {
             core = current
             return result
         } catch let error as MailboxError {
+            if error.reason == .locked {
+                // The lock was never acquired. Preserve the unread request;
+                // contention is not evidence of a malformed peer document.
+                core = current
+                guard !current.isExpired(at: clock()) else {
+                    closeWindowState()
+                    try? clearSharedFiles()
+                    throw MailboxError.unavailable(.windowClosed)
+                }
+                return .idle
+            }
             if error.reason == .windowClosed {
                 closeWindowState()
                 try? clearSharedFiles()
@@ -191,6 +209,16 @@ public final class MailboxOwner {
                 guard !current.isExpired(at: now) else {
                     throw MailboxError.unavailable(.windowClosed)
                 }
+                // The client may replace its missed 900 ms lease before the
+                // owner's 1 s handle expires. Never publish the old response
+                // over that unread replacement: it cannot match the new id.
+                if let queued = try storage.readRequest(),
+                   let replacement = try? MailboxEnvelope.decode(queued, kind: .request),
+                   replacement.sessionId == request.sessionId,
+                   replacement.clientEncapsulation == current.pinnedClient,
+                   replacement.sequence > request.sequence {
+                    throw MailboxError.unavailable(.requestPending)
+                }
                 let encoded = try current.sealResponse(
                     sessionId: request.sessionId,
                     requestId: request.requestId,
@@ -212,6 +240,22 @@ public final class MailboxOwner {
         } catch {
             core = current
             throw error
+        }
+    }
+
+    /// Deliver once or report a missed/replaced lease or a contended storage
+    /// lock. Other storage, authentication and lifecycle failures still throw.
+    /// Used only by bounded initial
+    /// delegation; it neither repeats an application operation nor accepts a
+    /// late response or renews the original window.
+    public func respondIfFresh(to request: MailboxPendingRequest, payload: Data) throws -> Bool {
+        do {
+            try respond(to: request, payload: payload)
+            return true
+        } catch let error as MailboxError {
+            guard error.reason == .responseTimeout || error.reason == .requestPending || error.reason == .locked,
+                  let core, !core.isExpired(at: clock()) else { throw error }
+            return false
         }
     }
 

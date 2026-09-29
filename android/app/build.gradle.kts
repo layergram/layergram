@@ -14,6 +14,8 @@ val releaseKeyPassword = keystoreProperties.getProperty("keyPassword")
 val hasReleaseKeystore = keystorePropertiesFile.exists()
 val isLayergramSckaPhysicalSmoke =
     providers.gradleProperty("layergramSckaPhysicalSmoke").orNull == "true"
+val isLayergramKeyboardValidation =
+    providers.gradleProperty("layergramKeyboardValidation").orNull == "true"
 
 fun resolveKeystoreFile(path: String): File {
     val normalizedPath = if (path.startsWith("~/")) {
@@ -90,7 +92,9 @@ android {
     }
 
     defaultConfig {
-        applicationId = if (isLayergramSckaPhysicalSmoke) {
+        applicationId = if (isLayergramKeyboardValidation) {
+            "app.layergram.keyboardvalidation"
+        } else if (isLayergramSckaPhysicalSmoke) {
             "app.layergram.sckasmoke"
         } else {
             "app.layergram"

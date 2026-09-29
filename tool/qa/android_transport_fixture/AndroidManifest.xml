@@ -1,0 +1,9 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="app.layergram.keyboardprobe">
+  <uses-sdk android:minSdkVersion="23" android:targetSdkVersion="29" />
+  <instrumentation android:name=".FullAppLifecycleInstrumentation" android:targetPackage="app.layergram.keyboardprobe" />
+  <application android:label="Layergram offline transport" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:debuggable="true" android:allowBackup="false">
+    <activity android:name=".TransportActivity" android:exported="true" android:launchMode="singleTop" android:windowSoftInputMode="adjustResize">
+      <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+    </activity>
+  </application>
+</manifest>

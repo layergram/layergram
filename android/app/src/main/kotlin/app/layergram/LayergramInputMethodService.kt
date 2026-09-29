@@ -8,6 +8,14 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
+import android.view.HapticFeedbackConstants
+import android.widget.ImageButton
+import android.widget.ImageView
+import java.util.Locale
 import android.os.Build
 import android.util.TypedValue
 import android.view.Gravity
@@ -30,7 +38,7 @@ import java.security.SecureRandom
  * Optional SYSTEM keyboard surface for the experimental Layergram keyboard.
  *
  * The service is entirely local: it renders a plaintext draft in its own
- * [TextView] plus a custom key grid, and it never hands plaintext to the host
+ * local cursor viewport plus a custom key grid, and it never hands plaintext to the host
  * editor. The single host insert is `InputConnection.commitText(carrier, 1)`
  * with the carrier returned by an explicit `authorize`, followed by an `ack`
  * that reports the *actual* result. No `EditText`, no `setComposingText`, no
@@ -46,26 +54,44 @@ class LayergramInputMethodService : InputMethodService() {
     val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
     val WRAP = ViewGroup.LayoutParams.WRAP_CONTENT
     val LETTER_ROWS = listOf("qwertyuiop", "asdfghjkl", "zxcvbnm")
-    val NUMBER_ROWS = listOf("1234567890", "-/:;()\$&@\"", ".,?!'")
-    val SYMBOL_ROWS = listOf("[]{}#%^*+=", "_\\|~<>€£¥•", ".,?!àèéìòù")
+    val NUMBER_ROWS = listOf("1234567890", "-/:;()\$&@\"", ".,?!'#%")
+    val SYMBOL_ROWS = listOf("[]{}#%^*+=", "_\\|~<>€£¥•", "…—°±§¶×")
   }
 
   private enum class KeyMode { LETTERS, NUMBERS, SYMBOLS }
 
   private val secureRandom = SecureRandom()
-  private val draft = StringBuilder()
+  private val draft = KeyboardComposerState()
+  private val search = KeyboardComposerState(128)
+  private val uiHandler = Handler(Looper.getMainLooper())
+  private var searching = false
+  private var emojiVisible = false
+  private var operationInFlight = false
+  private var loadedContacts = emptyList<BrokerContact>()
+  private var countdownView: TextView? = null
+  private var recipientRow: LinearLayout? = null
+  private var recipientName: TextView? = null
+  private var recipientShield: ImageView? = null
+  private var composeRow: LinearLayout? = null
+  private var clearDraftButton: ImageButton? = null
+  private var searchView: KeyboardDraftView? = null
+  private var searchRowView: LinearLayout? = null
+  private var accentRow: LinearLayout? = null
+  private val accentSelection = KeyboardAccentSelection()
+  private val currentAccents get() = accentSelection.options
+  private val accentIndex get() = accentSelection.index
 
   private var rootView: ProtectedInputRoot? = null
   private var statusView: TextView? = null
-  private var draftView: TextView? = null
+  private var statusDot: TextView? = null
+  private var draftView: KeyboardDraftView? = null
   private var keysContainer: LinearLayout? = null
   private var contactsSection: LinearLayout? = null
   private var contactsContainer: LinearLayout? = null
   private var previewSection: LinearLayout? = null
   private var previewTitle: TextView? = null
   private var previewView: TextView? = null
-  private var insertButton: Button? = null
-  private var reconnectButton: Button? = null
+  private var insertButton: ImageButton? = null
 
   private var keyMode = KeyMode.LETTERS
   private var uppercase = false
@@ -78,8 +104,15 @@ class LayergramInputMethodService : InputMethodService() {
   private var selectedContact: BrokerContact? = null
   private var carrierBuffer: String? = null
   private val commitSelection = KeyboardCommitSelection()
+  private var editorBinding: KeyboardEditorBinding? = null
+  private var committedCarrierInEditor = false
   private var editorEpoch = 0
   private var securityReceiverRegistered = false
+  private var biometricInFlight = false
+  private var biometricVerified = false
+  private var biometricCompleting = false
+  private var biometricTarget: KeyboardEditorBinding? = null
+  private var afterBiometric: (() -> Unit)? = null
 
   // --- lifecycle -----------------------------------------------------------
 
@@ -93,6 +126,7 @@ class LayergramInputMethodService : InputMethodService() {
     rootView = view
     applyWindowSecurity()
     applyAccessibilitySensitivity(view)
+    rebuildRows()
     renderKeys()
     updateInsertLabel()
     return view
@@ -116,7 +150,41 @@ class LayergramInputMethodService : InputMethodService() {
    * sent later, once the input view is actually visible.
    */
   override fun onStartInput(attribute: EditorInfo?, restarting: Boolean) {
+    SystemKeyboardBroker.traceImeForTesting("start:restart=$restarting:connected=$connected")
     super.onStartInput(attribute, restarting)
+    val binding = currentInputBinding
+    val nextBinding = if (attribute?.packageName != null && binding?.connectionToken != null)
+      KeyboardEditorBinding(attribute.packageName, attribute.fieldId, attribute.inputType, attribute.imeOptions,
+        binding.uid, binding.pid, binding.connectionToken) else null
+    val continueEditor = KeyboardEditorRestartPolicy.mayContinue(restarting, editorBinding, nextBinding,
+      connected && admitted, isInputViewShown, KeyboardAutonomousHost.isRunning,
+      restarting && SystemKeyboardBroker.isEditorUsableNow(), committedCarrierInEditor && draft.text.isEmpty())
+    editorBinding = nextBinding
+    // A platform biometric dialog may temporarily become the input target.
+    // Do not admit it; wait briefly for the exact original binding to return.
+    if (KeyboardBiometricEditorPolicy.changed(biometricTarget, nextBinding))
+      KeyboardQaTrace.emit(this, "biometricDifferentEditorDeferred")
+    if (continueEditor) {
+      // Host Send can restart the same visible field. Fence old callbacks and
+      // clear draft/exports, but keep exclusive FS custody and its idle deadline.
+      val recipient = selectedContact
+      editorEpoch += 1; connected = false; beginRequested = true
+      clearSensitiveUi()
+      // EditorInfo can still contain the pre-Send cursor. The subsequent OS
+      // update to (0,0) belongs to clearing this successfully populated field.
+      commitSelection.expectRestartSelection(0, 0)
+      val epoch = editorEpoch
+      showStatus(R.string.sk_status_connecting)
+      SystemKeyboardBroker.onHostSelectionChanged { outcome ->
+        if (!guardEpoch(epoch)) return@onHostSelectionChanged
+        if (outcome is BrokerOutcome.Success) {
+          connected = true; scramble = outcome.value
+          rebuildRows(); renderKeys(); showStatus(R.string.sk_status_ready)
+          if (recipient != null) selectContact(recipient.id, epoch) else updateInsertLabel()
+        } else onBrokerUnavailable()
+      }
+      return
+    }
     editorEpoch += 1
     beginRequested = false
     connected = false
@@ -126,38 +194,51 @@ class LayergramInputMethodService : InputMethodService() {
     commitSelection.update(attribute?.initialSelStart ?: -1, attribute?.initialSelEnd ?: -1)
     admitted = KeyboardEditorPolicy.admitsEditor(attribute?.inputType ?: 0) && !isKeyguardLocked()
     if (!admitted) {
-      setReconnectVisible(false)
       showStatus(R.string.sk_status_rejected_field)
       return
     }
     SystemKeyboardBroker.bindEditor()
-    setReconnectVisible(false)
-    showStatus(R.string.sk_status_ready)
+    showStatus(R.string.sk_status_connecting)
   }
 
   override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
+    SystemKeyboardBroker.traceImeForTesting("startView:restart=$restarting:connected=$connected")
     super.onStartInputView(info, restarting)
     applyWindowSecurity()
     applyAccessibilitySensitivity(rootView)
     SystemKeyboardBroker.attachService(this)
     SystemKeyboardBroker.setServiceVisible(true)
+    if (!admitted && KeyboardEditorPolicy.admitsEditor(info?.inputType ?: 0) && !isKeyguardLocked()) {
+      admitted = true; beginRequested = false
+      SystemKeyboardBroker.bindEditor()
+    }
     renderKeys()
     updateInsertLabel()
+    uiHandler.removeCallbacks(countdownTick); uiHandler.post(countdownTick)
     if (!admitted) {
       showStatus(R.string.sk_status_rejected_field)
       return
     }
-    beginEditorSession(explicitReconnect = false)
+    if (!completeBiometricIfReady()) beginEditorSession()
   }
 
   override fun onWindowShown() {
+    SystemKeyboardBroker.traceImeForTesting("shown:connected=$connected")
     super.onWindowShown()
     applyWindowSecurity()
     SystemKeyboardBroker.setServiceVisible(true)
-    if (admitted) beginEditorSession(explicitReconnect = false)
+    if (admitted && !completeBiometricIfReady()) beginEditorSession()
   }
 
   override fun onWindowHidden() {
+    KeyboardQaTrace.emit(this, "imeWindowHidden")
+    SystemKeyboardBroker.traceImeForTesting("hidden:connected=$connected")
+    uiHandler.removeCallbacks(countdownTick)
+    // Android may hide and show the same editor without onFinishInputView or
+    // onStartInput. The hidden generation is revoked, so its one-shot begin
+    // marker must not suppress admission when the window is shown again.
+    beginRequested = false
+    connected = false
     // A hidden window always clears every sensitive entry; the broker also
     // invalidates the generation so no reply can arrive for a hidden surface.
     clearSensitiveUi()
@@ -166,16 +247,21 @@ class LayergramInputMethodService : InputMethodService() {
   }
 
   override fun onFinishInputView(finishingInput: Boolean) {
+    KeyboardQaTrace.emit(this, "imeFinishInputView")
+    SystemKeyboardBroker.traceImeForTesting("finishView:finishing=$finishingInput:connected=$connected")
     resetForLifecycleEvent()
     super.onFinishInputView(finishingInput)
   }
 
   override fun onFinishInput() {
+    KeyboardQaTrace.emit(this, "imeFinishInput")
+    SystemKeyboardBroker.traceImeForTesting("finish:connected=$connected")
     resetForLifecycleEvent()
     super.onFinishInput()
   }
 
   override fun onDestroy() {
+    KeyboardAutonomousHost.discardBiometric()
     resetForLifecycleEvent()
     unregisterSecurityReceiver()
     super.onDestroy()
@@ -204,21 +290,40 @@ class LayergramInputMethodService : InputMethodService() {
       candidatesEnd,
     )
     val ownCommit = commitSelection.update(newSelStart, newSelEnd)
+    SystemKeyboardBroker.traceImeForTesting("selection:own=$ownCommit:changed=${oldSelStart != newSelStart || oldSelEnd != newSelEnd}:connected=$connected")
     if (ownCommit || (oldSelStart == newSelStart && oldSelEnd == newSelEnd)) return
-    SystemKeyboardBroker.onHostSelectionChanged()
     onBrokerUnavailable()
+    val epoch = editorEpoch
+    SystemKeyboardBroker.onHostSelectionChanged { outcome ->
+      if (!guardEpoch(epoch)) return@onHostSelectionChanged
+      if (outcome is BrokerOutcome.Success) {
+        connected = true; scramble = outcome.value; beginRequested = true
+        rebuildRows(); renderKeys(); showStatus(R.string.sk_status_ready)
+      }
+    }
   }
 
   /** Called by the broker whenever it clears or invalidates the editor. */
   fun onBrokerUnavailable() {
+    afterBiometric = null
+    if (!KeyboardAutonomousHost.hasBiometricFlow) {
+      biometricInFlight = false; biometricVerified = false; biometricCompleting = false
+      biometricTarget = null
+    }
     editorEpoch += 1
     connected = false
     clearSensitiveUi()
-    showStatus(R.string.sk_status_unavailable)
-    setReconnectVisible(admitted)
+    showReentryStatus()
   }
 
   private fun resetForLifecycleEvent() {
+    editorBinding = null
+    afterBiometric = null
+    if (!KeyboardAutonomousHost.hasBiometricFlow) {
+      biometricInFlight = false; biometricVerified = false; biometricCompleting = false
+      biometricTarget = null
+    }
+    uiHandler.removeCallbacks(countdownTick)
     editorEpoch += 1
     admitted = false
     connected = false
@@ -233,7 +338,10 @@ class LayergramInputMethodService : InputMethodService() {
 
   private fun applyWindowSecurity() {
     val dialogWindow = window?.window ?: return
-    dialogWindow.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+    val protection = getSharedPreferences("layergram_prefs", Context.MODE_PRIVATE)
+      .getBoolean("screen_protection_enabled", true)
+    if (protection) dialogWindow.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+    else dialogWindow.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
       dialogWindow.setHideOverlayWindows(true)
     }
@@ -300,282 +408,348 @@ class LayergramInputMethodService : InputMethodService() {
 
   // --- view construction ---------------------------------------------------
 
+  private val dark: Boolean get() = resources.configuration.uiMode and
+    Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+  private val chrome: Int get() = if (dark) Color.rgb(33, 33, 33) else Color.rgb(223, 225, 228)
+  private val inkColor: Int get() = if (dark) Color.WHITE else Color.BLACK
+  private val muted: Int get() = if (dark) Color.rgb(155, 155, 160) else Color.rgb(115, 115, 120)
+  private val functionColor: Int get() = if (dark) Color.rgb(154, 203, 250) else Color.rgb(11, 82, 69)
+  private val functionInk: Int get() = if (dark) Color.rgb(0, 51, 82) else Color.WHITE
+  private val keyColor: Int get() = if (dark) Color.BLACK else Color.WHITE
+  private val specialColor: Int get() = if (dark) Color.rgb(67, 68, 72) else Color.rgb(204, 206, 210)
+  private val language: String get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N)
+    resources.configuration.locales[0].language else @Suppress("DEPRECATION") resources.configuration.locale.language
+
+  private fun background(color: Int, radius: Int = 8) = GradientDrawable().apply {
+    setColor(color); cornerRadius = dp(radius).toFloat()
+  }
+
   private fun buildKeyboardView(): ProtectedInputRoot {
     val root = ProtectedInputRoot(this)
     root.orientation = LinearLayout.VERTICAL
-    // Reserve a real preview/draft viewport; a zero-height weighted child in an
-    // unbounded wrap-content IME would otherwise never become visible.
-    val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-    root.minimumHeight = minOf(
-      dp(if (landscape) 352 else 440),
-      (resources.displayMetrics.heightPixels * 0.8).toInt(),
-    )
-    root.setBackgroundColor(Color.BLACK)
-    root.setPadding(dp(4), dp(4), dp(4), dp(4))
+    root.layoutParams = ViewGroup.LayoutParams(MATCH, WRAP)
+    root.setBackgroundColor(chrome)
+    root.setPadding(dp(6), dp(2), dp(6), dp(2))
+    root.onUserTouch = {
+      if (connected) SystemKeyboardBroker.recordUserInteraction()
+      updateCountdown()
+    }
+    // An explicit paste/contact click must queue its action before the prompt
+    // can steal focus. A tap on the unused surface may then only unlock.
+    root.onWakeTap = { if (!connected && admitted && !biometricInFlight) resumeKeyboard() }
     root.setOnApplyWindowInsetsListener { view, insets ->
-      val bottom = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+      val bottom = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
         insets.getInsets(WindowInsets.Type.navigationBars()).bottom
-      } else {
-        @Suppress("DEPRECATION")
-        insets.systemWindowInsetBottom
-      }
-      view.setPadding(dp(4), dp(4), dp(4), dp(4) + bottom)
+      else @Suppress("DEPRECATION") insets.systemWindowInsetBottom
+      view.setPadding(dp(6), dp(2), dp(6), dp(2) + bottom)
       insets
     }
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      // The plaintext draft and every label stay out of autofill entirely.
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
       root.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
+    root.isSaveEnabled = false
+
+    val statusRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+    statusDot = TextView(this).apply {
+      text = "●"; setTextColor(muted); textSize = 12f; gravity = Gravity.CENTER
     }
-
-    val status = TextView(this).apply {
-      setTextColor(Color.LTGRAY)
-      setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-      gravity = Gravity.CENTER_HORIZONTAL
-      minHeight = dp(20)
+    statusRow.addView(statusDot, LinearLayout.LayoutParams(dp(16), dp(22)).apply { marginStart = dp(10); marginEnd = dp(8) })
+    statusView = TextView(this).apply {
+      setTextColor(muted); textSize = 12f; tag = "keyboard.status"
     }
-    statusView = status
-    root.addView(status, LinearLayout.LayoutParams(MATCH, WRAP))
-
-    val bodyScroll = ScrollView(this)
-    val body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-    bodyScroll.addView(body, FrameLayout.LayoutParams(MATCH, WRAP))
-    root.addView(bodyScroll, LinearLayout.LayoutParams(MATCH, 0, 1f))
-
-    val draft = TextView(this).apply {
-      setTextColor(Color.WHITE)
-      setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
-      hint = getString(R.string.sk_draft_hint)
-      setHintTextColor(Color.LTGRAY)
-      setPadding(dp(6), dp(6), dp(6), dp(6))
+    countdownView = TextView(this).apply {
+      setTextColor(muted); textSize = 12f; gravity = Gravity.END
+      setPadding(0, 0, dp(10), 0); tag = "keyboard.countdown"
     }
-    draftView = draft
-    body.addView(draft, LinearLayout.LayoutParams(MATCH, WRAP))
+    statusRow.addView(statusView, LinearLayout.LayoutParams(0, dp(22), 1f))
+    statusRow.addView(countdownView, LinearLayout.LayoutParams(dp(50), dp(22)))
+    root.addView(statusRow)
 
-    // Contacts chooser: names and fingerprints only, never a pre-selected entry.
-    val contacts = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-    contactsSection = contacts
-    contacts.visibility = View.GONE
-    contacts.addView(sectionTitle(getString(R.string.sk_contacts_title)), LinearLayout.LayoutParams(MATCH, WRAP))
-    val contactList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-    contactsContainer = contactList
-    contacts.addView(contactList, LinearLayout.LayoutParams(MATCH, WRAP))
-    contacts.addView(
-      plainButton(getString(R.string.sk_contacts_clear)) {
-        contactList.removeAllViews()
-        contacts.visibility = View.GONE
-        keysContainer?.visibility = View.VISIBLE
-      },
-      LinearLayout.LayoutParams(MATCH, WRAP),
-    )
-    body.addView(contacts, LinearLayout.LayoutParams(MATCH, WRAP))
+    recipientRow = LinearLayout(this).apply {
+      gravity = Gravity.CENTER_VERTICAL; visibility = View.GONE
+      setPadding(dp(10), dp(3), dp(10), dp(3))
+    }
+    recipientShield = ImageView(this).apply { tag = "keyboard.shield" }
+    recipientName = TextView(this).apply { textSize = 15f; setTextColor(inkColor); tag = "keyboard.recipient" }
+    recipientRow!!.addView(recipientShield, LinearLayout.LayoutParams(dp(16), dp(20)).apply { marginEnd = dp(8) })
+    recipientRow!!.addView(recipientName, LinearLayout.LayoutParams(0, WRAP, 1f))
+    root.addView(recipientRow, LinearLayout.LayoutParams(MATCH, WRAP))
 
-    // Decoded preview: scrollable, clearable, and never a recipient source.
-    val preview = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-    previewSection = preview
-    preview.visibility = View.GONE
-    val title = sectionTitle("")
-    previewTitle = title
-    preview.addView(title, LinearLayout.LayoutParams(MATCH, WRAP))
+    val compose = LinearLayout(this).apply {
+      gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(4), 0, dp(6))
+    }
+    composeRow = compose
+    compose.addView(iconButton("contacts", getString(R.string.sk_action_contacts)) { requestContacts() },
+      LinearLayout.LayoutParams(dp(40), dp(40)))
+    val field = FrameLayout(this).apply { background = background(if (dark) Color.rgb(42, 42, 44) else Color.WHITE, 12) }
+    draftView = KeyboardDraftView(this).apply {
+      hint = getString(R.string.sk_draft_hint); setHintTextColor(muted)
+      setTextColor(inkColor); textSize = 18f; gravity = Gravity.TOP
+      setPadding(dp(10), dp(5), dp(30), dp(5)); tag = "keyboard.secret"
+      onCursorTouch = { offset -> if (requireActiveEditor()) { draft.moveTo(offset); presentDraft() } }
+    }
+    field.addView(draftView, FrameLayout.LayoutParams(MATCH, dp(60)))
+    clearDraftButton = iconButton("close", getString(R.string.sk_action_clear), false) {
+      if (requireActiveEditor()) clearDraft()
+    }.apply { visibility = View.GONE; tag = "keyboard.clear" }
+    field.addView(clearDraftButton, FrameLayout.LayoutParams(dp(26), dp(26), Gravity.CENTER_VERTICAL or Gravity.END))
+    compose.addView(field, LinearLayout.LayoutParams(0, dp(60), 1f).apply { marginStart = dp(6); marginEnd = dp(6) })
+    insertButton = iconButton("paste", getString(R.string.sk_action_paste_decode)) {
+      if (draft.text.isEmpty()) pasteCarrierFromClipboard() else requestInsert()
+    }.apply { tag = "keyboard.primary" }
+    compose.addView(insertButton, LinearLayout.LayoutParams(dp(40), dp(40)))
+    root.addView(compose, LinearLayout.LayoutParams(MATCH, WRAP))
+
+    contactsSection = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
+    searchView = KeyboardDraftView(this).apply {
+      hint = getString(R.string.sk_search_contacts); setHintTextColor(muted)
+      setTextColor(inkColor); textSize = 16f; background = background(keyColor)
+      setPadding(dp(10), dp(6), dp(10), dp(6)); tag = "keyboard.search"
+      onCursorTouch = { offset -> if (requireActiveEditor()) { search.moveTo(offset); presentSearch() } }
+    }
+    val searchRow = LinearLayout(this)
+    searchRowView = searchRow
+    searchRow.addView(searchView, LinearLayout.LayoutParams(0, dp(40), 1f))
+    searchRow.addView(plainButton(getString(R.string.sk_confirm_no)) { closeContacts() }, LinearLayout.LayoutParams(dp(76), dp(40)))
+    contactsSection!!.addView(searchRow)
+    val contactsScroll = ScrollView(this)
+    contactsContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; tag = "keyboard.contactList" }
+    contactsScroll.addView(contactsContainer, FrameLayout.LayoutParams(MATCH, WRAP))
+    contactsSection!!.addView(contactsScroll, LinearLayout.LayoutParams(MATCH, dp(136)))
+    contactsSection!!.setPadding(0, 0, 0, dp(8))
+    root.addView(contactsSection)
+
+    previewSection = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
+    previewTitle = sectionTitle("")
+    previewSection!!.addView(previewTitle)
     val previewScroll = ScrollView(this)
-    val previewText = TextView(this).apply {
-      setTextColor(Color.WHITE)
-      setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-      setPadding(dp(6), dp(6), dp(6), dp(6))
+    previewView = TextView(this).apply {
+      setTextColor(inkColor); textSize = 16f; setPadding(dp(8), dp(8), dp(8), dp(8)); isSaveEnabled = false
     }
-    previewView = previewText
-    previewScroll.addView(previewText, FrameLayout.LayoutParams(MATCH, WRAP))
-    preview.addView(previewScroll, LinearLayout.LayoutParams(MATCH, dp(120)))
-    preview.addView(
-      plainButton(getString(R.string.sk_preview_clear)) {
-        previewText.text = ""
-        previewTitle?.text = ""
-        preview.visibility = View.GONE
-        keysContainer?.visibility = View.VISIBLE
-      },
-      LinearLayout.LayoutParams(MATCH, WRAP),
-    )
-    body.addView(preview, LinearLayout.LayoutParams(MATCH, WRAP))
+    previewScroll.addView(previewView, FrameLayout.LayoutParams(MATCH, WRAP))
+    previewSection!!.addView(previewScroll, LinearLayout.LayoutParams(MATCH, dp(145)))
+    previewSection!!.addView(plainButton(getString(R.string.sk_reply_to)) {
+      val sender = decodedSender ?: return@plainButton
+      previewSection?.visibility = View.GONE
+      showContactConfirmation(sender)
+    })
+    previewSection!!.addView(plainButton(getString(R.string.sk_preview_clear)) {
+      previewView?.text = ""; previewTitle?.text = ""; decodedSender = null
+      previewSection?.visibility = View.GONE; composeRow?.visibility = View.VISIBLE; keysContainer?.visibility = View.VISIBLE
+    })
+    root.addView(previewSection)
 
-    val keys = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-    keysContainer = keys
-    root.addView(keys, LinearLayout.LayoutParams(MATCH, WRAP))
-
-    val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-    actions.addView(
-      actionButton(getString(R.string.sk_action_paste)) { pasteCarrierFromClipboard() },
-      weightParams(),
-    )
-    actions.addView(
-      actionButton(getString(R.string.sk_action_contacts)) { requestContacts() },
-      weightParams(),
-    )
-    actions.addView(
-      actionButton(getString(R.string.sk_action_decode)) { requestDecode() },
-      weightParams(),
-    )
-    actions.addView(
-      actionButton(getString(R.string.sk_action_next_keyboard)) { switchToNextKeyboard() },
-      weightParams(),
-    )
-    root.addView(actions, LinearLayout.LayoutParams(MATCH, WRAP))
-
-    val insertRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-    val insert = actionButton(getString(R.string.sk_action_insert_idle)) { requestInsert() }
-    insertButton = insert
-    insertRow.addView(insert, weightParams())
-    val reconnect = actionButton(getString(R.string.sk_action_reconnect)) {
-      beginEditorSession(explicitReconnect = true)
-    }
-    reconnect.visibility = View.GONE
-    reconnectButton = reconnect
-    insertRow.addView(reconnect, weightParams())
-    root.addView(insertRow, LinearLayout.LayoutParams(MATCH, WRAP))
-
+    accentRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; visibility = View.GONE }
+    root.addView(accentRow, LinearLayout.LayoutParams(MATCH, dp(42)))
+    keysContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; tag = "keyboard.keys" }
+    root.addView(keysContainer, LinearLayout.LayoutParams(MATCH, WRAP))
     return root
   }
 
+  private var decodedSender: BrokerContact? = null
+
   private fun sectionTitle(label: String): TextView = TextView(this).apply {
-    text = label
-    setTextColor(Color.LTGRAY)
-    setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+    text = label; setTextColor(muted); textSize = 13f; setPadding(dp(8), dp(4), dp(8), dp(4))
   }
+
+  private fun haptic(view: View) { view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) }
 
   private fun plainButton(label: String, onClick: () -> Unit): Button = Button(this).apply {
-    text = label
-    isAllCaps = false
-    minWidth = 0
-    minimumWidth = 0
-    minHeight = dp(40)
-    minimumHeight = dp(40)
-    setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-    setPadding(dp(4), dp(2), dp(4), dp(2))
-    setOnClickListener { onClick() }
+    text = label; isAllCaps = false; minWidth = 0; minimumWidth = 0; minHeight = 0; minimumHeight = 0
+    textSize = 14f; setTextColor(inkColor); background = background(specialColor)
+    setPadding(dp(8), dp(5), dp(8), dp(5)); isSaveEnabled = false
+    setOnClickListener { haptic(this); onClick() }
   }
 
-  private fun actionButton(label: String, onClick: () -> Unit): Button = plainButton(label, onClick)
+  private fun iconButton(glyph: String, label: String, function: Boolean = true, action: () -> Unit): ImageButton =
+    ImageButton(this).apply {
+      background = background(if (function) functionColor else Color.TRANSPARENT, if (function) 24 else 8)
+      setImageDrawable(KeyboardGlyphDrawable(glyph, if (function) functionInk else muted))
+      val inset = if (glyph == "contacts") 11 else 10
+      setPadding(dp(inset), dp(inset), dp(inset), dp(inset)); contentDescription = label; isSaveEnabled = false
+      setOnClickListener { haptic(this); action() }
+    }
 
-  private fun weightParams(): LinearLayout.LayoutParams =
-    LinearLayout.LayoutParams(0, WRAP, 1f)
+  private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt().coerceAtLeast(0)
 
-  private fun dp(value: Int): Int =
-    (value * resources.displayMetrics.density).toInt().coerceAtLeast(0)
-
-  // --- key grid ------------------------------------------------------------
+  // --- local key grid and editor --------------------------------------------
 
   private fun rebuildRows() {
     val base = when (keyMode) {
-      KeyMode.LETTERS -> LETTER_ROWS
+      KeyMode.LETTERS -> KeyboardPresentation.letterRows(language)
       KeyMode.NUMBERS -> NUMBER_ROWS
       KeyMode.SYMBOLS -> SYMBOL_ROWS
     }
     activeRows = if (scramble) base.map { shuffleRow(it) } else base
   }
 
-  /** Presentation-only shuffle of the local grid; never used for any keying material. */
   private fun shuffleRow(row: String): String {
     val characters = row.toCharArray()
     for (index in characters.size - 1 downTo 1) {
       val swapWith = secureRandom.nextInt(index + 1)
-      val current = characters[index]
-      characters[index] = characters[swapWith]
-      characters[swapWith] = current
+      val current = characters[index]; characters[index] = characters[swapWith]; characters[swapWith] = current
     }
     return String(characters)
   }
 
+  private fun keyParams(weight: Float = 1f) = LinearLayout.LayoutParams(0,
+    dp(if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) 36 else 44), weight).apply {
+      marginStart = dp(2); marginEnd = dp(2); topMargin = dp(3); bottomMargin = dp(3)
+    }
+
   private fun renderKeys() {
     val container = keysContainer ?: return
     container.removeAllViews()
-    for (row in activeRows) {
+    if (emojiVisible) { renderEmojiKeys(container); return }
+    for ((index, row) in activeRows.withIndex()) {
       val rowView = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+      if (index == 2) rowView.addView(specialKey("shift", getString(R.string.sk_action_shift)) {
+        if (requireActiveEditor()) { uppercase = !uppercase; renderKeys() }
+      }, keyParams(1.3f))
       for (character in row) {
-        val label = if (uppercase && character.isLetter()) {
-          character.uppercaseChar().toString()
-        } else {
-          character.toString()
+        val label = if (uppercase && character.isLetter()) character.uppercaseChar().toString() else character.toString()
+        val key = plainButton(label) { appendDraft(label) }.apply {
+          textSize = 21f; background = background(keyColor, 6); setPadding(0, 0, 0, 0)
         }
-        val key = plainButton(label) { appendDraft(label) }
-        key.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
-        val height = if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) 30 else 44
-        rowView.addView(key, LinearLayout.LayoutParams(0, dp(height), 1f))
+        attachAccents(key, label)
+        rowView.addView(key, keyParams())
       }
+      if (index == 2) rowView.addView(specialKey("delete", getString(R.string.sk_action_backspace)) { backspace() }, keyParams(1.3f))
       container.addView(rowView, LinearLayout.LayoutParams(MATCH, WRAP))
     }
+    renderBottomRow(container)
+  }
 
-    val specialRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-    specialRow.addView(
-      plainButton(getString(R.string.sk_action_shift)) {
-        uppercase = !uppercase
-        renderKeys()
-      },
-      weightParams(),
-    )
-    specialRow.addView(
-      plainButton(modeLabel()) {
-        keyMode = when (keyMode) {
-          KeyMode.LETTERS -> KeyMode.NUMBERS
-          KeyMode.NUMBERS -> KeyMode.SYMBOLS
-          KeyMode.SYMBOLS -> KeyMode.LETTERS
+  private fun specialKey(glyph: String, label: String, action: () -> Unit): ImageButton = iconButton(glyph, label, false, action).apply {
+    background = background(specialColor, 6); setImageDrawable(KeyboardGlyphDrawable(glyph, inkColor))
+    setPadding(dp(12), dp(10), dp(12), dp(10))
+  }
+
+  private fun renderBottomRow(container: LinearLayout) {
+    val row = LinearLayout(this)
+    row.addView(plainButton(modeLabel()) {
+      if (requireActiveEditor()) {
+        emojiVisible = false
+        keyMode = when (keyMode) { KeyMode.LETTERS -> KeyMode.NUMBERS; KeyMode.NUMBERS -> KeyMode.SYMBOLS; KeyMode.SYMBOLS -> KeyMode.LETTERS }
+        rebuildRows(); renderKeys()
+      }
+    }, keyParams(1.25f))
+    row.addView(specialKey("emoji", getString(R.string.sk_action_emoji)) {
+      if (requireActiveEditor()) { emojiVisible = !emojiVisible; renderKeys() }
+    }, keyParams(1.1f))
+    val space = plainButton(getString(R.string.sk_action_space)) { appendDraft(" ") }
+    attachTrackpad(space)
+    row.addView(space, keyParams(5.5f))
+    row.addView(specialKey("return", getString(R.string.sk_action_newline)) {
+      if (searching) closeContacts() else appendDraft("\n")
+    }, keyParams(1.4f))
+    container.addView(row, LinearLayout.LayoutParams(MATCH, WRAP))
+  }
+
+  private var emojiCategory = 0
+  private fun renderEmojiKeys(container: LinearLayout) {
+    val categories = listOf("😀", "❤️", "🐱", "🍎")
+    val emojiRows = listOf(
+      listOf("😀 😃 😄 😁 😆 😅 😂", "🙂 🙃 😉 😊 😍 🥰 😘", "😎 🤔 😭 😢 😡 👍 🙏"),
+      listOf("❤️ 🧡 💛 💚 💙 💜 🖤", "🤍 💕 💞 💓 💗 💖 💘", "✅ ❌ ⭐ ✨ 🔥 🎉 🎁"),
+      listOf("🐱 🐶 🐭 🐹 🐰 🦊 🐻", "🐼 🐨 🐯 🦁 🐮 🐷 🐸", "🌸 🌹 🌻 🌷 🌴 🌊 ☀️"),
+      listOf("🍎 🍐 🍊 🍋 🍌 🍉 🍇", "🍓 🍒 🍑 🥑 🍕 🍔 🍟", "🍰 🍫 ☕ 🍵 🥂 🍺 🍽️"))
+    val tabs = LinearLayout(this)
+    categories.forEachIndexed { index, title -> tabs.addView(plainButton(title) {
+      if (requireActiveEditor()) { emojiCategory = index; renderKeys() }
+    }, keyParams()) }
+    tabs.addView(specialKey("delete", getString(R.string.sk_action_backspace)) { backspace() }, keyParams())
+    container.addView(tabs)
+    for (values in emojiRows[emojiCategory]) {
+      val row = LinearLayout(this)
+      for (value in values.split(" ")) row.addView(plainButton(value) { appendDraft(value) }.apply {
+        textSize = 23f; background = background(keyColor, 6); setPadding(0, 0, 0, 0)
+      }, keyParams())
+      container.addView(row)
+    }
+    val bottom = LinearLayout(this)
+    bottom.addView(plainButton("ABC") { if (requireActiveEditor()) { emojiVisible = false; renderKeys() } }, keyParams())
+    bottom.addView(plainButton(getString(R.string.sk_action_space)) { appendDraft(" ") }, keyParams(4f))
+    bottom.addView(specialKey("return", getString(R.string.sk_action_newline)) { appendDraft("\n") }, keyParams())
+    container.addView(bottom)
+  }
+
+  private fun attachAccents(key: Button, label: String) {
+    var choosing = false
+    key.setOnLongClickListener {
+      val variants = KeyboardPresentation.variants(label)
+      if (variants.isEmpty() || !requireActiveEditor()) false else {
+        haptic(key); accentSelection.begin(variants); choosing = true
+        accentRow?.removeAllViews()
+        for (value in variants) accentRow?.addView(plainButton(value) { }, keyParams())
+        accentRow?.visibility = View.VISIBLE; true
+      }
+    }
+    key.setOnTouchListener { _, event ->
+      if (!choosing) false else {
+        // A lock/revoke can clear the popup between a long press and finger-up.
+        // Never index stale options or insert a character into a new session.
+        if (currentAccents.isEmpty() || !requireActiveEditor()) {
+          choosing = false; accentSelection.clear(); accentRow?.visibility = View.GONE
+          return@setOnTouchListener true
         }
-        rebuildRows()
-        renderKeys()
-      },
-      weightParams(),
-    )
-    specialRow.addView(
-      plainButton(getString(R.string.sk_action_backspace)) { backspace() },
-      weightParams(),
-    )
-    container.addView(specialRow, LinearLayout.LayoutParams(MATCH, WRAP))
+        if (event.actionMasked == MotionEvent.ACTION_MOVE) {
+          val location = IntArray(2); accentRow?.getLocationOnScreen(location)
+          val width = accentRow?.width ?: 1
+          accentSelection.move((((event.rawX - location[0]) / width) * currentAccents.size).toInt())
+          for (i in 0 until (accentRow?.childCount ?: 0)) accentRow?.getChildAt(i)?.alpha = if (i == accentIndex) 1f else .5f
+        }
+        if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
+          if (event.actionMasked == MotionEvent.ACTION_UP) accentSelection.finish()?.let { appendDraft(it) }
+          choosing = false; accentSelection.clear(); accentRow?.visibility = View.GONE
+        }
+        true
+      }
+    }
+  }
 
-    val editRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-    editRow.addView(
-      plainButton(getString(R.string.sk_action_space)) { appendDraft(" ") },
-      weightParams(),
-    )
-    editRow.addView(
-      plainButton(getString(R.string.sk_action_newline)) { appendDraft("\n") },
-      weightParams(),
-    )
-    editRow.addView(
-      plainButton(getString(R.string.sk_action_clear)) { clearDraft() },
-      weightParams(),
-    )
-    container.addView(editRow, LinearLayout.LayoutParams(MATCH, WRAP))
+  private fun attachTrackpad(space: Button) {
+    var dragging = false; var x = 0f; var y = 0f
+    space.setOnLongClickListener { if (!requireActiveEditor()) false else { dragging = true; haptic(space); true } }
+    space.setOnTouchListener { _, event ->
+      if (event.actionMasked == MotionEvent.ACTION_DOWN) { x = event.x; y = event.y }
+      if (!dragging) false else {
+        if (event.actionMasked == MotionEvent.ACTION_MOVE && requireActiveEditor()) {
+          val horizontal = ((event.x - x) / dp(12).coerceAtLeast(1)).toInt()
+          val vertical = ((event.y - y) / dp(22).coerceAtLeast(1)).toInt()
+          val state = if (searching) search else draft
+          val view = if (searching) searchView else draftView
+          if (horizontal != 0) { state.moveBy(horizontal); x = event.x }
+          if (vertical != 0) { state.moveTo(view?.moveVertical(vertical) ?: state.cursor); y = event.y }
+          if (searching) presentSearch() else presentDraft()
+        }
+        if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) dragging = false
+        true
+      }
+    }
   }
 
   private fun modeLabel(): String = when (keyMode) {
-    KeyMode.LETTERS -> getString(R.string.sk_mode_numbers)
-    KeyMode.NUMBERS -> getString(R.string.sk_mode_symbols)
-    KeyMode.SYMBOLS -> getString(R.string.sk_mode_letters)
+    KeyMode.LETTERS -> "123"; KeyMode.NUMBERS -> "#+="; KeyMode.SYMBOLS -> "ABC"
   }
 
-  // --- local draft ---------------------------------------------------------
-
-  private fun appendDraft(text: CharSequence) {
+  private fun appendDraft(text: String) {
     if (!requireActiveEditor()) return
-    if (!KeyboardEditorPolicy.admitsDraftAppend(draft.length, text.length)) {
-      showStatus(R.string.sk_error_oversize)
-      return
-    }
+    val state = if (searching) search else draft
+    if (!state.insert(text)) { showStatus(R.string.sk_error_oversize); return }
     commitSelection.cancelPending()
-    draft.append(text)
-    draftView?.text = draft.toString()
+    if (searching) { presentSearch(); filterContacts() } else presentDraft()
   }
 
   private fun backspace() {
     if (!requireActiveEditor()) return
-    if (draft.isEmpty()) return
-    commitSelection.cancelPending()
-    draft.setLength(draft.length - 1)
-    draftView?.text = draft.toString()
+    val state = if (searching) search else draft
+    state.deleteBeforeCursor(); commitSelection.cancelPending()
+    if (searching) { presentSearch(); filterContacts() } else presentDraft()
   }
 
-  /** Best-effort local clear of the native draft; String content is not zeroized. */
-  private fun clearDraft() {
-    draft.setLength(0)
-    draftView?.text = ""
-  }
+  private fun presentDraft() { draftView?.present(draft.text, draft.cursor); updateInsertLabel() }
+  private fun presentSearch() { searchView?.present(search.text, search.cursor) }
+  private fun clearDraft() { draft.clear(); presentDraft() }
 
   // --- explicit clipboard paste -------------------------------------------
 
@@ -584,6 +758,7 @@ class LayergramInputMethodService : InputMethodService() {
    * `text` field, no `coerceToText`, no URIs, no listener and no automatic read.
    */
   private fun pasteCarrierFromClipboard() {
+    if (!connected) { resumeKeyboard { pasteCarrierFromClipboard() }; return }
     if (!requireActiveEditor()) return
     val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
     if (clipboard == null) {
@@ -608,13 +783,18 @@ class LayergramInputMethodService : InputMethodService() {
       showStatus(R.string.sk_error_oversize)
       return
     }
+    if (KeyboardPastePolicy.looksLikePublicIdentity(text)) {
+      showStatus(R.string.sk_identity_import)
+      return
+    }
     carrierBuffer = text
-    showStatusText(getString(R.string.sk_status_carrier_loaded, text.length))
+    requestDecode()
   }
 
   // --- recipient chooser ---------------------------------------------------
 
   private fun requestContacts() {
+    if (!connected) { resumeKeyboard { requestContacts() }; return }
     if (!requireActiveEditor()) return
     val epoch = editorEpoch
     showStatus(R.string.sk_status_loading)
@@ -628,44 +808,47 @@ class LayergramInputMethodService : InputMethodService() {
   }
 
   private fun renderContacts(contacts: List<BrokerContact>) {
-    val section = contactsSection ?: return
-    val container = contactsContainer ?: return
-    container.removeAllViews()
-    section.visibility = View.VISIBLE
-    keysContainer?.visibility = View.GONE
-    if (contacts.isEmpty()) {
-      showStatus(R.string.sk_status_contacts_empty)
-      return
-    }
-    showStatus(R.string.sk_status_ready)
-    for (contact in contacts) {
-      val entry = plainButton(
-        getString(R.string.sk_contact_entry, contact.name, contact.fingerprint),
-      ) { confirmContact(contact) }
-      container.addView(entry, LinearLayout.LayoutParams(MATCH, WRAP))
-    }
+    loadedContacts = contacts; search.clear(); searching = true; presentSearch()
+    contactsSection?.visibility = View.VISIBLE; composeRow?.visibility = View.GONE
+    previewSection?.visibility = View.GONE; keysContainer?.visibility = View.VISIBLE
+    searchRowView?.visibility = View.VISIBLE; filterContacts()
+    showStatus(R.string.sk_contacts_title)
   }
 
-  /** Explicit confirmation with the displayed fingerprint; nothing is inferred. */
-  private fun confirmContact(contact: BrokerContact) {
-    if (!requireActiveEditor()) return
-    val epoch = editorEpoch
+  private fun filterContacts() {
     val container = contactsContainer ?: return
     container.removeAllViews()
-    container.addView(sectionTitle(getString(
-      R.string.sk_contact_confirm_message, contact.name, contact.fingerprint,
-    )), LinearLayout.LayoutParams(MATCH, WRAP))
-    // Keep confirmation inside the protected IME window. A service has no
-    // activity token for an application dialog, and a second window could
-    // change input focus while a recipient is being confirmed.
-    container.addView(plainButton(getString(R.string.sk_confirm_yes)) {
+    val matches = loadedContacts.filter { KeyboardPresentation.matches(it.name, search.text) }
+    if (matches.isEmpty()) container.addView(sectionTitle(getString(R.string.sk_status_contacts_empty)))
+    for (contact in matches) container.addView(plainButton(contact.name) { showContactConfirmation(contact) }.apply {
+      gravity = Gravity.START or Gravity.CENTER_VERTICAL; background = background(Color.TRANSPARENT)
+    }, LinearLayout.LayoutParams(MATCH, dp(44)))
+  }
+
+  private fun closeContacts() {
+    searching = false; search.clear(); loadedContacts = emptyList()
+    contactsContainer?.removeAllViews(); contactsSection?.visibility = View.GONE
+    composeRow?.visibility = View.VISIBLE; keysContainer?.visibility = View.VISIBLE
+    showStatus(R.string.sk_status_ready)
+  }
+
+  private fun showContactConfirmation(contact: BrokerContact) {
+    if (!requireActiveEditor()) return
+    val epoch = editorEpoch
+    searching = false; search.clear(); loadedContacts = emptyList()
+    val container = contactsContainer ?: return
+    container.removeAllViews(); searchRowView?.visibility = View.GONE
+    contactsSection?.visibility = View.VISIBLE; composeRow?.visibility = View.GONE
+    keysContainer?.visibility = View.GONE; recipientRow?.visibility = View.GONE
+    val row = LinearLayout(this)
+    row.addView(plainButton(getString(R.string.sk_confirm_no)) { closeContacts() }.apply {
+      setTextColor(functionInk); background = background(functionColor, 22)
+    }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginEnd = dp(6) })
+    row.addView(plainButton(getString(R.string.sk_confirm_yes)) {
       if (guardEpoch(epoch) && requireActiveEditor()) selectContact(contact.id, epoch)
-    }, LinearLayout.LayoutParams(MATCH, WRAP))
-    container.addView(plainButton(getString(R.string.sk_confirm_no)) {
-      container.removeAllViews()
-      contactsSection?.visibility = View.GONE
-      keysContainer?.visibility = View.VISIBLE
-    }, LinearLayout.LayoutParams(MATCH, WRAP))
+    }.apply { setTextColor(functionInk); background = background(functionColor, 22) }, LinearLayout.LayoutParams(0, dp(40), 1f))
+    container.addView(row)
+    container.addView(sectionTitle(getString(R.string.sk_contact_confirm_message, contact.name, contact.fingerprint)))
   }
 
   private fun selectContact(contactId: String, epoch: Int) {
@@ -674,27 +857,31 @@ class LayergramInputMethodService : InputMethodService() {
       when (outcome) {
         is BrokerOutcome.Failure -> showFailure(outcome.status)
         is BrokerOutcome.Success -> {
-          selectedContact = outcome.value
-          contactsContainer?.removeAllViews()
-          contactsSection?.visibility = View.GONE
-          keysContainer?.visibility = View.VISIBLE
-          updateInsertLabel()
-          showStatusText(getString(R.string.sk_status_selected, outcome.value.name))
+          selectedContact = outcome.value; closeContacts(); updateInsertLabel()
         }
       }
     }
   }
 
   private fun updateInsertLabel() {
-    val button = insertButton ?: return
-    val recipient = selectedContact
-    if (recipient == null) {
-      button.text = getString(R.string.sk_action_insert_idle)
-      button.isEnabled = false
-    } else {
-      button.text = getString(R.string.sk_action_insert_for, recipient.name)
-      button.isEnabled = true
+    val hasText = draft.text.isNotEmpty()
+    insertButton?.setImageDrawable(KeyboardGlyphDrawable(KeyboardPresentation.primaryAction(hasText), functionInk))
+    insertButton?.contentDescription = getString(if (hasText) R.string.sk_action_insert_idle else R.string.sk_action_paste_decode)
+    insertButton?.isEnabled = !operationInFlight
+    clearDraftButton?.visibility = if (hasText) View.VISIBLE else View.GONE
+    val contact = selectedContact
+    recipientRow?.visibility = if (contact == null || contactsSection?.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+    recipientName?.text = contact?.name ?: ""
+    val phase = contact?.securityPhase
+    val color = when (KeyboardPresentation.shieldState(phase)) {
+      "active" -> Color.rgb(48, 209, 88); "pending" -> Color.rgb(255, 159, 10)
+      "recovery" -> Color.rgb(255, 69, 58); else -> muted
     }
+    recipientShield?.setImageDrawable(KeyboardGlyphDrawable("shield", color, phase?.startsWith("maximum") == true))
+    recipientShield?.contentDescription = getString(when (KeyboardPresentation.shieldState(phase)) {
+      "active" -> R.string.sk_fs_active; "pending" -> R.string.sk_fs_pending
+      "recovery" -> R.string.sk_fs_recovery; else -> R.string.sk_fs_unknown
+    })
   }
 
   // --- compose, insert, acknowledge ---------------------------------------
@@ -702,18 +889,20 @@ class LayergramInputMethodService : InputMethodService() {
   private fun requestInsert() {
     if (!requireActiveEditor()) return
     if (selectedContact == null) {
-      showStatus(R.string.sk_status_select_recipient)
+      requestContacts()
       return
     }
-    if (draft.isEmpty()) {
+    if (draft.text.isEmpty()) {
       showStatus(R.string.sk_status_nothing_to_insert)
       return
     }
     val epoch = editorEpoch
-    SystemKeyboardBroker.prepareAndAuthorize(draft.toString()) { outcome ->
+    operationInFlight = true
+    updateInsertLabel()
+    SystemKeyboardBroker.prepareAndAuthorize(draft.text) { outcome ->
       if (!guardEpoch(epoch)) return@prepareAndAuthorize
       when (outcome) {
-        is BrokerOutcome.Failure -> showFailure(outcome.status)
+        is BrokerOutcome.Failure -> { operationInFlight = false; updateInsertLabel(); showFailure(outcome.status) }
         is BrokerOutcome.Success -> commitCarrier(outcome.value, epoch)
       }
     }
@@ -731,12 +920,13 @@ class LayergramInputMethodService : InputMethodService() {
     if (!KeyboardEditorPolicy.admitsOutboundCarrierLength(export.carrier.length)) {
       // Never trust an oversized carrier, even if the app core misbehaves.
       SystemKeyboardBroker.acknowledge(export.pendingId, false) { }
+      operationInFlight = false; updateInsertLabel()
       showStatus(R.string.sk_error_unsupported_export)
       return
     }
     if (!SystemKeyboardBroker.isEditorUsableNow()) {
+      operationInFlight = false; updateInsertLabel()
       showStatus(R.string.sk_status_unavailable)
-      setReconnectVisible(true)
       return
     }
     val connection = currentInputConnection
@@ -751,25 +941,32 @@ class LayergramInputMethodService : InputMethodService() {
       }
     }
     if (inserted) {
+      committedCarrierInEditor = true
       clearDraft()
-      // The host cannot prove which external conversation remains open.
-      // Require a new explicit recipient selection for the next message.
-      selectedContact = null
+      // Keep the choice only for our own successful insert in this editor.
+      // Lifecycle and arbitrary host selection changes still revoke it.
       updateInsertLabel()
       showStatus(R.string.sk_status_insert_uncertain)
     }
     if (!inserted) commitSelection.cancelPending()
     SystemKeyboardBroker.acknowledge(export.pendingId, inserted) { outcome ->
       if (!guardEpoch(epoch)) return@acknowledge
-      when (outcome) {
-        is BrokerOutcome.Failure -> showStatus(
-          if (inserted) R.string.sk_status_insert_open_app else R.string.sk_error_unavailable,
-        )
-        is BrokerOutcome.Success -> showStatus(
-          if (inserted && outcome.value) R.string.sk_status_insert_done
-          else if (inserted) R.string.sk_status_insert_open_app
-          else R.string.sk_error_unavailable,
-        )
+      if (outcome is BrokerOutcome.Success && outcome.value && inserted) {
+        val recipient = selectedContact
+        if (recipient != null) {
+          // The core consumes selection on export: ask it to reapprove the
+          // same user-confirmed contact before enabling another insertion.
+          SystemKeyboardBroker.selectContact(recipient.id) { selected ->
+            if (!guardEpoch(epoch)) return@selectContact
+            operationInFlight = false
+            selectedContact = (selected as? BrokerOutcome.Success)?.value
+            updateInsertLabel()
+            if (selected is BrokerOutcome.Failure) showFailure(selected.status) else showStatus(R.string.sk_status_ready)
+          }
+        } else { operationInFlight = false; updateInsertLabel() }
+      } else {
+        operationInFlight = false; selectedContact = null; updateInsertLabel()
+        showStatus(if (inserted) R.string.sk_status_insert_open_app else R.string.sk_error_unavailable)
       }
     }
   }
@@ -784,6 +981,9 @@ class LayergramInputMethodService : InputMethodService() {
       return
     }
     val epoch = editorEpoch
+    carrierBuffer = null
+    // A pasted message cannot silently keep a previous outbound recipient.
+    selectedContact = null; decodedSender = null; updateInsertLabel()
     SystemKeyboardBroker.decode(carrier) { outcome ->
       if (!guardEpoch(epoch)) return@decode
       when (outcome) {
@@ -799,6 +999,9 @@ class LayergramInputMethodService : InputMethodService() {
       preview.contactName,
       preview.fingerprint,
     )
+    selectedContact = null; updateInsertLabel()
+    decodedSender = if (preview.contactId.isNotEmpty()) BrokerContact(preview.contactId, preview.contactName, preview.fingerprint) else null
+    composeRow?.visibility = View.GONE
     previewView?.text = preview.text
     previewSection?.visibility = View.VISIBLE
     keysContainer?.visibility = View.GONE
@@ -831,24 +1034,22 @@ class LayergramInputMethodService : InputMethodService() {
 
   /**
    * Binds (when needed) and requests `begin` at most once per editor generation,
-   * and only while the input view is actually visible. Only the explicit reconnect
-   * button asks for a retry; a heartbeat never re-begins a revoked editor.
+   * and only while the input view is actually visible. A heartbeat never
+   * re-begins a revoked editor.
    */
-  private fun beginEditorSession(explicitReconnect: Boolean) {
+  private fun beginEditorSession() {
+    if (biometricTarget != null && KeyboardAutonomousHost.hasBiometricFlow) return
     if (!admitted) {
-      setReconnectVisible(false)
       showStatus(R.string.sk_status_rejected_field)
       return
     }
-    if (beginRequested && !explicitReconnect) return
+    if (beginRequested) return
     if (!SystemKeyboardBroker.isEnabled()) {
       // Without the explicit app opt-in the component stays unusable.
       showStatus(R.string.sk_status_unavailable)
-      setReconnectVisible(true)
       return
     }
-    if (explicitReconnect || !SystemKeyboardBroker.hasEditorGeneration()) {
-      // A manual retry always starts a brand new generation.
+    if (!SystemKeyboardBroker.hasEditorGeneration()) {
       SystemKeyboardBroker.bindEditor()
     }
     beginRequested = true
@@ -859,11 +1060,10 @@ class LayergramInputMethodService : InputMethodService() {
       if (!guardEpoch(epoch)) return@requestBegin
       when (outcome) {
         is BrokerOutcome.Failure -> {
-          // No automatic fallback: `beginRequested` stays set until the user asks
-          // for an explicit reconnect or a new editor starts.
+          // No automatic fallback: a new admitted editor is required after an
+          // initial begin failure. An expired active editor uses biometrics.
           connected = false
           showFailure(outcome.status)
-          setReconnectVisible(true)
         }
         is BrokerOutcome.Success -> {
           connected = true
@@ -871,15 +1071,10 @@ class LayergramInputMethodService : InputMethodService() {
           rebuildRows()
           renderKeys()
           updateInsertLabel()
-          setReconnectVisible(false)
           showStatus(R.string.sk_status_ready)
         }
       }
     }
-  }
-
-  private fun setReconnectVisible(visible: Boolean) {
-    reconnectButton?.visibility = if (visible) View.VISIBLE else View.GONE
   }
 
   /**
@@ -889,9 +1084,77 @@ class LayergramInputMethodService : InputMethodService() {
    */
   private fun requireActiveEditor(): Boolean {
     if (!admitted || !connected || !SystemKeyboardBroker.isEditorUsableNow()) {
-      showStatus(R.string.sk_status_unavailable)
-      setReconnectVisible(admitted)
+      KeyboardQaTrace.emit(
+        this, "keyNeedsAdmission:admitted=$admitted:connected=$connected:binding=${editorBinding != null}")
+      if (admitted && !connected) resumeKeyboard()
+      showReentryStatus()
       return false
+    }
+    return true
+  }
+
+  private fun resumeKeyboard(after: (() -> Unit)? = null) {
+    KeyboardQaTrace.emit(
+      this, "resumePreflight:admitted=$admitted:enabled=${KeyboardAutonomousHost.enabled()}:binding=${editorBinding != null}:flow=${KeyboardAutonomousHost.hasBiometricFlow}:pending=${biometricInFlight || biometricCompleting || biometricVerified}")
+    if (!admitted || !KeyboardAutonomousHost.enabled()) return
+    if (biometricTarget != null && !KeyboardAutonomousHost.hasBiometricFlow) cancelBiometricFlow()
+    if (biometricInFlight || biometricCompleting || biometricVerified) return
+    val target = editorBinding ?: return
+    afterBiometric = after
+    biometricTarget = target
+    biometricInFlight = true
+    SystemKeyboardBroker.requestBiometricBegin { authenticated ->
+      biometricInFlight = false
+      if (!authenticated) { cancelBiometricFlow(); if (isInputViewShown) showReentryStatus(); return@requestBiometricBegin }
+      biometricVerified = true
+      KeyboardQaTrace.emit(this, "biometricVerifiedWaitingForEditor")
+      completeBiometricIfReady()
+      // EMUI can finish the IME input while the biometric Activity is closing.
+      // One immediate request is too early there. Retry briefly, only while the
+      // authenticated handoff still belongs to this exact original editor.
+      scheduleBiometricReturn(target)
+    }
+  }
+
+  private fun scheduleBiometricReturn(target: KeyboardEditorBinding) {
+    for (delay in listOf(150L, 500L, 1200L, 2400L)) {
+      uiHandler.postDelayed({
+        if (biometricTarget != target || !biometricVerified || !KeyboardAutonomousHost.hasBiometricFlow ||
+            isKeyguardLocked() || (editorBinding != null && editorBinding != target)) return@postDelayed
+        KeyboardQaTrace.emit(this, "biometricShowSelfRequested")
+        requestShowSelf(0)
+      }, delay)
+    }
+  }
+
+  private fun cancelBiometricFlow() {
+    biometricInFlight = false; biometricVerified = false; biometricCompleting = false
+    biometricTarget = null; afterBiometric = null
+    if (KeyboardAutonomousHost.hasBiometricFlow) KeyboardAutonomousHost.discardBiometric()
+  }
+
+  /** An authenticated ticket can only be used in the exact editor that asked. */
+  private fun completeBiometricIfReady(): Boolean {
+    val target = biometricTarget ?: return false
+    if (biometricCompleting || biometricInFlight) return true
+    if (!KeyboardAutonomousHost.hasBiometricFlow) { cancelBiometricFlow(); return false }
+    if (!biometricVerified) return true
+    if (!KeyboardBiometricEditorPolicy.mayAdmit(target, editorBinding, isInputViewShown, admitted)) return true
+    biometricCompleting = true; biometricVerified = false; beginRequested = true
+    KeyboardQaTrace.emit(this, "biometricEditorReadmitted")
+    val epoch = editorEpoch
+    SystemKeyboardBroker.completeBiometricBegin { outcome ->
+      biometricCompleting = false
+      if (!guardEpoch(epoch) || editorBinding != target || !isInputViewShown) {
+        cancelBiometricFlow(); return@completeBiometricBegin
+      }
+      biometricTarget = null
+      val action = afterBiometric; afterBiometric = null
+      if (outcome is BrokerOutcome.Success) {
+        connected = true; scramble = outcome.value
+        rebuildRows(); renderKeys(); showStatus(R.string.sk_status_ready)
+        action?.invoke()
+      } else { showReentryStatus() }
     }
     return true
   }
@@ -903,9 +1166,13 @@ class LayergramInputMethodService : InputMethodService() {
    * confirmed recipient, chooser list, preview labels and inline confirmation. String content is dropped, not zeroized.
    */
   private fun clearSensitiveUi() {
+    committedCarrierInEditor = false
     clearDraft()
     carrierBuffer = null
     selectedContact = null
+    decodedSender = null; searching = false; search.clear(); loadedContacts = emptyList(); operationInFlight = false
+    searchView?.present("", 0); accentRow?.visibility = View.GONE; accentSelection.clear()
+    composeRow?.visibility = View.VISIBLE
     commitSelection.cancelPending()
     contactsContainer?.removeAllViews()
     contactsSection?.visibility = View.GONE
@@ -918,14 +1185,42 @@ class LayergramInputMethodService : InputMethodService() {
 
   private fun showStatus(resId: Int) {
     statusView?.text = getString(resId)
+    statusDot?.setTextColor(if (connected) (if (dark) Color.WHITE else functionColor) else muted)
+    updateCountdown()
+  }
+
+  private fun showReentryStatus() {
+    val status = KeyboardReentryStatusPolicy.status(admitted,
+      biometricInFlight || biometricVerified || biometricCompleting,
+      SystemKeyboardBroker.canOfferBiometricUnlock())
+    showStatus(when (status) {
+      KeyboardReentryStatusPolicy.Status.REJECTED_FIELD -> R.string.sk_status_rejected_field
+      KeyboardReentryStatusPolicy.Status.UNLOCKING -> R.string.sk_status_unlocking
+      KeyboardReentryStatusPolicy.Status.TOUCH_TO_UNLOCK -> R.string.sk_status_touch_to_unlock
+      KeyboardReentryStatusPolicy.Status.OPEN_APP -> R.string.sk_status_unavailable
+    })
   }
 
   private fun showStatusText(text: CharSequence) {
     statusView?.text = text
+    updateCountdown()
+  }
+
+  private fun updateCountdown() {
+    val remaining = if (connected) SystemKeyboardBroker.remainingIdleMillis() else 0L
+    countdownView?.text = if (remaining > 0) "${(remaining + 999) / 1000}s" else ""
+  }
+
+  private val countdownTick = object : Runnable {
+    override fun run() { updateCountdown(); uiHandler.postDelayed(this, 250) }
   }
 
   /** Maps every internal failure to one short, identity-free user message. */
   private fun showFailure(status: String) {
+    if (status == SystemKeyboardBroker.STATUS_UNAVAILABLE) {
+      showReentryStatus()
+      return
+    }
     val resId = when (status) {
       SystemKeyboardBroker.STATUS_BUSY -> R.string.sk_error_busy
       SystemKeyboardBroker.STATUS_INVALID_SELECTION -> R.string.sk_error_invalid_selection
@@ -947,7 +1242,9 @@ class LayergramInputMethodService : InputMethodService() {
  * Input-view root that reuses the existing [ScreenProtectionTouchGate] so an
  * obscured gesture stream is cancelled to children before it is rejected.
  */
-private class ProtectedInputRoot(context: Context) : LinearLayout(context) {
+internal class ProtectedInputRoot(context: Context) : LinearLayout(context) {
+  var onUserTouch: (() -> Unit)? = null
+  var onWakeTap: (() -> Unit)? = null
   private val touchGate = ScreenProtectionTouchGate()
 
   override fun dispatchTouchEvent(event: MotionEvent): Boolean {
@@ -959,7 +1256,14 @@ private class ProtectedInputRoot(context: Context) : LinearLayout(context) {
         Build.VERSION.SDK_INT,
       )
     ) {
-      TouchDispatchAction.DISPATCH -> super.dispatchTouchEvent(event)
+      TouchDispatchAction.DISPATCH -> {
+        if (event.actionMasked == MotionEvent.ACTION_DOWN)
+          KeyboardQaTrace.emit(context, "imeTouchDown")
+        if (event.actionMasked == MotionEvent.ACTION_DOWN || event.actionMasked == MotionEvent.ACTION_MOVE) onUserTouch?.invoke()
+        val handled = super.dispatchTouchEvent(event)
+        if (event.actionMasked == MotionEvent.ACTION_UP && !handled) onWakeTap?.invoke()
+        handled
+      }
       TouchDispatchAction.REJECT -> false
       TouchDispatchAction.CANCEL_THEN_REJECT -> {
         dispatchCancellationToChildren(event)

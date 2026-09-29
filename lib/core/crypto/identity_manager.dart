@@ -27,11 +27,14 @@ class IdentityManager {
   IdentityManager({
     required SeedService seedService,
     required LocalIdentityVault localIdentityVault,
+    Future<void> Function()? beforeIdentityMutation,
   })  : _seedService = seedService,
-        _localIdentityVault = localIdentityVault;
+        _localIdentityVault = localIdentityVault,
+        _beforeIdentityMutation = beforeIdentityMutation;
 
   final SeedService _seedService;
   final LocalIdentityVault _localIdentityVault;
+  final Future<void> Function()? _beforeIdentityMutation;
   final _x25519 = X25519();
 
   Future<LocalIdentity> createNewIdentity({
@@ -68,6 +71,7 @@ class IdentityManager {
   }
 
   Future<void> updateDisplayName(String displayName) async {
+    await _beforeIdentityMutation?.call();
     final current = await _localIdentityVault.read();
     if (current == null) return;
     final updated = LocalIdentity(
@@ -93,8 +97,9 @@ class IdentityManager {
     return _deriveLocalPrivateKeyBase64();
   }
 
-  Future<void> clearLocalIdentity() {
-    return _localIdentityVault.clear();
+  Future<void> clearLocalIdentity() async {
+    await _beforeIdentityMutation?.call();
+    await _localIdentityVault.clear();
   }
 
   Future<String?> _deriveLocalPrivateKeyBase64() async {
@@ -113,6 +118,7 @@ class IdentityManager {
     String? displayName,
     required IdentityDerivationVersion derivationVersion,
   }) async {
+    await _beforeIdentityMutation?.call();
     final seed = _seedService.mnemonicToSeed(mnemonic);
     final privateKey = await _seedService.deriveIdentityPrivateKey(
       seed,

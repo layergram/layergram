@@ -63,6 +63,9 @@ typedef SystemKeyboardAccessReader = SystemKeyboardAccessSnapshot Function();
 /// inject `StegoDecoder.maxCarrierCodeUnits` explicitly.
 const int systemKeyboardDefaultMaxCarrierCodeUnits = 262144;
 
+/// Bounded text bundle for the autonomous V3 extension (4,000-character draft).
+const int systemKeyboardAutonomousMaxOutboundCarrierCodeUnits = 32768;
+
 /// Default bound for caller-supplied opaque identifier strings.
 ///
 /// Applies to request ids, the native editor nonce and pending ids. Keeps the
@@ -150,6 +153,7 @@ class SystemKeyboardContact {
     required this.id,
     required this.name,
     required this.fingerprint,
+    this.securityPhase,
   });
 
   /// Stable opaque contact id used for explicit selection.
@@ -160,6 +164,9 @@ class SystemKeyboardContact {
 
   /// Safety-fingerprint string shown for verification.
   final String fingerprint;
+
+  /// Fresh V3 status at confirmation time. Null means that no status was proven.
+  final String? securityPhase;
 
   /// Whether every reference field is present and non-empty.
   bool get isWellFormed =>
@@ -413,6 +420,15 @@ abstract interface class SystemKeyboardBackend {
   // No mark-read method exists by design.
 }
 
+/// Optional presentation-only V3 status lookup for the explicitly selected
+/// contact. Implementations must not infer the status from contact metadata.
+abstract interface class SystemKeyboardContactSecurityProvider {
+  Future<String?> securityPhaseForContact(
+    String contactId,
+    String fingerprint,
+  );
+}
+
 /// Single-owner controller for the SYSTEM keyboard bridge.
 ///
 /// Exactly one operation runs at a time; anything else is rejected with
@@ -662,10 +678,26 @@ class SystemKeyboardController {
           SystemKeyboardFailureCode.invalidSelection,
         );
       }
+      final match = matches.single;
+      String? securityPhase;
+      if (_backend is SystemKeyboardContactSecurityProvider) {
+        securityPhase =
+            await (_backend as SystemKeyboardContactSecurityProvider)
+                .securityPhaseForContact(match.id, match.fingerprint);
+        if (!_stillValid(stateEpoch, sessionEpoch)) {
+          return _unavailable<SystemKeyboardContact>();
+        }
+      }
+      final selected = SystemKeyboardContact(
+        id: match.id,
+        name: match.name,
+        fingerprint: match.fingerprint,
+        securityPhase: securityPhase,
+      );
       _pendingExports.clear();
-      _selectedContact = matches.single;
+      _selectedContact = selected;
       return SystemKeyboardResult<SystemKeyboardContact>.success(
-        matches.single,
+        selected,
       );
     } catch (_) {
       if (!_stillValid(stateEpoch, sessionEpoch)) {

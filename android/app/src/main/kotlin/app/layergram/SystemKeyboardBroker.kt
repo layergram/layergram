@@ -16,7 +16,7 @@ import java.lang.ref.WeakReference
 import java.security.SecureRandom
 
 /** One contact as displayed by the chooser; never inferred from the host app. */
-data class BrokerContact(val id: String, val name: String, val fingerprint: String)
+data class BrokerContact(val id: String, val name: String, val fingerprint: String, val securityPhase: String? = null)
 
 /** Authenticated inbound preview. Ordinary messages only; never a recipient source. */
 data class BrokerDecoded(
@@ -42,13 +42,9 @@ sealed class BrokerOutcome<out T> {
 }
 
 /**
- * Singleton bridge between the live Flutter engine (owned by [MainActivity]) and
- * the optional SYSTEM keyboard IME ([LayergramInputMethodService]).
- *
- * The service never creates an engine. It only ever speaks through the channel
- * that [MainActivity.configureFlutterEngine] attached to its own engine; when no
- * engine is attached every request fails generically (`unavailable`) without
- * starting the app, reading storage, keys or the network.
+ * Routes the optional SYSTEM keyboard to the app-owned finite preview or the
+ * isolated autonomous owner. UI and broker never receive identity keys or read
+ * the archive. Only KeyboardAutonomousHost creates a plugin-free V3 runtime.
  *
  * Freshness model: every reply must carry strictly parsed `processingMillis`
  * (0..30000) and `leaseMillis` (1..1000). That pair produces one absolute grant
@@ -110,6 +106,8 @@ object SystemKeyboardBroker {
 
   private val editorSession = KeyboardEditorSession()
   private val activeGrant = KeyboardActiveGrant()
+  private val interactionWindow = KeyboardInteractionWindow()
+  private var authorizedIdleMillis = 0
   private val pendingRequests = LinkedHashMap<String, PendingCallback>()
 
   private var engineChannel: MethodChannel? = null
@@ -126,6 +124,10 @@ object SystemKeyboardBroker {
   private var heartbeatScheduled = false
   private var watchdogScheduledAt = 0L
   private var pendingExportId: String? = null
+  private var controllerRequests = 0
+  private var traceForTesting: ((String) -> Unit)? = null
+  private var biometricCompletion: ((Boolean) -> Unit)? = null
+  internal fun traceImeForTesting(stage: String) { traceForTesting?.invoke("ime:$stage") }
 
   // --- engine ownership ----------------------------------------------------
 
@@ -150,9 +152,9 @@ object SystemKeyboardBroker {
     if (bound == null || bound !== owner) return
     engineChannel = null
     engineOwner = null
-    appContext = null
-    enabled = false
-    revokeCurrentEditor()
+    // Destroying the app Activity does not destroy an independently admitted
+    // keyboard. Returning to the app and explicit revocation still do.
+    if (!KeyboardAutonomousHost.isRunning) revokeCurrentEditor()
   }
 
   fun isEnabled(): Boolean = enabled
@@ -173,15 +175,50 @@ object SystemKeyboardBroker {
           result.error("invalid_arguments", "configure requires an enabled boolean.", null)
           return
         }
+        val autonomous = (call.arguments as? Map<*, *>)?.get("autonomous") == true
+        appContext?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)?.edit()
+          ?.putBoolean("system_keyboard_autonomous", autonomous)?.commit()
+        KeyboardAutonomousHost.revoke()
         result.success(configureInternal(requested))
       }
       "revoke" -> {
+        KeyboardAutonomousHost.revoke()
         revokeCurrentEditor()
         result.success(null)
       }
       "openSettings" -> result.success(openSettingsInternal())
       "isSupported" -> result.success(true)
       "readEnabled" -> result.success(readConfiguredState())
+      "diagnosticStage" -> {
+        // The Dart diagnostic build emits fixed stage names only. This private
+        // instrumentation callback is never enabled by application code.
+        val stage = call.arguments as? String
+        val allowed = setOf("prepareUnavailableOrAttempted", "prepareAdmissionDenied", "prepareStarted",
+          "prepareCompleted", "prepareFailed", "prepareFailedState", "prepareFailedFormat",
+          "prepareFailedPlatform", "prepareFailedOther", "closureAdmissionDenied", "closureNoIdentity",
+          "closureRuntimeLoad", "closureRuntimeUnavailable", "closureRuntimeReady",
+          "closureContactContextStart", "closureContactContextReady", "closureContactReadStart", "closureContactReadReady",
+          "closureContactsAdmissionDenied", "closureContactsChanged", "closureNoUsableContacts",
+          "closureContactsReady", "closureNoContext", "closureContextAdmissionDenied",
+          "closureCustodyPrepare", "closureCustodyReady", "warmRuntimeFailed",
+          "runtimeProviderBegin", "runtimeIdentityLoadStart", "runtimeIdentityLoadReady",
+          "runtimeContextStart", "runtimeContextReady", "runtimeProjectionKeyStart", "runtimeProjectionKeyReady",
+          "runtimeHistoryContextStart", "runtimeHistoryContextReady", "runtimeHistoryLeaseStart",
+          "runtimeHistoryLeaseReady", "runtimeOwnerOpenStart", "runtimeOwnerOpenReady",
+          "runtimeMaintainStart", "runtimeMaintainReady", "runtimeHistoryKeyStart", "runtimeHistoryKeyReady",
+          "runtimeHistoryRestoreStart", "runtimeHistoryRestoreReady", "runtimeHistoryReconcileStart",
+          "runtimeHistoryReconcileReady", "runtimeProviderReady",
+          "runtimeFactoryCustodyStart", "runtimeFactoryCustodyReady",
+          "runtimeFactorySessionStart", "runtimeFactorySessionReady",
+          "custodyDelegateKeyStart", "custodyDelegateKeyReady", "custodyDelegateIdentityReady",
+          "custodyDelegateRuntimeClosed", "custodyDelegateEntered", "custodyDelegateNativePending",
+          "custodyDelegateJournalPresent", "custodyDelegateWorkingSetEmpty")
+        if (stage in allowed) {
+          traceForTesting?.invoke("prepareStage:$stage")
+          KeyboardQaTrace.emit(appContext, "prepareStage:$stage")
+        }
+        result.success(null)
+      }
       else -> result.notImplemented()
     }
   }
@@ -244,6 +281,9 @@ object SystemKeyboardBroker {
   // --- service attachment --------------------------------------------------
 
   fun attachService(service: LayergramInputMethodService) {
+    appContext = service.applicationContext
+    KeyboardAutonomousHost.initialize(service)
+    enabled = appContext!!.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getBoolean(PREF_KEY_ENABLED, false)
     serviceRef = WeakReference(service)
   }
 
@@ -296,8 +336,9 @@ object SystemKeyboardBroker {
    * Called from `onUpdateSelection`. Any selection movement that our own commit
    * did not cause clears the pending export and any in-flight commit callback.
    */
-  fun onHostSelectionChanged() {
-    resetEditorInternal(sendEnd = true)
+  fun onHostSelectionChanged(callback: (BrokerOutcome<Boolean>) -> Unit) {
+    if (KeyboardAutonomousHost.isRunning && isEditorUsableNow()) rebindRuntime(callback)
+    else { resetEditorInternal(sendEnd = true); callback(BrokerOutcome.Failure(STATUS_UNAVAILABLE)) }
   }
 
   /**
@@ -308,18 +349,86 @@ object SystemKeyboardBroker {
   fun isEditorUsableNow(): Boolean {
     if (!enabled || !beginConfirmed || editorSession.generation == null) return false
     val now = SystemClock.elapsedRealtime()
-    if (isKeyguardLocked() || !serviceVisible || !activeGrant.isActive(now)) {
+    if (isKeyguardLocked() || !serviceVisible || !activeGrant.isActive(now) || interactionWindow.remaining(now) == 0L) {
       revokeCurrentEditor()
       return false
     }
     return true
   }
 
+  /** Called only from an unobscured, real touch in the visible IME. */
+  fun recordUserInteraction() {
+    if (isEditorUsableNow()) {
+      interactionWindow.touch(SystemClock.elapsedRealtime())
+      if (KeyboardAutonomousHost.isRunning) KeyboardAutonomousHost.touch()
+    }
+  }
+
+  fun remainingIdleMillis(): Long = if (!beginConfirmed) 0L else if (KeyboardAutonomousHost.isRunning)
+    KeyboardAutonomousHost.remainingIdleMillis() else interactionWindow.remaining(SystemClock.elapsedRealtime())
+
   /**
    * Sends `begin` for the current generation. Only called while the window is
    * visible, at most once per editor generation.
    */
   fun requestBegin(callback: (BrokerOutcome<Boolean>) -> Unit) {
+    if (KeyboardAutonomousHost.enabled()) {
+      val generation = editorSession.generation ?: run { callback(BrokerOutcome.Failure(STATUS_UNAVAILABLE)); return }
+      KeyboardAutonomousHost.begin(generation.nonce, { editorSession.isCurrent(generation) && serviceVisible && !isKeyguardLocked() },
+        { args, result -> engineChannel?.invokeMethod("request", args, result) ?: result.success(null) }) { success ->
+          if (!editorSession.isCurrent(generation)) return@begin
+          if (success) requestBeginOnChannel(callback) else callback(BrokerOutcome.Failure(STATUS_UNAVAILABLE))
+        }
+    } else requestBeginOnChannel(callback)
+  }
+
+  fun requestBiometricBegin(callback: (Boolean) -> Unit) {
+    val service = serviceRef?.get() ?: return callback(false)
+    if (!enabled || !serviceVisible || isKeyguardLocked() || biometricCompletion != null) { callback(false); return }
+    bindEditor()
+    if (editorSession.generation == null || !KeyboardAutonomousHost.reserveBiometricLaunch()) { callback(false); return }
+    biometricCompletion = callback
+    try {
+      service.startActivity(Intent(service, KeyboardBiometricActivity::class.java).addFlags(
+        Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS))
+    } catch (_: Throwable) {
+      biometricCompletion = null; KeyboardAutonomousHost.discardBiometric(); callback(false)
+    }
+  }
+
+  fun canOfferBiometricUnlock(): Boolean =
+    enabled && serviceVisible && !isKeyguardLocked() && KeyboardAutonomousHost.canOfferBiometric()
+
+  fun authenticateFromBiometricActivity(activity: KeyboardBiometricActivity) {
+    if (biometricCompletion == null || !KeyboardAutonomousHost.hasBiometricFlow) { activity.finish(); return }
+    KeyboardAutonomousHost.resumeBiometrically(activity) { success ->
+      val completion = biometricCompletion
+      biometricCompletion = null
+      activity.finish()
+      completion?.invoke(success)
+    }
+  }
+
+  fun cancelBiometricActivity() {
+    val completion = biometricCompletion
+    biometricCompletion = null
+    if (completion != null) { KeyboardAutonomousHost.discardBiometric(); completion(false) }
+  }
+
+  fun completeBiometricBegin(callback: (BrokerOutcome<Boolean>) -> Unit) {
+    if (!KeyboardAutonomousHost.hasBiometricFlow || !serviceVisible || isKeyguardLocked()) {
+      callback(BrokerOutcome.Failure(STATUS_UNAVAILABLE)); return
+    }
+    bindEditor()
+    val generation = editorSession.generation ?: return callback(BrokerOutcome.Failure(STATUS_UNAVAILABLE))
+    KeyboardAutonomousHost.startAuthenticated(generation.nonce,
+      { editorSession.isCurrent(generation) && serviceVisible && !isKeyguardLocked() }) { success ->
+        if (!editorSession.isCurrent(generation)) return@startAuthenticated
+        if (success) requestBeginOnChannel(callback) else callback(BrokerOutcome.Failure(STATUS_UNAVAILABLE))
+      }
+  }
+
+  private fun requestBeginOnChannel(callback: (BrokerOutcome<Boolean>) -> Unit) {
     val generation = editorSession.generation
     if (!enabled || generation == null) {
       callback(BrokerOutcome.Failure(STATUS_UNAVAILABLE))
@@ -335,6 +444,9 @@ object SystemKeyboardBroker {
     sendRequest(OPERATION_BEGIN, emptyMap(), ::parseScramble) { outcome ->
       when (outcome) {
         is BrokerOutcome.Success -> {
+          val interval = if (KeyboardAutonomousHost.isRunning)
+            minOf(authorizedIdleMillis, KeyboardAutonomousHost.remainingIdleMillis().toInt()) else authorizedIdleMillis
+          interactionWindow.start(SystemClock.elapsedRealtime(), interval)
           beginConfirmed = true
           startHeartbeatLoop()
         }
@@ -353,18 +465,37 @@ object SystemKeyboardBroker {
     editorSession.reset()
   }
 
-  private fun clearLocalState() {
+  private fun clearLocalState(closeRuntime: Boolean = true) {
+    if (closeRuntime) KeyboardAutonomousHost.closeEditor()
     pendingRequests.clear()
     pendingExportId = null
     beginConfirmed = false
     heartbeatInFlight = false
     activeGrant.clear()
+    interactionWindow.clear()
+    authorizedIdleMillis = 0
+    controllerRequests = 0
     cancelGrantWatchdog()
     stopHeartbeatLoop()
   }
 
+  private fun rebindRuntime(callback: (BrokerOutcome<Boolean>) -> Unit) {
+    val nonce = newNonce()
+    // Drop old callbacks before admission of a new nonce; do not renew idle.
+    clearLocalState(closeRuntime = false)
+    editorSession.begin(nonce)
+    val generation = editorSession.generation!!
+    KeyboardAutonomousHost.rebind(nonce,
+      { editorSession.isCurrent(generation) && serviceVisible && !isKeyguardLocked() }) { accepted ->
+      if (!editorSession.isCurrent(generation)) return@rebind
+      if (accepted) requestBeginOnChannel(callback)
+      else { revokeCurrentEditor(); callback(BrokerOutcome.Failure(STATUS_UNAVAILABLE)) }
+    }
+  }
+
   /** Clears every sensitive entry and permanently invalidates the generation. */
   private fun revokeCurrentEditor() {
+    traceForTesting?.invoke("revoke:pending=${pendingRequests.size}:native=${KeyboardAutonomousHost.isRunning}:idle=${KeyboardAutonomousHost.remainingIdleMillis()}")
     resetEditorInternal(sendEnd = true)
     serviceRef?.get()?.onBrokerUnavailable()
   }
@@ -474,6 +605,17 @@ object SystemKeyboardBroker {
     parse: (Map<*, *>?) -> T?,
     callback: (BrokerOutcome<T>) -> Unit,
   ): PendingCallback? {
+    // Rotate bounded replay bookkeeping before a safe, idle operation. The FS
+    // snapshot and idle grant stay unchanged; mutations are never replayed.
+    if (KeyboardAutonomousHost.isRunning && controllerRequests >= 40 &&
+        operation in setOf(OPERATION_CONTACTS, OPERATION_SELECT, OPERATION_DECODE) &&
+        pendingRequests.isEmpty() && pendingExportId == null && isEditorUsableNow()) {
+      rebindRuntime { outcome ->
+        if (outcome is BrokerOutcome.Success) sendRequest(operation, extra, parse, callback)
+        else callback(BrokerOutcome.Failure(STATUS_UNAVAILABLE))
+      }
+      return null
+    }
     if (operation != OPERATION_BEGIN && !isEditorUsableNow()) {
       callback(BrokerOutcome.Failure(STATUS_UNAVAILABLE))
       return null
@@ -487,8 +629,7 @@ object SystemKeyboardBroker {
       callback(BrokerOutcome.Failure(STATUS_UNAVAILABLE))
       return null
     }
-    val channel = engineChannel
-    if (channel == null) {
+    if (engineChannel == null && !KeyboardAutonomousHost.isRunning) {
       callback(BrokerOutcome.Failure(STATUS_UNAVAILABLE))
       return null
     }
@@ -504,12 +645,14 @@ object SystemKeyboardBroker {
       requestStartElapsedRealtime = SystemClock.elapsedRealtime(),
     )
     pendingRequests[requestId] = pending
+    if (operation != OPERATION_BEGIN) controllerRequests++
 
     val arguments = HashMap<String, Any>()
     arguments["operation"] = operation
     arguments["editorNonce"] = generation.nonce
     arguments["requestId"] = requestId
     arguments.putAll(extra)
+    traceForTesting?.invoke("send:$operation:count=$controllerRequests")
 
     val resultHandler = object : MethodChannel.Result {
       override fun success(result: Any?) {
@@ -532,7 +675,7 @@ object SystemKeyboardBroker {
     }
 
     try {
-      channel.invokeMethod(REQUEST_METHOD, arguments, resultHandler)
+      invokeRequest(arguments, resultHandler)
     } catch (error: Throwable) {
       if (pendingRequests.remove(requestId) != null) {
         revokeCurrentEditor()
@@ -551,7 +694,11 @@ object SystemKeyboardBroker {
   ) {
     // A missing entry means the frame was already cancelled by a lifecycle reset,
     // a revoke, a stale selection update or a newer editor generation.
-    val pending = pendingRequests.remove(requestId) ?: return
+    val pending = pendingRequests.remove(requestId) ?: run {
+      traceForTesting?.invoke("replyCancelled")
+      return
+    }
+    traceForTesting?.invoke("reply:status=${(rawReply as? Map<*, *>)?.get("status")}:elapsed=${SystemClock.elapsedRealtime() - pending.requestStartElapsedRealtime}")
     val current = editorSession.generation
     val now = SystemClock.elapsedRealtime()
     if (current == null || pending.generation != current) {
@@ -620,6 +767,11 @@ object SystemKeyboardBroker {
   private fun sanitizeStatus(status: String): String =
     if (status in knownFailureStatuses) status else STATUS_UNAVAILABLE
 
+  private fun invokeRequest(arguments: Map<String, Any>, result: MethodChannel.Result) {
+    if (KeyboardAutonomousHost.isRunning) KeyboardAutonomousHost.request(arguments, result)
+    else engineChannel?.invokeMethod(REQUEST_METHOD, arguments, result) ?: result.success(null)
+  }
+
   private fun sendEndOperation(generation: EditorGeneration) {
     val channel = engineChannel ?: return
     val arguments = HashMap<String, Any>()
@@ -645,7 +797,9 @@ object SystemKeyboardBroker {
       watchdogScheduledAt = 0L
       if (editorSession.generation == null) return
       val now = SystemClock.elapsedRealtime()
-      if (!enabled || isKeyguardLocked() || !serviceVisible || !activeGrant.isActive(now)) {
+      if (!enabled || isKeyguardLocked() || !serviceVisible || !activeGrant.isActive(now) ||
+          (beginConfirmed && interactionWindow.remaining(now) == 0L)) {
+        traceForTesting?.invoke("watchdog:grant=${activeGrant.isActive(now)}:visible=$serviceVisible:idle=${interactionWindow.remaining(now)}")
         revokeCurrentEditor()
         return
       }
@@ -704,7 +858,7 @@ object SystemKeyboardBroker {
   private fun sendHeartbeat() {
     val generation = editorSession.generation ?: return
     if (!enabled || !beginConfirmed || !serviceVisible || isKeyguardLocked()) return
-    val channel = engineChannel ?: return
+    if (engineChannel == null && !KeyboardAutonomousHost.isRunning) return
     val requestId = "skh" + (requestCounter++)
     val pending = PendingCallback(
       requestId = requestId,
@@ -733,7 +887,7 @@ object SystemKeyboardBroker {
       }
     }
     try {
-      channel.invokeMethod(REQUEST_METHOD, arguments, resultHandler)
+      invokeRequest(arguments, resultHandler)
     } catch (error: Throwable) {
       heartbeatInFlight = false
       revokeIfCurrentGeneration(pending.generation)
@@ -809,7 +963,9 @@ object SystemKeyboardBroker {
   // --- reply parsers (fail closed on any malformed payload) ----------------
 
   private fun parseScramble(data: Map<*, *>?): Boolean? {
-    if (data == null) return false
+    val idle = data?.get("idleMillis") as? Int ?: return null
+    if (idle !in 1..300000) return null
+    authorizedIdleMillis = idle
     return when (val raw = data["scramble"]) {
       null -> false
       is Boolean -> raw
@@ -837,7 +993,9 @@ object SystemKeyboardBroker {
     val fingerprint = map["fingerprint"] as? String ?: return null
     if (!KeyboardEditorPolicy.isWellFormedIdentifier(id)) return null
     if (name.isEmpty() || fingerprint.isEmpty()) return null
-    return BrokerContact(id, name, fingerprint)
+    val phase = map["securityPhase"]
+    if (phase != null && (phase !is String || phase !in KeyboardPresentation.securityPhases)) return null
+    return BrokerContact(id, name, fingerprint, phase as? String)
   }
 
   private fun parsePendingId(data: Map<*, *>?): String? =

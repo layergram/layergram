@@ -30,8 +30,14 @@ class MessagesRepositoryCore {
   String? _visibleRecordKey;
   int _contextLeaseRevision = 0;
   bool _contextLeaseAdmissionReady = false;
+  Completer<void> _contextReady = Completer<void>();
 
-  final Map<String, Map<dynamic, dynamic>> _hiddenPersistedRecords = {};
+  Future<void> waitForReadyContext() async {
+    while (!_contextLeaseAdmissionReady) {
+      if (_disposeRequested) throw StateError('MessagesRepository is disposed');
+      await _contextReady.future;
+    }
+  }
 
   static final Random _random = Random.secure();
 
@@ -64,6 +70,8 @@ class MessagesRepositoryCore {
   /// Lease admission stays closed until a subsequent [setActiveContext]
   /// completes for the current revision with a non-empty scope and key.
   void invalidateContextLeases() {
+    if (!_contextReady.isCompleted) _contextReady.complete();
+    _contextReady = Completer<void>();
     _contextLeaseRevision++;
     _contextLeaseAdmissionReady = false;
   }
@@ -73,6 +81,7 @@ class MessagesRepositoryCore {
     if (admissionRevision != _contextLeaseRevision) return;
     if (!_hasScope || _storageKey == null) return;
     _contextLeaseAdmissionReady = true;
+    if (!_contextReady.isCompleted) _contextReady.complete();
   }
 
   bool get _hasScope => (_scopeToken ?? '').isNotEmpty;
@@ -92,7 +101,6 @@ class MessagesRepositoryCore {
     final generation = ++_reloadGeneration;
     final storageKey = _storageKey;
     final visibleMessages = <MessageRecord>[];
-    final hidden = <String, Map<dynamic, dynamic>>{};
     String? visibleRecordKey;
 
     if (_hasScope) {
@@ -104,7 +112,6 @@ class MessagesRepositoryCore {
         final scopedKey = key as String;
 
         if (!_isSealedPersistedRecord(persisted)) {
-          hidden[scopedKey] = persisted;
           continue;
         }
 
@@ -113,7 +120,6 @@ class MessagesRepositoryCore {
           storageKey: storageKey,
         );
         if (decrypted == null) {
-          hidden[scopedKey] = persisted;
           continue;
         }
 
@@ -127,9 +133,6 @@ class MessagesRepositoryCore {
     _messages
       ..clear()
       ..addAll(visibleMessages);
-    _hiddenPersistedRecords
-      ..clear()
-      ..addAll(hidden);
     _visibleRecordKey = visibleRecordKey;
     _sortAndPrune();
   }
@@ -228,14 +231,12 @@ class MessagesRepositoryCore {
 
     // Rewrite only the visible message aggregate. Opaque encrypted residual
     // records in the same scope may be aux records or future archive formats;
-    // normal message operations must preserve them.
+    // normal message operations must leave them untouched. Never cache and
+    // replay opaque envelopes: another repository may have deleted a custody
+    // journal or imported a newer ratchet state since this view was loaded.
     if (_visibleRecordKey != null) {
       await _box.delete(_visibleRecordKey);
     }
-    for (final entry in _hiddenPersistedRecords.entries) {
-      await _box.put(entry.key, entry.value);
-    }
-
     final storageKey = _storageKey;
     if (_messages.isEmpty || storageKey == null) {
       _visibleRecordKey = null;
@@ -303,7 +304,6 @@ class MessagesRepositoryCore {
 
   Future<void> clearAll() => _serialized(() async {
         _messages.clear();
-        _hiddenPersistedRecords.clear();
         _visibleRecordKey = null;
         if (!_hasScope) {
           _controller.add(const []);

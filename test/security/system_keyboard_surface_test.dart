@@ -96,11 +96,113 @@ void main() {
     });
   });
 
+  group('Android autonomous owner boundary', () {
+    test('only the narrow owner creates a plugin-free headless engine', () {
+      final host = readCode(
+          'android/app/src/main/kotlin/app/layergram/KeyboardAutonomousHost.kt');
+      expect(host, contains('FlutterEngine(context!!, null, false)'));
+      expect(host, contains('"layergramKeyboardMain"'));
+      expect(host, contains('"layergram/keyboard_runtime"'));
+      expect(host, contains('args["editorNonce"] != currentNonce'));
+      expect(host, contains('authorizedUi?.invoke() == true'));
+      expect(host, contains('isKeyguardLocked'));
+      for (final forbidden in [
+        'GeneratedPluginRegistrant',
+        'java.net.',
+        'HttpURLConnection',
+        'Socket(',
+        'getDatabasePath',
+      ]) {
+        expect(host, isNot(contains(forbidden)));
+      }
+      final diagnostic = RegExp(
+        r'"diagnosticStage" -> \{[\s\S]*?result.success\(null\)\s*\}',
+      ).firstMatch(host);
+      expect(diagnostic, isNotNull);
+      expect(diagnostic!.group(0),
+          contains('KeyboardQaTrace.emitProtocol(context,'));
+      expect(diagnostic.group(0),
+          contains('allowed.contains(call.arguments as String)'));
+      expect(
+          diagnostic.group(0),
+          contains(
+              'KeyboardQaTrace.emitProtocol(context, call.arguments as String)'));
+      expect(host, isNot(contains('android.util.Log')));
+    });
+
+    test('QA diagnostics are profile-only and reject arbitrary values', () {
+      final bridge = readCode(
+          'android/app/src/main/kotlin/app/layergram/KeyboardQaTrace.kt');
+      final profile = readCode(
+          'android/app/src/profile/kotlin/app/layergram/KeyboardQaProfileTrace.kt');
+      expect(bridge, contains('context?.packageName != validationPackage'));
+      expect(bridge, contains('Class.forName(profileLogger)'));
+      expect(bridge, contains('stage in fixedStages'));
+      expect(bridge, contains('protocolStages'));
+      expect(bridge, contains('prepareStage.matches(stage)'));
+      expect(bridge, isNot(contains('android.util.Log')));
+      expect(profile, contains('android.util.Log'));
+      expect(profile, contains('LayergramKeyboardQA'));
+      expect(profile, contains('LayergramKeyboardProtocol'));
+
+      final productionLogs =
+          Directory('${root.path}/android/app/src/main/kotlin/app/layergram')
+              .listSync(recursive: true)
+              .whereType<File>()
+              .where((file) => file.path.endsWith('.kt'))
+              .where((file) =>
+                  readCode(file.path.substring(root.path.length + 1))
+                      .contains('android.util.Log'))
+              .map((file) => file.path.substring(root.path.length + 1))
+              .toList();
+      expect(productionLogs, isEmpty, reason: productionLogs.join('\n'));
+    });
+    test(
+        'custody is atomic, authenticated, excluded from backup and revision checked',
+        () {
+      final custody = readCode(
+          'android/app/src/main/kotlin/app/layergram/KeyboardCustodyStore.kt');
+      expect(custody, contains('context.noBackupFilesDir'));
+      expect(custody, contains('AtomicFile('));
+      expect(custody, contains('cipher.updateAAD(header)'));
+      expect(custody, contains('state.revision == revision'));
+      expect(
+          custody, contains('state.phase == KeyboardCustodyEnvelope.KEYBOARD'));
+      expect(custody, contains('check(!hasPending())'));
+      expect(custody, isNot(contains('SharedPreferences')));
+    });
+    test(
+        'biometric reopening requires a fresh CryptoObject with no PIN fallback',
+        () {
+      final host = readCode(
+          'android/app/src/main/kotlin/app/layergram/KeyboardAutonomousHost.kt');
+      final ticket = readCode(
+          'android/app/src/main/kotlin/app/layergram/KeyboardBiometricTicket.kt');
+      expect(host, contains('BiometricPrompt.CryptoObject(cipher)'));
+      expect(host, contains('BIOMETRIC_STRONG'));
+      expect(host, isNot(contains('DEVICE_CREDENTIAL')));
+      expect(ticket, contains('context.noBackupFilesDir'));
+      expect(ticket, contains('"AndroidKeyStore"'));
+      expect(ticket, contains('setUserAuthenticationRequired(true)'));
+      expect(ticket, contains('setInvalidatedByBiometricEnrollment(true)'));
+      expect(
+          ticket,
+          contains(
+              'setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG)'));
+      expect(ticket, contains('authenticatedCipher.doFinal(wrapped)'));
+      expect(ticket, contains('KeyboardBiometricPolicy.admits('));
+      expect(ticket, contains('plaintext.fill(0)'));
+    });
+  });
+
   group('native sources stay local, engine-free and plaintext-free', () {
     final nativeFiles = <String>[
       'android/app/src/main/kotlin/app/layergram/LayergramInputMethodService.kt',
       'android/app/src/main/kotlin/app/layergram/SystemKeyboardBroker.kt',
       'android/app/src/main/kotlin/app/layergram/KeyboardEditorLease.kt',
+      'android/app/src/main/kotlin/app/layergram/KeyboardComposerState.kt',
+      'android/app/src/main/kotlin/app/layergram/KeyboardDraftView.kt',
+      'android/app/src/main/kotlin/app/layergram/KeyboardGlyphDrawable.kt',
     ];
 
     test('no new engine, key material, database or network access', () {

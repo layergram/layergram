@@ -27,7 +27,7 @@ public final class MailboxClient {
     }
 
     /// True only when a well-formed rendezvous exists and has not expired.
-    public func hasLiveWindow() -> Bool {
+    public func hasLiveWindow(excluding previousSessionId: Data? = nil) -> Bool {
         var live = false
         do {
             try storage.withExclusiveLock { () throws -> Void in
@@ -35,7 +35,8 @@ public final class MailboxClient {
                 guard now.isSane else { return }
                 guard let data = try storage.readRendezvous() else { return }
                 guard let rendezvous = try? MailboxRendezvous.decode(data) else { return }
-                live = now.epochMillis <= rendezvous.deadlineEpochMillis
+                live = now.epochMillis <= rendezvous.deadlineEpochMillis &&
+                    rendezvous.sessionId != previousSessionId
             }
         } catch {
             return false
@@ -94,6 +95,14 @@ public final class MailboxClientSession {
         core.isExpired(at: clock ?? self.clock())
     }
 
+    /// A new request may replace a missed lease only inside the original
+    /// window. This never accepts the late response or renews the window.
+    /// Callers must not use this to replay application operations.
+    public var canReplaceExpiredRequest: Bool {
+        let now = clock()
+        return !core.isRevoked && !core.isExpired(at: now) && core.pendingTimedOut(at: now)
+    }
+
     /// Seal one request and publish it for the owner. Returns the new request id
     /// that the matching response must carry.
     ///
@@ -117,6 +126,23 @@ public final class MailboxClientSession {
         return requestId
     }
 
+    /// Initial bootstrap only: nil means the storage lock was not acquired and
+    /// no request was created or published. The caller may wait inside this
+    /// original window. All other failures remain terminal; application
+    /// operations must use `send` so they are never implicitly replayed.
+    @discardableResult
+    public func sendIfStorageReady(payload: Data) throws -> Data? {
+        do {
+            return try send(payload: payload)
+        } catch let error as MailboxError where error.reason == .locked {
+            guard !core.isRevoked else { throw MailboxError.unavailable(.revoked) }
+            guard !core.isExpired(at: clock()) else {
+                throw MailboxError.unavailable(.windowClosed)
+            }
+            return nil
+        }
+    }
+
     /// Read, authenticate and remove the response for the pending request.
     ///
     /// `.idle` means the owner has not answered yet and the lease is still
@@ -124,7 +150,8 @@ public final class MailboxClientSession {
     /// A mismatched, replayed or unauthenticated document is deleted and throws
     /// `malformed`.
     public func pollResponse() throws -> MailboxClientPoll {
-        try storage.withExclusiveLock { () throws -> MailboxClientPoll in
+        do {
+          return try storage.withExclusiveLock { () throws -> MailboxClientPoll in
             // A revoked session is closed for reading as well as writing.
             guard !core.isRevoked else { throw MailboxError.unavailable(.revoked) }
             // Read, authenticate and remove under the same exclusive lock: a
@@ -144,6 +171,16 @@ public final class MailboxClientSession {
                 try? storage.removeResponse()
                 throw error
             }
+          }
+        } catch let error as MailboxError where error.reason == .locked {
+            // A competing custody write may briefly own this same lock. No
+            // document was read or accepted: wait only inside the original
+            // pending lease/window, without renewing either deadline.
+            let now = clock()
+            guard !core.isRevoked else { throw MailboxError.unavailable(.revoked) }
+            if core.isExpired(at: now) { throw MailboxError.unavailable(.windowClosed) }
+            if core.pendingTimedOut(at: now) { throw MailboxError.unavailable(.responseTimeout) }
+            return .idle
         }
     }
 

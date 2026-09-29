@@ -29,11 +29,13 @@ library;
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:base32/base32.dart';
 import 'package:crypto/crypto.dart';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
+import 'package:layergram/core/crypto/fs_message_classification.dart';
 import 'package:layergram/core/crypto/fs_security_mode.dart';
 import 'package:layergram/core/crypto/models.dart';
 import 'package:layergram/core/crypto/seed_service.dart';
@@ -117,7 +119,7 @@ void main() {
   });
 
   test(
-    'real backend prepares, projects, decodes and replays one V3 message',
+    'real backend accepts the ordinary X25519 owner ID and exchanges a V3 message',
     () async {
       final _SessionFixture fixture = await _openSessionFixture(
         alice: alice,
@@ -132,10 +134,18 @@ void main() {
         bobContact: fixture.bobContact,
         scopeToken: aliceScope,
       );
+      // The app's ordinary identity ID is SHA-256(X25519 public key); the V3
+      // wire identity ID hashes the entire hybrid public bundle with SHA-384.
+      // This mismatch is real and must not block the app-owned V3 runtime.
+      final ordinaryIdentityId = base32
+          .encode(Uint8List.fromList(
+              sha256.convert(alice.publicIdentity.x25519PublicKey).bytes))
+          .replaceAll('=', '');
+      expect(ordinaryIdentityId, isNot(alice.publicIdentity.identityId));
       final _KeyboardHarness harness = _openKeyboardHarness(
         fixture: fixture,
         identities: identities,
-        ordinaryIdentityId: alice.publicIdentity.identityId,
+        ordinaryIdentityId: ordinaryIdentityId,
       );
       await harness.container.read(originalKeyTagProvider.future);
       try {
@@ -152,50 +162,11 @@ void main() {
         expect(contacts.single.name, 'Bob');
         expect(contacts.single.fingerprint, bobFingerprint);
 
-        // ── Missing policy: refuse, never ship a handshake instead ─────────
-        expect(
-          await harness.backend.prepareTextOutbound(
-            _outboundRequest(
-              contactId: bobId,
-              contactFingerprint: bobFingerprint,
-              text: plaintext,
-            ),
-          ),
-          isNull,
-        );
-        expect(
-          await fixture.aliceRuntime.pendingHandshakeForRemoteIdentity(
-            remoteIdentity: bob.publicIdentity,
-            mode: V3HandshakeMode.normal,
-          ),
-          isNull,
-        );
-
-        // ── Policy present but the session is not established: same refusal ─
-        await fixture.aliceBridge.ensureContactPolicy(
-          fixture.bobContact,
-          V3HandshakeMode.normal,
-        );
-        expect(
-          await harness.backend.prepareTextOutbound(
-            _outboundRequest(
-              contactId: bobId,
-              contactFingerprint: bobFingerprint,
-              text: plaintext,
-            ),
-          ),
-          isNull,
-        );
-        expect(
-          await fixture.aliceRuntime.pendingHandshakeForRemoteIdentity(
-            remoteIdentity: bob.publicIdentity,
-            mode: V3HandshakeMode.normal,
-          ),
-          isNull,
-        );
-
         await _establishNormalSession(fixture);
-        expect(await fixture.aliceMessages.getAllMessages(), isEmpty);
+        final int aliceBaseline =
+            (await fixture.aliceMessages.getAllMessages()).length;
+        final int bobBaseline =
+            (await fixture.bobMessages.getAllMessages()).length;
 
         final V3ApplicationHandshakeExport? handshakeBefore =
             await fixture.aliceRuntime.pendingHandshakeForRemoteIdentity(
@@ -213,7 +184,10 @@ void main() {
           ),
           isNull,
         );
-        expect(await fixture.aliceMessages.getAllMessages(), isEmpty);
+        expect(
+          await fixture.aliceMessages.getAllMessages(),
+          hasLength(aliceBaseline),
+        );
         final V3ApplicationHandshakeExport? handshakeAfter =
             await fixture.aliceRuntime.pendingHandshakeForRemoteIdentity(
           remoteIdentity: bob.publicIdentity,
@@ -249,8 +223,17 @@ void main() {
         // ── Projection into Alice history happens exactly once ─────────────
         final List<MessageRecord> outgoingHistory =
             await fixture.aliceMessages.getAllMessages();
-        expect(outgoingHistory, hasLength(1));
-        final MessageRecord outgoing = outgoingHistory.single;
+        expect(outgoingHistory, hasLength(aliceBaseline + 1));
+        MessageRecord? projectedOutgoing;
+        for (final record in outgoingHistory) {
+          if (record.direction == 'outgoing' &&
+              await fixture.aliceBridge.loadPlaintext(record.id) == plaintext) {
+            projectedOutgoing = record;
+            break;
+          }
+        }
+        expect(projectedOutgoing, isNotNull);
+        final outgoing = projectedOutgoing!;
         expect(outgoing.direction, 'outgoing');
         expect(outgoing.senderId, alice.publicIdentity.identityId);
         expect(outgoing.recipientId, bobId);
@@ -260,7 +243,10 @@ void main() {
         expect(await fixture.aliceBridge.loadPlaintext(outgoing.id), plaintext);
 
         await harness.backend.markExported(export.exportHandle);
-        expect(await fixture.aliceMessages.getAllMessages(), hasLength(1));
+        expect(
+          await fixture.aliceMessages.getAllMessages(),
+          hasLength(aliceBaseline + 1),
+        );
 
         // ── Bob receives the exported carrier and reads the original text ──
         V3ChatInboundResult? delivered;
@@ -276,11 +262,20 @@ void main() {
         expect(delivered?.payload?.text, plaintext);
         final List<MessageRecord> bobHistory =
             await fixture.bobMessages.getAllMessages();
-        expect(bobHistory, hasLength(1));
-        expect(bobHistory.single.direction, 'incoming');
-        expect(bobHistory.single.text, isNull);
+        expect(bobHistory, hasLength(bobBaseline + 1));
+        MessageRecord? deliveredRecord;
+        for (final record in bobHistory) {
+          if (record.direction == 'incoming' &&
+              await fixture.bobBridge.loadPlaintext(record.id) == plaintext) {
+            deliveredRecord = record;
+            break;
+          }
+        }
+        expect(deliveredRecord, isNotNull);
+        final bobIncoming = deliveredRecord!;
+        expect(bobIncoming.text, isNull);
         expect(
-          await fixture.bobBridge.loadPlaintext(bobHistory.single.id),
+          await fixture.bobBridge.loadPlaintext(bobIncoming.id),
           plaintext,
         );
 
@@ -310,17 +305,31 @@ void main() {
 
         final List<MessageRecord> afterReply =
             await fixture.aliceMessages.getAllMessages();
-        expect(afterReply, hasLength(2));
-        final MessageRecord incoming = afterReply.singleWhere(
-            (MessageRecord record) => record.direction == 'incoming');
-        expect(incoming.senderId, bobId);
-        expect(incoming.recipientId, alice.publicIdentity.identityId);
-        expect(incoming.text, isNull);
-        expect(await fixture.aliceBridge.loadPlaintext(incoming.id), replyText);
+        expect(afterReply, hasLength(aliceBaseline + 2));
+        MessageRecord? incoming;
+        for (final record in afterReply) {
+          if (record.direction == 'incoming' &&
+              await fixture.aliceBridge.loadPlaintext(record.id) == replyText) {
+            incoming = record;
+            break;
+          }
+        }
+        expect(incoming, isNotNull);
+        final replyRecord = incoming!;
+        expect(replyRecord.senderId, bobId);
+        expect(replyRecord.recipientId, alice.publicIdentity.identityId);
+        expect(replyRecord.text, isNull);
+        expect(
+          await fixture.aliceBridge.loadPlaintext(replyRecord.id),
+          replyText,
+        );
 
         // ── Replay produces no duplicate preview and no duplicate history ──
         expect(await harness.backend.decodeCarrier(reply.parts.single), isNull);
-        expect(await fixture.aliceMessages.getAllMessages(), hasLength(2));
+        expect(
+          await fixture.aliceMessages.getAllMessages(),
+          hasLength(aliceBaseline + 2),
+        );
 
         // ── Guard denial happens before any provider access ────────────────
         await _expectGuardDenialReadsNoProvider(
@@ -343,6 +352,133 @@ void main() {
       }
     },
   );
+
+  test(
+    'fresh eligible Normal contact sends one readable pre-session carrier',
+    () async {
+      final _SessionFixture fixture = await _openSessionFixture(
+        alice: alice,
+        bob: bob,
+        aliceScope: aliceScope,
+        bobScope: bobScope,
+        aliceStorageKeyStart: 0xb1,
+        bobStorageKeyStart: 0xd1,
+      );
+      final IdentitiesRepository identities = await _openAliceIdentities(
+        alice: alice,
+        bobContact: fixture.bobContact,
+        scopeToken: aliceScope,
+      );
+      final _KeyboardHarness harness = _openKeyboardHarness(
+        fixture: fixture,
+        identities: identities,
+        ordinaryIdentityId: alice.publicIdentity.identityId,
+      );
+      await harness.container.read(originalKeyTagProvider.future);
+      try {
+        const String plaintext = 'primo messaggio Normal autenticato';
+        final SystemKeyboardBackendExport? prepared =
+            await harness.backend.prepareTextOutbound(
+          _outboundRequest(
+            contactId: fixture.bobContact.identityId,
+            contactFingerprint: fixture.bobContact.fingerprint,
+            text: plaintext,
+          ),
+        );
+
+        expect(prepared, isNotNull);
+        expect(prepared!.carriers, hasLength(1));
+        expect(prepared.carriers.single.length,
+            lessThanOrEqualTo(systemKeyboardSurfaceOutboundCarrierMaxLength));
+        final List<MessageRecord> aliceHistory =
+            await fixture.aliceMessages.getAllMessages();
+        expect(aliceHistory, hasLength(1));
+        expect(aliceHistory.single.text, plaintext);
+        expect(
+          aliceHistory.single.effectiveClassification,
+          FsMessageClassification.preFs,
+        );
+
+        final V3ChatInboundResult delivered =
+            await fixture.bobBridge.receiveCarrier(
+          carrier: prepared.carriers.single,
+          contacts: <RemoteIdentity>[fixture.aliceContact],
+          modeForContact: fixture.bobBridge.modeForContact,
+          eligibilityForContact: fixture.bobBridge.eligibilityForContact,
+          ensureEligibilityForContact: fixture.bobBridge.ensureContactPolicy,
+          responseCarrierMode: V3ChatCarrierMode.text,
+        );
+        expect(delivered.hasUserMessage, isTrue);
+        expect(delivered.payload?.text, plaintext);
+        final List<MessageRecord> bobHistory =
+            await fixture.bobMessages.getAllMessages();
+        expect(bobHistory, hasLength(1));
+        expect(
+          bobHistory.single.effectiveClassification,
+          FsMessageClassification.preFs,
+        );
+        await harness.backend.markExported(prepared.exportHandle);
+      } finally {
+        harness.container.dispose();
+        identities.dispose();
+        fixture.aliceMessages.dispose();
+        fixture.bobMessages.dispose();
+        await fixture.aliceRuntime.close();
+        await fixture.bobRuntime.close();
+      }
+    },
+  );
+
+  test('Maximum setup remains blocked in the system keyboard', () async {
+    final _SessionFixture fixture = await _openSessionFixture(
+      alice: alice,
+      bob: bob,
+      aliceScope: aliceScope,
+      bobScope: bobScope,
+      aliceStorageKeyStart: 0xb2,
+      bobStorageKeyStart: 0xd2,
+    );
+    final IdentitiesRepository identities = await _openAliceIdentities(
+      alice: alice,
+      bobContact: fixture.bobContact,
+      scopeToken: aliceScope,
+    );
+    final _KeyboardHarness harness = _openKeyboardHarness(
+      fixture: fixture,
+      identities: identities,
+      ordinaryIdentityId: alice.publicIdentity.identityId,
+    );
+    await harness.container.read(originalKeyTagProvider.future);
+    try {
+      await fixture.aliceBridge.ensureContactPolicy(
+        fixture.bobContact,
+        V3HandshakeMode.maximum,
+      );
+      expect(
+        await harness.backend.securityPhaseForContact(
+            fixture.bobContact.identityId, fixture.bobContact.fingerprint),
+        'maximumSetupRequired',
+      );
+      expect(
+        await harness.backend.prepareTextOutbound(
+          _outboundRequest(
+            contactId: fixture.bobContact.identityId,
+            contactFingerprint: fixture.bobContact.fingerprint,
+            text: 'non deve uscire dalla tastiera',
+          ),
+        ),
+        isNull,
+      );
+      expect(await fixture.aliceMessages.getAllMessages(), isEmpty);
+    } finally {
+      harness.container.dispose();
+      identities.dispose();
+      fixture.aliceMessages.dispose();
+      fixture.bobMessages.dispose();
+      await fixture.aliceRuntime.close();
+      await fixture.bobRuntime.close();
+    }
+  });
 
   test(
     'a revoked owner context cannot mark a pinned export into another scope',
@@ -369,6 +505,8 @@ void main() {
       MessagesRepository? otherScope;
       try {
         await _establishNormalSession(fixture);
+        final int baseline =
+            (await fixture.aliceMessages.getAllMessages()).length;
         final SystemKeyboardBackendExport? export =
             await harness.backend.prepareTextOutbound(
           _outboundRequest(
@@ -378,7 +516,10 @@ void main() {
           ),
         );
         expect(export, isNotNull);
-        expect(await fixture.aliceMessages.getAllMessages(), hasLength(1));
+        expect(
+          await fixture.aliceMessages.getAllMessages(),
+          hasLength(baseline + 1),
+        );
 
         // The owner context is revoked before the acknowledgement: the pinned
         // handle must fail closed instead of exporting into whatever scope is
@@ -388,7 +529,10 @@ void main() {
           harness.backend.markExported(export!.exportHandle),
           throwsStateError,
         );
-        expect(await fixture.aliceMessages.getAllMessages(), hasLength(1));
+        expect(
+          await fixture.aliceMessages.getAllMessages(),
+          hasLength(baseline + 1),
+        );
 
         // A different scope keeps its own empty history: nothing leaked.
         otherScope = MessagesRepository();
@@ -572,57 +716,58 @@ Future<void> _establishNormalSession(_SessionFixture fixture) async {
     V3HandshakeMode.normal,
   );
 
-  final V3ChatOutboundExport offer = await fixture.aliceBridge.prepareOutbound(
+  V3ChatOutboundExport outbound = await fixture.aliceBridge.prepareOutbound(
     contact: fixture.bobContact,
     mode: V3HandshakeMode.normal,
     carrierMode: V3ChatCarrierMode.text,
-    text: 'v3 setup',
+    text: '',
     eligibilityPolicy: alicePolicy,
   );
-  expect(offer.purpose, V3ChatOutboundPurpose.handshake);
-
-  V3ChatInboundResult? receivedOffer;
-  for (final String part in offer.parts.reversed) {
-    receivedOffer = await fixture.bobBridge.receiveCarrier(
-      carrier: part,
-      contacts: <RemoteIdentity>[fixture.aliceContact],
-      modeForContact: fixture.bobBridge.modeForContact,
-      eligibilityForContact: fixture.bobBridge.eligibilityForContact,
-      ensureEligibilityForContact: fixture.bobBridge.ensureContactPolicy,
+  var aliceIsSender = true;
+  for (var step = 0; step < 16; step++) {
+    final receiver = aliceIsSender ? fixture.bobBridge : fixture.aliceBridge;
+    final senderContact =
+        aliceIsSender ? fixture.aliceContact : fixture.bobContact;
+    final received = await receiver.receiveCarrier(
+      carrier: outbound.bundledText,
+      contacts: <RemoteIdentity>[senderContact],
+      modeForContact: receiver.modeForContact,
+      eligibilityForContact: receiver.eligibilityForContact,
+      ensureEligibilityForContact: receiver.ensureContactPolicy,
       responseCarrierMode: V3ChatCarrierMode.text,
     );
+
+    final aliceStatus = await fixture.aliceBridge.securityStatus(
+      contact: fixture.bobContact,
+      selectedMode: V3HandshakeMode.normal,
+    );
+    final bobStatus = await fixture.bobBridge.securityStatus(
+      contact: fixture.aliceContact,
+      selectedMode: V3HandshakeMode.normal,
+    );
+    if (aliceStatus.isActive && bobStatus.isActive) {
+      expect(aliceStatus.activeSessionCount, 1);
+      expect(bobStatus.activeSessionCount, 1);
+      return;
+    }
+
+    aliceIsSender = !aliceIsSender;
+    final response = received.response;
+    if (response != null) {
+      outbound = response;
+      continue;
+    }
+    final sender = aliceIsSender ? fixture.aliceBridge : fixture.bobBridge;
+    final recipient = aliceIsSender ? fixture.bobContact : fixture.aliceContact;
+    outbound = await sender.prepareOutbound(
+      contact: recipient,
+      mode: V3HandshakeMode.normal,
+      carrierMode: V3ChatCarrierMode.text,
+      text: 'normal setup step $step',
+      eligibilityPolicy: sender.eligibilityForContact(recipient),
+    );
   }
-  expect(receivedOffer?.status, V3ChatInboundStatus.handshakeResponse);
-
-  final V3ChatInboundResult receivedReply =
-      await fixture.aliceBridge.receiveCarrier(
-    carrier: receivedOffer!.response!.bundledText,
-    contacts: <RemoteIdentity>[fixture.bobContact],
-    modeForContact: fixture.aliceBridge.modeForContact,
-    eligibilityForContact: fixture.aliceBridge.eligibilityForContact,
-    ensureEligibilityForContact: fixture.aliceBridge.ensureContactPolicy,
-    responseCarrierMode: V3ChatCarrierMode.text,
-  );
-  expect(receivedReply.status, V3ChatInboundStatus.handshakeResponse);
-
-  final V3ChatInboundResult established =
-      await fixture.bobBridge.receiveCarrier(
-    carrier: receivedReply.response!.bundledText,
-    contacts: <RemoteIdentity>[fixture.aliceContact],
-    modeForContact: fixture.bobBridge.modeForContact,
-    eligibilityForContact: fixture.bobBridge.eligibilityForContact,
-    ensureEligibilityForContact: fixture.bobBridge.ensureContactPolicy,
-    responseCarrierMode: V3ChatCarrierMode.text,
-  );
-  expect(established.status, V3ChatInboundStatus.sessionEstablished);
-
-  final V3ChatContactSecurityStatus aliceStatus =
-      await fixture.aliceBridge.securityStatus(
-    contact: fixture.bobContact,
-    selectedMode: V3HandshakeMode.normal,
-  );
-  expect(aliceStatus.phase, V3ChatContactSecurityPhase.normalActive);
-  expect(aliceStatus.activeSessionCount, 1);
+  fail('Normal V3 session did not become active within the bounded exchange');
 }
 
 SystemKeyboardOutboundRequest _outboundRequest({

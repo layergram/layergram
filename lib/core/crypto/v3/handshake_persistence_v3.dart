@@ -1063,6 +1063,50 @@ final class V3HandshakePersistenceController {
     });
   }
 
+  /// Returns every retryable setup record for one installation and identity.
+  /// Normal mode can have several simultaneous responders for distinct peer
+  /// devices; selecting only the newest would strand the older negotiation.
+  Future<List<V3DurableHandshakeOutbound>> pendingOutboundForPeer({
+    required V3LocalIdentityHandle localIdentity,
+    required V3LocalDeviceHandle localDevice,
+    required V3PublicIdentity remoteIdentity,
+    required V3HandshakeMode mode,
+    Set<String> excludedHandshakeIds = const <String>{},
+  }) {
+    return _serialized(() async {
+      _ensureReady();
+      if (localIdentity.isClosed || localDevice.isClosed) {
+        throw StateError('Layergram v3 identity/device handle is closed');
+      }
+      final localDigest = _identityDigest(localIdentity.publicIdentity);
+      final remoteDigest = _identityDigest(remoteIdentity);
+      final localDeviceId = localDevice.deviceId;
+      try {
+        final matches = _repository
+            .pending(authority: _authority)
+            .where((pending) =>
+                pending.localIdentityDigest == localDigest.armored &&
+                pending.remoteIdentityDigest == remoteDigest.armored &&
+                pending.localDeviceId == _id(localDeviceId) &&
+                pending.mode == mode &&
+                !excludedHandshakeIds.contains(pending.handshakeId))
+            .toList(growable: false)
+          ..sort((left, right) {
+            final byCreated = left.createdAt.compareTo(right.createdAt);
+            if (byCreated != 0) return byCreated;
+            return left.handshakeId.compareTo(right.handshakeId);
+          });
+        return List<V3DurableHandshakeOutbound>.unmodifiable(
+          matches.map((pending) => _outbound(pending, restored: true)),
+        );
+      } finally {
+        _wipe(localDigest.bytes);
+        _wipe(remoteDigest.bytes);
+        _wipe(localDeviceId);
+      }
+    });
+  }
+
   /// Returns the newest exact pending export for one local device/peer/mode.
   ///
   /// This lets a manual carrier retry a lost setup message without creating a

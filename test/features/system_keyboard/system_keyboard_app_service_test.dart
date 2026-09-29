@@ -21,6 +21,8 @@ import 'package:layergram/core/providers.dart';
 import 'package:layergram/features/system_keyboard/system_keyboard_app_backend.dart';
 import 'package:layergram/features/system_keyboard/system_keyboard_app_service.dart';
 import 'package:layergram/features/system_keyboard/system_keyboard_controller.dart';
+import 'package:layergram/features/system_keyboard/system_keyboard_custody.dart';
+import 'package:layergram/features/system_keyboard/system_keyboard_custody_coordinator.dart';
 
 const SystemKeyboardContact _alice = SystemKeyboardContact(
   id: 'c-alice',
@@ -136,6 +138,12 @@ class _FakeOptInStore implements SystemKeyboardOptInStore {
   }
 }
 
+class _UnusedCustodyNative implements SystemKeyboardCustodyNative {
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw StateError('No native custody operation expected in this test');
+}
+
 class _RecordingBackend
     implements SystemKeyboardBackend, SystemKeyboardSessionScopedBackend {
   int listCalls = 0;
@@ -230,6 +238,14 @@ _Harness _buildHarness({
   bool featureFlagEnabled = true,
   bool configureResult = true,
   Duration? maximumBackgroundDuration,
+  Future<int?> Function()? readIdlePreference,
+  Future<void> Function(int)? writeIdlePreference,
+  Future<bool?> Function()? readScramblePreference,
+  Future<void> Function(bool)? writeScramblePreference,
+  Future<bool> Function()? readSaveHistoryPreference,
+  Future<void> Function(bool)? writeSaveHistoryPreference,
+  Future<bool> Function()? readBiometricResumePreference,
+  Future<void> Function(bool)? writeBiometricResumePreference,
 }) {
   final _TestClock clock = _TestClock();
   final _OwnerState owner = _OwnerState();
@@ -250,6 +266,14 @@ _Harness _buildHarness({
     monotonicNow: clock.call,
     observeLifecycle: false,
     maximumBackgroundDuration: maximumBackgroundDuration,
+    readIdlePreference: readIdlePreference,
+    writeIdlePreference: writeIdlePreference,
+    readScramblePreference: readScramblePreference,
+    writeScramblePreference: writeScramblePreference,
+    readSaveHistoryPreference: readSaveHistoryPreference,
+    writeSaveHistoryPreference: writeSaveHistoryPreference,
+    readBiometricResumePreference: readBiometricResumePreference,
+    writeBiometricResumePreference: writeBiometricResumePreference,
   );
   service.attachBackend(backend);
   return _Harness(
@@ -279,6 +303,165 @@ void _expectNoData(Map<String, Object?> reply) {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+      'foreground warming requires ordinary unlocked consent and never delegates',
+      () async {
+    final h =
+        _buildHarness(maximumBackgroundDuration: const Duration(seconds: 20));
+    var warms = 0;
+    var preparations = 0;
+    h.service.attachAutonomousCustody(
+      SystemKeyboardCustodyCoordinator(native: _UnusedCustodyNative()),
+      (_, __, ___) async {
+        preparations++;
+      },
+      () {},
+      warm: () {
+        warms++;
+      },
+    );
+    h.owner.needsUnlock = true;
+    await h.service.start();
+    expect(warms, 0);
+    h.owner.needsUnlock = false;
+    h.service.onAppNeedsUnlockChanged(false);
+    expect(warms, 1);
+    h.service.onAppLifecycleChanged(AppLifecycleState.inactive);
+    expect(warms, 1);
+    h.service.onAppLifecycleChanged(AppLifecycleState.resumed);
+    expect(warms, 2);
+    h.owner.passphraseActive = true;
+    h.service.onOwnerStateChanged();
+    expect(warms, 2);
+    h.owner.passphraseActive = false;
+    h.owner.ordinaryKeyTagReady = false;
+    h.service.onOwnerStateChanged();
+    expect(warms, 2);
+    h.owner.ordinaryKeyTagReady = true;
+    h.service.noteAppLockRequested();
+    expect(warms, 2);
+    h.service.onAppNeedsUnlockChanged(false);
+    expect(warms, 3);
+    await h.service.setEnabled(false);
+    h.service.onAppLifecycleChanged(AppLifecycleState.resumed);
+    expect(warms, 3);
+    expect(preparations, 0);
+    h.service.dispose();
+  });
+
+  test('departure alone never delegates, and request starts preparation once',
+      () async {
+    final h = _buildHarness(
+      maximumBackgroundDuration: const Duration(seconds: 30),
+    );
+    await h.service.start();
+    final preparation = Completer<void>();
+    var attempts = 0;
+    h.service.attachAutonomousCustody(
+      SystemKeyboardCustodyCoordinator(native: _UnusedCustodyNative()),
+      (_, __, ___) {
+        attempts++;
+        return preparation.future;
+      },
+      () {},
+    );
+
+    h.service.onAppLifecycleChanged(AppLifecycleState.inactive);
+    h.service.onAppLifecycleChanged(AppLifecycleState.paused);
+    expect(attempts, 0);
+    expect(
+        _status(await h.request('delegate')), SystemKeyboardChannelStatus.busy);
+    expect(attempts, 1);
+    expect(
+        _status(await h.request('delegate')), SystemKeyboardChannelStatus.busy);
+    expect(attempts, 1);
+
+    preparation.complete();
+    await _tick();
+    expect(_status(await h.request('delegate')),
+        SystemKeyboardChannelStatus.unavailable);
+  });
+
+  test('fresh foreground visit permits a new autonomous preparation', () async {
+    final h = _buildHarness(
+      maximumBackgroundDuration: const Duration(seconds: 30),
+    );
+    await h.service.start();
+    final first = Completer<void>();
+    final second = Completer<void>();
+    var attempts = 0;
+    h.service.attachAutonomousCustody(
+      SystemKeyboardCustodyCoordinator(native: _UnusedCustodyNative()),
+      (_, __, ___) {
+        attempts++;
+        return attempts == 1 ? first.future : second.future;
+      },
+      () {},
+    );
+
+    h.service.onAppLifecycleChanged(AppLifecycleState.inactive);
+    expect(attempts, 0);
+    expect(
+        _status(await h.request('delegate')), SystemKeyboardChannelStatus.busy);
+    expect(attempts, 1);
+    first.complete();
+    await _tick();
+    expect(_status(await h.request('delegate')),
+        SystemKeyboardChannelStatus.unavailable);
+
+    h.service.onAppLifecycleChanged(AppLifecycleState.resumed);
+    h.service.onAppLifecycleChanged(AppLifecycleState.inactive);
+    expect(attempts, 1);
+    expect(
+        _status(await h.request('delegate')), SystemKeyboardChannelStatus.busy);
+    expect(attempts, 2);
+    second.complete();
+    await _tick();
+  });
+
+  test('foreground delegate request cannot trigger a custody transfer',
+      () async {
+    final h = _buildHarness();
+    await h.service.start();
+    var attempts = 0;
+    h.service.attachAutonomousCustody(
+      SystemKeyboardCustodyCoordinator(native: _UnusedCustodyNative()),
+      (_, __, ___) async {
+        attempts++;
+      },
+      () {},
+    );
+    expect(_status(await h.request('delegate')),
+        SystemKeyboardChannelStatus.unavailable);
+    expect(attempts, 0);
+  });
+
+  test('an update-like departure and return leaves V3 custody private',
+      () async {
+    final h = _buildHarness(
+      maximumBackgroundDuration: const Duration(seconds: 30),
+    );
+    await h.service.start();
+    var attempts = 0;
+    h.service.attachAutonomousCustody(
+      SystemKeyboardCustodyCoordinator(native: _UnusedCustodyNative()),
+      (_, __, ___) async {
+        attempts++;
+      },
+      () {},
+    );
+    h.service.onAppLifecycleChanged(AppLifecycleState.inactive);
+    h.service.onAppLifecycleChanged(AppLifecycleState.paused);
+    h.service.onAppLifecycleChanged(AppLifecycleState.resumed);
+    expect(attempts, 0);
+    h.service.onAppLifecycleChanged(AppLifecycleState.inactive);
+    expect(attempts, 0);
+    expect(
+        _status(await h.request('delegate')), SystemKeyboardChannelStatus.busy);
+    expect(attempts, 1);
+    await _tick();
+  });
 
   group('admission gate', () {
     test('feature disabled configures native off and never reads the backend',
@@ -469,6 +652,7 @@ void main() {
       final Map<String, Object?> begin = await h.request('begin');
       expect(_status(begin), SystemKeyboardChannelStatus.ok);
       expect(_data(begin)['scramble'], isFalse);
+      expect(_data(begin)['idleMillis'], 60000);
       expect(begin['processingMillis'], isA<int>());
       expect(
         begin['processingMillis']! as int,
@@ -1138,6 +1322,143 @@ void main() {
       barrier.complete();
       expect(await enabling, isFalse);
       expect(h.channel.configureRequests.last, isFalse);
+    });
+  });
+
+  group('autonomous inactivity settings', () {
+    test(
+        'loads preference and applies the app lock ceiling without changing it',
+        () async {
+      final h = _buildHarness(readIdlePreference: () async => 120);
+      addTearDown(h.service.dispose);
+      await h.service.start();
+      expect(h.service.idlePreferenceSeconds, 120);
+      expect(h.service.effectiveIdleSeconds, 120);
+      h.service.seedAppLockConfig(enabled: true, timeoutSeconds: 30);
+      expect(h.service.effectiveIdleSeconds, 30);
+      h.service.onAppLockConfigChanged(enabled: true, timeoutSeconds: 0);
+      expect(h.service.effectiveIdleSeconds, isNull);
+      expect(h.service.idlePreferenceSeconds, 120);
+    });
+
+    test('concurrent writes cannot leave an older duration persisted last',
+        () async {
+      final barrier = Completer<void>();
+      final writes = <int>[];
+      final h = _buildHarness(writeIdlePreference: (seconds) async {
+        if (seconds == 30) await barrier.future;
+        writes.add(seconds);
+      });
+      addTearDown(h.service.dispose);
+      await h.service.start();
+      final first = h.service.setIdlePreferenceSeconds(30);
+      await _tick();
+      final second = h.service.setIdlePreferenceSeconds(60);
+      await _tick();
+      expect(writes, isEmpty);
+      barrier.complete();
+      expect(await first, isTrue);
+      expect(await second, isTrue);
+      expect(writes, [30, 60]);
+      expect(h.service.idlePreferenceSeconds, 60);
+      expect(await h.service.setIdlePreferenceSeconds(0), isFalse);
+      expect(writes, [30, 60]);
+    });
+
+    test('a failed duration write revokes but does not claim the change',
+        () async {
+      final h = _buildHarness(
+          writeIdlePreference: (_) async => throw StateError('write failed'));
+      addTearDown(h.service.dispose);
+      await h.service.start();
+      expect(_status(await h.request('begin')), SystemKeyboardChannelStatus.ok);
+      expect(await h.service.setIdlePreferenceSeconds(60), isFalse);
+      expect(h.service.idlePreferenceSeconds, 60);
+      _expectNoData(await h.request('contacts'));
+    });
+  });
+
+  group('open-source system keyboard scramble setting', () {
+    test('loads an independent preference and includes it in begin', () async {
+      final h = _buildHarness(readScramblePreference: () async => true);
+      addTearDown(h.service.dispose);
+      await h.service.start();
+      expect(h.service.scramblePreference, isTrue);
+      expect(_data(await h.request('begin'))['scramble'], isTrue);
+    });
+
+    test('persists a change and revokes the previous editor', () async {
+      final writes = <bool>[];
+      final h = _buildHarness(writeScramblePreference: (value) async {
+        writes.add(value);
+      });
+      addTearDown(h.service.dispose);
+      await h.service.start();
+      expect(_status(await h.request('begin')), SystemKeyboardChannelStatus.ok);
+      expect(await h.service.setScramblePreference(true), isTrue);
+      expect(writes, [true]);
+      expect(h.service.scramblePreference, isTrue);
+      _expectNoData(await h.request('contacts'));
+    });
+  });
+
+  group('keyboard chat history preference', () {
+    test('defaults on and persists an opt-out before the next grant', () async {
+      final writes = <bool>[];
+      final h = _buildHarness(writeSaveHistoryPreference: (value) async {
+        writes.add(value);
+      });
+      addTearDown(h.service.dispose);
+      await h.service.start();
+      expect(h.service.saveHistoryPreference, isTrue);
+      expect(await h.service.setSaveHistoryPreference(false), isTrue);
+      expect(writes, [false]);
+      expect(h.service.saveHistoryPreference, isFalse);
+    });
+
+    test('restores opt-out and fails closed on preference read error',
+        () async {
+      final optedOut =
+          _buildHarness(readSaveHistoryPreference: () async => false);
+      addTearDown(optedOut.service.dispose);
+      await optedOut.service.start();
+      expect(optedOut.service.saveHistoryPreference, isFalse);
+
+      final failed = _buildHarness(
+          readSaveHistoryPreference: () async => throw StateError('read'));
+      addTearDown(failed.service.dispose);
+      await failed.service.start();
+      expect(failed.service.saveHistoryPreference, isFalse);
+    });
+  });
+
+  group('keyboard biometric resume preference', () {
+    test('is off by default and revokes an existing editor before enabling',
+        () async {
+      final writes = <bool>[];
+      final h = _buildHarness(writeBiometricResumePreference: (value) async {
+        writes.add(value);
+      });
+      addTearDown(h.service.dispose);
+      await h.service.start();
+      expect(h.service.biometricResumePreference, isFalse);
+      expect(_status(await h.request('begin')), SystemKeyboardChannelStatus.ok);
+      expect(await h.service.setBiometricResumePreference(true), isTrue);
+      expect(writes, [true]);
+      expect(h.service.biometricResumePreference, isTrue);
+      _expectNoData(await h.request('contacts'));
+    });
+
+    test('failed preference read or write never enables it', () async {
+      final h = _buildHarness(
+        readBiometricResumePreference: () async => throw StateError('read'),
+        writeBiometricResumePreference: (_) async => throw StateError('write'),
+      );
+      addTearDown(h.service.dispose);
+      await h.service.start();
+      expect(h.service.biometricResumePreference, isFalse);
+      expect(await h.service.setBiometricResumePreference(true), isFalse);
+      expect(h.service.biometricResumePreference, isFalse);
     });
   });
 

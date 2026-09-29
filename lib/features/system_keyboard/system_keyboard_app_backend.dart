@@ -31,9 +31,11 @@
 /// * Only V3 contacts (`protocolVersion == 3` with a public identity token) are
 ///   surfaced, using their saved display name and fingerprint. The recipient is
 ///   never inferred from the host application.
-/// * `prepare` requires an already active security setup: a missing policy or an
-///   unestablished session returns "unsupported" instead of silently shipping a
-///   handshake packet in place of the user's text. Nothing here changes the FS
+/// * `prepare` creates the app-owned default Normal policy only for a fresh,
+///   saved and fingerprint-matched contact. An active session can send an
+///   application message; a fresh Normal setup can send an authenticated
+///   identity-only pre-session message that also advances setup. Maximum and
+///   recovery states remain fail-closed. Nothing here changes an existing FS
 ///   mode or pins a device as a side effect of a send.
 /// * The durable export stays app-owned. The opaque handle retained here is
 ///   dropped on revoke, but the durable pending recovery state is never
@@ -120,7 +122,10 @@ class SystemKeyboardDisabledBackend
 
 /// Real backend bound to the existing app owner providers.
 class SystemKeyboardAppBackend
-    implements SystemKeyboardBackend, SystemKeyboardSessionScopedBackend {
+    implements
+        SystemKeyboardBackend,
+        SystemKeyboardSessionScopedBackend,
+        SystemKeyboardContactSecurityProvider {
   /// Creates the backend. [ref] is the owning provider container reference and
   /// [guard] is the live app-owner snapshot.
   SystemKeyboardAppBackend({
@@ -146,7 +151,7 @@ class SystemKeyboardAppBackend
     if (!_beginCall()) return const <SystemKeyboardContact>[];
     final List<RemoteIdentity> saved;
     try {
-      saved = await _ref.read(identitiesRepositoryProvider).watchRemote().first;
+      saved = await _savedContacts();
     } catch (_) {
       return const <SystemKeyboardContact>[];
     }
@@ -162,6 +167,41 @@ class SystemKeyboardAppBackend
       if (mapped != null) surface.add(mapped);
     }
     return List<SystemKeyboardContact>.unmodifiable(surface);
+  }
+
+  @override
+  Future<String?> securityPhaseForContact(
+      String contactId, String fingerprint) async {
+    if (!_beginCall()) return null;
+    final contact = await _savedContact(contactId);
+    if (!_stillValid() ||
+        contact == null ||
+        !_isSurfaceV3Contact(contact) ||
+        contact.fingerprint != fingerprint) {
+      return null;
+    }
+    final keyTag = _ordinaryKeyTag();
+    if (keyTag == null) return null;
+    final bridge = await _openBridge(keyTag);
+    if (bridge == null || !_stillValid()) return null;
+    final mode = bridge.modeForContact(contact);
+    final status = await bridge.securityStatus(
+      contact: contact,
+      selectedMode: mode,
+      eligibilityPolicy: bridge.eligibilityForContact(contact),
+      requireEligibilityPolicy: true,
+    );
+    if (!_stillValid()) return null;
+    if (mode == V3HandshakeMode.maximum) {
+      return switch (status.phase) {
+        V3ChatContactSecurityPhase.setupRequired => 'maximumSetupRequired',
+        V3ChatContactSecurityPhase.setupPending => 'maximumSetupPending',
+        V3ChatContactSecurityPhase.recoveryRequired =>
+          'maximumRecoveryRequired',
+        _ => status.phase.name,
+      };
+    }
+    return status.phase.name;
   }
 
   @override
@@ -184,14 +224,24 @@ class SystemKeyboardAppBackend
     final V3ApplicationChatBridge? bridge = await _openBridge(keyTag);
     if (bridge == null || !_stillValid()) return null;
 
-    // Active setup only, so a handshake packet can never silently replace the
-    // user's text. A missing contact policy or an unestablished/recovering
-    // session is *not* repaired here: creating a policy or changing/pinning the
-    // security mode is an app action, never a send side effect.
+    // The selected, fingerprint-matched saved contact is an explicit app-owned
+    // boundary. It may initialize the default Normal policy only while the
+    // runtime proves the contact has no existing setup. Missing policy beside
+    // durable setup, recovery and Maximum remain fail-closed.
     final V3HandshakeMode mode = bridge.modeForContact(contact);
-    final V3SessionEligibilityPolicy? policy =
-        bridge.eligibilityForContact(contact);
-    if (policy == null) return null;
+    V3SessionEligibilityPolicy? policy = bridge.eligibilityForContact(contact);
+    if (policy == null) {
+      if (mode != V3HandshakeMode.normal) return null;
+      try {
+        policy = await bridge.ensureContactPolicy(
+          contact,
+          V3HandshakeMode.normal,
+        );
+      } catch (_) {
+        return null;
+      }
+      if (!_stillValid()) return null;
+    }
     final V3ChatContactSecurityStatus status;
     try {
       status = await bridge.securityStatus(
@@ -203,7 +253,11 @@ class SystemKeyboardAppBackend
     } catch (_) {
       return null;
     }
-    if (!_stillValid() || !status.isActive) return null;
+    if (!_stillValid()) return null;
+    final bool allowsNormalPreFs = mode == V3HandshakeMode.normal &&
+        (status.phase == V3ChatContactSecurityPhase.setupRequired ||
+            status.phase == V3ChatContactSecurityPhase.setupPending);
+    if (!status.isActive && !allowsNormalPreFs) return null;
 
     final V3ChatOutboundExport export;
     try {
@@ -214,12 +268,16 @@ class SystemKeyboardAppBackend
         text: request.text,
         eligibilityPolicy: policy,
         eligibilityForContact: bridge.eligibilityForContact,
+        maxCarrierCharacters: systemKeyboardSurfaceOutboundCarrierMaxLength,
       );
     } catch (_) {
       return null;
     }
     if (!_stillValid()) return null;
-    if (export.purpose != V3ChatOutboundPurpose.application) return null;
+    if (export.purpose != V3ChatOutboundPurpose.application &&
+        export.purpose != V3ChatOutboundPurpose.preFs) {
+      return null;
+    }
     if (export.parts.length != 1) return null;
     final String carrier = export.parts.single;
     if (carrier.isEmpty ||
@@ -267,7 +325,7 @@ class SystemKeyboardAppBackend
 
     final List<RemoteIdentity> saved;
     try {
-      saved = await _ref.read(identitiesRepositoryProvider).watchRemote().first;
+      saved = await _savedContacts();
     } catch (_) {
       return null;
     }
@@ -365,8 +423,7 @@ class SystemKeyboardAppBackend
 
   Future<RemoteIdentity?> _savedContact(String contactId) async {
     try {
-      final List<RemoteIdentity> saved =
-          await _ref.read(identitiesRepositoryProvider).watchRemote().first;
+      final List<RemoteIdentity> saved = await _savedContacts();
       for (final RemoteIdentity contact in saved) {
         if (contact.identityId == contactId) return contact;
       }
@@ -376,20 +433,22 @@ class SystemKeyboardAppBackend
     return null;
   }
 
+  Future<List<RemoteIdentity>> _savedContacts() async {
+    final repository = _ref.read(identitiesRepositoryProvider);
+    await repository.waitForReadyContext();
+    return repository.watchRemote().first;
+  }
+
   /// Opens the existing app-owned V3 runtime plus an ephemeral repository
-  /// context lease. The runtime identity must match the captured ordinary
-  /// identity, and no v2 path is ever considered.
+  /// context lease. The runtime provider binds it to the captured ordinary
+  /// identity before opening it; the legacy X25519 identity ID and the hybrid
+  /// V3 identity ID use different digests and must not be compared directly.
   Future<V3ApplicationChatBridge?> _openBridge(String keyTag) async {
     try {
       final V3ApplicationSessionRuntime? runtime =
           await _ref.read(v3ApplicationSessionRuntimeProvider.future);
       if (runtime == null) return null;
       if (!_stillValid()) return null;
-      final String? captured = _callIdentity;
-      if (captured == null) return null;
-      if (runtime.localIdentity.publicIdentity.identityId != captured) {
-        return null;
-      }
       final MessagesRepositoryCore repository =
           _ref.read(messagesRepositoryProvider);
       if (!_stillValid()) return null;

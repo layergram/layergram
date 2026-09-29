@@ -14,10 +14,10 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cryptography/cryptography.dart';
 
 import 'capabilities/chat_folders_capability.dart';
@@ -30,6 +30,7 @@ import 'crypto/passphrase_service.dart';
 import 'crypto/seed_service.dart';
 import 'crypto/v3/application_runtime_owner_v3.dart';
 import 'crypto/v3/application_session_runtime_v3.dart';
+import 'crypto/v3/lmf_v3_persistence.dart';
 import 'crypto/v3/identity_runtime_v3.dart';
 import 'crypto/v3/protocol_v3_activation.dart';
 import 'security/app_lock_service.dart';
@@ -53,6 +54,11 @@ import 'storage/secure_storage.dart';
 import 'utils/clipboard_service.dart';
 import 'crypto/message_record_cipher.dart';
 import '../features/contact_verification/contact_sas_service.dart';
+import '../features/system_keyboard/system_keyboard_custody_channel.dart';
+import '../features/system_keyboard/system_keyboard_custody_coordinator.dart';
+import '../features/system_keyboard/system_keyboard_custody.dart';
+import '../features/system_keyboard/system_keyboard_history.dart';
+import '../utils/app_platform.dart';
 import 'crypto/fs_contact_security_state.dart';
 import 'crypto/fs_dos_resistance.dart';
 import 'crypto/fs_downgrade_detector.dart';
@@ -91,10 +97,17 @@ final activeIdentityIdProvider = StateProvider<IdentityId?>((_) => null);
 
 final identitiesRepositoryProvider = Provider<IdentitiesRepository>((ref) {
   final ownerId = ref.watch(activeIdentityIdProvider) ?? '';
-  final repo = IdentitiesRepository(ownerIdentityId: ownerId);
   var contextGeneration = 0;
   var disposed = false;
   final pendingUpdates = <Future<void>>{};
+  final repo = IdentitiesRepository(
+    ownerIdentityId: ownerId,
+    waitForContextUpdates: () async {
+      while (pendingUpdates.isNotEmpty) {
+        await Future.wait(pendingUpdates.toList(growable: false));
+      }
+    },
+  );
 
   Future<void> updateStorageContext(int generation) async {
     final identityId = ref.read(activeIdentityIdProvider) ?? '';
@@ -416,6 +429,8 @@ final appShellInitialIndexProvider = StateProvider<int?>((_) => null);
 
 final identityManagerProvider = Provider((ref) {
   return IdentityManager(
+    beforeIdentityMutation:
+        ref.watch(systemKeyboardRecoverBeforeContextChangeProvider),
     seedService: ref.watch(seedServiceProvider),
     localIdentityVault: ref.watch(localIdentityVaultProvider),
   );
@@ -450,13 +465,146 @@ final v3IdentityRuntimeProvider = Provider<V3IdentityRuntime>((ref) {
   return runtime;
 });
 
+final systemKeyboardCustodyCoordinatorProvider =
+    Provider<SystemKeyboardCustodyCoordinator>(
+  (_) => SystemKeyboardCustodyCoordinator(
+      native: const MethodChannelSystemKeyboardCustodyNative(),
+      diagnosticStage: _traceKeyboardRuntimeStage),
+);
+
+/// Reclaim a delegated keyboard journal before changing the identity context.
+final systemKeyboardRecoverBeforeContextChangeProvider =
+    Provider<Future<void> Function()>((ref) {
+  return () async {
+    if (!AppPlatform.isIOS && !AppPlatform.isAndroid) return;
+    final custody = ref.read(systemKeyboardCustodyCoordinatorProvider);
+    if (!custody.hasUnrecoveredAttempt && !await custody.native.hasPending()) {
+      return;
+    }
+    if (!ref.read(appLockStateReadyProvider) ||
+        ref.read(appNeedsUnlockProvider)) {
+      throw StateError('Unlock Layergram before recovering keyboard state');
+    }
+    custody.cancel();
+    await const MethodChannel('layergram/system_keyboard')
+        .invokeMethod<void>('revoke');
+    await ref.read(v3ApplicationRuntimeOwnerProvider).closeCurrent();
+    final local = await ref.read(localIdentityVaultProvider).read();
+    if (local == null) {
+      throw StateError('Keyboard recovery identity unavailable');
+    }
+    final context = await ref
+        .read(localStorageSecurityProvider)
+        .contextForIdentity(local.identityId);
+    if (context == null) {
+      throw StateError('Keyboard recovery scope unavailable');
+    }
+    final token = context.scopeToken;
+    context.destroy();
+    final identity =
+        await ref.read(v3IdentityRuntimeProvider).primaryHandle(local);
+    await custody.beforeRuntimeOpen(identity: identity, scopeToken: token);
+  };
+});
+
+/// User-driven recovery of a delegated V3 working set whose native custody
+/// files are provably gone. A read-only probe precedes an explicit confirmation
+/// in the settings UI; the write path checks the native state again.
+final class SystemKeyboardResetCommittedRecoveryFailed implements Exception {
+  const SystemKeyboardResetCommittedRecoveryFailed();
+}
+
+final systemKeyboardLostCustodyActionProvider =
+    Provider<Future<bool> Function({required bool reset})>((ref) {
+  return ({required bool reset}) async {
+    _traceKeyboardRuntimeStage('resetActionEntered');
+    if ((!AppPlatform.isIOS && !AppPlatform.isAndroid) ||
+        !ref.read(appLockStateReadyProvider) ||
+        ref.read(appNeedsUnlockProvider) ||
+        ref.read(passphraseProvider).isActive) {
+      throw StateError('Unlock the ordinary identity first');
+    }
+    final custody = ref.read(systemKeyboardCustodyCoordinatorProvider);
+    custody.cancel();
+    await const MethodChannel('layergram/system_keyboard')
+        .invokeMethod<void>('revoke');
+    await ref.read(v3ApplicationRuntimeOwnerProvider).closeCurrent();
+    _traceKeyboardRuntimeStage('resetActionRuntimeClosed');
+    final local = await ref.read(localIdentityVaultProvider).read();
+    if (local == null ||
+        local.identityId != ref.read(activeIdentityIdProvider)) {
+      throw StateError('Keyboard recovery identity unavailable');
+    }
+    final context = await ref
+        .read(localStorageSecurityProvider)
+        .contextForIdentity(local.identityId);
+    if (context == null) {
+      throw StateError('Keyboard recovery scope unavailable');
+    }
+    final scopeToken = context.scopeToken;
+    context.destroy();
+    final identity =
+        await ref.read(v3IdentityRuntimeProvider).primaryHandle(local);
+    final derived = await identity.deriveAuxStorageKey();
+    final key = await derived.extract();
+    _traceKeyboardRuntimeStage('resetActionKeyReady');
+    final repository = AuxRecordRepository();
+    repository.setActiveContext(scopeToken: scopeToken, auxStorageKey: key);
+    bool lost;
+    try {
+      final recovery = SystemKeyboardCustody(
+          privateStore: SystemKeyboardCustodyAuxStore(repository),
+          native: custody.native,
+          diagnosticStage: _traceKeyboardRuntimeStage);
+      _traceKeyboardRuntimeStage('resetActionProbeStart');
+      lost = await recovery.hasLostAuthoritativeState();
+      _traceKeyboardRuntimeStage(
+          lost ? 'resetActionLossConfirmed' : 'resetActionLossNotConfirmed');
+      if (reset && lost) {
+        _traceKeyboardRuntimeStage('resetActionCommitStart');
+        await recovery.abandonLostAuthoritativeState();
+        _traceKeyboardRuntimeStage('resetActionCommitReady');
+      }
+    } finally {
+      repository.setActiveContext(scopeToken: null, auxStorageKey: null);
+      key.destroy();
+      derived.destroy();
+    }
+    if (reset && lost) {
+      _traceKeyboardRuntimeStage('resetActionReopenStart');
+      try {
+        await custody.beforeRuntimeOpen(
+            identity: identity, scopeToken: scopeToken);
+      } catch (_) {
+        _traceKeyboardRuntimeStage('resetActionReopenFailed');
+        ref.invalidate(v3ApplicationSessionRuntimeProvider);
+        throw const SystemKeyboardResetCommittedRecoveryFailed();
+      }
+      _traceKeyboardRuntimeStage('resetActionReopenReady');
+      ref.invalidate(v3ApplicationSessionRuntimeProvider);
+    }
+    return lost;
+  };
+});
+
 final v3ApplicationRuntimeFactoryProvider =
-    Provider<V3ApplicationRuntimeFactory<V3ApplicationSessionRuntime>>((_) {
-  return ({required localIdentity, required scopeToken}) =>
-      V3ApplicationSessionRuntime.openPackagedScka(
-        localIdentity: localIdentity,
-        scopeToken: scopeToken,
-      );
+    Provider<V3ApplicationRuntimeFactory<V3ApplicationSessionRuntime>>((ref) {
+  final custody = (AppPlatform.isIOS || AppPlatform.isAndroid)
+      ? ref.watch(systemKeyboardCustodyCoordinatorProvider)
+      : null;
+  return ({required localIdentity, required scopeToken}) async {
+    _traceKeyboardRuntimeStage('runtimeFactoryCustodyStart');
+    await custody?.beforeRuntimeOpen(
+        identity: localIdentity, scopeToken: scopeToken);
+    _traceKeyboardRuntimeStage('runtimeFactoryCustodyReady');
+    _traceKeyboardRuntimeStage('runtimeFactorySessionStart');
+    final runtime = await V3ApplicationSessionRuntime.openPackagedScka(
+      localIdentity: localIdentity,
+      scopeToken: scopeToken,
+    );
+    _traceKeyboardRuntimeStage('runtimeFactorySessionReady');
+    return runtime;
+  };
 });
 
 /// Sole owner of an open v3 identity/passphrase persistence scope.
@@ -469,10 +617,21 @@ final v3ApplicationRuntimeOwnerProvider =
   final owner = V3ApplicationRuntimeOwner<V3ApplicationSessionRuntime>(
     identityRuntime: ref.watch(v3IdentityRuntimeProvider),
     runtimeFactory: ref.watch(v3ApplicationRuntimeFactoryProvider),
+    diagnosticStage: _traceKeyboardRuntimeStage,
   );
   ref.onDispose(() => unawaited(owner.close()));
   return owner;
 });
+
+// Fixture-only, fixed codes for diagnosing a failed keyboard handoff. Never
+// include exception text, identity, scope, contact or message data.
+void _traceKeyboardRuntimeStage(String stage) {
+  if (const bool.fromEnvironment('LAYERGRAM_KEYBOARD_DIAGNOSTICS')) {
+    unawaited(const MethodChannel('layergram/system_keyboard')
+        .invokeMethod<void>('diagnosticStage', stage)
+        .then<void>((_) {}, onError: (Object _) {}));
+  }
+}
 
 /// Restored v3 application runtime for the currently effective identity.
 ///
@@ -481,6 +640,7 @@ final v3ApplicationRuntimeOwnerProvider =
 /// runtime.
 final v3ApplicationSessionRuntimeProvider =
     FutureProvider<V3ApplicationSessionRuntime?>((ref) async {
+  _traceKeyboardRuntimeStage('runtimeProviderBegin');
   if (!ref.watch(protocolV3MessagingEnabledProvider)) return null;
 
   final lockStateReady = ref.watch(appLockStateReadyProvider);
@@ -499,14 +659,18 @@ final v3ApplicationSessionRuntimeProvider =
     return null;
   }
 
+  _traceKeyboardRuntimeStage('runtimeIdentityLoadStart');
   final local = await ref.read(identityManagerProvider).getLocalIdentity();
+  _traceKeyboardRuntimeStage('runtimeIdentityLoadReady');
   if (local == null || local.identityId != activeIdentityId) {
     await owner.closeCurrent();
     return null;
   }
+  _traceKeyboardRuntimeStage('runtimeContextStart');
   final context = await ref
       .read(localStorageSecurityProvider)
       .contextForIdentity(activeIdentityId);
+  _traceKeyboardRuntimeStage('runtimeContextReady');
   if (context == null) {
     await owner.closeCurrent();
     return null;
@@ -521,6 +685,30 @@ final v3ApplicationSessionRuntimeProvider =
     await owner.closeCurrent();
     return null;
   }
+  final projectKeyboardHistory = (AppPlatform.isIOS || AppPlatform.isAndroid) &&
+      const bool.fromEnvironment('LAYERGRAM_AUTONOMOUS_SYSTEM_KEYBOARD') &&
+      !usePassphrase;
+  _traceKeyboardRuntimeStage('runtimeProjectionKeyStart');
+  final projectionKeyTag = projectKeyboardHistory
+      ? await ref.read(originalKeyTagProvider.future)
+      : null;
+  _traceKeyboardRuntimeStage('runtimeProjectionKeyReady');
+  final projectionRepository =
+      projectKeyboardHistory ? ref.read(messagesRepositoryProvider) : null;
+  if (projectionRepository != null) {
+    if (projectionKeyTag == null || projectionKeyTag.isEmpty) {
+      throw StateError('Keyboard chat history requires the active identity');
+    }
+    _traceKeyboardRuntimeStage('runtimeHistoryContextStart');
+    await projectionRepository.waitForReadyContext();
+    _traceKeyboardRuntimeStage('runtimeHistoryContextReady');
+  }
+  // Pin this chat context before custody recovery: a subsequent identity
+  // switch invalidates the lease rather than writing into the new chat.
+  _traceKeyboardRuntimeStage('runtimeHistoryLeaseStart');
+  final projectionLease = await projectionRepository?.acquireContextLease();
+  _traceKeyboardRuntimeStage('runtimeHistoryLeaseReady');
+  _traceKeyboardRuntimeStage('runtimeOwnerOpenStart');
   final runtime = await owner.open(
     recoveryIdentity: local,
     scopeToken: scopeToken,
@@ -528,7 +716,43 @@ final v3ApplicationSessionRuntimeProvider =
         '${usePassphrase ? 'passphrase' : 'primary'}|$effectiveIdentityId|$scopeToken',
     usePassphraseIdentity: usePassphrase,
   );
+  _traceKeyboardRuntimeStage('runtimeOwnerOpenReady');
+  _traceKeyboardRuntimeStage('runtimeMaintainStart');
   await runtime.maintainRetainedState(now: DateTime.now().toUtc());
+  _traceKeyboardRuntimeStage('runtimeMaintainReady');
+  if (projectionRepository != null && projectionLease != null) {
+    _traceKeyboardRuntimeStage('runtimeHistoryKeyStart');
+    final derived = await runtime.localIdentity.deriveAuxStorageKey();
+    final key = await derived.extract();
+    _traceKeyboardRuntimeStage('runtimeHistoryKeyReady');
+    final repository = AuxRecordRepository();
+    repository.setActiveContext(scopeToken: scopeToken, auxStorageKey: key);
+    try {
+      _traceKeyboardRuntimeStage('runtimeHistoryRestoreStart');
+      await SystemKeyboardHistory.restore(
+        store: V3LmfAuxRecordStore(repository),
+        isDeleted: (id) async =>
+            (await runtime.presentationStateForMessage(id))?.isDeleted == true,
+        messages: projectionRepository,
+        lease: projectionLease,
+        localIdentityId: runtime.localPublicIdentity.identityId,
+        keyTag: projectionKeyTag,
+      );
+      _traceKeyboardRuntimeStage('runtimeHistoryRestoreReady');
+      _traceKeyboardRuntimeStage('runtimeHistoryReconcileStart');
+      await runtime.reconcileMessageRepository(
+        messagesRepository: projectionRepository,
+        keyTag: projectionKeyTag,
+        repositoryContextLease: projectionLease,
+      );
+      _traceKeyboardRuntimeStage('runtimeHistoryReconcileReady');
+    } finally {
+      repository.setActiveContext(scopeToken: null, auxStorageKey: null);
+      key.destroy();
+      derived.destroy();
+    }
+  }
+  _traceKeyboardRuntimeStage('runtimeProviderReady');
   return runtime;
 });
 

@@ -9,12 +9,17 @@ enum MailboxLeaf: String, CaseIterable {
     case request = "client.request"
     case response = "owner.response"
     case lock = "mailbox.lock"
+    // Used only in a separate custody directory, never by mailbox cleanup.
+    case custodyState = "custody.state"
+    case custodyControl = "custody.control"
 
     var maxBytes: Int {
         switch self {
         case .rendezvous: return MailboxConstants.maxRendezvousBytes
         case .request, .response: return MailboxConstants.maxEnvelopeBytes
         case .lock: return 0
+        case .custodyState: return 2 * 1024 * 1024 + 64
+        case .custodyControl: return 64
         }
     }
 }
@@ -235,6 +240,26 @@ public final class MailboxStorage {
         try removeLeaf(.response)
     }
 
+    // Custody state is durable protocol state, unlike transient IPC. A failed
+    // sync is an uncertain commit and must be reported to the caller. These
+    // files are deliberately excluded from mailbox expiration/cleanup.
+    public func readCustodyState() throws -> Data? { try readBounded(.custodyState) }
+    public func readCustodyControl() throws -> Data? { try readBounded(.custodyControl) }
+    public func writeCustodyState(_ data: Data) throws {
+        try withExclusiveLock { try writeAtomicLocked(data, to: .custodyState, durable: true) }
+    }
+    public func writeCustodyControl(_ data: Data) throws {
+        try withExclusiveLock { try writeAtomicLocked(data, to: .custodyControl, durable: true) }
+    }
+    public func removeCustodyFiles() throws {
+        try withExclusiveLock {
+            try removeLeaf(.custodyState)
+            try syncDirectory()
+            try removeLeaf(.custodyControl)
+            try syncDirectory()
+        }
+    }
+
     /// Remove every mailbox document but keep the directory itself.
     public func removeAll() throws {
         try lockCoordinator.withLock(
@@ -440,10 +465,10 @@ public final class MailboxStorage {
         return data
     }
 
-    // Three fixed staging leaves bound crash leftovers independently of the
+    // Fixed staging leaves bound crash leftovers independently of the
     // number of launches. The same directory lock covers cleanup and writing.
     private func removeTemporaryFiles() throws {
-        for leaf in [MailboxLeaf.request, .response, .rendezvous] {
+        for leaf in [MailboxLeaf.request, .response, .rendezvous, .custodyState, .custodyControl] {
             let name = ".\(leaf.rawValue).tmp"
             guard unlinkat(directoryDescriptor, name, 0) == 0 || errno == ENOENT else {
                 throw MailboxError.unavailable(.storageUnavailable)
@@ -455,7 +480,7 @@ public final class MailboxStorage {
         try withExclusiveLock { try writeAtomicLocked(data, to: leaf) }
     }
 
-    private func writeAtomicLocked(_ data: Data, to leaf: MailboxLeaf) throws {
+    private func writeAtomicLocked(_ data: Data, to leaf: MailboxLeaf, durable: Bool = false) throws {
         guard data.count <= leaf.maxBytes else { throw MailboxError.malformed(.tooLarge) }
 
         let tempName = ".\(leaf.rawValue).tmp"
@@ -484,7 +509,10 @@ public final class MailboxStorage {
             // Protection must be in place before the first content byte.
             try applyCompleteProtection(at: tempURL)
             try writeAll(data, to: fd)
-            _ = fsync(fd)
+            let synced = fsync(fd)
+            if durable && synced != 0 {
+                throw MailboxError.unavailable(.storageUnavailable)
+            }
         } catch {
             close(fd)
             unlinkat(directoryDescriptor, tempName, 0)
@@ -494,6 +522,13 @@ public final class MailboxStorage {
 
         guard renameat(directoryDescriptor, tempName, directoryDescriptor, leaf.rawValue) == 0 else {
             unlinkat(directoryDescriptor, tempName, 0)
+            throw MailboxError.unavailable(.storageUnavailable)
+        }
+        if durable { try syncDirectory() }
+    }
+
+    private func syncDirectory() throws {
+        guard fsync(directoryDescriptor) == 0 else {
             throw MailboxError.unavailable(.storageUnavailable)
         }
     }

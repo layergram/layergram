@@ -36,19 +36,24 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/capabilities/layergram_capabilities.dart';
 import '../../core/crypto/passphrase_service.dart';
+import '../../core/crypto/fs_security_mode.dart';
+import '../../core/crypto/v3/public_identity_v3.dart';
 import '../../core/crypto/stego_decoder.dart';
 import '../../core/providers.dart';
 import '../../core/storage/secure_storage.dart';
 import '../../utils/app_platform.dart';
 import 'system_keyboard_app_backend.dart';
+import 'system_keyboard_contact_approval.dart';
 import 'system_keyboard_controller.dart';
+import 'system_keyboard_custody_coordinator.dart';
+import 'system_keyboard_idle_policy.dart';
 
 /// Compile-time gate for the experimental SYSTEM keyboard.
 ///
@@ -59,6 +64,24 @@ const bool systemKeyboardExperimentalEnabled = bool.fromEnvironment(
   'LAYERGRAM_EXPERIMENTAL_SYSTEM_KEYBOARD',
   defaultValue: false,
 );
+
+const bool systemKeyboardAutonomousEnabled = bool.fromEnvironment(
+  'LAYERGRAM_AUTONOMOUS_SYSTEM_KEYBOARD',
+  defaultValue: false,
+);
+
+// Validation fixture only. These fixed stage codes never include identity,
+// message, key or contact material and disappear from ordinary builds.
+void _traceAutonomousPreparation(String stage) {
+  if (const bool.fromEnvironment('LAYERGRAM_KEYBOARD_DIAGNOSTICS')) {
+    // The physical fixture's stdout is not always present in the device
+    // syslog. Pass only fixed stage codes through the already-owned native
+    // channel; the ordinary build compiles this branch away.
+    unawaited(const MethodChannel(systemKeyboardChannelName)
+        .invokeMethod<void>('diagnosticStage', stage)
+        .then<void>((_) {}, onError: (Object _) {}));
+  }
+}
 
 /// Method channel used by the native broker (coordination contract v1).
 const String systemKeyboardChannelName = 'layergram/system_keyboard';
@@ -234,7 +257,11 @@ class MethodChannelSystemKeyboardNativeChannel
     try {
       final bool? accepted = await _channel.invokeMethod<bool>(
         'configure',
-        <String, Object?>{'enabled': enabled},
+        <String, Object?>{
+          'enabled': enabled,
+          if (AppPlatform.isAndroid)
+            'autonomous': systemKeyboardAutonomousEnabled
+        },
       );
       return accepted ?? false;
     } catch (_) {
@@ -279,6 +306,14 @@ class SystemKeyboardAppService extends ChangeNotifier
     required SystemKeyboardMonotonicNow monotonicNow,
     bool observeLifecycle = true,
     Duration? maximumBackgroundDuration,
+    Future<int?> Function()? readIdlePreference,
+    Future<void> Function(int)? writeIdlePreference,
+    Future<bool?> Function()? readScramblePreference,
+    Future<void> Function(bool)? writeScramblePreference,
+    Future<bool> Function()? readSaveHistoryPreference,
+    Future<void> Function(bool)? writeSaveHistoryPreference,
+    Future<bool> Function()? readBiometricResumePreference,
+    Future<void> Function(bool)? writeBiometricResumePreference,
   })  : _nativeChannel = nativeChannel,
         _optInStore = optInStore,
         _platformSupported = platformSupported,
@@ -287,7 +322,15 @@ class SystemKeyboardAppService extends ChangeNotifier
         _readScramble = readScramble,
         _now = monotonicNow,
         _observeLifecycle = observeLifecycle,
-        _maximumBackgroundDuration = maximumBackgroundDuration;
+        _maximumBackgroundDuration = maximumBackgroundDuration,
+        _readIdlePreference = readIdlePreference,
+        _writeIdlePreference = writeIdlePreference,
+        _readScramblePreference = readScramblePreference,
+        _writeScramblePreference = writeScramblePreference,
+        _readSaveHistoryPreference = readSaveHistoryPreference,
+        _writeSaveHistoryPreference = writeSaveHistoryPreference,
+        _readBiometricResumePreference = readBiometricResumePreference,
+        _writeBiometricResumePreference = writeBiometricResumePreference;
 
   final SystemKeyboardNativeChannel _nativeChannel;
   final SystemKeyboardOptInStore _optInStore;
@@ -298,6 +341,120 @@ class SystemKeyboardAppService extends ChangeNotifier
   final SystemKeyboardMonotonicNow _now;
   final bool _observeLifecycle;
   final Duration? _maximumBackgroundDuration;
+  final Future<int?> Function()? _readIdlePreference;
+  final Future<void> Function(int)? _writeIdlePreference;
+  final Future<bool?> Function()? _readScramblePreference;
+  final Future<void> Function(bool)? _writeScramblePreference;
+  final Future<bool> Function()? _readSaveHistoryPreference;
+  final Future<void> Function(bool)? _writeSaveHistoryPreference;
+  final Future<bool> Function()? _readBiometricResumePreference;
+  final Future<void> Function(bool)? _writeBiometricResumePreference;
+  bool _biometricResumePreference = false;
+  bool get biometricResumePreference => _biometricResumePreference;
+
+  Future<bool> setBiometricResumePreference(bool enabled) async {
+    if (_disposed ||
+        !isInteractive ||
+        _writeBiometricResumePreference == null) {
+      return false;
+    }
+    _revokeEverything();
+    final operation = _storeQueue.then((_) async {
+      if (_disposed) return false;
+      try {
+        await _writeBiometricResumePreference(enabled);
+      } catch (_) {
+        return false;
+      }
+      if (_disposed) return false;
+      _biometricResumePreference = enabled;
+      _notify();
+      return true;
+    });
+    _storeQueue = operation.then<void>((_) {}, onError: (Object _) {});
+    return operation;
+  }
+
+  bool _saveHistoryPreference = true;
+  bool get saveHistoryPreference => _saveHistoryPreference;
+
+  Future<bool> setSaveHistoryPreference(bool enabled) async {
+    if (_disposed || !isInteractive || _writeSaveHistoryPreference == null) {
+      return false;
+    }
+    _revokeEverything();
+    final operation = _storeQueue.then((_) async {
+      if (_disposed) return false;
+      try {
+        await _writeSaveHistoryPreference(enabled);
+      } catch (_) {
+        return false;
+      }
+      if (_disposed) return false;
+      _saveHistoryPreference = enabled;
+      _notify();
+      return true;
+    });
+    _storeQueue = operation.then<void>((_) {}, onError: (Object _) {});
+    return operation;
+  }
+
+  bool _scramblePreference = false;
+  bool get scramblePreference => _scramblePreference;
+
+  Future<bool> setScramblePreference(bool enabled) async {
+    if (_disposed || !isInteractive || _writeScramblePreference == null) {
+      return false;
+    }
+    _revokeEverything();
+    final operation = _storeQueue.then((_) async {
+      if (_disposed) return false;
+      try {
+        await _writeScramblePreference(enabled);
+      } catch (_) {
+        return false;
+      }
+      if (_disposed) return false;
+      _scramblePreference = enabled;
+      _notify();
+      return true;
+    });
+    _storeQueue = operation.then<void>((_) {}, onError: (Object _) {});
+    return operation;
+  }
+
+  int _idlePreferenceSeconds = SystemKeyboardIdlePolicy.defaultIdleSeconds;
+  int get idlePreferenceSeconds => _idlePreferenceSeconds;
+  int? get effectiveIdleSeconds =>
+      SystemKeyboardIdlePolicy.effectiveIdleSeconds(
+          requestedIdleSeconds: _idlePreferenceSeconds,
+          appLockEnabled: _appLockEnabled,
+          appLockTimeoutSeconds: _appLockTimeoutSeconds);
+
+  Future<bool> setIdlePreferenceSeconds(int seconds) async {
+    if (_disposed ||
+        !isInteractive ||
+        _writeIdlePreference == null ||
+        !SystemKeyboardIdlePolicy.supportedIdleSeconds.contains(seconds)) {
+      return false;
+    }
+    _revokeEverything();
+    final operation = _storeQueue.then((_) async {
+      if (_disposed) return false;
+      try {
+        await _writeIdlePreference(seconds);
+      } catch (_) {
+        return false;
+      }
+      if (_disposed) return false;
+      _idlePreferenceSeconds = seconds;
+      _notify();
+      return true;
+    });
+    _storeQueue = operation.then<void>((_) {}, onError: (Object _) {});
+    return operation;
+  }
+
   Duration? _platformBackgroundDeadline;
 
   Duration? get _effectiveBackgroundDeadline {
@@ -309,6 +466,69 @@ class SystemKeyboardAppService extends ChangeNotifier
 
   SystemKeyboardController? _controller;
   SystemKeyboardBackend? _backend;
+  SystemKeyboardCustodyCoordinator? _custody;
+  Future<void> Function(
+          int idleMillis, bool scramble, bool Function() stillAdmitted)?
+      _prepareAutonomous;
+  bool _attemptedAutonomousDeparture = false;
+  bool _autonomousPreparationInFlight = false;
+  int _autonomousPreparationToken = 0;
+  void Function()? _resumeAutonomous;
+  void Function()? _warmAutonomous;
+  int? _warmedAutonomousGeneration;
+
+  void attachAutonomousCustody(
+      SystemKeyboardCustodyCoordinator custody,
+      Future<void> Function(int, bool, bool Function()) prepare,
+      void Function() resume,
+      {void Function()? warm}) {
+    _custody = custody;
+    _prepareAutonomous = prepare;
+    _resumeAutonomous = resume;
+    _warmAutonomous = warm;
+  }
+
+  void _startAutonomousPreparation() {
+    final prepare = _prepareAutonomous;
+    if (prepare == null || _attemptedAutonomousDeparture) {
+      _traceAutonomousPreparation('prepareUnavailableOrAttempted');
+      return;
+    }
+    _attemptedAutonomousDeparture = true;
+    final captured = generation;
+    final identity = ordinaryIdentityId;
+    final idle = SystemKeyboardIdlePolicy.effectiveIdleMillis(
+        requestedIdleSeconds: _idlePreferenceSeconds,
+        appLockEnabled: _appLockEnabled,
+        appLockTimeoutSeconds: _appLockTimeoutSeconds);
+    bool valid() => identity != null && admits(captured, identity);
+    if (idle == null || !valid()) {
+      _traceAutonomousPreparation('prepareAdmissionDenied');
+      return;
+    }
+    _traceAutonomousPreparation('prepareStarted');
+    _autonomousPreparationInFlight = true;
+    final preparationToken = ++_autonomousPreparationToken;
+    // The finite parent window is used only for this one bootstrap. A fresh
+    // runtime grant has its own native inactivity policy after handoff.
+    unawaited(prepare(idle, _safeReadScramble(), valid).then((_) {
+      if (preparationToken == _autonomousPreparationToken) {
+        _autonomousPreparationInFlight = false;
+      }
+      _traceAutonomousPreparation('prepareCompleted');
+    }).catchError((Object error, StackTrace __) {
+      if (preparationToken == _autonomousPreparationToken) {
+        _autonomousPreparationInFlight = false;
+      }
+      _traceAutonomousPreparation('prepareFailed');
+      _traceAutonomousPreparation(switch (error) {
+        StateError() => 'prepareFailedState',
+        FormatException() => 'prepareFailedFormat',
+        PlatformException() => 'prepareFailedPlatform',
+        _ => 'prepareFailedOther',
+      });
+    }));
+  }
 
   bool _started = false;
   bool _disposed = false;
@@ -440,6 +660,34 @@ class SystemKeyboardAppService extends ChangeNotifier
       stored = await _optInStore.read();
     } catch (_) {
       stored = false;
+    }
+    if (_isStale(intent)) return;
+    try {
+      _idlePreferenceSeconds =
+          SystemKeyboardIdlePolicy.validatedPreferenceSeconds(
+              await _readIdlePreference?.call());
+    } catch (_) {
+      _idlePreferenceSeconds = SystemKeyboardIdlePolicy.defaultIdleSeconds;
+    }
+    if (_isStale(intent)) return;
+    try {
+      _scramblePreference = await _readScramblePreference?.call() == true;
+    } catch (_) {
+      _scramblePreference = false;
+    }
+    if (_isStale(intent)) return;
+    try {
+      _saveHistoryPreference = await _readSaveHistoryPreference?.call() ?? true;
+    } catch (_) {
+      // A failed preference read must not override a prior opt-out.
+      _saveHistoryPreference = false;
+    }
+    if (_isStale(intent)) return;
+    try {
+      _biometricResumePreference =
+          await _readBiometricResumePreference?.call() == true;
+    } catch (_) {
+      _biometricResumePreference = false;
     }
     if (_isStale(intent)) return;
     // Restoration requires agreement between independent persisted switches.
@@ -594,7 +842,40 @@ class SystemKeyboardAppService extends ChangeNotifier
 
   void _notify() {
     if (_disposed) return;
+    _warmAutonomousIfAdmitted();
     notifyListeners();
+  }
+
+  // Opening the ordinary app should prepare its runtime while it is visible,
+  // rather than making a keyboard bootstrap wait for cold storage and native
+  // crypto initialization inside the short mailbox lease. This grants no
+  // keyboard authority and never transfers custody: delegation still checks
+  // the live owner, generation and deadline when the keyboard actually asks.
+  void _warmAutonomousIfAdmitted() {
+    if (_warmAutonomous == null ||
+        !_gateActive ||
+        !_started ||
+        !isEnabled ||
+        _backgroundAt != null ||
+        _lockRequested ||
+        _warmedAutonomousGeneration == generation) {
+      return;
+    }
+    try {
+      final owner = _ownerState();
+      if (!owner.lockStateReady ||
+          owner.needsUnlock ||
+          owner.passphraseActive ||
+          !owner.ordinaryKeyTagReady ||
+          owner.ordinaryIdentityId == null ||
+          owner.ordinaryIdentityId!.isEmpty) {
+        return;
+      }
+      _warmedAutonomousGeneration = generation;
+      _warmAutonomous!();
+    } catch (_) {
+      _traceAutonomousPreparation('warmUnavailable');
+    }
   }
 
   // ── owner events ──────────────────────────────────────────────────────────
@@ -693,6 +974,8 @@ class SystemKeyboardAppService extends ChangeNotifier
   void onAppLifecycleChanged(AppLifecycleState state) {
     if (_disposed || !_gateActive) return;
     if (state == AppLifecycleState.resumed) {
+      final needsRecovery = _custody?.hasUnrecoveredAttempt == true;
+      _attemptedAutonomousDeparture = false;
       _platformBackgroundDeadline = null;
       _backgroundAt = null;
       _backgroundDeadline = null;
@@ -701,6 +984,7 @@ class SystemKeyboardAppService extends ChangeNotifier
       // The app-lock provider and the synchronous request flag stay
       // authoritative until an actual unlock clears them.
       _revokeEverything();
+      if (needsRecovery) _resumeAutonomous?.call();
       _notify();
       return;
     }
@@ -757,8 +1041,17 @@ class SystemKeyboardAppService extends ChangeNotifier
     Map<Object?, Object?> arguments,
   ) async {
     final Duration? entry = _safeNow();
-    if (entry == null || _disposed || !_started) {
-      return _failure(SystemKeyboardChannelStatus.unavailable);
+    if (entry == null) {
+      return _diagnosticFailure(
+          SystemKeyboardChannelStatus.unavailable, 'delegateClockUnavailable');
+    }
+    if (_disposed) {
+      return _diagnosticFailure(
+          SystemKeyboardChannelStatus.unavailable, 'delegateServiceDisposed');
+    }
+    if (!_started) {
+      return _diagnosticFailure(
+          SystemKeyboardChannelStatus.unavailable, 'delegateServiceNotStarted');
     }
     final Object? operationRaw = arguments['operation'];
     final Object? nonceRaw = arguments['editorNonce'];
@@ -766,11 +1059,47 @@ class SystemKeyboardAppService extends ChangeNotifier
     if (operationRaw is! String ||
         !_isValidIdentifier(nonceRaw) ||
         !_isValidIdentifier(requestIdRaw)) {
-      return _failure(SystemKeyboardChannelStatus.invalidRequest);
+      return _diagnosticFailure(
+          SystemKeyboardChannelStatus.invalidRequest, 'delegateInvalidRequest');
     }
     final String operation = operationRaw;
     final String editorNonce = nonceRaw! as String;
     final String requestId = requestIdRaw! as String;
+
+    if (operation == 'delegate') {
+      final identity = ordinaryIdentityId;
+      if (_custody == null) {
+        return _diagnosticFailure(
+            SystemKeyboardChannelStatus.unavailable, 'delegateNoCoordinator');
+      }
+      if (identity == null) {
+        return _diagnosticFailure(
+            SystemKeyboardChannelStatus.unavailable, 'delegateNoIdentity');
+      }
+      // Leaving the app, including for an in-place update, is not a keyboard
+      // request. Move V3 custody only when the extension actually asks.
+      if (_backgroundAt == null || !admits(generation, identity)) {
+        return _diagnosticFailure(
+            SystemKeyboardChannelStatus.unavailable, 'delegateAdmissionDenied');
+      }
+      final grant = _custody!.takeGrant(editorNonce);
+      if (grant != null) {
+        _traceAutonomousPreparation('delegateGranted');
+        return grant;
+      }
+      if (!_attemptedAutonomousDeparture) {
+        _startAutonomousPreparation();
+      }
+      final preparing = _autonomousPreparationInFlight || _custody!.isPreparing;
+      return _diagnosticFailure(
+          preparing
+              ? SystemKeyboardChannelStatus.busy
+              : SystemKeyboardChannelStatus.unavailable,
+          preparing ? 'delegatePipelinePreparing' : 'delegateGrantMissing');
+    }
+    if (_custody?.isDelegating == true) {
+      return _failure(SystemKeyboardChannelStatus.unavailable);
+    }
 
     // `end` carries no content and must stay able to tear down its own editor
     // even while the app is locked. It must never close a newer editor.
@@ -908,7 +1237,10 @@ class SystemKeyboardAppService extends ChangeNotifier
     _clearSessionScopedBackend();
     final bool scramble = _safeReadScramble();
     return _success(
-      data: <String, Object?>{'scramble': scramble},
+      data: <String, Object?>{
+        'scramble': scramble,
+        'idleMillis': _idlePreferenceSeconds * 1000,
+      },
       entry: entry,
       editorGeneration: _editorGeneration,
       heartbeat: false,
@@ -1093,15 +1425,17 @@ class SystemKeyboardAppService extends ChangeNotifier
   Object? _contactsData(List<SystemKeyboardContact> contacts) {
     final List<Map<String, Object?>> mapped = <Map<String, Object?>>[];
     for (final SystemKeyboardContact contact in contacts) {
-      final Map<String, Object?>? entry =
-          _contactMap(contact.id, contact.name, contact.fingerprint);
+      final Map<String, Object?>? entry = _contactMap(
+          contact.id, contact.name, contact.fingerprint,
+          securityPhase: contact.securityPhase);
       if (entry != null) mapped.add(entry);
     }
     return <String, Object?>{'contacts': mapped};
   }
 
   Object? _contactData(SystemKeyboardContact contact) =>
-      _contactMap(contact.id, contact.name, contact.fingerprint);
+      _contactMap(contact.id, contact.name, contact.fingerprint,
+          securityPhase: contact.securityPhase);
 
   Object? _previewData(SystemKeyboardDecodedPreview preview) {
     final Map<String, Object?>? contact = _contactMap(
@@ -1123,10 +1457,8 @@ class SystemKeyboardAppService extends ChangeNotifier
   }
 
   static Map<String, Object?>? _contactMap(
-    String id,
-    String name,
-    String fingerprint,
-  ) {
+      String id, String name, String fingerprint,
+      {String? securityPhase}) {
     if (id.isEmpty || id.length > systemKeyboardSurfaceIdentifierMaxLength) {
       return null;
     }
@@ -1141,12 +1473,16 @@ class SystemKeyboardAppService extends ChangeNotifier
       'id': id,
       'name': name,
       'fingerprint': fingerprint,
+      if (securityPhase != null) 'securityPhase': securityPhase,
     };
   }
 
   // ── internals ─────────────────────────────────────────────────────────────
 
   void _revokeEverything() {
+    _autonomousPreparationToken++;
+    _autonomousPreparationInFlight = false;
+    _custody?.cancel();
     _generation++;
     _controller?.revoke();
     _clearEditorBinding();
@@ -1189,7 +1525,7 @@ class SystemKeyboardAppService extends ChangeNotifier
 
   bool _safeReadScramble() {
     try {
-      return _readScramble();
+      return _scramblePreference || _readScramble();
     } catch (_) {
       return false;
     }
@@ -1222,6 +1558,15 @@ class SystemKeyboardAppService extends ChangeNotifier
 
   static Map<String, Object?> _failure(String status) =>
       <String, Object?>{'status': status};
+
+  static Map<String, Object?> _diagnosticFailure(String status, String stage) {
+    _traceAutonomousPreparation(stage);
+    return <String, Object?>{
+      'status': status,
+      if (const bool.fromEnvironment('LAYERGRAM_KEYBOARD_DIAGNOSTICS'))
+        'diagnosticStage': stage,
+    };
+  }
 
   static String _statusFor(SystemKeyboardFailureCode code) => switch (code) {
         SystemKeyboardFailureCode.unavailable =>
@@ -1270,10 +1615,8 @@ final systemKeyboardFeatureActiveProvider = Provider<bool>(
       ref.watch(systemKeyboardPlatformSupportedProvider),
 );
 
-/// Neutral optional preference adapter for downstream presentation only.
-///
-/// It defaults to `false`, is never persisted here, and only *adds* to the
-/// existing capability check before `begin.scramble` is sent.
+/// Optional test seam for neutral key permutation. Production preference is
+/// stored independently by the system-keyboard service.
 final systemKeyboardScramblePreferenceProvider = Provider<bool>((ref) => false);
 
 /// Native channel seam.
@@ -1336,20 +1679,173 @@ final systemKeyboardAppServiceProvider = Provider<SystemKeyboardAppService>(
         );
       },
       readScramble: () {
-        final LayergramCapabilities capabilities =
-            ref.read(layergramCapabilitiesProvider);
-        final bool preference =
-            ref.read(systemKeyboardScramblePreferenceProvider);
-        return preference &&
-            capabilities.secureKeyboard.isAvailable &&
-            capabilities.secureKeyboard.supportsScramble;
+        return ref.read(systemKeyboardScramblePreferenceProvider);
       },
       monotonicNow: ref.watch(systemKeyboardMonotonicNowProvider),
       maximumBackgroundDuration:
           AppPlatform.isIOS ? const Duration(seconds: 20) : null,
+      readIdlePreference: AppPlatform.isAndroid ||
+              ((AppPlatform.isIOS || AppPlatform.isAndroid) &&
+                  systemKeyboardAutonomousEnabled)
+          ? () async => int.tryParse(await ref
+                  .read(secureStorageProvider)
+                  .read('system_keyboard_idle_seconds') ??
+              '')
+          : null,
+      writeIdlePreference: AppPlatform.isAndroid ||
+              ((AppPlatform.isIOS || AppPlatform.isAndroid) &&
+                  systemKeyboardAutonomousEnabled)
+          ? (seconds) => ref
+              .read(secureStorageProvider)
+              .write('system_keyboard_idle_seconds', '$seconds')
+          : null,
+      readScramblePreference: (AppPlatform.isIOS || AppPlatform.isAndroid) &&
+              systemKeyboardAutonomousEnabled
+          ? () async =>
+              (await ref
+                  .read(secureStorageProvider)
+                  .read('system_keyboard_scramble')) ==
+              'true'
+          : null,
+      writeScramblePreference: (AppPlatform.isIOS || AppPlatform.isAndroid) &&
+              systemKeyboardAutonomousEnabled
+          ? (enabled) => ref
+              .read(secureStorageProvider)
+              .write('system_keyboard_scramble', enabled ? 'true' : 'false')
+          : null,
+      readSaveHistoryPreference: (AppPlatform.isIOS || AppPlatform.isAndroid) &&
+              systemKeyboardAutonomousEnabled
+          ? () async =>
+              (await ref
+                  .read(secureStorageProvider)
+                  .read('system_keyboard_save_history')) !=
+              'false'
+          : null,
+      writeSaveHistoryPreference: (AppPlatform.isIOS ||
+                  AppPlatform.isAndroid) &&
+              systemKeyboardAutonomousEnabled
+          ? (enabled) => ref
+              .read(secureStorageProvider)
+              .write('system_keyboard_save_history', enabled ? 'true' : 'false')
+          : null,
+      readBiometricResumePreference:
+          (AppPlatform.isIOS || AppPlatform.isAndroid) &&
+                  systemKeyboardAutonomousEnabled
+              ? () async =>
+                  (await ref
+                      .read(secureStorageProvider)
+                      .read('system_keyboard_biometric_resume')) ==
+                  'true'
+              : null,
+      writeBiometricResumePreference: (AppPlatform.isIOS ||
+                  AppPlatform.isAndroid) &&
+              systemKeyboardAutonomousEnabled
+          ? (enabled) => ref.read(secureStorageProvider).write(
+              'system_keyboard_biometric_resume', enabled ? 'true' : 'false')
+          : null,
     );
 
     if (featureActive) {
+      if ((AppPlatform.isIOS || AppPlatform.isAndroid) &&
+          systemKeyboardAutonomousEnabled) {
+        final custody = ref.read(systemKeyboardCustodyCoordinatorProvider);
+        service.attachAutonomousCustody(
+            custody,
+            (idleMillis, scramble, admitted) async {
+              if (!admitted()) {
+                _traceAutonomousPreparation('closureAdmissionDenied');
+                return;
+              }
+              final ordinaryIdentityId = service.ordinaryIdentityId;
+              if (ordinaryIdentityId == null) {
+                _traceAutonomousPreparation('closureNoIdentity');
+                return;
+              }
+              _traceAutonomousPreparation('closureRuntimeLoad');
+              final runtime =
+                  await ref.read(v3ApplicationSessionRuntimeProvider.future);
+              if (runtime == null ||
+                  !admitted() ||
+                  service.ordinaryIdentityId != ordinaryIdentityId) {
+                _traceAutonomousPreparation('closureRuntimeUnavailable');
+                return;
+              }
+              _traceAutonomousPreparation('closureRuntimeReady');
+              final contactRepository = ref.read(identitiesRepositoryProvider);
+              _traceAutonomousPreparation('closureContactContextStart');
+              await contactRepository.waitForReadyContext();
+              _traceAutonomousPreparation('closureContactContextReady');
+              if (!admitted()) {
+                _traceAutonomousPreparation('closureContactsAdmissionDenied');
+                return;
+              }
+              _traceAutonomousPreparation('closureContactReadStart');
+              final contacts = await contactRepository.watchRemote().first;
+              _traceAutonomousPreparation('closureContactReadReady');
+              if (!admitted()) {
+                _traceAutonomousPreparation('closureContactsChanged');
+                return;
+              }
+              final rows = await prepareKeyboardCustodyContacts(
+                contacts: contacts,
+                modeFor: runtime.protocolV3ModeForIdentity,
+                policyFor: runtime.protocolV3EligibilityForIdentity,
+                initializeNormalPolicy: (identity) =>
+                    runtime.ensureProtocolV3ContactPolicy(
+                  remoteIdentity: identity,
+                  mode: FsSecurityMode.advanced,
+                ),
+                admitted: admitted,
+              );
+              if (rows.isEmpty || !admitted()) {
+                _traceAutonomousPreparation('closureNoUsableContacts');
+                return;
+              }
+              _traceAutonomousPreparation('closureContactsReady');
+              final context = await ref
+                  .read(localStorageSecurityProvider)
+                  .contextForIdentity(ordinaryIdentityId);
+              if (context == null) {
+                _traceAutonomousPreparation('closureNoContext');
+                return;
+              }
+              final token = context.scopeToken;
+              context.destroy();
+              if (!admitted()) {
+                _traceAutonomousPreparation('closureContextAdmissionDenied');
+                return;
+              }
+              _traceAutonomousPreparation('closureCustodyPrepare');
+              await custody.prepare(
+                  runtime: runtime,
+                  scopeToken: token,
+                  closeRuntime:
+                      ref.read(v3ApplicationRuntimeOwnerProvider).closeCurrent,
+                  stillAdmitted: admitted,
+                  configuration: {
+                    'v': 2,
+                    'publicIdentity': base64Encode(
+                        V3PublicIdentityCodec.encodeBinary(
+                            runtime.localPublicIdentity)),
+                    'localDeviceId': base64Encode(runtime.localDeviceId),
+                    'scopeToken': token,
+                    'idleMillis': idleMillis,
+                    'scramble': scramble,
+                    'saveHistory': service.saveHistoryPreference,
+                    'biometricResume': service.biometricResumePreference,
+                    'contacts': rows
+                  });
+              _traceAutonomousPreparation('closureCustodyReady');
+            },
+            () => ref.invalidate(v3ApplicationSessionRuntimeProvider),
+            warm: () {
+              unawaited(ref
+                  .read(v3ApplicationSessionRuntimeProvider.future)
+                  .then<void>((_) {}, onError: (Object _, StackTrace __) {
+                _traceAutonomousPreparation('warmRuntimeFailed');
+              }));
+            });
+      }
       service.attachBackend(
         ref.watch(systemKeyboardBackendFactoryProvider)(ref, service),
       );

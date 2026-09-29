@@ -73,6 +73,7 @@ public enum KeyboardSurfaceBounds {
     public static let maxLabelUTF16 = 128
     /// Outbound carrier handed to `textDocumentProxy.insertText`.
     public static let maxOutboundCarrierUTF16 = 4_000
+    public static let maxAutonomousOutboundCarrierUTF16 = 32_768
     /// Inbound carrier read from an explicit user paste.
     public static let maxInboundCarrierUTF16 = 262_144
     /// Outbound draft accepted by `prepare`.
@@ -83,6 +84,9 @@ public enum KeyboardSurfaceBounds {
     public static let maxLeaseMillis: Int64 = 1_000
     /// The bootstrap wait before the first accepted `begin` is abandoned.
     public static let maxBootstrapMillis: Int64 = 1_000
+    /// A headless Flutter engine needs a bounded cold-start window after the
+    /// native grant. Custody and the editor are still checked on every sample.
+    public static let maxAutonomousBootstrapMillis: Int64 = 10_000
 }
 
 // MARK: - Failures
@@ -235,12 +239,21 @@ public struct KeyboardContact: Equatable {
     public let id: String
     public let name: String
     public let fingerprint: String
+    public let securityPhase: KeyboardSecurityPhase?
 
-    public init(id: String, name: String, fingerprint: String) {
+    public init(id: String, name: String, fingerprint: String,
+                securityPhase: KeyboardSecurityPhase? = nil) {
         self.id = id
         self.name = name
         self.fingerprint = fingerprint
+        self.securityPhase = securityPhase
     }
+}
+
+/// A display-only V3 status, never an authorization to send.
+public enum KeyboardSecurityPhase: String {
+    case setupRequired, setupPending, normalActive, maximumActive, recoveryRequired
+    case maximumSetupRequired, maximumSetupPending, maximumRecoveryRequired
 }
 
 /// One explicit insertion authorization as projected for callers.
@@ -305,6 +318,11 @@ public final class KeyboardEditorPolicy {
     private var documentIdentifier: String?
     private var generation: Int64 = 0
     private var sessionActive = false
+    private var autonomousMode = false
+    private var outboundCarrierLimit: Int {
+        autonomousMode ? KeyboardSurfaceBounds.maxAutonomousOutboundCarrierUTF16 : KeyboardSurfaceBounds.maxOutboundCarrierUTF16
+    }
+    private var autonomousAuthorization: ((KeyboardEditorSnapshot) -> Int64?)?
     /// Fixed, absolute deadline of the app-owned window. Never renewed.
     private var windowDeadlineMonotonicMillis: Int64 = 0
     /// Short freshness proof. Refreshed by every accepted grant, including a
@@ -365,6 +383,16 @@ public final class KeyboardEditorPolicy {
         }
         guard sessionActive else { return false }
         guard snapshot.documentIdentifier == self.documentIdentifier else { return false }
+        if autonomousMode {
+            guard let deadline = autonomousAuthorization?(snapshot), deadline > snapshot.monotonicMillis,
+                  deadline <= KeyboardIdlePolicy.maxSafeMonotonicMillis else {
+                clearSensitive(); return false
+            }
+            windowDeadlineMonotonicMillis = deadline
+            // Native custody and live inactivity are the liveness authority.
+            // This refresh never changes the native inactivity deadline itself.
+            freshLeaseDeadlineMonotonicMillis = min(deadline, snapshot.monotonicMillis + 1_000)
+        }
         return snapshot.monotonicMillis < windowDeadlineMonotonicMillis
     }
 
@@ -427,13 +455,17 @@ public final class KeyboardEditorPolicy {
     @discardableResult
     public func begin(
         documentIdentifier: String?,
-        windowDeadlineMonotonicMillis: Int64
+        windowDeadlineMonotonicMillis: Int64,
+        bootstrapMillis: Int64 = KeyboardSurfaceBounds.maxBootstrapMillis
     ) -> Bool {
         clearSensitive(notify: false)
+        autonomousMode = false
         generation += 1
         let nowMillis = now()
-        let (bootstrapDeadline, overflow) = nowMillis.addingReportingOverflow(KeyboardSurfaceBounds.maxBootstrapMillis)
-        guard nowMillis >= 0, !overflow, windowDeadlineMonotonicMillis > nowMillis else {
+        let (bootstrapDeadline, overflow) = nowMillis.addingReportingOverflow(bootstrapMillis)
+        guard nowMillis >= 0, bootstrapMillis > 0,
+              bootstrapMillis <= KeyboardSurfaceBounds.maxAutonomousBootstrapMillis,
+              !overflow, windowDeadlineMonotonicMillis > nowMillis else {
             sessionActive = false
             return false
         }
@@ -447,6 +479,23 @@ public final class KeyboardEditorPolicy {
         beginAccepted = false
         sessionActive = true
         return true
+    }
+
+    /// Bind only after a fresh native grant has started its headless runtime.
+    /// The callback must validate custody, visibility, capture and inactivity on
+    /// every call. It returns that native session's deadline and never renews it.
+    @discardableResult
+    public func beginAutonomous(snapshot: KeyboardEditorSnapshot, editorNonce: String,
+                                authorization: @escaping (KeyboardEditorSnapshot) -> Int64?) -> Bool {
+        guard !editorNonce.isEmpty, editorNonce.utf16.count <= 128,
+              let deadline = authorization(snapshot), deadline > snapshot.monotonicMillis,
+              begin(documentIdentifier: snapshot.documentIdentifier,
+                    windowDeadlineMonotonicMillis: deadline,
+                    bootstrapMillis: KeyboardSurfaceBounds.maxAutonomousBootstrapMillis) else { return false }
+        self.editorNonce = editorNonce
+        autonomousMode = true
+        autonomousAuthorization = authorization
+        return revalidate(snapshot)
     }
 
     /// The live editor nonce, for callers that must build an `end` request.
@@ -582,6 +631,7 @@ public final class KeyboardEditorPolicy {
         _ data: Data,
         snapshot: KeyboardEditorSnapshot
     ) -> KeyboardResponse? {
+        if autonomousMode && !revalidate(snapshot) { return nil }
         guard sessionActive,
               let pending,
               pending.generation == generation,
@@ -612,8 +662,9 @@ public final class KeyboardEditorPolicy {
             listener?.keyboardPolicyResponse(response, operation: pending.operation)
             return response
         case .granted(let rawGrant):
+            let responseStart = autonomousMode ? snapshot.monotonicMillis : pending.startedAtMonotonicMillis
             guard let computedDeadline = Self.deadline(
-                startedAtMonotonicMillis: pending.startedAtMonotonicMillis,
+                startedAtMonotonicMillis: responseStart,
                 processingMillis: rawGrant.processingMillis,
                 leaseMillis: rawGrant.leaseMillis,
                 windowDeadlineMonotonicMillis: windowDeadlineMonotonicMillis
@@ -625,7 +676,7 @@ public final class KeyboardEditorPolicy {
             }
             // Transport replies have a one-second budget. A processing-time
             // field must never widen the proof of owner liveness beyond it.
-            let (transportDeadline, overflow) = pending.startedAtMonotonicMillis
+            let (transportDeadline, overflow) = responseStart
                 .addingReportingOverflow(KeyboardSurfaceBounds.maxLeaseMillis)
             guard !overflow else { clearSensitive(); return nil }
             let deadline = min(computedDeadline, transportDeadline)
@@ -765,7 +816,10 @@ public final class KeyboardEditorPolicy {
                id == Self.stringValue(payload, "contactId"),
                let name = Self.boundedLabel(data["name"]),
                let fingerprint = Self.boundedLabel(data["fingerprint"]) {
-                selectedContact = KeyboardContact(id: id, name: name, fingerprint: fingerprint)
+                selectedContact = KeyboardContact(
+                    id: id, name: name, fingerprint: fingerprint,
+                    securityPhase: (data["securityPhase"] as? String)
+                        .flatMap(KeyboardSecurityPhase.init(rawValue:)))
             } else {
                 selectedContact = nil
             }
@@ -778,7 +832,7 @@ public final class KeyboardEditorPolicy {
             // this request; an arbitrary or replayed carrier is never accepted.
             if let carrier = data["carrier"] as? String,
                !carrier.isEmpty,
-               carrier.utf16.count <= KeyboardSurfaceBounds.maxOutboundCarrierUTF16,
+               carrier.utf16.count <= outboundCarrierLimit,
                let pendingId = Self.stringValue(payload, "pendingId"),
                let recipientId = selectedContact?.id {
                 authorized = AuthorizedInsertion(
@@ -825,7 +879,7 @@ public final class KeyboardEditorPolicy {
         }
         let carrier = authorized.carrier
         guard !carrier.isEmpty,
-              carrier.utf16.count <= KeyboardSurfaceBounds.maxOutboundCarrierUTF16 else {
+              carrier.utf16.count <= outboundCarrierLimit else {
             clearSensitive()
             throw KeyboardPolicyError.malformed
         }
@@ -843,6 +897,7 @@ public final class KeyboardEditorPolicy {
     /// Drop every sensitive value and the freshness proof. Idempotent; safe from
     /// any callback.
     public func clearSensitive(notify: Bool = true) {
+        autonomousAuthorization = nil
         revision += 1
         pending = nil
         grant = nil
@@ -874,6 +929,7 @@ public final class KeyboardEditorPolicy {
         let nonce = editorNonce
         editorNonce = nil
         sessionActive = false
+        autonomousMode = false
         beginAccepted = false
         documentIdentifier = nil
         windowDeadlineMonotonicMillis = 0

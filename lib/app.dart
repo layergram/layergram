@@ -483,7 +483,9 @@ class _LayergramAppState extends ConsumerState<LayergramApp>
   }
 
   bool _isMessageLink(String text) {
-    return text.trim().toLowerCase().startsWith('layergram://m/');
+    final normalized = text.trim().toLowerCase();
+    return normalized.startsWith('layergram://m/') ||
+        normalized.startsWith('layergram://p/');
   }
 
   Future<void> _handleIncomingLink(String text) async {

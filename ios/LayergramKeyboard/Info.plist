@@ -10,6 +10,7 @@
   <key>CFBundleShortVersionString</key><string>$(FLUTTER_BUILD_NAME)</string>
   <key>CFBundleVersion</key><string>$(FLUTTER_BUILD_NUMBER)</string>
   <key>AppGroupId</key><string>$(CUSTOM_KEYBOARD_GROUP_ID)</string>
+  <key>NSFaceIDUsageDescription</key><string>Unlock the Layergram keyboard after inactivity when you choose biometric resume.</string>
   <key>NSExtension</key><dict>
     <key>NSExtensionAttributes</key><dict>
       <key>IsASCIICapable</key><false/>

@@ -288,10 +288,10 @@ object KeyboardCallbackPolicy {
 class KeyboardCommitSelection {
   private var start = -1
   private var end = -1
-  private var expected: Int? = null
+  private var expected: Pair<Int, Int>? = null
 
   fun update(newStart: Int, newEnd: Int): Boolean {
-    val own = expected != null && newStart == expected && newEnd == expected
+    val own = expected == Pair(newStart, newEnd)
     expected = null
     start = newStart
     end = newEnd
@@ -301,9 +301,50 @@ class KeyboardCommitSelection {
   fun expectInsertion(length: Int) {
     expected = if (start >= 0 && end >= 0 && length > 0) {
       val position = minOf(start, end).toLong() + length
-      if (position <= Int.MAX_VALUE) position.toInt() else null
+      if (position <= Int.MAX_VALUE) Pair(position.toInt(), position.toInt()) else null
     } else null
   }
 
+  /** The framework's initial selection for an admitted restart, consumed once. */
+  fun expectRestartSelection(newStart: Int, newEnd: Int) {
+    expected = if (newStart >= 0 && newEnd >= 0) Pair(newStart, newEnd) else null
+  }
+
   fun cancelPending() { expected = null }
+}
+
+/** OS editor identity; a field restart must never inherit a different host's grant. */
+internal data class KeyboardEditorBinding(
+  val packageName: String, val fieldId: Int, val inputType: Int, val imeOptions: Int,
+  val uid: Int, val pid: Int, val connectionToken: Any,
+)
+
+/** A system biometric dialog may report no editor before restoring the host. */
+internal object KeyboardBiometricEditorPolicy {
+  fun changed(original: KeyboardEditorBinding?, next: KeyboardEditorBinding?): Boolean =
+    original != null && next != null && original != next
+
+  fun mayAdmit(original: KeyboardEditorBinding?, next: KeyboardEditorBinding?,
+      visible: Boolean, admitted: Boolean): Boolean =
+    original != null && original == next && visible && admitted
+}
+
+/** A hint never promises biometric recovery without an admitted editor and a usable ticket. */
+internal object KeyboardReentryStatusPolicy {
+  enum class Status { REJECTED_FIELD, UNLOCKING, TOUCH_TO_UNLOCK, OPEN_APP }
+
+  fun status(admitted: Boolean, biometricInProgress: Boolean, ticketAvailable: Boolean): Status = when {
+    !admitted -> Status.REJECTED_FIELD
+    biometricInProgress -> Status.UNLOCKING
+    ticketAvailable -> Status.TOUCH_TO_UNLOCK
+    else -> Status.OPEN_APP
+  }
+}
+
+internal object KeyboardEditorRestartPolicy {
+  fun mayContinue(restarting: Boolean, previous: KeyboardEditorBinding?, next: KeyboardEditorBinding?,
+      connected: Boolean, visible: Boolean, nativeRunning: Boolean, usable: Boolean,
+      committedCarrier: Boolean): Boolean =
+    restarting && previous != null && next != null && previous == next &&
+      connected && visible && nativeRunning && usable && committedCarrier
 }

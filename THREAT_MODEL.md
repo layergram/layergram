@@ -51,9 +51,12 @@ does not protect plaintext that the user copies or shares into another app.
 | Layer | Protection and limits |
 | --- | --- |
 | Android screen capture | `FLAG_SECURE` asks Android to exclude the app window from ordinary screenshots, recordings and non-secure displays. Enforcement depends on Android and the device; ordinary capture permission is not equivalent to control of the OS. |
+| Android keyboard biometric resume | This separate opt-in wraps the exclusive keyboard custody key with an authentication-per-use Android Keystore key invalidated by biometric enrollment changes. A new ticket may remain sealed during long app suspension on the same device boot; it is not a live session. Every deliberate reopening needs a fresh strong biometric CryptoObject, current FS custody, visible editor and a new inactivity grant. App revocation or reboot denies reuse. Older issued tickets retain their ten-minute bound. |
 | Android overlays and touch | On Android 12 and later, Layergram asks the system to hide non-system overlay windows. While protection is enabled, it rejects touches marked as obscured; partially obscured touches are also rejected on Android 10 and later. These controls depend on the system supplying the correct flags and do not block every trusted/system window or input path. |
 | Android accessibility | On Android 14 and later, the window and Flutter host are marked as sensitive. Android can restrict access by services that do not declare themselves accessibility tools. This is not a trust check on a service: declared accessibility tools retain access, and Flutter's virtual accessibility nodes are not individually marked sensitive. Do not assume this control revokes information or node references obtained before protection was enabled. |
 | iOS capture and backgrounding | Layergram uses an opaque native shield when its scene is inactive or its screen reports active capture. It also retains its secure-text-entry host as a best-effort screenshot mitigation. iOS does not offer a general app-wide guarantee that arbitrary UI cannot be captured; detection, notification timing and secure-host behavior depend on the OS. |
+| iOS system keyboard capture | When app screen protection is enabled, the keyboard's own content is placed in a secure-text-entry canvas as a best-effort mitigation. This is not a documented keyboard screenshot-protection API and may change across OS releases or device classes. The host application's pixels are unaffected. The still-screenshot callback retains a draft only after revalidating the live editor, custody and session; recording or invalidation clears it. |
+| iOS keyboard biometric resume | This separate opt-in stores a custody recovery capability under `WhenUnlockedThisDeviceOnly` and `biometryCurrentSet`. A new capability may remain sealed while the app stays suspended; its presence is not an active session. Each deliberate reopening requires a fresh biometric Keychain read and current exclusive FS custody, an uncaptured visible editor and a new inactivity grant. The app revokes the item on custody return or disabling the option. A user with access to the device and enrolled biometrics can reopen the keyboard until that revocation; disabling the preference or changing the biometric set prevents future recovery. Older issued capabilities retain their ten-minute expiry. |
 | Inactive app content | The Flutter privacy shield is opaque and excludes the underlying UI from accessibility, pointer input and focus while it is shown, including during external sharing. The native iOS shield also hides and disables its underlying root view and restores its prior state on return. |
 
 The app preserves its normal accessibility content while active and unlocked;
@@ -98,6 +101,30 @@ Layergram is honest about its limits. The following concerns are explicitly out 
 - **Backup exclusion limits.** When a message is marked `backupExcluded`, official Layergram clients must exclude it from official Layergram backups and exports. This is an interoperability contract between official clients, not remote deletion control: it cannot prevent screenshots, screen recordings, modified clients, operating-system or device-level backups, or external copies.
 - **Anonymity of the user on the underlying transport.** If the transport requires a phone number or account, that identity is visible to the transport operator. Layergram does not anonymize the user at the transport layer.
 - **Legal or regulatory compulsion against the user or the transport.** Layergram cannot protect against an adversary who can compel the user (or the transport operator) to reveal information they hold. Layergram's contribution is to minimize the information actually held by the transport (content is encrypted; attribution is not present in the wire format).
+
+## Normal-mode initial messages
+
+Normal mode permits an explicitly classified pre-session envelope so users can
+exchange text while the hybrid handshake is carried incrementally by ordinary
+messages. This bootstrap derives an authenticated-encryption key from the
+long-term identity X25519 keys. It provides **no forward secrecy and no
+post-quantum protection**. A later identity-key compromise can expose recorded
+bootstrap messages; compromise of the receiving identity key also permits
+key-compromise impersonation within this classical construction. Identity
+verification remains necessary.
+
+The gray shield describes each such message permanently. Orange describes a
+conversation still negotiating; green describes an active FS session. Establishing
+a session does not upgrade the protection of previously sent messages.
+Maximum mode does not permit this initial classical application-data path, and
+loss or corruption of an established session must not silently enable it.
+
+The bootstrap has a distinct format and binds the complete sender and recipient
+identities through public digests. Those digests and its format marker are wire
+metadata: the identifier-free legacy-wire statements elsewhere in this document
+do not apply to this envelope. Existing clients need support for the new format
+to read these initial messages. This change preserves the steganographic
+alphabet and density rules; it does not prove delivery through every transport.
 
 ## Forward Secrecy
 
