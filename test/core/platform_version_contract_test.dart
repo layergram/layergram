@@ -17,9 +17,10 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('current Layergram version and iOS share extension stay synchronized', () {
+  test('current Layergram version and iOS share extension stay synchronized',
+      () {
     final pubspec = File('pubspec.yaml').readAsStringSync();
-    expect(pubspec, contains('version: 2.0.4+31'));
+    expect(pubspec, contains('version: 2.0.5+32'));
 
     final project = File(
       'ios/Runner.xcodeproj/project.pbxproj',
@@ -27,25 +28,29 @@ void main() {
     expect(
       'CURRENT_PROJECT_VERSION = "\$(FLUTTER_BUILD_NUMBER)";'
           .allMatches(project),
-      hasLength(4),
+      hasLength(5),
     );
     expect(
-      'CURRENT_PROJECT_VERSION = 31;'.allMatches(project),
+      'CURRENT_PROJECT_VERSION = 32;'.allMatches(project),
       hasLength(3),
     );
     expect(
-      'MARKETING_VERSION = 2.0.4;'.allMatches(project),
+      'MARKETING_VERSION = 2.0.5;'.allMatches(project),
       hasLength(3),
     );
 
     final extensionConfigurations = RegExp(
-      r'buildSettings = \{.*?PRODUCT_BUNDLE_IDENTIFIER = app\.layergram\.app\.share;.*?\n\s*\};',
+      r'buildSettings = \{[^}]*LAYERGRAM_SHARE_BUNDLE_ID = app\.layergram\.app\.share;[^}]*\};',
       dotAll: true,
     ).allMatches(project).map((match) => match.group(0)!).toList();
     expect(extensionConfigurations, hasLength(3));
     for (final configuration in extensionConfigurations) {
-      expect(configuration, contains('CURRENT_PROJECT_VERSION = 31;'));
-      expect(configuration, contains('MARKETING_VERSION = 2.0.4;'));
+      expect(configuration, contains('CURRENT_PROJECT_VERSION = 32;'));
+      expect(configuration, contains('MARKETING_VERSION = 2.0.5;'));
+      expect(
+          configuration,
+          contains(
+              'PRODUCT_BUNDLE_IDENTIFIER = "\$(LAYERGRAM_SHARE_BUNDLE_ID)";'));
     }
 
     final extensionInfo = File(

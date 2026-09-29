@@ -132,8 +132,8 @@ final class V3SessionPersistenceScope {
   V3SessionPersistenceScope._({
     required String scopeToken,
     required Object scopeLease,
-    required AuxRecordRepository repository,
-    required SecretKeyData ownedAuxStorageKey,
+    required AuxRecordRepository? repository,
+    required SecretKeyData? ownedAuxStorageKey,
     required V3LmfDurableInbox inbox,
     required this.handshakeInbox,
     required this.handshakes,
@@ -208,77 +208,20 @@ final class V3SessionPersistenceScope {
           scopeToken: scopeToken,
           auxStorageKey: ownedKey,
         );
-        final store = V3LmfAuxRecordStore(repository);
-        final initialHandoffAuthority = V3InitialSessionHandoffAuthority();
-        final inbox = V3LmfDurableInbox(
-          store: store,
-          maxPersistedFrames: maxInboxPersistedFrames,
-          maxPersistedFrameBytes: maxInboxPersistedFrameBytes,
-        );
-        final handshakeInbox = V3HandshakeFrameInbox(store: store);
-        final handshakes = V3HandshakePersistenceController(
-          repository: V3HandshakePendingRepository(store: store),
-          initialHandoffAuthority: initialHandoffAuthority,
-        );
-        final sendGroups = V3ApplicationSendGroupJournal(store: store);
-        final acknowledgements = V3AcknowledgementOutbox(
-          store: store,
-          maxEntries: maxAcknowledgementEntries,
-          maxTotalBytes: maxAcknowledgementTotalBytes,
-          partitionResolver: (frame) =>
-              _acknowledgementPartitionFor(handshakes, frame),
-        );
-        final presentation = V3ApplicationPresentationJournal(store: store);
-        final controller = V3SessionCommitController(
-          journal: V3LmfAtomicCommitJournal(store: store, inbox: inbox),
-          sendJournal: V3SessionSendJournal(store: store),
-          outbox: V3LmfDurableOutbox(store: store),
-          committedRecordMaterializer:
-              V3CommittedRecordMaterializer(store: store),
-          checkpointRepository: V3SessionCheckpointRepository(
-            store: store,
-            maxSessions: maxSessions,
-          ),
-          retirementJournal: V3SessionRetirementJournal(store: store),
-          initialHandoffAuthority: initialHandoffAuthority,
+        return _compose(
+          scopeToken: scopeToken,
+          scopeLease: scopeLease,
+          store: V3LmfAuxRecordStore(repository),
+          repository: repository,
+          ownedAuxStorageKey: ownedKey,
           sckaBackend: sckaBackend,
           snapshotValidator: snapshotValidator,
           maxSessions: maxSessions,
-        );
-        final handoffs = V3HandshakeSessionHandoffController(
-          repository: V3HandshakeHandoffRepository(store: store),
-          handshakes: handshakes,
-          sessions: controller,
-          initialHandoffAuthority: initialHandoffAuthority,
-          sckaBackend: sckaBackend,
-        );
-        final ratchetKeyResolver = V3SessionRatchetKeyResolver(
-          backend: sckaBackend,
-          controller: controller,
-          skippedKeyLifetimeSeconds: testOnlySkippedKeyLifetimeSeconds,
-          skippedKeyLifetimeResolver: testOnlySkippedKeyLifetimeSeconds == null
-              ? (sessionId) async {
-                  return V3SessionRetentionBinding.skippedKeyLifetimeSeconds(
-                    sessionId: sessionId,
-                    completedSessions: await handshakes.completedSessions(),
-                  );
-                }
-              : null,
-        );
-        return V3SessionPersistenceScope._(
-          scopeToken: scopeToken,
-          scopeLease: scopeLease,
-          repository: repository,
-          ownedAuxStorageKey: ownedKey,
-          inbox: inbox,
-          handshakeInbox: handshakeInbox,
-          handshakes: handshakes,
-          sendGroups: sendGroups,
-          acknowledgements: acknowledgements,
-          presentation: presentation,
-          controller: controller,
-          handoffs: handoffs,
-          ratchetKeyResolver: ratchetKeyResolver,
+          maxInboxPersistedFrames: maxInboxPersistedFrames,
+          maxInboxPersistedFrameBytes: maxInboxPersistedFrameBytes,
+          maxAcknowledgementEntries: maxAcknowledgementEntries,
+          maxAcknowledgementTotalBytes: maxAcknowledgementTotalBytes,
+          testOnlySkippedKeyLifetimeSeconds: testOnlySkippedKeyLifetimeSeconds,
         );
       } catch (_) {
         ownedKey.destroy();
@@ -288,6 +231,146 @@ final class V3SessionPersistenceScope {
       _releaseScopeLease(scopeToken, scopeLease);
       rethrow;
     }
+  }
+
+  /// Opens the complete durable scope over a caller-owned record store.
+  ///
+  /// This is the restricted established-session boundary. The caller supplies
+  /// the already-scoped [store] (for example the platform custody store) and
+  /// the exact [sckaBackend]; this scope never creates an auxiliary repository,
+  /// never derives or owns an auxiliary key, and therefore has nothing private
+  /// to destroy on [close]. Every durable journal, inbox, materializer and
+  /// checkpoint is the same implementation used by [open], so no protocol
+  /// behavior forks. No snapshot-validator override is exposed: the restricted
+  /// boundary always applies the production validator.
+  static Future<V3SessionPersistenceScope> openWithStore({
+    required String scopeToken,
+    required V3LmfRecordStore store,
+    required V3SckaBackend sckaBackend,
+    int maxSessions = 4096,
+    int maxInboxPersistedFrames = 256,
+    int maxInboxPersistedFrameBytes = 128 * 1024,
+    int maxAcknowledgementEntries = 4096,
+    int maxAcknowledgementTotalBytes = 4 * 1024 * 1024,
+  }) async {
+    if (!_isCanonicalScopeToken(scopeToken)) {
+      throw ArgumentError.value(
+        scopeToken,
+        'scopeToken',
+        'must be the canonical 16-character base64url identity token',
+      );
+    }
+    final scopeLease = _claimScopeLease(scopeToken);
+    try {
+      await V3SparsePqRatchet.ensureBackendReady(sckaBackend);
+      return _compose(
+        scopeToken: scopeToken,
+        scopeLease: scopeLease,
+        store: store,
+        repository: null,
+        ownedAuxStorageKey: null,
+        sckaBackend: sckaBackend,
+        maxSessions: maxSessions,
+        maxInboxPersistedFrames: maxInboxPersistedFrames,
+        maxInboxPersistedFrameBytes: maxInboxPersistedFrameBytes,
+        maxAcknowledgementEntries: maxAcknowledgementEntries,
+        maxAcknowledgementTotalBytes: maxAcknowledgementTotalBytes,
+      );
+    } catch (_) {
+      _releaseScopeLease(scopeToken, scopeLease);
+      rethrow;
+    }
+  }
+
+  /// Builds every scope-owned component over one record store.
+  ///
+  /// [open] passes the owned repository/key so [close] can release them;
+  /// [openWithStore] passes null because the caller retains ownership.
+  static V3SessionPersistenceScope _compose({
+    required String scopeToken,
+    required Object scopeLease,
+    required V3LmfRecordStore store,
+    required AuxRecordRepository? repository,
+    required SecretKeyData? ownedAuxStorageKey,
+    required V3SckaBackend sckaBackend,
+    V3SessionSnapshotValidator? snapshotValidator,
+    required int maxSessions,
+    required int maxInboxPersistedFrames,
+    required int maxInboxPersistedFrameBytes,
+    required int maxAcknowledgementEntries,
+    required int maxAcknowledgementTotalBytes,
+    int? testOnlySkippedKeyLifetimeSeconds,
+  }) {
+    final initialHandoffAuthority = V3InitialSessionHandoffAuthority();
+    final inbox = V3LmfDurableInbox(
+      store: store,
+      maxPersistedFrames: maxInboxPersistedFrames,
+      maxPersistedFrameBytes: maxInboxPersistedFrameBytes,
+    );
+    final handshakeInbox = V3HandshakeFrameInbox(store: store);
+    final handshakes = V3HandshakePersistenceController(
+      repository: V3HandshakePendingRepository(store: store),
+      initialHandoffAuthority: initialHandoffAuthority,
+    );
+    final sendGroups = V3ApplicationSendGroupJournal(store: store);
+    final acknowledgements = V3AcknowledgementOutbox(
+      store: store,
+      maxEntries: maxAcknowledgementEntries,
+      maxTotalBytes: maxAcknowledgementTotalBytes,
+      partitionResolver: (frame) =>
+          _acknowledgementPartitionFor(handshakes, frame),
+    );
+    final presentation = V3ApplicationPresentationJournal(store: store);
+    final controller = V3SessionCommitController(
+      journal: V3LmfAtomicCommitJournal(store: store, inbox: inbox),
+      sendJournal: V3SessionSendJournal(store: store),
+      outbox: V3LmfDurableOutbox(store: store),
+      committedRecordMaterializer: V3CommittedRecordMaterializer(store: store),
+      checkpointRepository: V3SessionCheckpointRepository(
+        store: store,
+        maxSessions: maxSessions,
+      ),
+      retirementJournal: V3SessionRetirementJournal(store: store),
+      initialHandoffAuthority: initialHandoffAuthority,
+      sckaBackend: sckaBackend,
+      snapshotValidator: snapshotValidator,
+      maxSessions: maxSessions,
+    );
+    final handoffs = V3HandshakeSessionHandoffController(
+      repository: V3HandshakeHandoffRepository(store: store),
+      handshakes: handshakes,
+      sessions: controller,
+      initialHandoffAuthority: initialHandoffAuthority,
+      sckaBackend: sckaBackend,
+    );
+    final ratchetKeyResolver = V3SessionRatchetKeyResolver(
+      backend: sckaBackend,
+      controller: controller,
+      skippedKeyLifetimeSeconds: testOnlySkippedKeyLifetimeSeconds,
+      skippedKeyLifetimeResolver: testOnlySkippedKeyLifetimeSeconds == null
+          ? (sessionId) async {
+              return V3SessionRetentionBinding.skippedKeyLifetimeSeconds(
+                sessionId: sessionId,
+                completedSessions: await handshakes.completedSessions(),
+              );
+            }
+          : null,
+    );
+    return V3SessionPersistenceScope._(
+      scopeToken: scopeToken,
+      scopeLease: scopeLease,
+      repository: repository,
+      ownedAuxStorageKey: ownedAuxStorageKey,
+      inbox: inbox,
+      handshakeInbox: handshakeInbox,
+      handshakes: handshakes,
+      sendGroups: sendGroups,
+      acknowledgements: acknowledgements,
+      presentation: presentation,
+      controller: controller,
+      handoffs: handoffs,
+      ratchetKeyResolver: ratchetKeyResolver,
+    );
   }
 
   /// Opens the complete durable scope with the packaged SCKA backend.
@@ -357,8 +440,14 @@ final class V3SessionPersistenceScope {
 
   final String _scopeToken;
   final Object _scopeLease;
-  final AuxRecordRepository _repository;
-  final SecretKeyData _ownedAuxStorageKey;
+
+  /// Owned auxiliary repository for the normal [open] boundary; null when a
+  /// caller-owned [openWithStore] store is in use.
+  final AuxRecordRepository? _repository;
+
+  /// Owned auxiliary key copy for the normal [open] boundary; null when the
+  /// caller retains key ownership.
+  final SecretKeyData? _ownedAuxStorageKey;
 
   /// Persist-first sealed receive boundary, hidden behind the scope-owned
   /// resolver/controller composition.
@@ -916,11 +1005,11 @@ final class V3SessionPersistenceScope {
                         await _inbox.close();
                       } finally {
                         try {
-                          _repository.setActiveContext(
+                          _repository?.setActiveContext(
                             scopeToken: null,
                             auxStorageKey: null,
                           );
-                          _ownedAuxStorageKey.destroy();
+                          _ownedAuxStorageKey?.destroy();
                         } finally {
                           _releaseScopeLease(_scopeToken, _scopeLease);
                         }

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sk_identity_import">Contacto: pégalo en Layergram</string>
+    <string name="sk_status_ready">Sesión activa</string>
+    <string name="sk_status_unavailable">Abre Layergram</string>
+    <string name="sk_status_touch_to_unlock">Toca una tecla para desbloquear con biometría</string>
+    <string name="sk_status_unlocking">Desbloqueando teclado...</string>
+    <string name="sk_draft_hint">Texto secreto</string>
+    <string name="sk_action_paste_decode">Pegar y descifrar</string>
+    <string name="sk_search_contacts">Buscar contactos</string>
+    <string name="sk_reply_to">Responder al remitente</string>
+    <string name="sk_action_emoji">Emoji</string>
+    <string name="sk_fs_active">Secreto hacia adelante activo</string>
+    <string name="sk_fs_pending">Secreto hacia adelante en negociación</string>
+    <string name="sk_fs_recovery">Revisar secreto hacia adelante</string>
+    <string name="sk_fs_unknown">Estado no disponible</string>
+    <string name="system_keyboard_service_label">Teclado Layergram</string>
+    <string name="sk_action_contacts">Contactos</string>
+    <string name="sk_contacts_title">Destinatario</string>
+    <string name="sk_confirm_yes">Confirmar</string>
+    <string name="sk_confirm_no">Cancelar</string>
+    <string name="sk_action_clear">Borrar texto secreto</string>
+    <string name="sk_action_space">espacio</string>
+    <string name="sk_action_insert_idle">Cifrar e insertar</string>
+    <string name="sk_contact_confirm_message">Confirma el destinatario y revisa la huella.
+
+%1$s
+Huella: %2$s</string>
+    <string name="sk_preview_clear">Nuevo mensaje</string>
+    <string name="sk_preview_title">Mensaje de %1$s
+Huella: %2$s</string>
+    <string name="sk_biometric_title">Desbloquear teclado Layergram</string>
+</resources>

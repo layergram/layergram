@@ -23,8 +23,11 @@ import '../crypto/models.dart';
 import 'local_database.dart';
 
 class IdentitiesRepository {
-  IdentitiesRepository({required this.ownerIdentityId})
-      : _box = Hive.box<Map>(LocalDatabase.identitiesBoxName) {
+  IdentitiesRepository({
+    required this.ownerIdentityId,
+    Future<void> Function()? waitForContextUpdates,
+  })  : _waitForContextUpdates = waitForContextUpdates,
+        _box = Hive.box<Map>(LocalDatabase.identitiesBoxName) {
     _loadFuture = _reloadFromBox();
     _operationTail = _loadFuture;
   }
@@ -35,6 +38,19 @@ class IdentitiesRepository {
   /// this value (via provider recreation) to support
   /// multi-identity.
   final String ownerIdentityId;
+  final Future<void> Function()? _waitForContextUpdates;
+
+  /// Wait outside the repository's serialized operation queue: the provider's
+  /// pending context update itself needs that queue. A first read made while
+  /// the provider is still decrypting must not observe the empty pre-context
+  /// cache as an authoritative contact list.
+  Future<void> waitForReadyContext() async {
+    await _waitForContextUpdates?.call();
+    await _loadFuture;
+    if (!_hasScope || _encryptionKey == null) {
+      throw StateError('Contacts storage context is unavailable');
+    }
+  }
 
   final Box<Map> _box;
   final Map<String, RemoteIdentity> _remote = {};
@@ -119,30 +135,29 @@ class IdentitiesRepository {
       },
       key: key,
     );
-    await _box.put(_storageKey, {
-      'encryptedRecord': encryptedRecord,
-    });
+    await _box.put(_storageKey, {'encryptedRecord': encryptedRecord});
   }
 
-  Future<void> upsertRemoteIdentity(RemoteIdentity identity) =>
-      _serialized(() async {
-        await _ensureLoaded();
-        _ensureWritable();
-        if (_selfIdentity?.identityId == identity.identityId) {
-          throw StateError('Local identity cannot be stored as a contact');
-        }
-        final existing = _remote[identity.identityId];
-        if (existing != null &&
-            !_hasSameCryptographicIdentity(existing, identity)) {
-          throw StateError(
-              'Identity key change requires explicit verification');
-        }
-        _remote[identity.identityId] = identity.copyWith(
-          verified: existing?.verified ?? false,
-        );
-        await _persist();
-        _controller.add(_visibleRemote());
-      });
+  Future<void> upsertRemoteIdentity(RemoteIdentity identity) => _serialized(
+        () async {
+          await _ensureLoaded();
+          _ensureWritable();
+          if (_selfIdentity?.identityId == identity.identityId) {
+            throw StateError('Local identity cannot be stored as a contact');
+          }
+          final existing = _remote[identity.identityId];
+          if (existing != null &&
+              !_hasSameCryptographicIdentity(existing, identity)) {
+            throw StateError(
+                'Identity key change requires explicit verification');
+          }
+          _remote[identity.identityId] = identity.copyWith(
+            verified: existing?.verified ?? false,
+          );
+          await _persist();
+          _controller.add(_visibleRemote());
+        },
+      );
 
   Future<void> setRemoteVerification({
     required RemoteIdentity expectedIdentity,
@@ -194,6 +209,16 @@ class IdentitiesRepository {
           await _box.delete(_storageKey);
         }
         _controller.add(_visibleRemote());
+      });
+
+  Future<void> clearScope(String scopeToken) => _serialized(() async {
+        final normalized = scopeToken.trim();
+        if (normalized.isEmpty) return;
+        await _box.delete('r|$normalized');
+        if (_scopeToken == normalized) {
+          _remote.clear();
+          _controller.add(_visibleRemote());
+        }
       });
 
   Future<RemoteIdentity?> getRemoteById(String identityId) =>

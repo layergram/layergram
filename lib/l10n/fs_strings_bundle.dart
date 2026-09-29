@@ -59,9 +59,9 @@ class FsStringsBundle {
     'security.fs.v3.status.normal_active': 'Post-quantum Normal active',
     'security.fs.v3.status.maximum_active': 'Post-quantum Maximum active',
     'security.fs.v3.description.setup_required':
-        'Your next outgoing message will first create a setup message to exchange with this contact.',
+        'Until setup completes, Normal messages use authenticated identity-only encryption and show a gray shield. They are not yet forward-secret or post-quantum.',
     'security.fs.v3.description.setup_pending':
-        'Share the prepared setup message. If it is lost or not sent, Layergram will reproduce the exact same pending data.',
+        'Keep sending ordinary messages. Setup data travels with them; while setup is pending, messages remain identity-only and show a gray shield.',
     'security.fs.v3.description.normal_active':
         'Messages use the hybrid v3 ratchet and may be delivered to confirmed installations of this identity.',
     'security.fs.v3.description.maximum_active':

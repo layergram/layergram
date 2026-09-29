@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Minimal, local-only input method description. The optional settings entry
+     points at the existing app activity; no new activity or process is added. -->
+<input-method xmlns:android="http://schemas.android.com/apk/res/android"
+    android:settingsActivity="app.layergram.MainActivity"
+    android:supportsSwitchingToNextInputMethod="true" />

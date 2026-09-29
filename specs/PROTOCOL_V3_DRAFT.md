@@ -213,3 +213,15 @@ claim rejection. Hosted CI, current physical devices, real cross-application
 loss/preservation tests, and signed distribution-artifact verification remain
 release gates. The user consequences are defined
 in [Protocol v3 Migration](PROTOCOL_V3_MIGRATION.md).
+
+Normal messaging has one explicit pre-session exception: an ordinary first
+message may use the separate `p1` classical identity envelope and is recorded
+as `preFs`. It does not claim the hybrid properties of an active session. Only
+bounded handshake-control chunks consume residual carrier capacity, allowing
+negotiation to span later ordinary messages without blank technical sends.
+After activation, mutually capable Normal peers may wrap one unchanged
+authenticated application frame and bounded unchanged authenticated ACK frames
+in the `b3` transport carrier. The inner LMF frames and ratchets do not change;
+data wins when the carrier has no residual ACK capacity. Legacy sessions and
+Maximum mode retain their existing carrier framing. The `p1` and `b3`
+namespaces are intentionally incompatible with older clients.

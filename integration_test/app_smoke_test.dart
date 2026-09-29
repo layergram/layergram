@@ -7,11 +7,11 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('app launches and renders first frame', (tester) async {
-    app.main();
+    await app.runLayergramApp();
 
-    for (var i = 0; i < 30; i += 1) {
+    for (var i = 0; i < 100; i += 1) {
       await tester.pump(const Duration(milliseconds: 100));
-      if (find.byType(MaterialApp).evaluate().isNotEmpty) break;
+      if (find.byType(Scaffold).evaluate().isNotEmpty) break;
     }
 
     expect(find.byType(MaterialApp), findsOneWidget);

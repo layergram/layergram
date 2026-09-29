@@ -167,6 +167,10 @@ class ChatViewState extends ConsumerState<ChatView> {
   MessageOutputMode _outputMode = MessageOutputMode.defaultMode;
   String _encryptedOutput = '';
   V3ChatOutboundExport? _v3OutboundExport;
+  String? _v3OutboundDraftText;
+  int? _v3OutboundDraftRevision;
+  int _draftRevision = 0;
+  int _v3StageRevision = 0;
   List<String> _v3OutputParts = const [];
   int _v3OutputPartIndex = 0;
   bool _dirtySinceEncode = true;
@@ -211,23 +215,33 @@ class ChatViewState extends ConsumerState<ChatView> {
       };
 
   void _clearPreparedOutput() {
+    _v3StageRevision++;
     _encryptedOutput = '';
     _v3OutboundExport = null;
+    _v3OutboundDraftText = null;
+    _v3OutboundDraftRevision = null;
     _v3OutputParts = const [];
     _v3OutputPartIndex = 0;
   }
 
-  void _stageProtocolV3Output(V3ChatOutboundExport export) {
+  void _stageProtocolV3Output(
+    V3ChatOutboundExport export, {
+    String? boundDraftText,
+    int? boundDraftRevision,
+  }) {
     if (!mounted || export.remoteIdentityId != widget.contact.identityId) {
       return;
     }
     setState(() {
+      _v3StageRevision++;
       _outputMode = switch (export.carrierMode) {
         V3ChatCarrierMode.steganography => MessageOutputMode.cover,
         V3ChatCarrierMode.text => MessageOutputMode.text,
         V3ChatCarrierMode.link => MessageOutputMode.link,
       };
       _v3OutboundExport = export;
+      _v3OutboundDraftText = boundDraftText;
+      _v3OutboundDraftRevision = boundDraftRevision;
       _v3OutputParts = export.parts;
       _v3OutputPartIndex = 0;
       _encryptedOutput = export.parts.first;
@@ -238,22 +252,57 @@ class ChatViewState extends ConsumerState<ChatView> {
   Future<void> _recordPreparedOutputExported() async {
     final export = _v3OutboundExport;
     if (export == null) return;
+    final stagedDraft = _v3OutboundDraftText;
+    final stagedDraftRevision = _v3OutboundDraftRevision;
+    final stagedRevision = _v3StageRevision;
+    final exportedPartIndex = _v3OutputPartIndex;
+    final exportedParts = _v3OutputParts;
     await ref.read(homeControllerProvider).markProtocolV3Exported(
           export,
-          partIndex: _v3OutputPartIndex,
+          partIndex: exportedPartIndex,
         );
-    if (!mounted || _v3OutputParts.length <= 1) return;
+    if (!mounted ||
+        stagedRevision != _v3StageRevision ||
+        !identical(_v3OutboundExport, export)) {
+      return;
+    }
+    final bool completedUserMessage =
+        (export.purpose == V3ChatOutboundPurpose.application ||
+                export.purpose == V3ChatOutboundPurpose.preFs) &&
+            (exportedParts.length <= 1 ||
+                exportedPartIndex == exportedParts.length - 1);
+    if (completedUserMessage) {
+      if (identical(_v3OutboundExport, export) &&
+          stagedDraft != null &&
+          stagedDraftRevision == _draftRevision &&
+          _secretCtrl.text == stagedDraft) {
+        _secretCtrl.clear();
+      }
+      return;
+    }
+    if ((export.purpose == V3ChatOutboundPurpose.handshake ||
+            export.purpose == V3ChatOutboundPurpose.acknowledgement) &&
+        exportedPartIndex == exportedParts.length - 1) {
+      setState(_clearPreparedOutput);
+      _takePendingProtocolV3Response();
+      return;
+    }
+    if (exportedParts.length <= 1) return;
     setState(() {
-      _v3OutputPartIndex = (_v3OutputPartIndex + 1) % _v3OutputParts.length;
-      _encryptedOutput = _v3OutputParts[_v3OutputPartIndex];
+      _v3OutputPartIndex = (exportedPartIndex + 1) % exportedParts.length;
+      _encryptedOutput = exportedParts[_v3OutputPartIndex];
     });
   }
 
   void _takePendingProtocolV3Response() {
+    // A second installation may send its offer before the first reply was
+    // copied. Preserve the visible export, then show the next queued reply
+    // after the current one has been copied.
+    if (_hasPreparedOutput) return;
     final response = ref
         .read(homeControllerProvider)
         .takePendingProtocolV3Response(widget.contact.identityId);
-    if (response != null) {
+    if (response != null && response.parts.isNotEmpty) {
       _stageProtocolV3Output(response);
     }
   }
@@ -268,8 +317,30 @@ class ChatViewState extends ConsumerState<ChatView> {
             carrierMode: _v3CarrierMode,
             coverText: _coverCtrl.text,
           );
-      if (!mounted || _hasPreparedOutput || exports.isEmpty) return;
-      _stageProtocolV3Output(exports.first);
+      if (!mounted ||
+          _hasPreparedOutput ||
+          exports.isEmpty ||
+          _secretCtrl.text.trim().isNotEmpty) {
+        return;
+      }
+      final userExport = exports.cast<V3ChatOutboundExport?>().firstWhere(
+            (export) =>
+                export!.purpose == V3ChatOutboundPurpose.application ||
+                export.purpose == V3ChatOutboundPurpose.preFs,
+            orElse: () => null,
+          );
+      if (userExport != null) {
+        _stageProtocolV3Output(userExport);
+      } else {
+        final technicalExport =
+            exports.cast<V3ChatOutboundExport?>().firstWhere(
+                  (export) => export!.parts.isNotEmpty,
+                  orElse: () => null,
+                );
+        if (technicalExport != null) {
+          _stageProtocolV3Output(technicalExport);
+        }
+      }
     } on V3ChatCoverCapacityException {
       // A durable steganographic retry remains available after the user adds
       // a sufficiently long cover message or selects text/link output.
@@ -1026,6 +1097,7 @@ class ChatViewState extends ConsumerState<ChatView> {
   }
 
   void _onFieldChanged() {
+    _draftRevision++;
     setState(() {
       _clearPreparedOutput();
       _dirtySinceEncode = true;
@@ -1661,17 +1733,31 @@ class ChatViewState extends ConsumerState<ChatView> {
 
       final controller = ref.read(homeControllerProvider);
       if (controller.isProtocolV3Contact(recipient)) {
+        final draftText = _secretCtrl.text;
+        final coverText = _coverCtrl.text;
+        final carrierMode = _v3CarrierMode;
+        final draftRevision = _draftRevision;
         final export = await controller.prepareProtocolV3Outbound(
           recipient: recipient,
-          carrierMode: _v3CarrierMode,
-          text: _secretCtrl.text,
-          coverText: _coverCtrl.text,
+          carrierMode: carrierMode,
+          text: draftText,
+          coverText: coverText,
           expireAfter: expireAfter,
           deleteAfterRead: _deleteAfterRead,
           backupExcluded: _excludeFromBackups,
         );
         if (!mounted) return null;
-        _stageProtocolV3Output(export);
+        if (draftRevision != _draftRevision ||
+            _secretCtrl.text != draftText ||
+            _coverCtrl.text != coverText ||
+            _v3CarrierMode != carrierMode) {
+          throw StateError('Composer changed while preparing the export');
+        }
+        _stageProtocolV3Output(
+          export,
+          boundDraftText: draftText,
+          boundDraftRevision: draftRevision,
+        );
         _scrollToBottom();
         return _encryptedOutput;
       }
@@ -2285,9 +2371,9 @@ class ChatViewState extends ConsumerState<ChatView> {
                   if (contact.identityId == widget.contact.identityId) {
                     _takePendingProtocolV3Response();
                     refreshAfterDecodedMessage();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(t(context, 'messageDecoded'))),
-                    );
+                    // A handshake/ACK changes FS state but contains no user
+                    // message. Calling it "message decoded" hides failures in
+                    // the application part of a mixed carrier.
                   } else {
                     await Navigator.of(context).pushReplacement(
                       MaterialPageRoute(

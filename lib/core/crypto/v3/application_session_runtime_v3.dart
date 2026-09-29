@@ -17,6 +17,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:base32/base32.dart';
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:cryptography/cryptography.dart';
 
@@ -39,12 +40,19 @@ import 'lmf_v3.dart';
 import 'lmf_v3_outbox.dart';
 import 'lmf_v3_persistence.dart';
 import 'local_identity_v3.dart';
+import 'prefs_bootstrap_v3.dart';
 import 'public_identity_v3.dart';
 import 'retention_policy_v3.dart';
 import 'session_commit_controller_v3.dart';
 import 'session_persistence_scope_v3.dart';
 import 'sparse_pq_ratchet_v3.dart';
 import 'triple_ratchet_state_v3.dart';
+
+/// A valid peer-identity handshake reply sealed for a different installation.
+final class V3HandshakeAddressedElsewhereException extends FormatException {
+  const V3HandshakeAddressedElsewhereException()
+      : super('Layergram v3 handshake reply addresses another installation');
+}
 
 /// Public, already-durable handshake data ready for carrier export.
 ///
@@ -130,10 +138,14 @@ final class V3ApplicationMessageExport {
   V3ApplicationMessageExport({
     required this.groupId,
     required Iterable<V3ApplicationMessageTargetExport> targets,
+    this.logicalMessageId,
+    this.alsoSentIdentityOnly = false,
   }) : targets = List<V3ApplicationMessageTargetExport>.unmodifiable(targets);
 
   final String groupId;
   final List<V3ApplicationMessageTargetExport> targets;
+  final String? logicalMessageId;
+  final bool alsoSentIdentityOnly;
 
   List<V3LmfFrame> get frames => List<V3LmfFrame>.unmodifiable(
         targets.expand((target) => target.frames),
@@ -182,6 +194,70 @@ final class V3ApplicationRetentionMaintenanceResult {
   final int examinedReceipts;
   final int retiredReceipts;
   final int collectedDeletedApplicationRecords;
+}
+
+/// One immutable approved-contact policy for a restricted runtime.
+///
+/// A restricted established-session runtime receives this snapshot from the
+/// parent application/custody boundary and never reads or writes the mutable
+/// [FsSecurityModeService] store. The revision and the Maximum-mode device
+/// binding are carried unchanged so existing eligibility checks keep their
+/// exact meaning.
+final class V3EstablishedSessionPolicy {
+  V3EstablishedSessionPolicy({
+    required this.mode,
+    required this.revision,
+    Iterable<String> excludedHandshakeIds = const <String>{},
+    this.maximumRemoteDeviceId,
+  }) : excludedHandshakeIds = Set<String>.unmodifiable(excludedHandshakeIds) {
+    if (mode == FsSecurityMode.base) {
+      throw ArgumentError.value(
+        mode,
+        'mode',
+        'protocol v3 supports only advanced or strict contact modes',
+      );
+    }
+    if (revision < 0 || revision > 9007199254740991) {
+      throw ArgumentError.value(revision, 'revision', 'outside safe range');
+    }
+    if (this.excludedHandshakeIds.length > 4096 ||
+        this.excludedHandshakeIds.any((id) => !_validPolicyId(id)) ||
+        (maximumRemoteDeviceId != null &&
+            !_validPolicyId(maximumRemoteDeviceId!))) {
+      throw ArgumentError('Invalid established-session policy binding');
+    }
+    if (maximumRemoteDeviceId != null && mode != FsSecurityMode.strict) {
+      throw ArgumentError.value(
+        maximumRemoteDeviceId,
+        'maximumRemoteDeviceId',
+        'is only valid for strict (Maximum) contact mode',
+      );
+    }
+  }
+
+  static bool _validPolicyId(String value) {
+    try {
+      final bytes = _decodeCanonicalId(value, 16);
+      return bytes.any((byte) => byte != 0);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  final FsSecurityMode mode;
+  final int revision;
+  final Set<String> excludedHandshakeIds;
+  final String? maximumRemoteDeviceId;
+
+  /// Projects the immutable snapshot into the eligibility shape used by the
+  /// shared session-selection and inbound-eligibility checks.
+  V3SessionEligibilityPolicy toEligibilityPolicy() =>
+      V3SessionEligibilityPolicy(
+        isValid: true,
+        revision: revision,
+        excludedHandshakeIds: excludedHandshakeIds,
+        maximumRemoteDeviceId: maximumRemoteDeviceId,
+      );
 }
 
 enum V3ApplicationInboundStatus {
@@ -240,20 +316,39 @@ final class V3ApplicationMessageInboundResult {
 /// runtime closes that handle only after this runtime has drained.
 final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
   static const int maxNormalDeviceTargetsPerMessage = 16;
+  static const int _publicDeviceIdBytes = 16;
 
   V3ApplicationSessionRuntime._({
-    required this.localIdentity,
-    required V3LocalDeviceHandle localDevice,
+    required V3LocalIdentityHandle? localIdentity,
+    required this.localPublicIdentity,
+    required V3LocalDeviceHandle? localDevice,
+    required Uint8List localDeviceId,
     required V3SessionPersistenceScope scope,
-    required AuxRecordRepository contactPolicyRepository,
-    required SecretKeyData contactPolicyStorageKey,
-    required FsSecurityModeService contactPolicyService,
+    required AuxRecordRepository? contactPolicyRepository,
+    required SecretKeyData? contactPolicyStorageKey,
+    required FsSecurityModeService? contactPolicyService,
+    required AuxRecordRepository? preFsRepository,
+    required SecretKeyData? preFsStorageKey,
+    required V3PreFsPendingStore? preFsPendingStore,
+    required Map<String, V3EstablishedSessionPolicy>? fixedContactPolicies,
+    required bool establishedSessionOnly,
     required this.restoreResult,
-  })  : _localDevice = localDevice,
+  })  : _localIdentity = localIdentity,
+        _localDevice = localDevice,
+        _localDeviceId = Uint8List.fromList(localDeviceId),
         _scope = scope,
         _contactPolicyRepository = contactPolicyRepository,
         _contactPolicyStorageKey = contactPolicyStorageKey,
-        _contactPolicyService = contactPolicyService;
+        _contactPolicyService = contactPolicyService,
+        _preFsRepository = preFsRepository,
+        _preFsStorageKey = preFsStorageKey,
+        _preFsPendingStore = preFsPendingStore,
+        _establishedSessionOnly = establishedSessionOnly,
+        _fixedContactPolicies = fixedContactPolicies == null
+            ? null
+            : Map<String, V3EstablishedSessionPolicy>.unmodifiable(
+                fixedContactPolicies,
+              );
 
   /// Opens the real encrypted Aux scope and restores all durable state.
   ///
@@ -308,6 +403,154 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
         maxAcknowledgementTotalBytes: maxAcknowledgementTotalBytes,
       );
 
+  /// Opens a restricted runtime over one caller-owned record store.
+  ///
+  /// The caller supplies only public material and an already-scoped store:
+  /// the public [publicIdentity], the public 16-byte installation
+  /// [localDeviceId], the [scopeToken], the caller-owned [store] and the
+  /// immutable [approvedContactPolicies] snapshot. This factory never derives
+  /// an auxiliary key, never loads or creates a private installation device
+  /// key, never constructs a mutable auxiliary repository, and therefore never
+  /// reaches Hive or any package-global storage.
+  ///
+  /// Only restore, established-session application send/receive/ACK/retry and
+  /// authenticated completed-session lookup remain available. Handshake
+  /// creation, processing, repair, contact-policy mutation and
+  /// message-repository projection throw [StateError] before any side effect.
+  static Future<V3ApplicationSessionRuntime> openEstablishedSessions({
+    required V3PublicIdentity publicIdentity,
+    required Uint8List localDeviceId,
+    required String scopeToken,
+    required V3LmfRecordStore store,
+    required V3SckaBackend sckaBackend,
+    required Map<String, V3EstablishedSessionPolicy> approvedContactPolicies,
+    int maxSessions = 4096,
+    int maxAcknowledgementEntries = 4096,
+    int maxAcknowledgementTotalBytes = 4 * 1024 * 1024,
+  }) async {
+    if (localDeviceId.length != _publicDeviceIdBytes ||
+        !localDeviceId.any((byte) => byte != 0)) {
+      throw ArgumentError.value(
+        localDeviceId.length,
+        'localDeviceId',
+        'must be the public 16-byte installation device identifier',
+      );
+    }
+    final policies = <String, V3EstablishedSessionPolicy>{};
+    for (final entry in approvedContactPolicies.entries) {
+      if (entry.key.isEmpty) {
+        throw ArgumentError(
+          'approved contact identity IDs must not be empty',
+          'approvedContactPolicies',
+        );
+      }
+      policies[entry.key] = entry.value;
+    }
+    V3SessionPersistenceScope? scope;
+    try {
+      scope = await V3SessionPersistenceScope.openWithStore(
+        scopeToken: scopeToken,
+        store: store,
+        sckaBackend: sckaBackend,
+        maxSessions: maxSessions,
+        maxAcknowledgementEntries: maxAcknowledgementEntries,
+        maxAcknowledgementTotalBytes: maxAcknowledgementTotalBytes,
+      );
+      final restored = await scope.restore(
+        checkpoints: const <V3TripleRatchetState>[],
+      );
+      for (final session in await scope.handshakes.completedSessions()) {
+        if (session.localIdentityDigest != _identityDigest(publicIdentity) ||
+            session.localDeviceId != _id(localDeviceId)) {
+          throw StateError(
+              'Restored keyboard session belongs to another identity or device');
+        }
+      }
+      return V3ApplicationSessionRuntime._(
+        localIdentity: null,
+        localPublicIdentity: publicIdentity,
+        localDevice: null,
+        localDeviceId: Uint8List.fromList(localDeviceId),
+        scope: scope,
+        contactPolicyRepository: null,
+        contactPolicyStorageKey: null,
+        contactPolicyService: null,
+        preFsRepository: null,
+        preFsStorageKey: null,
+        preFsPendingStore: null,
+        fixedContactPolicies: policies,
+        establishedSessionOnly: true,
+        restoreResult: restored,
+      );
+    } catch (_) {
+      await scope?.close();
+      rethrow;
+    }
+  }
+
+  /// Opens the delegated, single-grant keyboard runtime over a caller-owned
+  /// encrypted working set. No package-global storage or mutable contact
+  /// policy service is opened. The caller owns and closes [localIdentity];
+  /// this runtime owns [localDevice] after a successful return.
+  static Future<V3ApplicationSessionRuntime> openDelegatedKeyboardSessions({
+    required V3LocalIdentityHandle localIdentity,
+    required V3LocalDeviceHandle localDevice,
+    required String scopeToken,
+    required V3LmfRecordStore store,
+    required V3SckaBackend sckaBackend,
+    required Map<String, V3EstablishedSessionPolicy> approvedContactPolicies,
+  }) async {
+    if (localIdentity.isClosed ||
+        approvedContactPolicies.isEmpty ||
+        approvedContactPolicies.keys.any((id) => id.isEmpty)) {
+      throw ArgumentError('Invalid delegated keyboard identity or contacts');
+    }
+    V3SessionPersistenceScope? scope;
+    V3PreFsPendingStore? pending;
+    try {
+      scope = await V3SessionPersistenceScope.openWithStore(
+        scopeToken: scopeToken,
+        store: store,
+        sckaBackend: sckaBackend,
+      );
+      final restored = await scope.restore(
+        checkpoints: const <V3TripleRatchetState>[],
+      );
+      pending = V3PreFsPendingStore(store: store);
+      await pending.restore();
+      final localDigest = _identityDigest(localIdentity.publicIdentity);
+      final deviceId = _id(localDevice.deviceId);
+      for (final session in await scope.handshakes.completedSessions()) {
+        if (session.localIdentityDigest != localDigest ||
+            session.localDeviceId != deviceId) {
+          throw StateError(
+            'Restored keyboard session belongs to another identity or device',
+          );
+        }
+      }
+      return V3ApplicationSessionRuntime._(
+        localIdentity: localIdentity,
+        localPublicIdentity: localIdentity.publicIdentity,
+        localDevice: localDevice,
+        localDeviceId: localDevice.deviceId,
+        scope: scope,
+        contactPolicyRepository: null,
+        contactPolicyStorageKey: null,
+        contactPolicyService: null,
+        preFsRepository: null,
+        preFsStorageKey: null,
+        preFsPendingStore: pending,
+        fixedContactPolicies: approvedContactPolicies,
+        establishedSessionOnly: false,
+        restoreResult: restored,
+      );
+    } catch (_) {
+      await pending?.close();
+      await scope?.close();
+      rethrow;
+    }
+  }
+
   static Future<V3ApplicationSessionRuntime> _open({
     required V3LocalIdentityHandle localIdentity,
     required String scopeToken,
@@ -329,14 +572,18 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     V3SessionPersistenceScope? scope;
     AuxRecordRepository? contactPolicyRepository;
     SecretKeyData? contactPolicyStorageKey;
+    AuxRecordRepository? preFsRepository;
+    SecretKeyData? preFsStorageKey;
+    V3PreFsPendingStore? preFsPendingStore;
     try {
       deviceRepository.setActiveContext(
         scopeToken: scopeToken,
         auxStorageKey: extractedKey,
       );
-      device = await V3DeviceKeyRepository(
+      final createdDevice = await V3DeviceKeyRepository(
         store: V3LmfAuxRecordStore(deviceRepository),
       ).loadOrCreate();
+      device = createdDevice;
       scope = sckaBackend == null
           ? await V3SessionPersistenceScope.openPackagedScka(
               scopeToken: scopeToken,
@@ -368,13 +615,30 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
         auxRepository: contactPolicyRepository,
       );
       await contactPolicyService.rebuildIndex();
+      preFsStorageKey = extractedKey.copy();
+      preFsRepository = AuxRecordRepository()
+        ..setActiveContext(
+          scopeToken: scopeToken,
+          auxStorageKey: preFsStorageKey,
+        );
+      preFsPendingStore = V3PreFsPendingStore(
+        store: V3LmfAuxRecordStore(preFsRepository),
+      );
+      await preFsPendingStore.restore();
       return V3ApplicationSessionRuntime._(
         localIdentity: localIdentity,
-        localDevice: device,
+        localPublicIdentity: localIdentity.publicIdentity,
+        localDevice: createdDevice,
+        localDeviceId: createdDevice.deviceId,
         scope: scope,
         contactPolicyRepository: contactPolicyRepository,
         contactPolicyStorageKey: contactPolicyStorageKey,
         contactPolicyService: contactPolicyService,
+        preFsRepository: preFsRepository,
+        preFsStorageKey: preFsStorageKey,
+        preFsPendingStore: preFsPendingStore,
+        fixedContactPolicies: null,
+        establishedSessionOnly: false,
         restoreResult: restored,
       );
     } catch (_) {
@@ -383,6 +647,11 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
         auxStorageKey: null,
       );
       contactPolicyStorageKey?.destroy();
+      preFsRepository?.setActiveContext(
+        scopeToken: null,
+        auxStorageKey: null,
+      );
+      preFsStorageKey?.destroy();
       await scope?.close();
       device?.close();
       rethrow;
@@ -398,12 +667,36 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     }
   }
 
-  final V3LocalIdentityHandle localIdentity;
-  final V3LocalDeviceHandle _localDevice;
+  final V3LocalIdentityHandle? _localIdentity;
+
+  /// Public identity of this runtime's local context.
+  ///
+  /// Restricted runtimes carry only this value, never a private handle, so
+  /// every public identity check must read it instead of [localIdentity].
+  final V3PublicIdentity localPublicIdentity;
+
+  /// Private installation device handle; null in a restricted runtime.
+  final V3LocalDeviceHandle? _localDevice;
+
+  /// Detached copy of the public installation device identifier.
+  final Uint8List _localDeviceId;
+
   final V3SessionPersistenceScope _scope;
-  final AuxRecordRepository _contactPolicyRepository;
-  final SecretKeyData _contactPolicyStorageKey;
-  final FsSecurityModeService _contactPolicyService;
+  final AuxRecordRepository? _contactPolicyRepository;
+  final SecretKeyData? _contactPolicyStorageKey;
+  final FsSecurityModeService? _contactPolicyService;
+  final AuxRecordRepository? _preFsRepository;
+  final SecretKeyData? _preFsStorageKey;
+  final Map<String, V3EstablishedSessionPolicy>? _fixedContactPolicies;
+  final bool _establishedSessionOnly;
+
+  /// Durable, bounded preFs bootstrap journal for this identity scope.
+  final V3PreFsPendingStore? _preFsPendingStore;
+
+  V3PreFsPendingStore get preFsPendingStore =>
+      _preFsPendingStore ??
+      (throw StateError('Restricted runtime has no pre-FS pending store'));
+
   final V3SessionPersistenceRestoreResult restoreResult;
 
   Future<void> _operationTail = Future<void>.value();
@@ -412,7 +705,133 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
 
   bool get requiresRecovery => _scope.requiresRecovery;
 
-  Uint8List get localDeviceId => _localDevice.deviceId;
+  /// The private identity handle for normal callers.
+  ///
+  /// A restricted established-session runtime deliberately holds no private
+  /// identity: this throws instead of fabricating one.
+  V3LocalIdentityHandle get localIdentity {
+    final identity = _localIdentity;
+    if (identity == null) {
+      throw StateError(
+        'Layergram v3 established-session runtime has no private identity',
+      );
+    }
+    return identity;
+  }
+
+  /// True when this runtime may only operate existing established sessions.
+  bool get isEstablishedSessionOnly => _establishedSessionOnly;
+
+  bool get isDelegatedKeyboardSession =>
+      _fixedContactPolicies != null && !_establishedSessionOnly;
+
+  void _requireDelegatedContact(
+    V3PublicIdentity remoteIdentity,
+    V3HandshakeMode mode,
+  ) {
+    if (!isDelegatedKeyboardSession) return;
+    final policy = _approvedPolicyFor(remoteIdentity);
+    final approvedMode = policy.mode == FsSecurityMode.strict
+        ? V3HandshakeMode.maximum
+        : V3HandshakeMode.normal;
+    if (mode != approvedMode) {
+      throw StateError('Handshake mode is outside keyboard contact policy');
+    }
+  }
+
+  Uint8List get localDeviceId => Uint8List.fromList(_localDeviceId);
+
+  /// Denies one long-term-identity-dependent operation in restricted mode.
+  ///
+  /// Every caller invokes this before any store mutation, controller queue
+  /// entry or cryptography so a denied operation cannot have a side effect.
+  void _denyEstablishedSessionOnly(String operation) {
+    throw StateError(
+      'Layergram v3 established-session runtime does not permit $operation',
+    );
+  }
+
+  V3EstablishedSessionPolicy _approvedPolicyFor(
+    V3PublicIdentity remoteIdentity,
+  ) {
+    final policy = _fixedContactPolicies?[remoteIdentity.identityId];
+    if (policy == null) {
+      throw StateError(
+        'Layergram v3 contact is not approved for this runtime',
+      );
+    }
+    return policy;
+  }
+
+  V3EstablishedSessionPolicy _policyForSession(
+      V3CompletedHandshakeSession session) {
+    final identityId = base32
+        .encode(_decodeCanonicalId(session.remoteIdentityDigest, 48))
+        .replaceAll('=', '');
+    final policy = _fixedContactPolicies?[identityId];
+    if (policy == null ||
+        session.localIdentityDigest != _identityDigest(localPublicIdentity) ||
+        session.localDeviceId != _id(_localDeviceId)) {
+      throw StateError('Session is outside the authorized keyboard scope');
+    }
+    return policy;
+  }
+
+  bool _matchesFixedPolicy(V3CompletedHandshakeSession session,
+          V3EstablishedSessionPolicy policy) =>
+      session.mode ==
+          (policy.mode == FsSecurityMode.strict
+              ? V3HandshakeMode.maximum
+              : V3HandshakeMode.normal) &&
+      !policy.excludedHandshakeIds.contains(session.handshakeId) &&
+      (policy.mode != FsSecurityMode.strict ||
+          (policy.maximumRemoteDeviceId != null &&
+              session.remoteDeviceId == policy.maximumRemoteDeviceId));
+
+  Future<bool> _isRestrictedSessionAllowed(Uint8List sessionId) async {
+    if (_fixedContactPolicies == null) return true;
+    final session = await _completedSessionForId(sessionId);
+    try {
+      return _matchesFixedPolicy(session, _policyForSession(session));
+    } on StateError {
+      return false;
+    }
+  }
+
+  Future<void> _requireRestrictedSession(Uint8List sessionId) async {
+    if (!await _isRestrictedSessionAllowed(sessionId)) {
+      throw StateError('Session is outside the authorized keyboard policy');
+    }
+  }
+
+  Future<T> _normalRuntimeOnly<T>(Future<T> Function() operation) {
+    if (isEstablishedSessionOnly) {
+      _denyEstablishedSessionOnly('raw session or maintenance API');
+    }
+    return _serialized(operation);
+  }
+
+  FsSecurityModeService _requireMutableContactPolicyService() {
+    final service = _contactPolicyService;
+    if (service == null) {
+      throw StateError(
+        'Layergram v3 established-session runtime has no mutable contact '
+        'policy store',
+      );
+    }
+    return service;
+  }
+
+  V3LocalDeviceHandle _requireLocalDevice() {
+    final device = _localDevice;
+    if (device == null) {
+      throw StateError(
+        'Layergram v3 established-session runtime has no installation '
+        'device key',
+      );
+    }
+    return device;
+  }
 
   /// Starts or durably retries an offer before returning exportable frames.
   Future<V3ApplicationHandshakeExport> createOffer({
@@ -421,11 +840,15 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     Set<String> excludedHandshakeIds = const <String>{},
     DateTime? createdAt,
   }) {
+    _requireDelegatedContact(remoteIdentity, mode);
+    if (isEstablishedSessionOnly) {
+      _denyEstablishedSessionOnly('handshake offer creation');
+    }
     return _serialized(() async {
       final excluded = _effectiveExcludedHandshakeIds(excludedHandshakeIds);
       final outbound = await _scope.handshakes.createOffer(
         localIdentity: localIdentity,
-        localDevice: _localDevice,
+        localDevice: _requireLocalDevice(),
         remoteIdentity: remoteIdentity,
         mode: mode,
         excludedHandshakeIds: excluded,
@@ -447,6 +870,10 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     Set<String> excludedHandshakeIds = const <String>{},
     DateTime? createdAt,
   }) {
+    _requireDelegatedContact(initiatorIdentity, expectedMode);
+    if (isEstablishedSessionOnly) {
+      _denyEstablishedSessionOnly('handshake offer processing');
+    }
     return _serialized(() async {
       final opened = await V3HandshakeTransport.open(
         frames: frames,
@@ -457,7 +884,7 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
         final offer = opened.decodeOffer();
         final outbound = await _scope.handshakes.createReply(
           localIdentity: localIdentity,
-          localDevice: _localDevice,
+          localDevice: _requireLocalDevice(),
           initiatorIdentity: initiatorIdentity,
           offer: offer,
           expectedMode: expectedMode,
@@ -485,6 +912,9 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     DateTime? preparedAt,
     DateTime? completedAt,
   }) {
+    if (isEstablishedSessionOnly) {
+      _denyEstablishedSessionOnly('handshake reply processing');
+    }
     return _serialized(() async {
       final opened = await V3HandshakeTransport.open(
         frames: frames,
@@ -504,7 +934,7 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
           handshakeId: handshakeId,
           expectedStateDigest: stateDigest,
           localIdentity: localIdentity,
-          localDevice: _localDevice,
+          localDevice: _requireLocalDevice(),
           responderIdentity: responderIdentity,
           reply: reply,
           preparedAt: preparedAt,
@@ -543,6 +973,9 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     DateTime? preparedAt,
     DateTime? completedAt,
   }) {
+    if (isEstablishedSessionOnly) {
+      _denyEstablishedSessionOnly('handshake confirmation processing');
+    }
     return _serialized(() async {
       final opened = await V3HandshakeTransport.open(
         frames: frames,
@@ -590,6 +1023,10 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
         onSessionEstablished,
     DateTime? receivedAt,
   }) {
+    _requireDelegatedContact(remoteIdentity, expectedMode);
+    if (isEstablishedSessionOnly) {
+      _denyEstablishedSessionOnly('inbound handshake processing');
+    }
     return _serialized(() async {
       final excluded = _effectiveExcludedHandshakeIds(excludedHandshakeIds);
       final pinnedDeviceId =
@@ -657,6 +1094,9 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     required String handshakeId,
     required V3PublicIdentity remoteIdentity,
   }) {
+    if (isEstablishedSessionOnly) {
+      _denyEstablishedSessionOnly('handshake repair');
+    }
     return _serialized(() async {
       var outbound = await _scope.handshakes.pendingOutboundForId(handshakeId);
       outbound ??=
@@ -680,10 +1120,14 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     required V3HandshakeMode mode,
     Set<String> excludedHandshakeIds = const <String>{},
   }) {
+    _requireDelegatedContact(remoteIdentity, mode);
+    if (isEstablishedSessionOnly) {
+      _denyEstablishedSessionOnly('handshake repair lookup');
+    }
     return _serialized(() async {
       var outbound = await _scope.handshakes.latestPendingOutboundForPeer(
         localIdentity: localIdentity,
-        localDevice: _localDevice,
+        localDevice: _requireLocalDevice(),
         remoteIdentity: remoteIdentity,
         mode: mode,
         excludedHandshakeIds:
@@ -691,7 +1135,7 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
       );
       outbound ??= await _scope.handshakes.latestCompletedConfirmationForPeer(
         localIdentity: localIdentity,
-        localDevice: _localDevice,
+        localDevice: _requireLocalDevice(),
         remoteIdentity: remoteIdentity,
         mode: mode,
         excludedHandshakeIds:
@@ -705,6 +1149,56 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
             localIsResponder ? remoteIdentity : localIdentity.publicIdentity,
         responderIdentity:
             localIsResponder ? localIdentity.publicIdentity : remoteIdentity,
+      );
+    });
+  }
+
+  /// Lists every Normal setup this installation still owes to a peer
+  /// identity. Each record has its own handshake ID and can be retried
+  /// independently when several devices share that identity.
+  Future<List<V3ApplicationHandshakeExport>>
+      pendingHandshakesForRemoteIdentity({
+    required V3PublicIdentity remoteIdentity,
+    required V3HandshakeMode mode,
+    Set<String> excludedHandshakeIds = const <String>{},
+  }) {
+    _requireDelegatedContact(remoteIdentity, mode);
+    return _serialized(() async {
+      final pending = <V3DurableHandshakeOutbound>[
+        ...await _scope.handshakes.pendingOutboundForPeer(
+          localIdentity: localIdentity,
+          localDevice: _requireLocalDevice(),
+          remoteIdentity: remoteIdentity,
+          mode: mode,
+          excludedHandshakeIds:
+              _effectiveExcludedHandshakeIds(excludedHandshakeIds),
+        ),
+      ];
+      if (pending.isEmpty) {
+        final confirmation =
+            await _scope.handshakes.latestCompletedConfirmationForPeer(
+          localIdentity: localIdentity,
+          localDevice: _requireLocalDevice(),
+          remoteIdentity: remoteIdentity,
+          mode: mode,
+          excludedHandshakeIds:
+              _effectiveExcludedHandshakeIds(excludedHandshakeIds),
+        );
+        if (confirmation != null) pending.add(confirmation);
+      }
+      return List<V3ApplicationHandshakeExport>.unmodifiable(
+        await Future.wait([
+          for (final outbound in pending)
+            _sealOutbound(
+              outbound,
+              initiatorIdentity: outbound.kind == V3HandshakeRecordKind.reply
+                  ? remoteIdentity
+                  : localIdentity.publicIdentity,
+              responderIdentity: outbound.kind == V3HandshakeRecordKind.reply
+                  ? localIdentity.publicIdentity
+                  : remoteIdentity,
+            ),
+        ]),
       );
     });
   }
@@ -726,6 +1220,9 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     required V3PublicIdentity remoteIdentity,
     required Future<T> Function(Set<String> handshakeIds) persist,
   }) {
+    if (isEstablishedSessionOnly) {
+      _denyEstablishedSessionOnly('contact policy mutation');
+    }
     return _serialized(() async {
       final ids = await _handshakeIdsForRemoteIdentity(remoteIdentity);
       _locallyExcludedHandshakeIds.addAll(ids);
@@ -740,6 +1237,9 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     required V3PublicIdentity remoteIdentity,
     required Future<T> Function() persist,
   }) {
+    if (isEstablishedSessionOnly) {
+      _denyEstablishedSessionOnly('contact policy initialization');
+    }
     return _serialized(() async {
       if ((await _handshakeIdsForRemoteIdentity(remoteIdentity)).isNotEmpty) {
         throw StateError('Layergram v3 contact policy requires recovery');
@@ -749,9 +1249,13 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
   }
 
   FsSecurityMode protocolV3ModeForIdentity(V3PublicIdentity remoteIdentity) {
-    return _contactPolicyService.getModeSync(
+    final fixedPolicies = _fixedContactPolicies;
+    if (fixedPolicies != null) {
+      return _approvedPolicyFor(remoteIdentity).mode;
+    }
+    return _requireMutableContactPolicyService().getModeSync(
       contactId: remoteIdentity.identityId,
-      identityContext: localIdentity.publicIdentity.identityId,
+      identityContext: localPublicIdentity.identityId,
     );
   }
 
@@ -764,9 +1268,19 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
   V3SessionEligibilityPolicy? protocolV3EligibilityForIdentityId(
     String remoteIdentityId,
   ) {
-    return _contactPolicyService.getV3SessionEligibilitySync(
+    final fixedPolicies = _fixedContactPolicies;
+    if (fixedPolicies != null) {
+      final policy = fixedPolicies[remoteIdentityId];
+      if (policy == null) {
+        throw StateError(
+          'Layergram v3 contact is not approved for this runtime',
+        );
+      }
+      return policy.toEligibilityPolicy();
+    }
+    return _requireMutableContactPolicyService().getV3SessionEligibilitySync(
       contactId: remoteIdentityId,
-      identityContext: localIdentity.publicIdentity.identityId,
+      identityContext: localPublicIdentity.identityId,
     );
   }
 
@@ -774,11 +1288,15 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     required V3PublicIdentity remoteIdentity,
     required FsSecurityMode mode,
   }) {
+    if (isEstablishedSessionOnly) {
+      _denyEstablishedSessionOnly('contact policy initialization');
+    }
     return initializeContactPolicy(
       remoteIdentity: remoteIdentity,
-      persist: () => _contactPolicyService.ensureProtocolV3Policy(
+      persist: () =>
+          _requireMutableContactPolicyService().ensureProtocolV3Policy(
         contactId: remoteIdentity.identityId,
-        identityContext: localIdentity.publicIdentity.identityId,
+        identityContext: localPublicIdentity.identityId,
         mode: mode,
       ),
     );
@@ -788,11 +1306,15 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     required V3PublicIdentity remoteIdentity,
     required FsSecurityMode mode,
   }) {
+    if (isEstablishedSessionOnly) {
+      _denyEstablishedSessionOnly('contact policy mutation');
+    }
     return commitContactPolicyBoundary<void>(
       remoteIdentity: remoteIdentity,
-      persist: (handshakeIds) => _contactPolicyService.setProtocolV3Mode(
+      persist: (handshakeIds) =>
+          _requireMutableContactPolicyService().setProtocolV3Mode(
         contactId: remoteIdentity.identityId,
-        identityContext: localIdentity.publicIdentity.identityId,
+        identityContext: localPublicIdentity.identityId,
         mode: mode,
         existingHandshakeIds: handshakeIds,
       ),
@@ -803,9 +1325,12 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     required V3PublicIdentity remoteIdentity,
     required String remoteDeviceId,
   }) {
-    return _contactPolicyService.pinProtocolV3MaximumDevice(
+    if (isEstablishedSessionOnly) {
+      _denyEstablishedSessionOnly('contact policy mutation');
+    }
+    return _requireMutableContactPolicyService().pinProtocolV3MaximumDevice(
       contactId: remoteIdentity.identityId,
-      identityContext: localIdentity.publicIdentity.identityId,
+      identityContext: localPublicIdentity.identityId,
       remoteDeviceId: remoteDeviceId,
     );
   }
@@ -838,7 +1363,7 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     String? maximumRemoteDeviceId,
     String? Function()? maximumRemoteDeviceIdResolver,
   }) {
-    return _serialized(
+    return _normalRuntimeOnly(
       () => _sendMessageToIdentity(
         remoteIdentity: remoteIdentity,
         expectedMode: expectedMode,
@@ -860,33 +1385,48 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     required V3HandshakeMode expectedMode,
     required String text,
     String? senderDisplayName,
+    Uint8List? messageId,
     int? timestampUnixSeconds,
     int? expireAfterUnixSeconds,
     bool deleteAfterRead = false,
     bool backupExcluded = false,
+    bool alsoSentIdentityOnly = false,
     DateTime? persistedAt,
     Set<String>? excludedHandshakeIds,
     String? maximumRemoteDeviceId,
     String? Function()? maximumRemoteDeviceIdResolver,
   }) {
     return _serialized(() async {
-      final messageId = _newRandomId(V3ApplicationPayloadCodec.messageIdBytes);
-      final senderDigest = _identityDigestBytes(localIdentity.publicIdentity);
+      if (isEstablishedSessionOnly &&
+          (deleteAfterRead ||
+              expireAfterUnixSeconds != null ||
+              alsoSentIdentityOnly)) {
+        _denyEstablishedSessionOnly('scheduled or identity-only message');
+      }
+      final ownedMessageId = messageId == null
+          ? _newRandomId(V3ApplicationPayloadCodec.messageIdBytes)
+          : Uint8List.fromList(messageId);
+      if (ownedMessageId.length != V3ApplicationPayloadCodec.messageIdBytes) {
+        _wipe(ownedMessageId);
+        throw ArgumentError.value(messageId, 'messageId', 'invalid length');
+      }
+      final senderDigest = _identityDigestBytes(localPublicIdentity);
       final recipientDigest = _identityDigestBytes(remoteIdentity);
       Uint8List? encoded;
       try {
         final payload = V3ApplicationPayload(
-          messageId: messageId,
+          messageId: ownedMessageId,
           senderIdentityDigest: senderDigest,
           recipientIdentityDigest: recipientDigest,
           text: text,
           timestampUnixSeconds: timestampUnixSeconds ??
               DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000,
           senderDisplayName:
-              senderDisplayName ?? localIdentity.publicIdentity.displayName,
+              senderDisplayName ?? localPublicIdentity.displayName,
           expireAfterUnixSeconds: expireAfterUnixSeconds,
           deleteAfterRead: deleteAfterRead,
           backupExcluded: backupExcluded,
+          alsoSentIdentityOnly: alsoSentIdentityOnly,
         );
         encoded = V3ApplicationPayloadCodec.encode(payload);
         return await _sendMessageToIdentity(
@@ -901,7 +1441,7 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
               maximumRemoteDeviceIdResolver?.call() ?? maximumRemoteDeviceId,
         );
       } finally {
-        _wipe(messageId);
+        _wipe(ownedMessageId);
         _wipe(senderDigest);
         _wipe(recipientDigest);
         if (encoded != null) _wipe(encoded);
@@ -915,6 +1455,15 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     return _serialized(() async {
       final exports = <V3ApplicationMessageExport>[];
       for (final group in await _scope.pendingSendGroups()) {
+        var allowed = true;
+        for (final target in group.targets) {
+          if (!await _isRestrictedSessionAllowed(
+              _decodeCanonicalId(target.sessionId, 16))) {
+            allowed = false;
+            break;
+          }
+        }
+        if (!allowed) continue;
         final export = await _resumeSendGroup(group);
         if (export.frames.isEmpty) {
           if (await _isSendGroupFullyAcknowledged(group)) {
@@ -954,6 +1503,30 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
         _wipe(sessionId);
       }
 
+      if (_fixedContactPolicies != null) {
+        final target = await _completedSessionForId(frame.metadata.sessionId);
+        final policy = _policyForSession(target);
+        final mode = policy.mode == FsSecurityMode.strict
+            ? V3HandshakeMode.maximum
+            : V3HandshakeMode.normal;
+        if (!_matchesFixedPolicy(target, policy) ||
+            (expectedMode != null && expectedMode != mode) ||
+            (maximumRemoteDeviceId != null &&
+                maximumRemoteDeviceId != policy.maximumRemoteDeviceId) ||
+            (maximumRemoteDeviceIdResolver != null &&
+                maximumRemoteDeviceIdResolver?.call() !=
+                    policy.maximumRemoteDeviceId)) {
+          return const V3ApplicationMessageInboundResult(
+              status: V3ApplicationInboundStatus.notForThisInstallation);
+        }
+        expectedMode = mode;
+        excludedHandshakeIds = {
+          ...policy.excludedHandshakeIds,
+          ...?excludedHandshakeIds
+        };
+        maximumRemoteDeviceId = policy.maximumRemoteDeviceId;
+        maximumRemoteDeviceIdResolver = null;
+      }
       if (frame.metadata.kind == V3LmfFrameKind.acknowledgement) {
         final status = await _scope.applySendAcknowledgement(
           acknowledgementFrame: frame,
@@ -984,7 +1557,7 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
           if (!_isInboundSessionEligible(
             target,
             samePeer,
-            expectedMode: expectedMode,
+            expectedMode: expectedMode!,
             excludedHandshakeIds:
                 _effectiveExcludedHandshakeIds(excludedHandshakeIds),
             maximumRemoteDeviceId:
@@ -1129,7 +1702,17 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
   }
 
   Future<List<V3LmfFrame>> pendingAcknowledgementFrames() =>
-      _serialized(_scope.pendingAcknowledgementFrames);
+      _serialized(() async {
+        final frames = await _scope.pendingAcknowledgementFrames();
+        if (_fixedContactPolicies == null) return frames;
+        final allowed = <V3LmfFrame>[];
+        for (final frame in frames) {
+          if (await _isRestrictedSessionAllowed(frame.metadata.sessionId)) {
+            allowed.add(frame);
+          }
+        }
+        return allowed;
+      });
 
   /// Reconciles the encrypted canonical AR3 source into active chat metadata.
   ///
@@ -1139,18 +1722,63 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
   Future<V3ApplicationProjectionResult> reconcileMessageRepository({
     required MessagesRepositoryCore messagesRepository,
     required String? keyTag,
+    MessagesRepositoryContextLease? repositoryContextLease,
     int? nowUnixSeconds,
   }) {
+    if (isEstablishedSessionOnly) {
+      _denyEstablishedSessionOnly('message repository projection');
+    }
     return _serialized(() async {
       final projector = await _applicationProjector(
         messagesRepository: messagesRepository,
         keyTag: keyTag,
+        repositoryContextLease: repositoryContextLease,
       );
       try {
-        return await projector.reconcile(nowUnixSeconds: nowUnixSeconds);
+        final result =
+            await projector.reconcile(nowUnixSeconds: nowUnixSeconds);
+        final states = await _scope.presentationStates();
+        final records = repositoryContextLease == null
+            ? await messagesRepository.getAllMessages()
+            : await messagesRepository.getAllMessagesInContext(
+                repositoryContextLease,
+              );
+        for (final record in records) {
+          if (record.fsClassification != FsMessageClassification.preFs) {
+            continue;
+          }
+          final state = states[record.id];
+          if (state?.isDeleted == true ||
+              (record.deleteAfterRead && state?.readAtUnixSeconds != null)) {
+            if (repositoryContextLease == null) {
+              await messagesRepository.delete(record.id);
+            } else {
+              await messagesRepository.deleteInContext(
+                repositoryContextLease,
+                record.id,
+              );
+            }
+          }
+        }
+        return result;
       } finally {
         projector.close();
       }
+    });
+  }
+
+  /// A system-keyboard exchange explicitly excluded from app chat history.
+  /// The presentation tombstone is committed in the same exclusive V3 scope
+  /// before the keyboard can return its carrier or plaintext to the host.
+  /// Protocol replay and handshake records remain authoritative.
+  Future<void> suppressKeyboardChatHistory(String messageRecordId) {
+    if (!isDelegatedKeyboardSession) {
+      throw StateError(
+          'Keyboard history suppression requires delegated custody');
+    }
+    return _serialized(() async {
+      await _scope.markProjectedMessageDeleted(
+          messageRecordId: messageRecordId);
     });
   }
 
@@ -1159,17 +1787,34 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     required MessagesRepositoryCore messagesRepository,
     required String messageRecordId,
     required String? keyTag,
+    MessagesRepositoryContextLease? repositoryContextLease,
   }) {
+    if (isEstablishedSessionOnly) {
+      _denyEstablishedSessionOnly('message repository projection');
+    }
     return _serialized(() async {
       final projector = await _applicationProjector(
         messagesRepository: messagesRepository,
         keyTag: keyTag,
+        repositoryContextLease: repositoryContextLease,
       );
       try {
         return await projector.loadPlaintext(messageRecordId);
       } finally {
         projector.close();
       }
+    });
+  }
+
+  Future<({int? readAtUnixSeconds, bool isDeleted})?>
+      presentationStateForMessage(String messageRecordId) {
+    return _serialized(() async {
+      final state = (await _scope.presentationStates())[messageRecordId];
+      if (state == null) return null;
+      return (
+        readAtUnixSeconds: state.readAtUnixSeconds,
+        isDeleted: state.isDeleted,
+      );
     });
   }
 
@@ -1180,6 +1825,9 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     required String? keyTag,
     DateTime? readAt,
   }) {
+    if (isEstablishedSessionOnly) {
+      _denyEstablishedSessionOnly('message repository projection');
+    }
     return _serialized(() async {
       await _scope.markProjectedMessageRead(
         messageRecordId: messageRecordId,
@@ -1190,7 +1838,21 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
         keyTag: keyTag,
       );
       try {
-        return await projector.reconcile();
+        final result = await projector.reconcile();
+        final records = await messagesRepository.getAllMessages();
+        for (final record in records) {
+          if (record.id != messageRecordId ||
+              record.fsClassification != FsMessageClassification.preFs) {
+            continue;
+          }
+          if (record.deleteAfterRead) {
+            await messagesRepository.delete(messageRecordId);
+          } else {
+            await messagesRepository.markRead(messageRecordId);
+          }
+          break;
+        }
+        return result;
       } finally {
         projector.close();
       }
@@ -1204,6 +1866,9 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     required String? keyTag,
     DateTime? deletedAt,
   }) {
+    if (isEstablishedSessionOnly) {
+      _denyEstablishedSessionOnly('message repository projection');
+    }
     return _serialized(() async {
       await _scope.markProjectedMessageDeleted(
         messageRecordId: messageRecordId,
@@ -1215,6 +1880,14 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
       );
       try {
         final result = await projector.reconcile();
+        final records = await messagesRepository.getAllMessages();
+        if (records.any(
+          (record) =>
+              record.id == messageRecordId &&
+              record.fsClassification == FsMessageClassification.preFs,
+        )) {
+          await messagesRepository.delete(messageRecordId);
+        }
         await _scope.collectDeletedApplicationRecords();
         return result;
       } finally {
@@ -1223,13 +1896,15 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     });
   }
 
-  Future<void> deleteAcknowledgementsOlderThan(DateTime cutoff) => _serialized(
+  Future<void> deleteAcknowledgementsOlderThan(DateTime cutoff) =>
+      _normalRuntimeOnly(
         () => _scope.deleteAcknowledgementsOlderThan(cutoff),
       );
 
   Future<V3ApplicationMessageProjector> _applicationProjector({
     required MessagesRepositoryCore messagesRepository,
     required String? keyTag,
+    MessagesRepositoryContextLease? repositoryContextLease,
   }) async {
     final presentationStates = await _scope.presentationStates();
     final classificationsBySessionId = <String, FsMessageClassification>{};
@@ -1241,9 +1916,10 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     }
     return V3ApplicationMessageProjector(
       messagesRepository: messagesRepository,
-      localIdentity: localIdentity.publicIdentity,
+      localIdentity: localPublicIdentity,
       recordLoader: _scope.applicationRecordBytesForProjection,
       keyTag: keyTag,
+      repositoryContextLease: repositoryContextLease,
       presentationStates: presentationStates,
       classificationsBySessionId: classificationsBySessionId,
     );
@@ -1254,6 +1930,10 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     DateTime? exportedAt,
   }) {
     return _serialized(() async {
+      for (final target in export.targets) {
+        await _requireRestrictedSession(
+            _decodeCanonicalId(target.sessionId, 16));
+      }
       for (final target in export.targets) {
         if (target.frames.isEmpty) continue;
         await _scope.markSendExported(
@@ -1283,6 +1963,8 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
           'Layergram v3 export does not contain the selected carrier part',
         );
       }
+      await _requireRestrictedSession(
+          _decodeCanonicalId(targets.single.sessionId, 16));
       await _scope.markSendExported(
         assemblyId: assemblyId,
         fragmentIndexes: <int>{fragmentIndex},
@@ -1299,7 +1981,7 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     int expiresAtUnixSeconds = 0,
     DateTime? persistedAt,
   }) =>
-      _serialized(
+      _normalRuntimeOnly(
         () => _scope.sendMessage(
           sessionId: sessionId,
           expectedRevision: expectedRevision,
@@ -1315,7 +1997,7 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     DateTime? receivedAt,
     int? nowUnixSeconds,
   }) =>
-      _serialized(
+      _normalRuntimeOnly(
         () => _scope.receiveFrame(
           frame: frame,
           receivedAt: receivedAt,
@@ -1327,7 +2009,7 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     required V3LmfDurableDelivery delivery,
     DateTime? persistedAt,
   }) =>
-      _serialized(
+      _normalRuntimeOnly(
         () => _scope.commitDelivery(
           delivery: delivery,
           persistedAt: persistedAt,
@@ -1337,19 +2019,19 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
   Future<V3LmfInboxRestoreResult> resumeDeferredSessionFrames({
     int? nowUnixSeconds,
   }) =>
-      _serialized(
+      _normalRuntimeOnly(
         () => _scope.resumeDeferred(nowUnixSeconds: nowUnixSeconds),
       );
 
   Future<List<V3LmfFrame>> pendingSendFrames(String assemblyId) =>
-      _serialized(() => _scope.pendingSendFrames(assemblyId));
+      _normalRuntimeOnly(() => _scope.pendingSendFrames(assemblyId));
 
   Future<V3LmfOutboxEntry> markSendExported({
     required String assemblyId,
     required Set<int> fragmentIndexes,
     DateTime? exportedAt,
   }) =>
-      _serialized(
+      _normalRuntimeOnly(
         () => _scope.markSendExported(
           assemblyId: assemblyId,
           fragmentIndexes: fragmentIndexes,
@@ -1363,6 +2045,8 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
   }) =>
       _serialized(
         () async {
+          await _requireRestrictedSession(
+              acknowledgementFrame.metadata.sessionId);
           final status = await _scope.applySendAcknowledgement(
             acknowledgementFrame: acknowledgementFrame,
             receivedAt: receivedAt,
@@ -1373,10 +2057,10 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
       );
 
   Future<V3TripleRatchetState> snapshotForSession(Uint8List sessionId) =>
-      _serialized(() => _scope.snapshotForSession(sessionId));
+      _normalRuntimeOnly(() => _scope.snapshotForSession(sessionId));
 
   Future<V3SessionCompactionResult> compactSession(Uint8List sessionId) =>
-      _serialized(() => _scope.compactSession(sessionId));
+      _normalRuntimeOnly(() => _scope.compactSession(sessionId));
 
   /// Opportunistically compacts durable effects and retires only proofs whose
   /// local Normal/Maximum retention window has elapsed.
@@ -1387,6 +2071,9 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
   Future<V3ApplicationRetentionMaintenanceResult> maintainRetainedState({
     required DateTime now,
   }) {
+    if (isEstablishedSessionOnly) {
+      _denyEstablishedSessionOnly('retention maintenance');
+    }
     return _serialized(() async {
       final sessions = await _scope.handshakes.completedSessions();
       final modeBySession = <String, V3HandshakeMode>{};
@@ -1456,7 +2143,7 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     required V3RetentionPolicy policy,
     required DateTime now,
   }) =>
-      _serialized(
+      _normalRuntimeOnly(
         () => _scope.replaceEligibleCheckpointReceipt(
           assemblyId: assemblyId,
           policy: policy,
@@ -1473,13 +2160,25 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
         await _scope.close();
       } finally {
         try {
-          _contactPolicyRepository.setActiveContext(
+          _contactPolicyRepository?.setActiveContext(
             scopeToken: null,
             auxStorageKey: null,
           );
-          _contactPolicyStorageKey.destroy();
+          _contactPolicyStorageKey?.destroy();
+          // Drain the independent pending-manifest queue before revoking the
+          // repository context/key. A concurrent close must not strand a
+          // partly persisted successor record beside a custody snapshot.
+          try {
+            await _preFsPendingStore?.close();
+          } finally {
+            _preFsRepository?.setActiveContext(
+              scopeToken: null,
+              auxStorageKey: null,
+            );
+            _preFsStorageKey?.destroy();
+          }
         } finally {
-          _localDevice.close();
+          _localDevice?.close();
         }
       }
     }, allowClosed: true);
@@ -1516,7 +2215,7 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
         );
         final outbound = await _scope.handshakes.createReply(
           localIdentity: localIdentity,
-          localDevice: _localDevice,
+          localDevice: _requireLocalDevice(),
           initiatorIdentity: remoteIdentity,
           offer: offer,
           expectedMode: expectedMode,
@@ -1535,6 +2234,16 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
 
       if (counter == 1) {
         final reply = opened.decodeReply();
+        final addressedDeviceId = reply.initiatorDeviceId;
+        final localDeviceId = _requireLocalDevice().deviceId;
+        try {
+          if (_id(addressedDeviceId) != _id(localDeviceId)) {
+            throw const V3HandshakeAddressedElsewhereException();
+          }
+        } finally {
+          _wipe(addressedDeviceId);
+          _wipe(localDeviceId);
+        }
         if (reply.mode != expectedMode) {
           throw const FormatException(
             'Layergram v3 handshake security mode mismatch',
@@ -1557,7 +2266,7 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
           handshakeId: handshakeId,
           expectedStateDigest: stateDigest,
           localIdentity: localIdentity,
-          localDevice: _localDevice,
+          localDevice: _requireLocalDevice(),
           responderIdentity: remoteIdentity,
           reply: reply,
           preparedAt: receivedAt,
@@ -1663,6 +2372,24 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     Set<String>? excludedHandshakeIds,
     String? maximumRemoteDeviceId,
   }) async {
+    if (_fixedContactPolicies != null) {
+      final policy = _approvedPolicyFor(remoteIdentity);
+      final mode = policy.mode == FsSecurityMode.strict
+          ? V3HandshakeMode.maximum
+          : V3HandshakeMode.normal;
+      if (kind != V3LmfFrameKind.application ||
+          expiresAtUnixSeconds != 0 ||
+          expectedMode != mode ||
+          (maximumRemoteDeviceId != null &&
+              maximumRemoteDeviceId != policy.maximumRemoteDeviceId)) {
+        _denyEstablishedSessionOnly('message outside fixed policy');
+      }
+      excludedHandshakeIds = {
+        ...policy.excludedHandshakeIds,
+        ...?excludedHandshakeIds
+      };
+      maximumRemoteDeviceId = policy.maximumRemoteDeviceId;
+    }
     final sessions = await _sessionsForRemoteIdentity(remoteIdentity);
     final selected = _selectDeviceSessions(
       sessions,
@@ -1713,7 +2440,7 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
           session.handshakeId,
         ...await _scope.handshakes.pendingHandshakeIdsForPeer(
           localIdentity: localIdentity,
-          localDevice: _localDevice,
+          localDevice: _requireLocalDevice(),
           remoteIdentity: remoteIdentity,
         ),
       };
@@ -1822,6 +2549,17 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
   }) async {
     var current = group;
     final plaintext = current.plaintext;
+    String? logicalMessageId;
+    var alsoSentIdentityOnly = false;
+    if (current.kind == V3LmfFrameKind.application) {
+      try {
+        final payload = V3ApplicationPayloadCodec.decode(plaintext);
+        logicalMessageId = payload.stableMessageId;
+        alsoSentIdentityOnly = payload.alsoSentIdentityOnly;
+      } on FormatException {
+        // Generic runtime sends need not contain an AP3 chat payload.
+      }
+    }
     try {
       for (final target in group.targets) {
         if (target.isCommitted) continue;
@@ -1880,6 +2618,8 @@ final class V3ApplicationSessionRuntime implements V3ApplicationRuntimeSession {
     return V3ApplicationMessageExport(
       groupId: current.groupId,
       targets: targets,
+      logicalMessageId: logicalMessageId,
+      alsoSentIdentityOnly: alsoSentIdentityOnly,
     );
   }
 

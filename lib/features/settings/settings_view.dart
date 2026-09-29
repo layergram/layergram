@@ -24,6 +24,8 @@ import '../home/home_controller.dart';
 import '../premium/backup_view.dart';
 import '../premium/cover_generator_view.dart';
 import '../premium/multi_identity_view.dart';
+import '../system_keyboard/system_keyboard_app_service.dart';
+import '../system_keyboard/system_keyboard_settings.dart';
 import 'about_view.dart';
 import 'widgets/app_lock_settings.dart';
 import 'widgets/cover_length_limit_selector.dart';
@@ -52,6 +54,8 @@ class SettingsView extends ConsumerWidget {
     final sessionDecryptionCacheService =
         ref.read(sessionDecryptionCacheServiceProvider);
     final isPassphraseActive = ref.watch(isPassphraseActiveProvider);
+    final systemKeyboardActive =
+        ref.watch(systemKeyboardFeatureActiveProvider);
     final hasPremiumSettings = caps.backup.isAvailable ||
         caps.coverGenerator.isAvailable ||
         caps.identity.isAvailable;
@@ -89,6 +93,9 @@ class SettingsView extends ConsumerWidget {
                 },
               ),
               const AppLockSettings(),
+              // Experimental, Android-only, hidden unless the local build
+              // enables LAYERGRAM_EXPERIMENTAL_SYSTEM_KEYBOARD.
+              if (systemKeyboardActive) const SystemKeyboardSettingsTile(),
               // §11.2/§14.2 — visible only for an active passphrase identity.
               if (isPassphraseActive) const FsPassphraseSettingsSection(),
             ],

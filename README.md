@@ -27,6 +27,13 @@ post-quantum protection. It combines X25519 with ML-KEM-768, keeps Layergram
 serverless and transport-agnostic, and carries messages through the same three
 user-facing forms: direct text, deep link, and zero-width steganography.
 
+In Normal mode, initial messages can use an explicitly classified identity-key
+bootstrap while the hybrid session is negotiated through ordinary messages.
+These initial messages are classically encrypted and authenticated, but have
+**neither forward secrecy nor post-quantum protection**. Their gray message
+shield remains gray after the conversation becomes active. Maximum mode still
+requires its hybrid session before application data can be sent.
+
 **Protocol v3 is active in Layergram 2.0 and later.** Its security design,
 implementation, test evidence, migration contract, and release tooling remain
 public so researchers can inspect and audit the complete protocol boundary.
@@ -72,7 +79,7 @@ be shared with a contact.
 ## Key Features
 
 ### Security
-- **Hybrid post-quantum end-to-end encryption (active protocol v3)** — mandatory X25519 + ML-KEM-768 authenticated handshake, EC Double Ratchet, and sparse post-quantum ratcheting, with no classical-only v3 fallback
+- **Hybrid post-quantum end-to-end encryption (active protocol v3)** — X25519 + ML-KEM-768 authenticated sessions, EC Double Ratchet, and sparse post-quantum ratcheting; Normal-mode initial messages use a separately classified classical bootstrap, never a fallback for a lost established session
 - **Forward Secrecy** — Normal multi-device and Maximum device-bound session policies, without a Layergram server
 - **Passphrase identities and plausible deniability** — an optional passphrase derives a separate identity and encrypted keyspace that remain unavailable while the passphrase is inactive, providing practical but limited plausible deniability (not a guarantee against coercion, forensic correlation, or a compromised device)
 - **Steganographic encoding** — encrypted payloads hidden inside zero-width Unicode characters, with direct text and deep-link fallbacks for transports that don't support invisible characters
@@ -145,6 +152,8 @@ In this public repository, these optional capabilities default to **safe no-op i
 
 A future optional add-on may provide an in-app secure keyboard for touch devices so sensitive input can avoid the system IME and optionally use scrambled key layouts per supported locale. This is intended as defense in depth only: it can reduce exposure to third-party keyboard telemetry and learned suggestions, but it does not protect against a compromised OS, screen recording, abusive accessibility tooling, or direct visual observation.
 
+The separate **iOS system keyboard** is part of this open-source repository. Its experimental V3 build, source, settings, native extension and tests are described in [SYSTEM_KEYBOARD.md](SYSTEM_KEYBOARD.md). The in-app keyboard remains an optional capability.
+
 ## Getting Started
 
 ### Prerequisites
@@ -157,6 +166,11 @@ The committed dependency lock currently requires Dart 3.11.0 and Flutter
 3.38.4 or newer. Using Flutter 3.41.1 reproduces the toolchain used for release
 verification and avoids resolving a different dependency graph.
 
+For iOS simulator builds with Xcode 27, use Flutter 3.44.9 (verified on this
+project). Flutter 3.41.1 fails during `debug_unpack_ios` with Xcode 27's
+`lipo` behavior. The Runner Debug target builds only the active simulator
+architecture so its local Swift package uses the same architecture.
+
 ### Fetch Dependencies and Run Checks
 
 ```bash
@@ -164,6 +178,10 @@ flutter pub get
 flutter analyze
 flutter test
 ```
+
+For changes to the v3 messaging path or a release candidate, use the
+[simulator acceptance protocol](docs/QA_V3_SIMULATOR_PROTOCOL.md) after the
+automated checks. It specifies when the three-device manual matrix is needed.
 
 ### Build a Functional Android App
 

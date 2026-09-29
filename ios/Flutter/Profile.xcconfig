@@ -1,3 +1,6 @@
 #include "Pods/Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"
 #include "Generated.xcconfig"
 ARCHS[sdk=iphonesimulator*]=arm64 x86_64
+
+// Optional autonomous system keyboard runtime archive.
+OTHER_LDFLAGS = $(inherited) $(LAYERGRAM_SCKA_LDFLAGS)

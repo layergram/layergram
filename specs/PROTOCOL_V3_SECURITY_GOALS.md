@@ -318,3 +318,42 @@ issue fails the next release gate. The required incompatible user transition is 
 - [NIST FIPS 203: Module-Lattice-Based Key-Encapsulation Mechanism Standard](https://csrc.nist.gov/pubs/fips/203/final)
 - [Signal Double Ratchet Algorithm, including the Triple Ratchet integration](https://signal.org/docs/specifications/doubleratchet/)
 - [Signal ML-KEM Braid](https://signal.org/docs/specifications/mlkembraid/)
+
+## Explicit Normal bootstrap exception
+
+Before `ACTIVE`, Normal mode may carry user data in a domain-separated `p1`
+envelope derived from the static X25519 identity pair. It must be labelled
+classical, non-FS, and non-PQ for the lifetime of the message. Public identity
+binding digests are authenticated metadata, not secrets. Application data has
+carrier priority; only residual capacity carries negotiation chunks.
+
+The exception never applies to Maximum mode. A Normal-mode sender may select
+an explicitly flagged identity-wide message after one device has proved FS
+readiness when another installation is still negotiating or the selected
+carrier cannot contain all per-device application frames. Its gray per-message
+classification discloses that this content lacks FS even though active
+sessions remain stored. Delayed pre-fence traffic may also be accepted. Static
+identity compromise can forge, decrypt, and backdate `preFs` traffic; that
+KCI boundary is explicit.
+In Normal mode, peer-FS commitment is scoped to the authenticated sender
+device ID. Another installation of the same identity may start a separate
+bootstrap while the first device's FS session remains active. Legacy envelopes
+without a device ID remain subject to the identity-wide fence unless a complete
+companion offer identifies their new device. A device ID in an identity-only
+envelope does not itself prove possession of the device's private key.
+When an active and a pending device share one identity, a sender carries one
+identity-wide format-2 `p1` data envelope. Its authenticated flag 1 allows
+Normal-mode recipients past the device-scoped FS fence to read that particular
+gray/`preFs` message; flag 0 remains fenced. Handshake material occupies only
+the spare capacity and may continue over later ordinary messages. No normal
+user message asks for a second copy/import fraction of any denominator. The contact remains in
+setup-pending status until every known pending device has completed its own
+handshake. Previously emitted format-3 targeted carriers remain readable for
+in-flight compatibility.
+
+For Normal sessions established through this extension, transport ACKs may be
+appended to the next ordinary application carrier. Each inner frame remains
+independently authenticated; an invalid, stale, or unrelated appended ACK is
+not applied and cannot replace the application outcome. Lack of residual
+capacity delays the ACK and never drops or replaces user data. This transport
+bundle is not used by Maximum or legacy sessions.

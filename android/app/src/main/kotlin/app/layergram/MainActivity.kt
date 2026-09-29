@@ -12,6 +12,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
   private val screenProtectionChannelName = "layergram/screen_protection"
   private val qrBrightnessChannelName = "layergram/screen_brightness"
+  private val systemKeyboardChannelName = SystemKeyboardBroker.CHANNEL_NAME
   private val qrBrightnessFloor = 0.60f
   private val prefsName = "layergram_prefs"
   private val enabledKey = "screen_protection_enabled"
@@ -29,6 +30,9 @@ class MainActivity : FlutterActivity() {
 
   override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
     super.configureFlutterEngine(flutterEngine)
+    KeyboardAutonomousHost.initialize(applicationContext)
+    MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "layergram/keyboard_custody")
+      .setMethodCallHandler { call, result -> KeyboardAutonomousHost.handleCustody(call, result) }
 
     MethodChannel(flutterEngine.dartExecutor.binaryMessenger, screenProtectionChannelName)
       .setMethodCallHandler { call, result ->
@@ -61,9 +65,24 @@ class MainActivity : FlutterActivity() {
           else -> result.notImplemented()
         }
       }
+
+    // App admission/delegation uses this engine. The autonomous keyboard owner
+    // keeps its isolated runtime when this Activity is destroyed in background.
+    val systemKeyboardChannel =
+      MethodChannel(flutterEngine.dartExecutor.binaryMessenger, systemKeyboardChannelName)
+    SystemKeyboardBroker.bindEngine(systemKeyboardChannel, flutterEngine, applicationContext)
+    systemKeyboardChannel.setMethodCallHandler { call, result ->
+      SystemKeyboardBroker.handleAppCall(call, result)
+    }
+  }
+
+  override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+    SystemKeyboardBroker.unbindEngine(flutterEngine)
+    super.cleanUpFlutterEngine(flutterEngine)
   }
 
   override fun onPause() {
+    KeyboardAutonomousHost.appDeparted()
     screenProtectionTouchGate.reset()
     restorePreviousScreenBrightness(clearRequest = false)
     super.onPause()
@@ -71,6 +90,7 @@ class MainActivity : FlutterActivity() {
 
   override fun onResume() {
     super.onResume()
+    KeyboardAutonomousHost.appResumed()
     applyAccessibilityDataSensitivity(isScreenProtectionEnabled())
     if (qrBrightnessRequested) {
       applyQrScreenBrightness(capturePrevious = false)

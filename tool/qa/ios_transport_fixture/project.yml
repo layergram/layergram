@@ -1,0 +1,38 @@
+name: KeyboardTransportFixture
+options:
+  bundleIdPrefix: app.layergram.keyboardprobe
+  deploymentTarget:
+    iOS: '17.0'
+settings:
+  CODE_SIGN_STYLE: Automatic
+  SWIFT_VERSION: '5.0'
+targets:
+  Transport:
+    type: application
+    platform: iOS
+    sources: [App.swift, SimulatorBiometricProbe.swift]
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: app.layergram.keyboardprobe
+      GENERATE_INFOPLIST_FILE: YES
+      INFOPLIST_KEY_UILaunchScreen_Generation: YES
+      INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+      INFOPLIST_KEY_NSFaceIDUsageDescription: Authenticate the disposable simulator biometric test.
+  TransportUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [TransportUITests.swift]
+    dependencies:
+      - target: Transport
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: app.layergram.keyboardprobe.uitests
+      GENERATE_INFOPLIST_FILE: YES
+schemes:
+  Transport:
+    build:
+      targets:
+        Transport: all
+        TransportUITests: [test]
+    test:
+      targets: [TransportUITests]
+      preferredScreenCaptureFormat: screenshots
+      captureScreenshotsAutomatically: false

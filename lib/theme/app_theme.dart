@@ -79,8 +79,7 @@ class AppTheme {
       floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: scheme.primary,
         foregroundColor: scheme.onPrimary,
-        shape:
-            ContinuousRectangleBorder(borderRadius: BorderRadius.circular(40)),
+        shape: ContinuousRectangleBorder(borderRadius: BorderRadius.circular(40)),
         elevation: 4,
       ),
       tabBarTheme: TabBarThemeData(
@@ -103,6 +102,7 @@ class AppTheme {
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         backgroundColor: Colors.black.withValues(alpha: 0.75),
+        contentTextStyle: const TextStyle(color: Colors.white),
         shape:
             ContinuousRectangleBorder(borderRadius: BorderRadius.circular(28)),
       ),
@@ -192,7 +192,8 @@ class AppTheme {
       floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: scheme.primary,
         foregroundColor: scheme.onPrimary,
-        shape: ContinuousRectangleBorder(borderRadius: BorderRadius.circular(40)),
+        shape:
+            ContinuousRectangleBorder(borderRadius: BorderRadius.circular(40)),
         elevation: 4,
       ),
       tabBarTheme: TabBarThemeData(
@@ -213,6 +214,7 @@ class AppTheme {
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         backgroundColor: Colors.black.withValues(alpha: 0.80),
+        contentTextStyle: const TextStyle(color: Colors.white),
         shape:
             ContinuousRectangleBorder(borderRadius: BorderRadius.circular(28)),
       ),

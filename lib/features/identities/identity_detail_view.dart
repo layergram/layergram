@@ -21,6 +21,7 @@ import '../../l10n/app_strings.dart';
 import '../../ui/fs_contact_security_card.dart';
 import '../../ui/v3_contact_security_card.dart';
 import '../contact_verification/contact_verification_view.dart';
+import '../contact_verification/contact_verification_actions.dart';
 import '../home/chat_view.dart';
 import '../home/home_controller.dart';
 import 'identities_controller.dart';
@@ -79,24 +80,6 @@ class _IdentityDetailViewState extends ConsumerState<IdentityDetailView> {
   }
 
   Future<void> _handleVerifyAction() async {
-    if (_identity.verified) {
-      final messenger = ScaffoldMessenger.of(context);
-      final snackText = AppStrings.t(
-        context,
-        'verifyContactRevokedSnackbar',
-        namedArgs: {'name': _identity.displayName},
-      );
-      await ref
-          .read(identitiesControllerProvider)
-          .revokeContactVerification(_identity);
-      if (!mounted) return;
-      setState(() {
-        _identity = _identity.copyWith(verified: false);
-      });
-      messenger.showSnackBar(SnackBar(content: Text(snackText)));
-      return;
-    }
-
     final result = await showContactVerificationCeremony(
       context,
       ref,
@@ -108,6 +91,21 @@ class _IdentityDetailViewState extends ConsumerState<IdentityDetailView> {
         _identity = _identity.copyWith(verified: true);
       });
     }
+  }
+
+  Future<void> _revokeVerification() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final snackText = AppStrings.t(
+      context,
+      'verifyContactRevokedSnackbar',
+      namedArgs: {'name': _identity.displayName},
+    );
+    await ref
+        .read(identitiesControllerProvider)
+        .revokeContactVerification(_identity);
+    if (!mounted) return;
+    setState(() => _identity = _identity.copyWith(verified: false));
+    messenger.showSnackBar(SnackBar(content: Text(snackText)));
   }
 
   @override
@@ -177,14 +175,11 @@ class _IdentityDetailViewState extends ConsumerState<IdentityDetailView> {
                           child: Text(t(context, 'home')),
                         ),
                         if (!isMe)
-                          FilledButton.tonal(
-                            onPressed: _saving ? null : _handleVerifyAction,
-                            child: Text(
-                              _identity.verified
-                                  ? t(context,
-                                      'verifyContactCtaRevokeVerification')
-                                  : t(context, 'verifyContactCtaVerifyNow'),
-                            ),
+                          ContactVerificationActions(
+                            verified: _identity.verified,
+                            enabled: !_saving,
+                            onCompare: _handleVerifyAction,
+                            onRevoke: _revokeVerification,
                           ),
                         if (!isMe)
                           FilledButton(

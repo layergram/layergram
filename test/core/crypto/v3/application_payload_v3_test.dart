@@ -32,6 +32,23 @@ void main() {
     expect(V3ApplicationPayloadCodec.encode(decoded), encoded);
   });
 
+  test('AP3 binds an identity-only copy to the same logical message', () {
+    final payload = V3ApplicationPayload(
+      messageId: _bytes(16, 0x91),
+      senderIdentityDigest: _bytes(48, 0x31),
+      recipientIdentityDigest: _bytes(48, 0x71),
+      text: 'same text on green and orange devices',
+      timestampUnixSeconds: 1770000000,
+      alsoSentIdentityOnly: true,
+    );
+    final encoded = V3ApplicationPayloadCodec.encode(payload);
+    expect(encoded[4] & 0x04, 0x04);
+    final decoded = V3ApplicationPayloadCodec.decode(encoded);
+    expect(decoded.alsoSentIdentityOnly, isTrue);
+    expect(decoded.stableMessageId, payload.stableMessageId);
+    expect(V3ApplicationPayloadCodec.encode(decoded), encoded);
+  });
+
   test('AP3 rejects non-canonical flags, lengths, UTF-8 and empty text', () {
     final valid = V3ApplicationPayloadCodec.encode(
       V3ApplicationPayload(

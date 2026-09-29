@@ -34,6 +34,7 @@ final class V3ApplicationPayload {
     int? expireAfterUnixSeconds,
     bool deleteAfterRead = false,
     bool backupExcluded = false,
+    bool alsoSentIdentityOnly = false,
   }) {
     _validateCounter(timestampUnixSeconds, 'timestampUnixSeconds');
     final expiry = expireAfterUnixSeconds;
@@ -88,6 +89,7 @@ final class V3ApplicationPayload {
         expireAfterUnixSeconds: expireAfterUnixSeconds,
         deleteAfterRead: deleteAfterRead,
         backupExcluded: backupExcluded,
+        alsoSentIdentityOnly: alsoSentIdentityOnly,
       );
       checkedMessageId = null;
       checkedSender = null;
@@ -112,6 +114,7 @@ final class V3ApplicationPayload {
     required this.expireAfterUnixSeconds,
     required this.deleteAfterRead,
     required this.backupExcluded,
+    required this.alsoSentIdentityOnly,
   })  : _messageId = messageId,
         _senderIdentityDigest = senderIdentityDigest,
         _recipientIdentityDigest = recipientIdentityDigest;
@@ -125,6 +128,11 @@ final class V3ApplicationPayload {
   final int? expireAfterUnixSeconds;
   final bool deleteAfterRead;
   final bool backupExcluded;
+
+  /// The same logical text was also sent with identity-only encryption to a
+  /// device that had not finished Normal FS. The entire message is therefore
+  /// classified conservatively as preFs on every installation.
+  final bool alsoSentIdentityOnly;
 
   Uint8List get messageId => Uint8List.fromList(_messageId);
   Uint8List get senderIdentityDigest =>
@@ -150,7 +158,9 @@ abstract final class V3ApplicationPayloadCodec {
 
   static const int _deleteAfterReadFlag = 1 << 0;
   static const int _backupExcludedFlag = 1 << 1;
-  static const int _knownFlags = _deleteAfterReadFlag | _backupExcludedFlag;
+  static const int _identityOnlyCopyFlag = 1 << 2;
+  static const int _knownFlags =
+      _deleteAfterReadFlag | _backupExcludedFlag | _identityOnlyCopyFlag;
 
   static Uint8List encode(V3ApplicationPayload payload) {
     final name = _validatedUtf8(
@@ -179,6 +189,7 @@ abstract final class V3ApplicationPayloadCodec {
       var flags = 0;
       if (payload.deleteAfterRead) flags |= _deleteAfterReadFlag;
       if (payload.backupExcluded) flags |= _backupExcludedFlag;
+      if (payload.alsoSentIdentityOnly) flags |= _identityOnlyCopyFlag;
       encoded[offset++] = flags;
       encoded[offset++] = name.length;
       data.setUint16(offset, 0, Endian.big);
@@ -301,6 +312,7 @@ abstract final class V3ApplicationPayloadCodec {
         expireAfterUnixSeconds: rawExpiry == 0 ? null : rawExpiry,
         deleteAfterRead: flags & _deleteAfterReadFlag != 0,
         backupExcluded: flags & _backupExcludedFlag != 0,
+        alsoSentIdentityOnly: flags & _identityOnlyCopyFlag != 0,
       );
       final canonical = encode(payload);
       try {

@@ -20,6 +20,7 @@ import '../../core/providers.dart';
 import '../../l10n/app_strings.dart';
 import '../../ui/passphrase_button.dart';
 import '../contact_verification/contact_verification_view.dart';
+import '../contact_verification/contact_verification_actions.dart';
 import 'add_identity_view.dart';
 import 'identities_controller.dart';
 import 'identity_detail_view.dart';
@@ -73,7 +74,9 @@ class _IdentitiesListViewState extends ConsumerState<IdentitiesListView> {
     final newName = _nameCtrl!.text.trim();
     if (newName.isEmpty || newName == _selected!.displayName) return;
     setState(() => _saving = true);
-    await ref.read(identitiesControllerProvider).setDisplayName(_selected!, newName);
+    await ref
+        .read(identitiesControllerProvider)
+        .setDisplayName(_selected!, newName);
     if (!mounted) return;
     setState(() {
       _saving = false;
@@ -85,26 +88,6 @@ class _IdentitiesListViewState extends ConsumerState<IdentitiesListView> {
   }
 
   Future<void> _handleVerifyAction(RemoteIdentity target) async {
-    if (target.verified) {
-      final messenger = ScaffoldMessenger.of(context);
-      final snackText = AppStrings.t(
-        context,
-        'verifyContactRevokedSnackbar',
-        namedArgs: {'name': target.displayName},
-      );
-      await ref
-          .read(identitiesControllerProvider)
-          .revokeContactVerification(target);
-      if (!mounted) return;
-      setState(() {
-        if (_selected?.identityId == target.identityId) {
-          _selected = _selected?.copyWith(verified: false);
-        }
-      });
-      messenger.showSnackBar(SnackBar(content: Text(snackText)));
-      return;
-    }
-
     final result = await showContactVerificationCeremony(context, ref, target);
     if (!mounted) return;
     if (result == true) {
@@ -114,6 +97,25 @@ class _IdentitiesListViewState extends ConsumerState<IdentitiesListView> {
         }
       });
     }
+  }
+
+  Future<void> _revokeVerification(RemoteIdentity target) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final snackText = AppStrings.t(
+      context,
+      'verifyContactRevokedSnackbar',
+      namedArgs: {'name': target.displayName},
+    );
+    await ref
+        .read(identitiesControllerProvider)
+        .revokeContactVerification(target);
+    if (!mounted) return;
+    setState(() {
+      if (_selected?.identityId == target.identityId) {
+        _selected = _selected?.copyWith(verified: false);
+      }
+    });
+    messenger.showSnackBar(SnackBar(content: Text(snackText)));
   }
 
   @override
@@ -131,7 +133,7 @@ class _IdentitiesListViewState extends ConsumerState<IdentitiesListView> {
         stream: ref.read(identitiesControllerProvider).watchAll(),
         builder: (context, snapshot) {
           var identities = snapshot.data ?? const [];
-          
+
           final query = _searchCtrl.text.trim().toLowerCase();
           if (query.isNotEmpty) {
             identities = identities.where((it) {
@@ -160,8 +162,10 @@ class _IdentitiesListViewState extends ConsumerState<IdentitiesListView> {
                   separatorBuilder: (_, __) => const SizedBox(height: 8),
                   itemBuilder: (context, index) {
                     final it = identities[index];
-                    final isSelected = isWide && _selected?.identityId == it.identityId;
-                    final isMe = _myIdentityId != null && it.identityId == _myIdentityId;
+                    final isSelected =
+                        isWide && _selected?.identityId == it.identityId;
+                    final isMe =
+                        _myIdentityId != null && it.identityId == _myIdentityId;
                     return ListTile(
                       selected: isSelected,
                       selectedTileColor: Theme.of(context)
@@ -175,7 +179,9 @@ class _IdentitiesListViewState extends ConsumerState<IdentitiesListView> {
                       trailing: Icon(
                         isMe
                             ? Icons.person
-                            : (it.verified ? Icons.verified : Icons.error_outline),
+                            : (it.verified
+                                ? Icons.verified
+                                : Icons.error_outline),
                         color: isMe
                             ? Theme.of(context).colorScheme.primary
                             : (it.verified
@@ -240,7 +246,8 @@ class _IdentitiesListViewState extends ConsumerState<IdentitiesListView> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               SizedBox(width: 340, child: listView),
-              const VerticalDivider(width: 1, thickness: 1, color: Colors.white24),
+              const VerticalDivider(
+                  width: 1, thickness: 1, color: Colors.white24),
               Expanded(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
@@ -252,41 +259,39 @@ class _IdentitiesListViewState extends ConsumerState<IdentitiesListView> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                          TextField(
-                            controller: _nameCtrl,
-                            enabled: !_saving,
-                            onSubmitted: (_) => _saveName(),
-                            onChanged: (_) => setState(() {}),
-                            decoration: InputDecoration(
-                              labelText: t(context, 'contactNameLabel'),
-                              hintText: t(context, 'contactNameHint'),
-                              helperText: t(context, 'contactNameHelper'),
+                            TextField(
+                              controller: _nameCtrl,
+                              enabled: !_saving,
+                              onSubmitted: (_) => _saveName(),
+                              onChanged: (_) => setState(() {}),
+                              decoration: InputDecoration(
+                                labelText: t(context, 'contactNameLabel'),
+                                hintText: t(context, 'contactNameHint'),
+                                helperText: t(context, 'contactNameHelper'),
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 12),
-                          SelectableText(
-                              '${t(context, 'identityIdLabel')}: ${selected.identityId}'),
-                          const SizedBox(height: 8),
-                          SelectableText(
-                              '${t(context, 'fingerprintLabel')}: ${selected.fingerprint}'),
-                          const SizedBox(height: 8),
-                          SelectableText(
-                              '${t(context, 'publicKeyLabel')}: ${selected.publicKeyBase64}'),
-                          const SizedBox(height: 16),
+                            const SizedBox(height: 12),
+                            SelectableText(
+                                '${t(context, 'identityIdLabel')}: ${selected.identityId}'),
+                            const SizedBox(height: 8),
+                            SelectableText(
+                                '${t(context, 'fingerprintLabel')}: ${selected.fingerprint}'),
+                            const SizedBox(height: 8),
+                            SelectableText(
+                                '${t(context, 'publicKeyLabel')}: ${selected.publicKeyBase64}'),
+                            const SizedBox(height: 16),
                             Wrap(
                               spacing: 8,
                               runSpacing: 8,
                               children: [
                                 if (!isSelectedMe)
-                                  FilledButton.tonal(
-                                    onPressed: _saving
-                                        ? null
-                                        : () => _handleVerifyAction(selected),
-                                    child: Text(
-                                      selected.verified
-                                          ? t(context, 'verifyContactCtaRevokeVerification')
-                                          : t(context, 'verifyContactCtaVerifyNow'),
-                                    ),
+                                  ContactVerificationActions(
+                                    verified: selected.verified,
+                                    enabled: !_saving,
+                                    onCompare: () =>
+                                        _handleVerifyAction(selected),
+                                    onRevoke: () =>
+                                        _revokeVerification(selected),
                                   ),
                                 if (_myIdentityId == null ||
                                     selected.identityId != _myIdentityId)
@@ -294,47 +299,63 @@ class _IdentitiesListViewState extends ConsumerState<IdentitiesListView> {
                                     style: FilledButton.styleFrom(
                                         backgroundColor: Colors.red),
                                     onPressed: _saving
-                                      ? null
-                                      : () async {
-                                          final confirm = await showDialog<bool>(
-                                            context: context,
-                                            builder: (ctx) => AlertDialog(
-                                              title: Text(t(ctx, 'deleteContactConfirmTitle')),
-                                              content: Text(t(ctx, 'deleteContactConfirmMsg')),
-                                              actions: [
-                                                TextButton(
-                                                  onPressed: () => Navigator.of(ctx).pop(false),
-                                                  child: Text(t(ctx, 'cancel')),
-                                                ),
-                                                TextButton(
-                                                  onPressed: () => Navigator.of(ctx).pop(true),
-                                                  child: Text(
-                                                    t(ctx, 'delete'),
-                                                    style: TextStyle(color: Theme.of(ctx).colorScheme.error),
+                                        ? null
+                                        : () async {
+                                            final confirm =
+                                                await showDialog<bool>(
+                                              context: context,
+                                              builder: (ctx) => AlertDialog(
+                                                title: Text(t(ctx,
+                                                    'deleteContactConfirmTitle')),
+                                                content: Text(t(ctx,
+                                                    'deleteContactConfirmMsg')),
+                                                actions: [
+                                                  TextButton(
+                                                    onPressed: () =>
+                                                        Navigator.of(ctx)
+                                                            .pop(false),
+                                                    child:
+                                                        Text(t(ctx, 'cancel')),
                                                   ),
-                                                ),
-                                              ],
-                                            ),
-                                          );
-                                          if (confirm == true) {
-                                            await ref
-                                                .read(identitiesControllerProvider)
-                                                .delete(selected.identityId);
-                                            if (!context.mounted) return;
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              SnackBar(
-                                                content: Text(t(context, 'contactDeleted')),
+                                                  TextButton(
+                                                    onPressed: () =>
+                                                        Navigator.of(ctx)
+                                                            .pop(true),
+                                                    child: Text(
+                                                      t(ctx, 'delete'),
+                                                      style: TextStyle(
+                                                          color: Theme.of(ctx)
+                                                              .colorScheme
+                                                              .error),
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
                                             );
-                                            if (identities.isNotEmpty) {
-                                              _selectIdentity(identities.first);
-                                            } else {
-                                              setState(() => _selected = null);
+                                            if (confirm == true) {
+                                              await ref
+                                                  .read(
+                                                      identitiesControllerProvider)
+                                                  .delete(selected.identityId);
+                                              if (!context.mounted) return;
+                                              ScaffoldMessenger.of(context)
+                                                  .showSnackBar(
+                                                SnackBar(
+                                                  content: Text(t(context,
+                                                      'contactDeleted')),
+                                                ),
+                                              );
+                                              if (identities.isNotEmpty) {
+                                                _selectIdentity(
+                                                    identities.first);
+                                              } else {
+                                                setState(
+                                                    () => _selected = null);
+                                              }
                                             }
-                                          }
-                                        },
-                                  child: Text(t(context, 'delete')),
-                                ),
+                                          },
+                                    child: Text(t(context, 'delete')),
+                                  ),
                                 if (_nameCtrl != null &&
                                     _nameCtrl!.text.trim() !=
                                         selected.displayName)
