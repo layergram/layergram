@@ -90,6 +90,7 @@ be shared with a contact.
 ### Core Functionality
 - **Compose and share** encrypted messages over any text-based channel
 - **Decode** received messages by pasting them into the app
+- **System keyboard for Android and iOS (experimental)** — compose and decrypt in another app's text field while Layergram keeps the local draft inside its keyboard; inserting a message places one encrypted text carrier in the host field for the user to send
 - **Identity management** — create, export, and import complete public identities via a single branded static QR code, deep link, or text block; the enlarged QR temporarily improves display brightness and restores the previous setting when closed
 - **Local chat history** — encrypted archive of sent and received messages
 - **Pin / search / delete** conversations
@@ -129,6 +130,7 @@ lib/
 │   └── storage/          # Hive repositories, secure storage
 ├── features/
 │   ├── home/             # Chat list, message composer/viewer
+│   ├── system_keyboard/  # Opt-in system keyboard session and custody logic
 │   ├── settings/         # Settings & about screens
 │   └── premium/          # Optional entry points kept inactive in the public OSS release
 ├── app.dart              # App entry point
@@ -152,7 +154,16 @@ In this public repository, these optional capabilities default to **safe no-op i
 
 A future optional add-on may provide an in-app secure keyboard for touch devices so sensitive input can avoid the system IME and optionally use scrambled key layouts per supported locale. This is intended as defense in depth only: it can reduce exposure to third-party keyboard telemetry and learned suggestions, but it does not protect against a compromised OS, screen recording, abusive accessibility tooling, or direct visual observation.
 
-The separate **iOS system keyboard** is part of this open-source repository. Its experimental V3 build, source, settings, native extension and tests are described in [SYSTEM_KEYBOARD.md](SYSTEM_KEYBOARD.md). The in-app keyboard remains an optional capability.
+The separate **Android and iOS system keyboards** are part of this open-source
+repository. They require an explicit build flag, an in-app opt-in, and selection
+in the device's keyboard settings; ordinary builds leave the feature disabled.
+They support local V3 composition and text-carrier insertion, with an optional
+biometric shortcut for reopening an expired keyboard session. The system
+keyboard is still being tested on real Android phones and iPhones before it
+can be enabled in ordinary release builds. See
+[System keyboard](SYSTEM_KEYBOARD.md) for platform setup, security boundaries,
+limitations, and current test status. The in-app keyboard
+capability above is a separate optional feature.
 
 ## Getting Started
 

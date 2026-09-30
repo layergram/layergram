@@ -1,10 +1,12 @@
-# Experimental system keyboard
+# Experimental Android and iOS system keyboard
 
-Status: **experimental, local increment, not release-ready.** The capability is
-disabled in ordinary builds: the gate is a compile-time flag that defaults to
-off, and it stays off until the user both consents in the app and selects the
-keyboard in system settings. The iOS extension is embedded only by the explicit
-experimental build procedure below.
+Status: **experimental, not release-ready.** Android's input method and the iOS
+keyboard extension are both implemented in this public repository. The feature
+is disabled in ordinary builds: its compile-time flag defaults to off, and a
+validation build still requires the user's in-app opt-in and selection in system
+settings. The iOS extension is embedded only by the explicit experimental build
+procedure below. Remaining tests on real Android devices and iPhones must pass
+before the feature is enabled in ordinary release builds.
 
 ## What it does
 
@@ -14,8 +16,8 @@ Layergram's keyboard window, never inserted into the host application's editor.
 There are two experimental modes: the original finite preview forwards
 operations to the running Layergram app; the autonomous V3 candidate transfers
 exclusive encrypted protocol custody to a headless keyboard runtime after an
-app-authorized grant. The latter is the build used to investigate immediate
-“Sesión caducada” on a physical iPhone.
+app-authorized grant. The autonomous build is the one used for current
+physical-device validation on Android and iOS.
 
 Shared properties:
 
