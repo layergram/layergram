@@ -7,7 +7,9 @@ if [ "${LAYERGRAM_KEYBOARD_EMBED:-NO}" != YES ]; then
   if [ -d "$keyboard_destination" ]; then rm -rf "$keyboard_destination"; fi
   exit 0
 fi
-keyboard_source="${BUILT_PRODUCTS_DIR}/LayergramKeyboard.appex"
+# A separately built extension can live outside Xcode's archive products,
+# which Xcode may recreate before running this phase.
+keyboard_source="${LAYERGRAM_KEYBOARD_PRODUCT_PATH:-${BUILT_PRODUCTS_DIR}/LayergramKeyboard.appex}"
 if [ ! -f "$keyboard_source/Info.plist" ]; then
   echo 'error: Build the LayergramKeyboard scheme before embedding the extension.' >&2
   exit 1
