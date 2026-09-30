@@ -50,6 +50,8 @@ conversation installation separate from synthetic custody fixtures.
    [`ios_simulator_clipboard_bridge.py`](../tool/qa/ios_simulator_clipboard_bridge.py)
    can place the exact carrier on the simulator pasteboard. For example,
    `python3 tool/qa/ios_simulator_clipboard_bridge.py UDID < carrier.txt`.
+   The target must be an explicit simulator UUID; names and the `booted` alias
+   are rejected to prevent accidental use of another installation.
    Compare its SHA-256 with the sender's carrier, then tap **Paste and decode**
    in Layergram. Record the host-sync failure separately as an environment
    limitation. Do not replace the receiving app's UI import with a direct

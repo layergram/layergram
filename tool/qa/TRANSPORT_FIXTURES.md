@@ -426,7 +426,9 @@ from a previous app window cannot authorize touches in a new window.
 Prepare the complete incoming carrier with `load_carrier.py --host-instrumentation`
 and the normal `--serial` and `--input` arguments. Put your Android SDK's
 `platform-tools` directory on `PATH`; the loader invokes only the fixed `adb`
-command and does not accept an executable override. This writes only
+command and does not accept an executable override. The validated `--serial`
+is passed through `ANDROID_SERIAL`, so it cannot become a command option.
+This writes only
 the Probe's fixed `no_backup/qa-transport-incoming.carrier` input over stdin;
 no ciphertext is printed or embedded in a shell command. Then supply its
 canonical SHA-256 as `qaCarrierSha256`, the exact harmless lowercase test phrase

@@ -15,6 +15,10 @@ The format is inspired by Keep a Changelog and reflects the public GitHub Releas
 - Required explicit identity creation or restoration after a complete iOS
   uninstall, while preserving the identity during in-place updates.
 
+### Security
+- Restricted QA transport helpers to fixed executables and validated device
+  selection, keeping carrier data out of shell syntax.
+
 ### Documentation
 - Gave the Android and iOS system keyboards a prominent practical guide,
   including their opt-in build and user-consent requirements.

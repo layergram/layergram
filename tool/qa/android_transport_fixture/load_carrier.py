@@ -1,5 +1,6 @@
 """Load only a complete QA carrier into the offline Android host."""
 import argparse
+import os
 from pathlib import Path
 import re
 import shlex
@@ -15,7 +16,7 @@ def load_command(serial: str, carrier: str) -> list[str]:
         raise ValueError("Expected complete canonical V3 text lines")
     # adb joins shell arguments. Quoting here preserves literal newlines in
     # one intent extra; passing a Python argument list alone does not do this.
-    return ["adb", "-s", serial, "shell", "am", "start", "-n",
+    return ["adb", "shell", "am", "start", "-n",
             "app.layergram.keyboardprobe/.TransportActivity", "--es",
             "qa_carrier", shlex.quote(carrier)]
 
@@ -31,12 +32,17 @@ def main() -> None:
     command = load_command(args.serial, carrier)
     input_text = None
     if args.host_instrumentation:
-        command = ["adb", "-s", args.serial, "shell", "run-as",
+        command = ["adb", "shell", "run-as",
                    "app.layergram.keyboardprobe", "sh", "-c",
                    shlex.quote("umask 077 && mkdir -p no_backup && "
                                "cat > no_backup/qa-transport-incoming.carrier")]
         input_text = carrier
-    result = subprocess.run(command, input=input_text, capture_output=True, text=True)
+    # Select the validated target through adb's dedicated environment setting.
+    # The serial is never interpreted as a command-line option or shell text.
+    environment = os.environ.copy()
+    environment["ANDROID_SERIAL"] = args.serial
+    result = subprocess.run(command, env=environment, input=input_text,
+                            capture_output=True, text=True)
     if result.returncode or "Error" in result.stdout + result.stderr:
         # am's diagnostic can contain ciphertext. Do not print it.
         raise SystemExit("Could not load the QA carrier into the offline host")
