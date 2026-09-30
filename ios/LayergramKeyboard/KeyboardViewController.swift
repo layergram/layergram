@@ -1900,9 +1900,23 @@ final class KeyboardViewController: UIInputViewController {
     /// The first touch after idle expiry is an authentication gesture, not an
     /// edit. UIKit also delivers that touch to its button; consume it without
     /// deleting a still-valid biometric ticket or inserting plaintext.
+    static func shouldDeferTouchDuringRuntimeBegin(hasRuntime: Bool,
+                                                   beginAccepted: Bool) -> Bool {
+        hasRuntime && !beginAccepted
+    }
+
     private func deferTouchForBiometricResume() -> Bool {
         #if LAYERGRAM_AUTONOMOUS_KEYBOARD
-        if let runtime = runtimeBridge, !runtime.isReady { return true }
+        // Face ID can finish before the new runtime's `begin` response arrives.
+        // A second tap during that bounded bootstrap is not an edit failure and
+        // must not revoke the sealed ticket. Native custody is still checked.
+        if let runtime = runtimeBridge,
+           Self.shouldDeferTouchDuringRuntimeBegin(
+               hasRuntime: true, beginAccepted: policy.isBeginAccepted),
+           runtime.validate() {
+            traceLifecycle("runtimeBeginPendingTouch")
+            return true
+        }
         guard runtimeBridge == nil,
               KeyboardBiometricResumeGate.mayAttempt(
                   available: biometricResumeAvailable,

@@ -3,8 +3,9 @@
 The offline transport app is retained in `ios_transport_fixture` and
 `android_transport_fixture`. Both install as `app.layergram.keyboardprobe`.
 They provide a real editable host field, Copy and/or Send controls, and no
-network transport or cryptography. The Android fixture also contains a guarded
-UI-only helper for the separate full-app reinstall test described below.
+network transport or cryptography. The Android fixture also contains guarded
+UI-only helpers for transport observation and the separate full-app reinstall
+test described below.
 Encryption and decryption
 run in the installed Layergram system keyboard, with actual system lifecycle
 callbacks and real injected touches.
@@ -43,6 +44,27 @@ A pass certifies authorization at that instant, not that it will remain valid
 throughout an unattended run. Keep this preflight separate from product tests.
 
 ## iOS
+
+### Isolated full-app removal and reinstall
+
+Build the complete app with `LAYERGRAM_KEYBOARD_ISOLATED_FULL_APP=YES`,
+`LAYERGRAM_KEYBOARD_ISOLATED_QA=YES`, `LAYERGRAM_KEYBOARD_FIXTURE=YES` and
+`LAYERGRAM_KEYBOARD_REUSE_VALIDATION_APP=NO`. The builder uses `lib/main.dart`
+and the separate `app.layergram.keyboardvalidation.qa` identifier and App
+Groups. Invalid combinations are refused before building. Supply the normal
+exact device/signing selection and a task-owned derived-data directory; use
+`LAYERGRAM_KEYBOARD_RELEASE=YES` for the complete Release candidate.
+
+Inventory the installed bundles first. Create a throwaway identity in this
+isolated copy through normal onboarding and record its display name and public
+fingerprint. Reinstall the same complete app in-place, launch only that copy,
+and require the same name and fingerprint in its actual identity screen.
+Then remove only the isolated `.qa` app, verify that it is absent, reinstall it
+and check the real fresh-onboarding state. Keep the existing validation app,
+its FS state and the Probe installed throughout. Do not clear shared or global
+Keychain data, retain recovery words, or claim that this gate restores an old
+FS conversation after uninstall. Installation success alone is not an
+identity-continuity or fresh-onboarding pass.
 
 ### Autonomous simulator biometrics
 
@@ -292,6 +314,16 @@ test carrier, then tap the keyboard's Paste exactly once and complete real Face
 ID and any OS paste consent. Check the exact preview and FS shield manually.
 Preparing a carrier alone is never a delivery or a passed biometric test.
 
+For a protected physical keyboard that XCTest cannot inspect, the owner can
+confirm a contact, type a unique test phrase and use **Encrypt & insert** in
+the already open Probe field. Leave the resulting carrier in that host field;
+do not press Probe's offline Send control, which clears it. The read-only
+`run.sh readback-carrier` test attaches that existing host text without opening
+Layergram or touching the keyboard. Collect it with `collect_carrier.py
+--attachment 'QA existing physical carrier'` only after the test passes, then
+decode it on the other device. The readback proves insertion into the host,
+not the recipient's ability to decrypt or the FS phase; verify those separately.
+
 For the recording lifecycle gate, start with an admitted keyboard and a harmless
 draft. Start real screen recording, reopen the keyboard, and require a cleared
 draft and denied admission throughout capture. Stop recording, make one fresh
@@ -356,6 +388,68 @@ install the transport on the explicitly selected disposable device:
 bash tool/qa/android_transport_fixture/build.sh
 adb -s "$LAYERGRAM_KEYBOARD_ANDROID_SERIAL" install -r "$LAYERGRAM_QA_TRANSPORT_OUTPUT/transport.apk"
 ```
+
+### Host-owned transport observation
+
+For a cold app-to-keyboard handoff, start a fresh code-only QA trace, stop only
+the disposable containing app, and run the host helper with `qaStage=handoff`.
+It requires the QA IME to be enabled and selected, waits for the ordinary
+unlocked navigation, then returns to Probe without an extra warm-up delay. It
+requires the real active status and countdown to remain visible for 20 seconds.
+It never copies or pastes a carrier. Count a pass only with
+`QA_PHYSICAL_HANDOFF=visibleActiveSessionAndCountdown20s`,
+`INSTRUMENTATION_CODE: -1` and no process crash/ANR in that cycle's trace.
+Repeat distinct cold and warm cycles with fresh timestamps; do not retry an
+unchanged failure or instrument the IME owner's process. This bounded gate does
+not certify FS, hardware biometrics or long-term memory stability.
+
+The `KeyboardTransportInstrumentation` helper runs in the offline Probe host;
+it does not instrument or restart the process that owns Layergram's IME. It
+accepts only the validation package and explicit disposable-device consent.
+`qaStage=inspect` reads fixed status categories and whether a declared harmless
+QA phrase is visible; it neither touches the UI nor pastes a carrier:
+
+```sh
+adb -s "$LAYERGRAM_KEYBOARD_ANDROID_SERIAL" shell am instrument -w \
+  -e qaTarget app.layergram.keyboardvalidation -e disposableDevice YES \
+  -e qaStage inspect -e qaLocale it -e qaExpectedPlaintext risposta \
+  app.layergram.keyboardprobe/.KeyboardTransportInstrumentation
+```
+
+The diagnostic `qaStage=decode` requires the existing QA IME to be enabled and
+selected before any touch. It never enables a component, changes opt-in or
+authenticates on the owner's behalf. A disabled component, missing biometric
+interaction or unavailable visible control is a failed stage, not a crypto or
+FS verdict. It observes only focused app windows and the visible IME; controls
+from a previous app window cannot authorize touches in a new window.
+
+Prepare the complete incoming carrier with `load_carrier.py --host-instrumentation`
+and the normal `--adb`, `--serial`, and `--input` arguments. This writes only
+the Probe's fixed `no_backup/qa-transport-incoming.carrier` input over stdin;
+no ciphertext is printed or embedded in a shell command. Then supply its
+canonical SHA-256 as `qaCarrierSha256`, the exact harmless lowercase test phrase
+as `qaExpectedPlaintext`, and the sender's public label as `qaExpectedContact`:
+
+```sh
+adb -s "$LAYERGRAM_KEYBOARD_ANDROID_SERIAL" shell am instrument -w \
+  -e qaTarget app.layergram.keyboardvalidation -e disposableDevice YES \
+  -e qaStage decode -e qaLocale it -e qaExpectedPlaintext risposta \
+  -e qaExpectedContact "$QA_PUBLIC_CONTACT" -e qaCarrierSha256 "$QA_CARRIER_SHA256" \
+  app.layergram.keyboardprobe/.KeyboardTransportInstrumentation
+```
+
+The helper makes an ordinary app-to-Probe handoff, checks visible readiness,
+uses the host's explicit incoming-copy control, and issues at most one real
+keyboard Paste tap for that carrier. A retained attempt marker prevents retries
+after a paste was attempted. Do not delete it to force a test result; an already
+visible exact decoded preview can be inspected without another Paste. A pass
+requires `QA_PHYSICAL_DECODE=exactPlaintextAndActiveFS` together with
+`INSTRUMENTATION_CODE: -1`, exact decoded text, confirmed authenticated sender,
+active FS and a running countdown. Shell exit zero or progress markers alone
+are insufficient. Bound the driver externally and stop only the Probe on a
+timeout, preserving Layergram and its custody. Keep this diagnostic fixture's
+validation separate from physical biometrics, cold-start stability and release
+qualification.
 
 ### Separate complete-app reinstall copy
 

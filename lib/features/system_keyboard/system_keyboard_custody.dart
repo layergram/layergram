@@ -271,7 +271,8 @@ final class SystemKeyboardCustody {
             return;
           }
           _diagnosticStage?.call('custodyNoJournal');
-          if (backups.isNotEmpty || prepared.isNotEmpty ||
+          if (backups.isNotEmpty ||
+              prepared.isNotEmpty ||
               activations.isNotEmpty ||
               repairs.isNotEmpty) {
             throw StateError('Orphaned keyboard preparation receipt');
@@ -291,7 +292,8 @@ final class SystemKeyboardCustody {
           // Reapply exact bytes to verify scope/authentication, then clear the
           // remaining import journal. Never restore authorization.
           await _applyManifest(imports.single.payload);
-          if (backups.isNotEmpty || activations.isNotEmpty ||
+          if (backups.isNotEmpty ||
+              activations.isNotEmpty ||
               prepared.length > 1 ||
               prepared.any((receipt) =>
                   receipt.payload.length != 3 ||
@@ -490,11 +492,13 @@ final class SystemKeyboardCustody {
           _diagnosticStage?.call('custodyManifestApplied');
           // Cleanup is idempotent and epoch bound. Keep both private journals until
           // shared cleanup finishes, so a crash cannot leave unowned shared state.
+          _diagnosticStage?.call('custodyNativeCleanupStart');
           await native.removeAfterImport(
             parsed.epoch,
             parsed.key,
             body['revision'] as int,
           );
+          _diagnosticStage?.call('custodyNativeCleanupReady');
           for (final receipt in prepared) {
             await privateStore.delete(receipt.storageId);
           }
@@ -504,10 +508,15 @@ final class SystemKeyboardCustody {
           for (final backup in backups) {
             await privateStore.delete(backup.storageId);
           }
+          _diagnosticStage?.call('custodyReceiptsDeleted');
           await privateStore.flush();
+          _diagnosticStage?.call('custodyReceiptsFlushed');
           await privateStore.delete(marker.storageId);
+          _diagnosticStage?.call('custodyMarkerDeleted');
           await privateStore.flush();
+          _diagnosticStage?.call('custodyMarkerFlushed');
           await privateStore.delete(manifest.storageId);
+          _diagnosticStage?.call('custodyManifestDeleted');
           await privateStore.flush();
           _diagnosticStage?.call('custodyCleanupReady');
         } finally {
@@ -1300,7 +1309,8 @@ final class SystemKeyboardCustody {
             in all.where((r) => r.payload['kind'] == activationKind)) {
           await privateStore.delete(receipt.storageId);
         }
-        for (final backup in all.where((r) => r.payload['kind'] == backupKind)) {
+        for (final backup
+            in all.where((r) => r.payload['kind'] == backupKind)) {
           await privateStore.delete(backup.storageId);
         }
         await privateStore.flush();

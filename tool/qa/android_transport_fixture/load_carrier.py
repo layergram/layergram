@@ -24,10 +24,19 @@ def main() -> None:
     parser.add_argument("--adb", required=True)
     parser.add_argument("--serial", required=True)
     parser.add_argument("--input", type=Path, required=True)
+    parser.add_argument("--host-instrumentation", action="store_true",
+                        help="Prepare the offline host's fixed input file without opening UI")
     args = parser.parse_args()
     carrier = args.input.read_text().strip()
-    result = subprocess.run(load_command(args.adb, args.serial, carrier),
-                            capture_output=True, text=True)
+    command = load_command(args.adb, args.serial, carrier)
+    input_text = None
+    if args.host_instrumentation:
+        command = [args.adb, "-s", args.serial, "shell", "run-as",
+                   "app.layergram.keyboardprobe", "sh", "-c",
+                   shlex.quote("umask 077 && mkdir -p no_backup && "
+                               "cat > no_backup/qa-transport-incoming.carrier")]
+        input_text = carrier
+    result = subprocess.run(command, input=input_text, capture_output=True, text=True)
     if result.returncode or "Error" in result.stdout + result.stderr:
         # am's diagnostic can contain ciphertext. Do not print it.
         raise SystemExit("Could not load the QA carrier into the offline host")

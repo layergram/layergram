@@ -15,7 +15,14 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class SecureStorageService {
-  SecureStorageService() : _storage = const FlutterSecureStorage();
+  SecureStorageService()
+      : _storage = const FlutterSecureStorage(iOptions: _iosAppStorage);
+
+  // The default application Keychain access group, with a non-null service.
+  // Do not widen fresh-install cleanup to shared keyboard/App Group services.
+  static const _iosAppStorage = IOSOptions(
+    accountName: AppleOptions.defaultAccountName,
+  );
 
   final FlutterSecureStorage _storage;
 
@@ -33,5 +40,12 @@ class SecureStorageService {
 
   Future<void> deleteAll() {
     return _storage.deleteAll();
+  }
+
+  Future<void> resetForFreshIosInstallation() async {
+    await _storage.deleteAll(iOptions: _iosAppStorage);
+    if ((await _storage.readAll(iOptions: _iosAppStorage)).isNotEmpty) {
+      throw StateError('Fresh iOS app storage reset was not completed');
+    }
   }
 }

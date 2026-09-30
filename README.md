@@ -97,6 +97,14 @@ be shared with a contact.
 - **Backup exclusion contract** — per-contact setting marks new messages so official Layergram clients exclude them from official backups and exports
 - **42 languages** included
 
+### Identity recovery on iOS
+
+Normal app updates preserve the local identity and data. After a complete iOS
+uninstall and fresh installation, Layergram opens onboarding and requires an
+explicit choice to create or restore an identity. Keep your 24-word recovery
+phrase and any optional passphrase before uninstalling. Restoring the identity
+does not restore deleted conversations or device-specific session state.
+
 ### Architecture
 - **Capability interfaces** — clean extension points for future optional add-ons
 - **Riverpod** state management

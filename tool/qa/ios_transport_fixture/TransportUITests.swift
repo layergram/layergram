@@ -28,6 +28,28 @@ final class TransportUITests: XCTestCase {
         print("QA_UI_AUTOMATION=runnerInitialized;noPhoneGestures")
     }
 
+    /// Collect an already inserted encrypted carrier without opening Layergram,
+    /// touching the keyboard or changing the offline host field.
+    func testExistingProbeCarrierReadback() throws {
+        let host = XCUIApplication(bundleIdentifier: "app.layergram.keyboardprobe")
+        XCTAssertTrue(host.waitForExistence(timeout: 5), "Leave the offline Probe in front")
+        let field = host.textViews["probe.transport.field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "The Probe host field must remain visible")
+        let carrier = field.value as? String ?? ""
+        XCTAssertFalse(carrier.isEmpty, "Insert one new keyboard carrier before readback")
+        XCTAssertLessThanOrEqual(carrier.utf16.count, 4_000)
+        let lines = carrier.split(separator: "\n", omittingEmptySubsequences: false)
+        XCTAssertEqual(lines.count, 1, "A single new message must have one carrier")
+        XCTAssertTrue(carrier.range(
+            of: #"^(?:p1|m3|b3)\.[A-Za-z0-9_-]+$"#, options: .regularExpression
+        ) != nil, "The host field must contain only a complete V3 carrier")
+        let attachment = XCTAttachment(string: carrier)
+        attachment.name = "QA existing physical carrier"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        print("QA_EXISTING_CARRIER_READBACK=complete;units=\(carrier.utf16.count)")
+    }
+
     /// Inventory the actual full-app onboarding in a disposable simulator.
     /// This only checks accessibility; it never creates or prints an identity.
     func testSimulatorLayergramOnboardingAccessibility() throws {
