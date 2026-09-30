@@ -195,6 +195,17 @@ The separate **Android and iOS system keyboards** are part of this open-source r
 - Rust 1.87.0 and Cargo for protocol-v3 native builds
 - Platform-specific tooling (Xcode for iOS/macOS, Android SDK, Visual Studio for Windows, Linux toolchain as needed)
 
+Start from the public source, including its committed lockfiles:
+
+```bash
+git clone https://github.com/layergram/layergram.git
+cd layergram
+```
+
+To build a particular release, check out its tag before resolving dependencies.
+No application account, release signing key, private repository, or generated
+native library is needed to build the open-source application.
+
 The committed dependency lock currently requires Dart 3.11.0 and Flutter
 3.38.4 or newer. Using Flutter 3.41.1 reproduces the toolchain used for release
 verification and avoids resolving a different dependency graph.
@@ -221,16 +232,44 @@ automated checks. It specifies when the three-device manual matrix is needed.
 Protocol v3 uses a native Rust SCKA backend. The default native ABI is
 deliberately fail-closed, so a plain `flutter run` is not a functional
 protocol-v3 build. To compile the active backend from this repository and
-package it into an Android build:
+package it into an Android build. Use JDK 17 or 21 and install Android SDK
+Platform 36, NDK 28.2.13676358 and CMake 3.22.1 in Android Studio's SDK Manager.
+Set `ANDROID_HOME` to your own SDK location and make `sdkmanager` available on
+`PATH`. The equivalent SDK Manager command is:
 
 ```bash
+sdkmanager "platform-tools" "platforms;android-36" \
+  "build-tools;36.0.0" "ndk;28.2.13676358" "cmake;3.22.1"
+sdkmanager --licenses
+```
+
+Then, from the repository root:
+
+```bash
+rustup toolchain install 1.87.0 --profile minimal
+rustup override set 1.87.0
+rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
 cargo fetch --locked --manifest-path native/layergram_scka/Cargo.toml
 tool/pq/prepare_scka_packaged_android.sh
 ORG_GRADLE_PROJECT_layergramSckaCandidatePackage=true \
-  flutter run -d <android-device>
+  flutter build apk --release --target lib/main.dart
 ```
 
-The first command populates the Cargo cache from the exact lockfile; the
+The installable result is `build/app/outputs/flutter-apk/app-release.apk`.
+Without your own `android/key.properties`, local release builds use the Android
+debug signing certificate. They are functional local builds, but cannot update
+an official APK signed with Layergram's distribution certificate. Official
+download checksums do not apply to independently compiled binaries.
+
+To run on a connected device after the native preparation step, replace
+`flutter build apk --release --target lib/main.dart` with
+`flutter run -d <android-device>`. To include the opt-in autonomous keyboard,
+add both `--dart-define=LAYERGRAM_EXPERIMENTAL_SYSTEM_KEYBOARD=true` and
+`--dart-define=LAYERGRAM_AUTONOMOUS_SYSTEM_KEYBOARD=true` to either Flutter
+command, then complete the app and system consent steps in
+[the keyboard guide](SYSTEM_KEYBOARD.md).
+
+The `cargo fetch` command populates the cache from the exact lockfile; the
 packaging step then runs offline. This path also requires Android NDK tooling
 and the Android Rust targets checked by the preparation script. Generated
 native libraries stay under the ignored `.dart_tool/` directory. The complete

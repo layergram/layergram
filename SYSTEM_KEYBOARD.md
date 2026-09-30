@@ -6,7 +6,7 @@ conversation, and preview a received message from the keyboard. This reduces
 switching between applications while keeping private text inside Layergram's
 keyboard window.
 
-Status: **experimental, local increment, not release-ready.** The capability is
+Status: **opt-in experimental feature on Android and iOS.** The capability is
 disabled in ordinary builds: the gate is a compile-time flag that defaults to
 off, and it stays off until the user both consents in the app and selects the
 keyboard in system settings. The iOS extension is embedded only by the explicit
@@ -50,8 +50,16 @@ access. The keyboard cannot unlock the identity. In the autonomous build,
 ## Enabling it locally
 
 ```
-flutter run --dart-define=LAYERGRAM_EXPERIMENTAL_SYSTEM_KEYBOARD=true
+ORG_GRADLE_PROJECT_layergramSckaCandidatePackage=true \
+  flutter run --dart-define=LAYERGRAM_EXPERIMENTAL_SYSTEM_KEYBOARD=true \
+  --dart-define=LAYERGRAM_AUTONOMOUS_SYSTEM_KEYBOARD=true
 ```
+
+On Android, first complete the Rust and native-library preparation in the
+[source build instructions](README.md#build-a-functional-android-app). A Flutter
+feature flag alone does not package the active protocol backend. On iOS, use
+the explicit autonomous extension build procedure below instead of this
+Android command.
 
 Then, in the app: open Settings, enable the experimental system keyboard entry,
 accept the consent dialog, and use the provided button to open the Android input
