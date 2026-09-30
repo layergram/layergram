@@ -185,7 +185,7 @@ In this public repository, these optional capabilities default to **safe no-op i
 
 A future optional add-on may provide an in-app secure keyboard for touch devices so sensitive input can avoid the system IME and optionally use scrambled key layouts per supported locale. This is intended as defense in depth only: it can reduce exposure to third-party keyboard telemetry and learned suggestions, but it does not protect against a compromised OS, screen recording, abusive accessibility tooling, or direct visual observation.
 
-The separate **iOS system keyboard** is part of this open-source repository. Its experimental V3 build, source, settings, native extension and tests are described in [SYSTEM_KEYBOARD.md](SYSTEM_KEYBOARD.md). The in-app keyboard remains an optional capability.
+The separate **Android and iOS system keyboards** are part of this open-source repository. Their experimental V3 builds, source, settings, native components and tests are described in [SYSTEM_KEYBOARD.md](SYSTEM_KEYBOARD.md). The in-app keyboard remains an optional capability.
 
 ## Getting Started
 
