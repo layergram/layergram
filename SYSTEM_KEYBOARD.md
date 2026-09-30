@@ -12,6 +12,11 @@ off, and it stays off until the user both consents in the app and selects the
 keyboard in system settings. The iOS extension is embedded only by the explicit
 experimental build procedure below.
 
+The official Android APKs attached to
+[v2.0.6+33](https://github.com/layergram/layergram/releases/tag/v2.0.6%2B33)
+include the autonomous keyboard. These APKs require the same explicit in-app
+consent and Android keyboard setup; they do not enable the keyboard automatically.
+
 ## What it does
 
 The system keyboard lets a user compose and preview Layergram messages while

@@ -33,8 +33,11 @@ receives the encrypted message. Optional biometric reopening lets you resume
 after an idle session expires, while the current authorization remains valid.
 
 The keyboard is currently an opt-in experimental feature on **both Android and
-iOS**. Ordinary builds keep it disabled; keyboard-enabled builds require the
-user's consent and system setup. See the [system keyboard guide](SYSTEM_KEYBOARD.md)
+iOS**. The official Android APKs attached to
+[v2.0.6+33](https://github.com/layergram/layergram/releases/tag/v2.0.6%2B33)
+include it. Ordinary source builds keep it disabled; enabling it requires the
+documented build flags. Every keyboard-enabled build still requires the user's
+consent and system setup. See the [system keyboard guide](SYSTEM_KEYBOARD.md)
 for setup, supported operations, and platform requirements.
 
 ## Official Project Links

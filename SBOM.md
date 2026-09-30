@@ -21,14 +21,14 @@ When published, release-specific SBOMs are attached to the corresponding GitHub
 release and named `layergram-<version>.spdx.json`. They are generated from the
 exact release tag in a clean source tree and reviewed before publication.
 
-The latest release with an attached inventory is `v2.0.4+31`
-(`75d8a146749cfd6c1778f9b3c1a1e788845fe27d`). Its inventory was generated
+The latest release with an attached inventory is `v2.0.6+33`
+(`f68a5eb476290f7d806369db8007d7913ccd9414`). Its inventory was generated
 with Syft 1.51.1 from that exact tag:
 
-- [SPDX 2.3 SBOM for v2.0.4+31](https://github.com/layergram/layergram/releases/download/v2.0.4%2B31/layergram-v2.0.4%2B31.spdx.json)
-- [SHA-256 checksum](https://github.com/layergram/layergram/releases/download/v2.0.4%2B31/layergram-v2.0.4%2B31.spdx.json.sha256)
+- [SPDX 2.3 SBOM for v2.0.6+33](https://github.com/layergram/layergram/releases/download/v2.0.6%2B33/layergram-v2.0.6%2B33.spdx.json)
+- [SHA-256 checksum](https://github.com/layergram/layergram/releases/download/v2.0.6%2B33/layergram-v2.0.6%2B33.spdx.json.sha256)
 
-That inventory contains 732 package records discovered from the release source,
+That inventory contains 734 package records discovered from the release source,
 including Pub, Cargo, Maven/Gradle, CocoaPods, GitHub Actions, and Python package
 metadata. Duplicate package names can be intentional when different platforms,
 versions, or lockfiles resolve the same dependency independently.
