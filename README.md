@@ -5,6 +5,10 @@
 Layergram is the official open-source Layergram app built with Flutter.
 It lets users encrypt sensitive content locally and share it through **any** existing text-based communication channel — WhatsApp, Telegram, Signal, iMessage, email, social networks, or any other platform that preserves Unicode text.
 
+The **Layergram system keyboard for Android and iOS** brings this workflow into
+the apps you already use: compose an encrypted message or read an incoming one
+from the keyboard, with fewer switches between Layergram and your conversation.
+
 Layergram can carry encrypted payloads inside ordinary-looking cover text using
 zero-width Unicode steganography. This can make the protected payload less
 obvious to a casual reader, but it is not intended to defeat technical
@@ -12,6 +16,26 @@ detection, normalization, or filtering by the transport platform. The
 cryptographic workflow remains local to the device.
 
 For transport channels that do not support invisible Unicode characters (or when steganography fails), Layergram also supports sending messages as **direct text payloads** (`<payload>`) or **direct deep links** (`layergram://m/<payload>`). Direct text payloads are not clickable, but they avoid exposing the Layergram URI scheme. Deep links are useful where custom URI schemes are interpreted, but make the presence of a Layergram message visibly obvious to anyone seeing the link.
+
+## A keyboard for the apps you already use
+
+The system keyboard makes local encryption part of the usual messaging flow:
+
+1. Enable it in Layergram and in your phone's keyboard settings.
+2. Choose a saved contact and write your private message inside the keyboard.
+3. Insert the encrypted message into the conversation and use the app's normal
+   send button.
+4. To read a received Layergram message, copy it and use the keyboard's
+   paste-and-decrypt control.
+
+Private text stays inside the Layergram keyboard; the conversation's text field
+receives the encrypted message. Optional biometric reopening lets you resume
+after an idle session expires, while the current authorization remains valid.
+
+The keyboard is currently an opt-in experimental feature on **both Android and
+iOS**. Ordinary builds keep it disabled; keyboard-enabled builds require the
+user's consent and system setup. See the [system keyboard guide](SYSTEM_KEYBOARD.md)
+for setup, supported operations, and platform requirements.
 
 ## Official Project Links
 
@@ -88,6 +112,7 @@ be shared with a contact.
 - **Screen protection** — optional privacy shielding where supported
 
 ### Core Functionality
+- **System keyboard on Android and iOS** — compose and decrypt inside your existing messaging apps, with explicit contact selection and optional biometric reopening; see the [keyboard guide](SYSTEM_KEYBOARD.md) for its current build status
 - **Compose and share** encrypted messages over any text-based channel
 - **Decode** received messages by pasting them into the app
 - **Identity management** — create, export, and import complete public identities via a single branded static QR code, deep link, or text block; the enlarged QR temporarily improves display brightness and restores the previous setting when closed

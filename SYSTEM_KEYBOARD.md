@@ -1,4 +1,10 @@
-# Experimental system keyboard
+# Layergram system keyboard for Android and iOS
+
+The keyboard brings Layergram's encrypted messaging into the apps you already
+use. You can write a private message, insert its encrypted carrier into the
+conversation, and preview a received message from the keyboard. This reduces
+switching between applications while keeping private text inside Layergram's
+keyboard window.
 
 Status: **experimental, local increment, not release-ready.** The capability is
 disabled in ordinary builds: the gate is a compile-time flag that defaults to
