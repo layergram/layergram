@@ -41,6 +41,22 @@ Layergram is an end-to-end encrypted messaging tool that is transport-agnostic: 
 - **Recovery-phrase-only compromise.** Knowledge of the mnemonic alone is enough to recreate identity keys by design — Layergram inherits the BIP39 semantics — but identity-scoped data in the encrypted vault and in session caches is never exposed until the device is unlocked.
 - **Limited deniability for passphrase-protected data.** When the optional passphrase feature is used, Layergram derives a separate identity/keyspace from the mnemonic+passphrase and keeps the passphrase-derived keys in memory only while active. If the user unlocks the app without activating the passphrase, the base vault remains visible while passphrase-scoped messages stay absent. This can provide a practical, limited form of plausible deniability against casual inspection.
 
+## iOS installation and identity recovery
+
+On an in-place update, Layergram preserves its identity and local data. After a
+complete uninstall and fresh installation, an empty app container causes the
+app's secure-storage service to be cleared before any identity is loaded, then
+onboarding requires explicit creation or restoration. A container witness and
+existing database files distinguish this boundary from a normal update.
+
+The cleanup is scoped to the app's own secure-storage service and default
+Keychain access group. It does not clear shared keyboard custody services or
+change device passcodes and biometric enrollment. Failed cleanup or an invalid
+witness stops startup rather than loading a retained identity. This is an app
+lifecycle policy, not a guarantee that uninstall securely erases every copy
+held by the OS or in backups. A recovery phrase restores identity keys, not
+deleted chat history or device-specific FS state.
+
 ## Screen protection and local access
 
 Screen protection is enabled by default on supported mobile platforms and can

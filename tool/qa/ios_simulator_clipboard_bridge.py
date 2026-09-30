@@ -16,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import uuid
 from pathlib import Path
 
 
@@ -23,8 +24,8 @@ BUNDLE_ID = "com.layergram.localtest.clipboardbridge"
 SOURCE = Path(__file__).with_suffix(".swift")
 
 
-def run(*arguments: str) -> str:
-    result = subprocess.run(arguments, check=True, capture_output=True, text=True)
+def run_xcrun(*arguments: str) -> str:
+    result = subprocess.run(["xcrun", *arguments], check=True, capture_output=True, text=True)
     return result.stdout.strip()
 
 
@@ -33,7 +34,11 @@ def main() -> int:
         print(f"Usage: {Path(sys.argv[0]).name} SIMULATOR_UDID < carrier.txt", file=sys.stderr)
         return 2
 
-    simulator = sys.argv[1]
+    try:
+        simulator = str(uuid.UUID(sys.argv[1]))
+    except ValueError:
+        print("Select a simulator by its UUID.", file=sys.stderr)
+        return 2
     carrier = sys.stdin.buffer.read()
     if not carrier:
         print("The carrier is empty.", file=sys.stderr)
@@ -49,7 +54,7 @@ def main() -> int:
         print(f"Unsupported simulator host architecture: {arch}", file=sys.stderr)
         return 2
 
-    sdk = run("xcrun", "--sdk", "iphonesimulator", "--show-sdk-path")
+    sdk = run_xcrun("--sdk", "iphonesimulator", "--show-sdk-path")
     with tempfile.TemporaryDirectory(prefix="layergram-ios-clipboard-") as temporary:
         app = Path(temporary) / "ClipboardBridge.app"
         app.mkdir()
@@ -67,8 +72,8 @@ def main() -> int:
                 }
             )
         )
-        run(
-            "xcrun", "--sdk", "iphonesimulator", "swiftc",
+        run_xcrun(
+            "--sdk", "iphonesimulator", "swiftc",
             "-parse-as-library",
             "-target", f"{arch}-apple-ios17.0-simulator",
             "-sdk", sdk,
@@ -76,16 +81,16 @@ def main() -> int:
             "-o", str(app / "ClipboardBridge"),
             str(SOURCE),
         )
-        run("xcrun", "simctl", "install", simulator, str(app))
+        run_xcrun("simctl", "install", simulator, str(app))
 
     data_container = Path(
-        run("xcrun", "simctl", "get_app_container", simulator, BUNDLE_ID, "data")
+        run_xcrun("simctl", "get_app_container", simulator, BUNDLE_ID, "data")
     )
     documents = data_container / "Documents"
     documents.mkdir(exist_ok=True)
     (documents / "carrier.txt").write_bytes(carrier)
-    run(
-        "xcrun", "simctl", "launch", "--terminate-running-process",
+    run_xcrun(
+        "simctl", "launch", "--terminate-running-process",
         simulator, BUNDLE_ID,
     )
 

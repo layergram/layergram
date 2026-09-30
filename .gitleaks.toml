@@ -18,6 +18,17 @@ id = "generic-api-key"
   ]
 
   [[rules.allowlists]]
+  description = "Generated local_auth_darwin CocoaPods specification checksum"
+  condition = "AND"
+  regexTarget = "line"
+  paths = [
+    '''^ios/Pods/Manifest\.lock$''',
+  ]
+  regexes = [
+    '''^(?:\r?\n)?[ \t]{2}local_auth_darwin:[ \t]+[a-f0-9]{40}[ \t]*$''',
+  ]
+
+  [[rules.allowlists]]
   description = "Published cryptographic conformance vector"
   paths = [
     '''^native/layergram_scka/testdata/braid_r1_cross_impl_vector\.txt$''',

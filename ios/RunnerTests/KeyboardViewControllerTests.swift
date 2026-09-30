@@ -441,6 +441,15 @@ final class KeyboardViewControllerTests: XCTestCase {
       runtimeReady: false, rebindInProgress: false))
   }
 
+  func testTouchDuringBiometricRuntimeBeginDoesNotRevokeTheTicket() {
+    XCTAssertTrue(KeyboardViewController.shouldDeferTouchDuringRuntimeBegin(
+      hasRuntime: true, beginAccepted: false))
+    XCTAssertFalse(KeyboardViewController.shouldDeferTouchDuringRuntimeBegin(
+      hasRuntime: true, beginAccepted: true))
+    XCTAssertFalse(KeyboardViewController.shouldDeferTouchDuringRuntimeBegin(
+      hasRuntime: false, beginAccepted: false))
+  }
+
   func testTwoLineDraftKeepsBeginningAndEndVisibleAtNarrowWidth() throws {
     let keyboard = makeKeyboard(width: 320, height: 306)
     keyboard.setLocalDraft("Messaggio segreto di prova")

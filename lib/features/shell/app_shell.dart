@@ -344,6 +344,8 @@ class _AppShellState extends ConsumerState<AppShell> {
               width: 120,
               color: Colors.transparent,
               child: SafeArea(
+                left: false,
+                right: false,
                 minimum: const EdgeInsets.fromLTRB(0, 28, 0, 8),
                 child: Column(
                   children: [
@@ -362,6 +364,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                                       : railTheme.indicatorColor,
                                 ),
                                 child: NavigationRail(
+                                  minWidth: 120,
                                   backgroundColor: Colors.transparent,
                                   selectedIndex: railSelectedIndex == -1
                                       ? null
@@ -404,7 +407,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                                   setState(() => _index = items.indexOf(item)),
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 14, vertical: 8),
+                                    horizontal: 4, vertical: 8),
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
@@ -438,17 +441,20 @@ class _AppShellState extends ConsumerState<AppShell> {
                                       ),
                                     ),
                                     const SizedBox(height: 4),
-                                    Text(
-                                      item.label,
-                                      style: _index == items.indexOf(item)
-                                          ? (railTheme.selectedLabelTextStyle ??
-                                              Theme.of(context)
-                                                  .textTheme
-                                                  .labelMedium)
-                                          : unselectedLabelStyle,
-                                      textAlign: TextAlign.center,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
+                                    SizedBox(
+                                      width: 112,
+                                      child: Text(
+                                        item.label,
+                                        style: _index == items.indexOf(item)
+                                            ? (railTheme.selectedLabelTextStyle ??
+                                                Theme.of(context)
+                                                    .textTheme
+                                                    .labelMedium)
+                                            : unselectedLabelStyle,
+                                        textAlign: TextAlign.center,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                     ),
                                   ],
                                 ),

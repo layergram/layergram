@@ -16,7 +16,14 @@ if [ "$keyboard_release" = YES ] && [ "$keyboard_simulator" = YES ]; then
   exit 1
 fi
 keyboard_isolated_qa="${LAYERGRAM_KEYBOARD_ISOLATED_QA:-NO}"
+keyboard_isolated_full_app="${LAYERGRAM_KEYBOARD_ISOLATED_FULL_APP:-NO}"
 keyboard_reuse_fixture="${LAYERGRAM_KEYBOARD_REUSE_VALIDATION_APP:-NO}"
+case "$keyboard_isolated_full_app" in YES|NO) ;; *) echo 'Invalid isolated full-app selection.' >&2; exit 1 ;; esac
+if [ "$keyboard_isolated_full_app" = YES ] &&
+   { [ "$keyboard_isolated_qa" != YES ] || [ "$keyboard_reuse_fixture" != NO ]; }; then
+  echo 'A full-app reinstall test requires a separate isolated QA identifier.' >&2
+  exit 1
+fi
 if [ "$keyboard_reuse_fixture" != YES ] && [ "$keyboard_reuse_fixture" != NO ]; then
   echo 'LAYERGRAM_KEYBOARD_REUSE_VALIDATION_APP must be YES or NO.' >&2
   exit 1
@@ -53,6 +60,9 @@ if [ "$keyboard_isolated_qa" = YES ]; then
   # A device QA run must never replace the fixture containing user test chats.
   keyboard_fixture_id=app.layergram.keyboardvalidation.qa
   keyboard_entry="$keyboard_root/tool/qa/ios_keyboard_fixture.dart"
+  if [ "$keyboard_isolated_full_app" = YES ]; then
+    keyboard_entry="$keyboard_root/lib/main.dart"
+  fi
   if [ "$keyboard_reuse_fixture" = YES ]; then
     # Explicit opt-in for a disposable installed validation app whose existing
     # provisioning profiles can be reused. Tests still use unique storage.
