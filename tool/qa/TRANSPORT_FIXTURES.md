@@ -424,7 +424,9 @@ FS verdict. It observes only focused app windows and the visible IME; controls
 from a previous app window cannot authorize touches in a new window.
 
 Prepare the complete incoming carrier with `load_carrier.py --host-instrumentation`
-and the normal `--adb`, `--serial`, and `--input` arguments. This writes only
+and the normal `--serial` and `--input` arguments. Put your Android SDK's
+`platform-tools` directory on `PATH`; the loader invokes only the fixed `adb`
+command and does not accept an executable override. This writes only
 the Probe's fixed `no_backup/qa-transport-incoming.carrier` input over stdin;
 no ciphertext is printed or embedded in a shell command. Then supply its
 canonical SHA-256 as `qaCarrierSha256`, the exact harmless lowercase test phrase
@@ -529,8 +531,8 @@ bounded V3 carrier through the retained loader, then run the test with
 `qaAction=decode` and the exact `qaPlaintext`:
 
 ```sh
-python3 tool/qa/android_transport_fixture/load_carrier.py \
-  --adb "$ANDROID_HOME/platform-tools/adb" \
+PATH="$ANDROID_HOME/platform-tools:$PATH" \
+  python3 tool/qa/android_transport_fixture/load_carrier.py \
   --serial "$LAYERGRAM_KEYBOARD_ANDROID_SERIAL" \
   --input /temporary/ios-reply.txt
 ```
