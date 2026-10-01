@@ -20,7 +20,7 @@ void main() {
   test('current Layergram version and iOS share extension stay synchronized',
       () {
     final pubspec = File('pubspec.yaml').readAsStringSync();
-    expect(pubspec, contains('version: 2.0.6+33'));
+    expect(pubspec, contains('version: 2.0.6+34'));
 
     final project = File(
       'ios/Runner.xcodeproj/project.pbxproj',
@@ -31,7 +31,7 @@ void main() {
       hasLength(5),
     );
     expect(
-      'CURRENT_PROJECT_VERSION = 33;'.allMatches(project),
+      'CURRENT_PROJECT_VERSION = 34;'.allMatches(project),
       hasLength(3),
     );
     expect(
@@ -45,7 +45,7 @@ void main() {
     ).allMatches(project).map((match) => match.group(0)!).toList();
     expect(extensionConfigurations, hasLength(3));
     for (final configuration in extensionConfigurations) {
-      expect(configuration, contains('CURRENT_PROJECT_VERSION = 33;'));
+      expect(configuration, contains('CURRENT_PROJECT_VERSION = 34;'));
       expect(configuration, contains('MARKETING_VERSION = 2.0.6;'));
       expect(
           configuration,

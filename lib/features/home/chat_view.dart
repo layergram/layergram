@@ -170,6 +170,7 @@ class ChatViewState extends ConsumerState<ChatView> {
   String? _v3OutboundDraftText;
   int? _v3OutboundDraftRevision;
   int _draftRevision = 0;
+  bool _clearingExportedDraft = false;
   int _v3StageRevision = 0;
   List<String> _v3OutputParts = const [];
   int _v3OutputPartIndex = 0;
@@ -276,7 +277,16 @@ class ChatViewState extends ConsumerState<ChatView> {
           stagedDraft != null &&
           stagedDraftRevision == _draftRevision &&
           _secretCtrl.text == stagedDraft) {
-        _secretCtrl.clear();
+        // Clear the sent draft without discarding its exact carrier: Copy and
+        // Share may both be used for the same message before another edit.
+        _clearingExportedDraft = true;
+        try {
+          _secretCtrl.clear();
+        } finally {
+          _clearingExportedDraft = false;
+        }
+        _v3OutboundDraftText = null;
+        _v3OutboundDraftRevision = null;
       }
       return;
     }
@@ -1098,6 +1108,7 @@ class ChatViewState extends ConsumerState<ChatView> {
 
   void _onFieldChanged() {
     _draftRevision++;
+    if (_clearingExportedDraft) return;
     setState(() {
       _clearPreparedOutput();
       _dirtySinceEncode = true;

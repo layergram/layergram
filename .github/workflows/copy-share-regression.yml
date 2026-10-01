@@ -40,6 +40,7 @@ jobs:
         run: >-
           flutter test
           test/features/home/chat_view_composer_mode_test.dart
+          test/core/crypto/v3/identity_first_boundaries_test.dart
           test/core/platform_version_contract_test.dart
 
   macos-clipboard:

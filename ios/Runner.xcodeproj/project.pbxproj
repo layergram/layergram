@@ -1076,7 +1076,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Share Extension/ShareExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 33;
+				CURRENT_PROJECT_VERSION = 34;
 				CUSTOM_GROUP_ID = group.app.layergram.app;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = B8CJ52364L;
@@ -1163,7 +1163,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Share Extension/ShareExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 33;
+				CURRENT_PROJECT_VERSION = 34;
 				CUSTOM_GROUP_ID = group.app.layergram.app;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = B8CJ52364L;
@@ -1244,7 +1244,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Share Extension/ShareExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 33;
+				CURRENT_PROJECT_VERSION = 34;
 				CUSTOM_GROUP_ID = group.app.layergram.app;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = B8CJ52364L;
