@@ -15,7 +15,7 @@ dependencies:
   app_links: ^7.0.0
   share_plus: ^12.0.1
   receive_sharing_intent: ^1.8.1
-  flutter_riverpod: ^2.6.1
+  flutter_riverpod: ^3.4.3
   cryptography: ^2.7.0
   crypto: ^3.0.6
   bip39: ^1.0.6
