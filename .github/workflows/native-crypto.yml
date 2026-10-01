@@ -1,0 +1,53 @@
+name: Native cryptography regression
+
+on:
+  pull_request:
+    branches: [main]
+  merge_group:
+    types: [checks_requested]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-cryptography-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scka:
+    name: Native crypto tests and dependency features
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      CARGO_BUILD_JOBS: '2'
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Check out the tested revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the documented Rust toolchain
+        run: rustup toolchain install 1.87.0 --profile minimal
+
+      - name: Verify the dependency-feature checker
+        run: python3 -m unittest discover -s tool/pq -p test_verify_scka_dependency_features.py
+
+      - name: Verify the resolved cipher features
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo +1.87.0 metadata --locked --format-version 1 \
+            --features candidate-ffi \
+            --manifest-path native/layergram_scka/Cargo.toml \
+            > "$RUNNER_TEMP/scka-dependency-metadata.json"
+          python3 tool/pq/verify_scka_dependency_features.py \
+            < "$RUNNER_TEMP/scka-dependency-metadata.json"
+
+      - name: Run the native unit and hostile-input tests
+        run: >-
+          cargo +1.87.0 test --locked --features candidate-ffi
+          --manifest-path native/layergram_scka/Cargo.toml
