@@ -213,10 +213,13 @@ The committed dependency lock currently requires Dart 3.11.0 and Flutter
 3.38.4 or newer. Using Flutter 3.41.1 reproduces the toolchain used for release
 verification and avoids resolving a different dependency graph.
 
-For iOS simulator builds with Xcode 27, use Flutter 3.44.9 (verified on this
-project). Flutter 3.41.1 fails during `debug_unpack_ios` with Xcode 27's
-`lipo` behavior. The Runner Debug target builds only the active simulator
-architecture so its local Swift package uses the same architecture.
+For iOS and macOS builds with Xcode 27, use Flutter 3.44.9. This includes
+the [upstream correction for Xcode 27's `lipo` behavior](https://github.com/flutter/flutter/blob/3.44.9/CHANGELOG.md).
+Flutter 3.41.1 can fail during `debug_unpack_ios` or `release_unpack_macos`,
+even when the framework contains both requested architectures. The iOS
+simulator path has been verified on this project. The Runner Debug target
+builds only the active simulator architecture so its local Swift package
+uses the same architecture.
 
 ### Fetch Dependencies and Run Checks
 
