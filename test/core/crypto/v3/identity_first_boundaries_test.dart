@@ -3,6 +3,8 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:cryptography/cryptography.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 import 'package:layergram/core/crypto/fs_security_mode.dart';
@@ -19,11 +21,167 @@ import 'package:layergram/core/crypto/v3/lmf_v3_persistence.dart';
 import 'package:layergram/core/crypto/v3/ml_kem_768.dart';
 import 'package:layergram/core/crypto/v3/prefs_bootstrap_v3.dart';
 import 'package:layergram/core/crypto/v3/sparse_pq_ratchet_v3.dart';
+import 'package:layergram/core/providers.dart';
+import 'package:layergram/core/storage/chat_meta_repository.dart';
 import 'package:layergram/core/storage/local_database.dart';
 import 'package:layergram/core/storage/messages_repository.dart';
+import 'package:layergram/core/utils/clipboard_service.dart';
+import 'package:layergram/features/home/chat_view.dart';
+import 'package:layergram/features/home/home_controller.dart';
+import 'package:layergram/features/home/message_output_mode.dart';
+import 'package:layergram/utils/sharing.dart';
+import 'package:share_plus/share_plus.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  for (final size in <Size>[const Size(390, 844), const Size(1200, 800)]) {
+    for (final mode in <MessageOutputMode>[
+      MessageOutputMode.text,
+      MessageOutputMode.cover,
+    ]) {
+      for (final established in <bool>[false, true]) {
+        testWidgets(
+          'Normal ${mode.name} ${size.width.toInt()} ${established ? "FS" : "first"} copy then share reuses message',
+          (tester) async {
+            const firstText = 'First user message';
+            const nextText = 'Next user message';
+            final cover = 'A' *
+                (4000 -
+                    StegoEncoder.minimumHiddenLengthForBytes(
+                      V3LmfFrameCodec.maxPortableStegoFrameBytes,
+                    ));
+            final prepared = await tester.runAsync(
+              () => _withFixture((fixture) async {
+                if (established) await _establishBoundaryFs(fixture);
+                final exports = <V3ChatOutboundExport>[];
+                for (final text in <String>[firstText, nextText]) {
+                  final export = await fixture.aliceBridge.prepareOutbound(
+                    contact: fixture.bobContact,
+                    mode: V3HandshakeMode.normal,
+                    carrierMode: mode == MessageOutputMode.cover
+                        ? V3ChatCarrierMode.steganography
+                        : V3ChatCarrierMode.text,
+                    text: text,
+                    coverText: cover,
+                    eligibilityPolicy:
+                        fixture.aliceBridge.eligibilityForContact(
+                      fixture.bobContact,
+                    ),
+                    maxCarrierCharacters: 4000,
+                  );
+                  expect(
+                      export.purpose,
+                      established
+                          ? V3ChatOutboundPurpose.application
+                          : V3ChatOutboundPurpose.preFs);
+                  expect(export.parts, hasLength(1));
+                  final received = await fixture.bobBridge.receiveCarrier(
+                    carrier: export.parts.single,
+                    contacts: [fixture.aliceContact],
+                    modeForContact: fixture.bobBridge.modeForContact,
+                    eligibilityForContact:
+                        fixture.bobBridge.eligibilityForContact,
+                    ensureEligibilityForContact:
+                        fixture.bobBridge.ensureContactPolicy,
+                  );
+                  expect(received.status, V3ChatInboundStatus.delivered);
+                  expect(received.payload?.text, text);
+                  exports.add(export);
+                }
+                return (contact: fixture.bobContact, exports: exports);
+              }),
+            );
+            final uiDirectory = await tester.runAsync(() async {
+              final directory =
+                  await Directory.systemTemp.createTemp('lg_export_ui_');
+              Hive.init(directory.path);
+              await Hive.openBox<Map>(LocalDatabase.chatMetaBoxName);
+              await Hive.openBox<Map>(LocalDatabase.messagesBoxName);
+              return directory;
+            });
+            addTearDown(() async {
+              await Hive.close();
+              await uiDirectory!.delete(recursive: true);
+            });
+            final clipboard = _BoundaryClipboard();
+            final shared = <String>[];
+            late _BoundaryExportController controller;
+            tester.view.devicePixelRatio = 1;
+            tester.view.physicalSize = size;
+            addTearDown(() {
+              tester.view.resetDevicePixelRatio();
+              tester.view.resetPhysicalSize();
+            });
+            await tester.pumpWidget(
+              ProviderScope(
+                overrides: [
+                  protocolV3MessagingEnabledProvider.overrideWithValue(true),
+                  chatMetaRepositoryProvider.overrideWithValue(
+                    _BoundaryChatMeta(),
+                  ),
+                  messagesRepositoryProvider.overrideWithValue(
+                    _BoundaryEmptyMessages(),
+                  ),
+                  homeControllerProvider.overrideWith(
+                    (ref) => controller = _BoundaryExportController(
+                      ref,
+                      prepared!.exports,
+                    ),
+                  ),
+                  clipboardServiceProvider.overrideWithValue(clipboard),
+                  externalTextShareProvider.overrideWithValue((
+                    context,
+                    text, {
+                    required bool forceStegoCover,
+                  }) async {
+                    expect(forceStegoCover, mode == MessageOutputMode.cover);
+                    shared.add(text);
+                    return const ShareResult('', ShareResultStatus.success);
+                  }),
+                ],
+                child: MaterialApp(
+                  home: ChatView(
+                    contact: prepared!.contact,
+                    embedded: true,
+                    initialOutputMode: mode,
+                    initialCover:
+                        mode == MessageOutputMode.cover ? cover : null,
+                    initialSecret: firstText,
+                  ),
+                ),
+              ),
+            );
+            await tester.pumpAndSettle();
+            final secret = find.byType(TextField).last;
+            await tester.tap(find.byIcon(Icons.copy_outlined).last);
+            await tester.pumpAndSettle();
+            expect(clipboard.value, prepared.exports.first.parts.single);
+            expect(tester.widget<TextField>(secret).controller!.text, isEmpty);
+            await tester.tap(find.byIcon(Icons.ios_share_outlined).last);
+            await tester.pumpAndSettle();
+            expect(shared, <String>[clipboard.value!]);
+            expect(controller.preparations, 1);
+
+            // A new draft must invalidate the old output rather than resend it.
+            await tester.enterText(secret, nextText);
+            await tester.pumpAndSettle();
+            await tester.tap(find.byIcon(Icons.copy_outlined).last);
+            await tester.pumpAndSettle();
+            expect(clipboard.value, prepared.exports.last.parts.single);
+            expect(clipboard.value, isNot(shared.single));
+            expect(controller.preparations, 2);
+            await tester.tap(find.byIcon(Icons.ios_share_outlined).last);
+            await tester.pumpAndSettle();
+            expect(
+                shared, prepared.exports.map((e) => e.parts.single).toList());
+            expect(controller.preparations, 2);
+            await tester.pumpWidget(const SizedBox.shrink());
+          },
+        );
+      }
+    }
+  }
 
   test('first Normal stego message fits the AI cover budget and is visible',
       () async {
@@ -464,8 +622,49 @@ void main() {
   });
 }
 
-Future<void> _withFixture(
-  Future<void> Function(_BoundaryFixture fixture) body,
+Future<void> _establishBoundaryFs(_BoundaryFixture fixture) async {
+  for (var turn = 0; turn < 32; turn++) {
+    final aliceSends = turn.isEven;
+    final sender = aliceSends ? fixture.aliceBridge : fixture.bobBridge;
+    final receiver = aliceSends ? fixture.bobBridge : fixture.aliceBridge;
+    final recipient = aliceSends ? fixture.bobContact : fixture.aliceContact;
+    final senderContact =
+        aliceSends ? fixture.aliceContact : fixture.bobContact;
+    final export = await sender.prepareOutbound(
+      contact: recipient,
+      mode: V3HandshakeMode.normal,
+      carrierMode: V3ChatCarrierMode.text,
+      text: 'Session fixture $turn',
+      eligibilityPolicy: sender.eligibilityForContact(recipient),
+    );
+    expect(export.parts, hasLength(1));
+    final received = await receiver.receiveCarrier(
+      carrier: export.parts.single,
+      contacts: [senderContact],
+      modeForContact: receiver.modeForContact,
+      eligibilityForContact: receiver.eligibilityForContact,
+      ensureEligibilityForContact: receiver.ensureContactPolicy,
+    );
+    expect(received.status, V3ChatInboundStatus.delivered);
+    final aliceStatus = await fixture.aliceBridge.securityStatus(
+      contact: fixture.bobContact,
+      selectedMode: V3HandshakeMode.normal,
+      eligibilityPolicy:
+          fixture.aliceBridge.eligibilityForContact(fixture.bobContact),
+    );
+    final bobStatus = await fixture.bobBridge.securityStatus(
+      contact: fixture.aliceContact,
+      selectedMode: V3HandshakeMode.normal,
+      eligibilityPolicy:
+          fixture.bobBridge.eligibilityForContact(fixture.aliceContact),
+    );
+    if (aliceStatus.isActive && bobStatus.isActive) return;
+  }
+  fail('Normal session fixture did not establish FS');
+}
+
+Future<T> _withFixture<T>(
+  Future<T> Function(_BoundaryFixture fixture) body,
 ) async {
   final temp = await Directory.systemTemp.createTemp('lg_identity_boundaries_');
   Hive.init(temp.path);
@@ -518,7 +717,7 @@ Future<void> _withFixture(
   await aliceBridge.ensureContactPolicy(bobContact, V3HandshakeMode.normal);
   await bobBridge.ensureContactPolicy(aliceContact, V3HandshakeMode.normal);
   try {
-    await body(_BoundaryFixture(
+    return await body(_BoundaryFixture(
       aliceBridge: aliceBridge,
       bobBridge: bobBridge,
       aliceRuntime: aliceRuntime,
@@ -538,6 +737,79 @@ Future<void> _withFixture(
     await Hive.close();
     await temp.delete(recursive: true);
   }
+}
+
+final class _BoundaryClipboard extends ClipboardService {
+  String? value;
+
+  @override
+  Future<void> writeText(String text) async => value = text;
+}
+
+final class _BoundaryChatMeta extends ChatMetaRepository {
+  _BoundaryChatMeta() : super(identityId: 'boundary-ui');
+
+  @override
+  Future<Map<String, dynamic>?> getChatSettings({required String chatId}) async =>
+      null;
+
+  @override
+  Future<void> saveChatSettings({
+    required String chatId,
+    required String outputMode,
+    required int? expiryMinutes,
+    required bool deleteAfterRead,
+    required bool excludeFromBackups,
+  }) async {}
+}
+
+final class _BoundaryEmptyMessages extends MessagesRepository {
+  @override
+  Stream<List<MessageRecord>> watchThread(String contactId, {int limit = 50}) =>
+      Stream.value(const <MessageRecord>[]);
+
+  @override
+  void dispose() {}
+}
+
+final class _BoundaryExportController extends HomeController {
+  _BoundaryExportController(super.ref, this.exports);
+  final List<V3ChatOutboundExport> exports;
+  int preparations = 0;
+  @override
+  bool isProtocolV3Contact(RemoteIdentity contact) => true;
+  @override
+  Future<V3ChatOutboundExport> prepareProtocolV3Outbound({
+    required RemoteIdentity recipient,
+    required V3ChatCarrierMode carrierMode,
+    required String text,
+    String coverText = '',
+    int? expireAfter,
+    bool deleteAfterRead = false,
+    bool backupExcluded = false,
+  }) async =>
+      exports[preparations++];
+  @override
+  Future<void> markProtocolV3Exported(
+    V3ChatOutboundExport export, {
+    int? partIndex,
+  }) async {}
+  @override
+  Future<List<V3ChatOutboundExport>> restorePendingProtocolV3Exports({
+    required RemoteIdentity contact,
+    required V3ChatCarrierMode carrierMode,
+    String coverText = '',
+  }) async =>
+      const [];
+  @override
+  Future<V3ChatContactSecurityStatus?> protocolV3SecurityStatus(
+    RemoteIdentity contact,
+  ) async =>
+      null;
+  @override
+  Future<void> primeDisplayKey({required RemoteIdentity contact}) async {}
+  @override
+  Future<void> purgeReadDeleteAfterReadFor(String contactId) async {}
 }
 
 final class _BoundaryFixture {

@@ -6,6 +6,18 @@ The format is inspired by Keep a Changelog and reflects the public GitHub Releas
 
 ## [Unreleased]
 
+## [2.0.6+34] - 2026-10-01
+
+### Fixed
+- Preserved the exact encrypted output after Copy clears the sent draft, so
+  Share can immediately reuse that output without preparing another message.
+- Kept user edits invalidating the previous output before the next export.
+
+### Testing
+- Added compact and desktop Copy-to-Share regressions for direct text and cover
+  messages, both before and after Normal forward secrecy is established. Each
+  initial Normal message is delivered in one carrier with the exact plaintext.
+
 ## [2.0.6+33] - 2026-09-30
 
 ### Fixed
