@@ -9,6 +9,10 @@ updates:
       time: "03:19"
       timezone: Atlantic/Canary
     open-pull-requests-limit: 3
+    groups:
+      workflow-maintenance:
+        patterns: ["*"]
+        update-types: [minor, patch]
 
   - package-ecosystem: pub
     directory: /
@@ -18,6 +22,10 @@ updates:
       time: "03:29"
       timezone: Atlantic/Canary
     open-pull-requests-limit: 3
+    groups:
+      dart-maintenance:
+        patterns: ["*"]
+        update-types: [minor, patch]
 
   - package-ecosystem: cargo
     directory: /native/layergram_scka
@@ -27,6 +35,10 @@ updates:
       time: "03:39"
       timezone: Atlantic/Canary
     open-pull-requests-limit: 3
+    groups:
+      crypto-patches:
+        patterns: ["*"]
+        update-types: [patch]
 
   - package-ecosystem: cargo
     directory: /native/layergram_scka/fuzz
@@ -36,6 +48,10 @@ updates:
       time: "03:49"
       timezone: Atlantic/Canary
     open-pull-requests-limit: 3
+    groups:
+      fuzz-patches:
+        patterns: ["*"]
+        update-types: [patch]
 
   - package-ecosystem: gradle
     directory: /android
@@ -45,6 +61,10 @@ updates:
       time: "04:09"
       timezone: Atlantic/Canary
     open-pull-requests-limit: 3
+    groups:
+      android-patches:
+        patterns: ["*"]
+        update-types: [patch]
 
   - package-ecosystem: pip
     directory: /tool/pq
@@ -54,3 +74,7 @@ updates:
       time: "04:19"
       timezone: Atlantic/Canary
     open-pull-requests-limit: 3
+    groups:
+      python-maintenance:
+        patterns: ["*"]
+        update-types: [minor, patch]
