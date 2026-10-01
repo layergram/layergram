@@ -18,11 +18,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app.dart';
 import 'core/legal/layergram_license_registry.dart';
+import 'core/storage/ios_installation_boundary.dart';
 import 'core/storage/local_database.dart';
 import 'core/storage/local_identity_vault.dart';
 import 'core/storage/local_storage_security_service.dart';
 import 'core/storage/secure_storage.dart';
 import 'l10n/app_strings.dart';
+import 'features/system_keyboard/system_keyboard_runtime_entry.dart';
 
 Future<void> runLayergramApp({
   List<Override> providerOverrides = const <Override>[],
@@ -30,8 +32,9 @@ Future<void> runLayergramApp({
   WidgetsFlutterBinding.ensureInitialized();
   LayergramLicenseRegistry.register();
   await EasyLocalization.ensureInitialized();
-  await LocalDatabase.init();
   final secureStorage = SecureStorageService();
+  await IosInstallationBoundary.prepareForCurrentPlatform(secureStorage);
+  await LocalDatabase.init();
   final localIdentityVault = LocalIdentityVault(secureStorage: secureStorage);
   final localStorageSecurity = LocalStorageSecurityService(
     secureStorage: secureStorage,
@@ -53,4 +56,10 @@ Future<void> runLayergramApp({
 
 void main() async {
   await runLayergramApp();
+}
+
+/// Headless AOT entrypoint for the opt-in autonomous system keyboard.
+@pragma('vm:entry-point')
+void layergramKeyboardMain() {
+  runSystemKeyboardRuntime();
 }

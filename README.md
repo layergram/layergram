@@ -5,6 +5,10 @@
 Layergram is the official open-source Layergram app built with Flutter.
 It lets users encrypt sensitive content locally and share it through **any** existing text-based communication channel — WhatsApp, Telegram, Signal, iMessage, email, social networks, or any other platform that preserves Unicode text.
 
+The **Layergram system keyboard for Android and iOS** brings this workflow into
+the apps you already use: compose an encrypted message or read an incoming one
+from the keyboard, with fewer switches between Layergram and your conversation.
+
 Layergram can carry encrypted payloads inside ordinary-looking cover text using
 zero-width Unicode steganography. This can make the protected payload less
 obvious to a casual reader, but it is not intended to defeat technical
@@ -12,6 +16,29 @@ detection, normalization, or filtering by the transport platform. The
 cryptographic workflow remains local to the device.
 
 For transport channels that do not support invisible Unicode characters (or when steganography fails), Layergram also supports sending messages as **direct text payloads** (`<payload>`) or **direct deep links** (`layergram://m/<payload>`). Direct text payloads are not clickable, but they avoid exposing the Layergram URI scheme. Deep links are useful where custom URI schemes are interpreted, but make the presence of a Layergram message visibly obvious to anyone seeing the link.
+
+## A keyboard for the apps you already use
+
+The system keyboard makes local encryption part of the usual messaging flow:
+
+1. Enable it in Layergram and in your phone's keyboard settings.
+2. Choose a saved contact and write your private message inside the keyboard.
+3. Insert the encrypted message into the conversation and use the app's normal
+   send button.
+4. To read a received Layergram message, copy it and use the keyboard's
+   paste-and-decrypt control.
+
+Private text stays inside the Layergram keyboard; the conversation's text field
+receives the encrypted message. Optional biometric reopening lets you resume
+after an idle session expires, while the current authorization remains valid.
+
+The keyboard is currently an opt-in experimental feature on **both Android and
+iOS**. The official Android APKs attached to
+[v2.0.6+33](https://github.com/layergram/layergram/releases/tag/v2.0.6%2B33)
+include it. Ordinary source builds keep it disabled; enabling it requires the
+documented build flags. Every keyboard-enabled build still requires the user's
+consent and system setup. See the [system keyboard guide](SYSTEM_KEYBOARD.md)
+for setup, supported operations, and platform requirements.
 
 ## Official Project Links
 
@@ -26,6 +53,13 @@ Layergram 2.0 activates the intentionally incompatible protocol v3 with hybrid
 post-quantum protection. It combines X25519 with ML-KEM-768, keeps Layergram
 serverless and transport-agnostic, and carries messages through the same three
 user-facing forms: direct text, deep link, and zero-width steganography.
+
+In Normal mode, initial messages can use an explicitly classified identity-key
+bootstrap while the hybrid session is negotiated through ordinary messages.
+These initial messages are classically encrypted and authenticated, but have
+**neither forward secrecy nor post-quantum protection**. Their gray message
+shield remains gray after the conversation becomes active. Maximum mode still
+requires its hybrid session before application data can be sent.
 
 **Protocol v3 is active in Layergram 2.0 and later.** Its security design,
 implementation, test evidence, migration contract, and release tooling remain
@@ -72,7 +106,7 @@ be shared with a contact.
 ## Key Features
 
 ### Security
-- **Hybrid post-quantum end-to-end encryption (active protocol v3)** — mandatory X25519 + ML-KEM-768 authenticated handshake, EC Double Ratchet, and sparse post-quantum ratcheting, with no classical-only v3 fallback
+- **Hybrid post-quantum end-to-end encryption (active protocol v3)** — X25519 + ML-KEM-768 authenticated sessions, EC Double Ratchet, and sparse post-quantum ratcheting; Normal-mode initial messages use a separately classified classical bootstrap, never a fallback for a lost established session
 - **Forward Secrecy** — Normal multi-device and Maximum device-bound session policies, without a Layergram server
 - **Passphrase identities and plausible deniability** — an optional passphrase derives a separate identity and encrypted keyspace that remain unavailable while the passphrase is inactive, providing practical but limited plausible deniability (not a guarantee against coercion, forensic correlation, or a compromised device)
 - **Steganographic encoding** — encrypted payloads hidden inside zero-width Unicode characters, with direct text and deep-link fallbacks for transports that don't support invisible characters
@@ -81,6 +115,7 @@ be shared with a contact.
 - **Screen protection** — optional privacy shielding where supported
 
 ### Core Functionality
+- **System keyboard on Android and iOS** — compose and decrypt inside your existing messaging apps, with explicit contact selection and optional biometric reopening; see the [keyboard guide](SYSTEM_KEYBOARD.md) for its current build status
 - **Compose and share** encrypted messages over any text-based channel
 - **Decode** received messages by pasting them into the app
 - **Identity management** — create, export, and import complete public identities via a single branded static QR code, deep link, or text block; the enlarged QR temporarily improves display brightness and restores the previous setting when closed
@@ -89,6 +124,14 @@ be shared with a contact.
 - **Self-destructing messages** — optional expiration and delete-after-read
 - **Backup exclusion contract** — per-contact setting marks new messages so official Layergram clients exclude them from official backups and exports
 - **42 languages** included
+
+### Identity recovery on iOS
+
+Normal app updates preserve the local identity and data. After a complete iOS
+uninstall and fresh installation, Layergram opens onboarding and requires an
+explicit choice to create or restore an identity. Keep your 24-word recovery
+phrase and any optional passphrase before uninstalling. Restoring the identity
+does not restore deleted conversations or device-specific session state.
 
 ### Architecture
 - **Capability interfaces** — clean extension points for future optional add-ons
@@ -145,6 +188,8 @@ In this public repository, these optional capabilities default to **safe no-op i
 
 A future optional add-on may provide an in-app secure keyboard for touch devices so sensitive input can avoid the system IME and optionally use scrambled key layouts per supported locale. This is intended as defense in depth only: it can reduce exposure to third-party keyboard telemetry and learned suggestions, but it does not protect against a compromised OS, screen recording, abusive accessibility tooling, or direct visual observation.
 
+The separate **Android and iOS system keyboards** are part of this open-source repository. Their experimental V3 builds, source, settings, native components and tests are described in [SYSTEM_KEYBOARD.md](SYSTEM_KEYBOARD.md). The in-app keyboard remains an optional capability.
+
 ## Getting Started
 
 ### Prerequisites
@@ -153,9 +198,28 @@ A future optional add-on may provide an in-app secure keyboard for touch devices
 - Rust 1.87.0 and Cargo for protocol-v3 native builds
 - Platform-specific tooling (Xcode for iOS/macOS, Android SDK, Visual Studio for Windows, Linux toolchain as needed)
 
+Start from the public source, including its committed lockfiles:
+
+```bash
+git clone https://github.com/layergram/layergram.git
+cd layergram
+```
+
+To build a particular release, check out its tag before resolving dependencies.
+No application account, release signing key, private repository, or generated
+native library is needed to build the open-source application.
+
 The committed dependency lock currently requires Dart 3.11.0 and Flutter
 3.38.4 or newer. Using Flutter 3.41.1 reproduces the toolchain used for release
 verification and avoids resolving a different dependency graph.
+
+For iOS and macOS builds with Xcode 27, use Flutter 3.44.9. This includes
+the [upstream correction for Xcode 27's `lipo` behavior](https://github.com/flutter/flutter/blob/3.44.9/CHANGELOG.md).
+Flutter 3.41.1 can fail during `debug_unpack_ios` or `release_unpack_macos`,
+even when the framework contains both requested architectures. The iOS
+simulator path has been verified on this project. The Runner Debug target
+builds only the active simulator architecture so its local Swift package
+uses the same architecture.
 
 ### Fetch Dependencies and Run Checks
 
@@ -165,21 +229,53 @@ flutter analyze
 flutter test
 ```
 
+For changes to the v3 messaging path or a release candidate, use the
+[simulator acceptance protocol](docs/QA_V3_SIMULATOR_PROTOCOL.md) after the
+automated checks. It specifies when the three-device manual matrix is needed.
+
 ### Build a Functional Android App
 
 Protocol v3 uses a native Rust SCKA backend. The default native ABI is
 deliberately fail-closed, so a plain `flutter run` is not a functional
 protocol-v3 build. To compile the active backend from this repository and
-package it into an Android build:
+package it into an Android build. Use JDK 17 or 21 and install Android SDK
+Platform 36, NDK 28.2.13676358 and CMake 3.22.1 in Android Studio's SDK Manager.
+Set `ANDROID_HOME` to your own SDK location and make `sdkmanager` available on
+`PATH`. The equivalent SDK Manager command is:
 
 ```bash
+sdkmanager "platform-tools" "platforms;android-36" \
+  "build-tools;36.0.0" "ndk;28.2.13676358" "cmake;3.22.1"
+sdkmanager --licenses
+```
+
+Then, from the repository root:
+
+```bash
+rustup toolchain install 1.87.0 --profile minimal
+rustup override set 1.87.0
+rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
 cargo fetch --locked --manifest-path native/layergram_scka/Cargo.toml
 tool/pq/prepare_scka_packaged_android.sh
 ORG_GRADLE_PROJECT_layergramSckaCandidatePackage=true \
-  flutter run -d <android-device>
+  flutter build apk --release --target lib/main.dart
 ```
 
-The first command populates the Cargo cache from the exact lockfile; the
+The installable result is `build/app/outputs/flutter-apk/app-release.apk`.
+Without your own `android/key.properties`, local release builds use the Android
+debug signing certificate. They are functional local builds, but cannot update
+an official APK signed with Layergram's distribution certificate. Official
+download checksums do not apply to independently compiled binaries.
+
+To run on a connected device after the native preparation step, replace
+`flutter build apk --release --target lib/main.dart` with
+`flutter run -d <android-device>`. To include the opt-in autonomous keyboard,
+add both `--dart-define=LAYERGRAM_EXPERIMENTAL_SYSTEM_KEYBOARD=true` and
+`--dart-define=LAYERGRAM_AUTONOMOUS_SYSTEM_KEYBOARD=true` to either Flutter
+command, then complete the app and system consent steps in
+[the keyboard guide](SYSTEM_KEYBOARD.md).
+
+The `cargo fetch` command populates the cache from the exact lockfile; the
 packaging step then runs offline. This path also requires Android NDK tooling
 and the Android Rust targets checked by the preparation script. Generated
 native libraries stay under the ignored `.dart_tool/` directory. The complete

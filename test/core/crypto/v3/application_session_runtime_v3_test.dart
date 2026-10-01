@@ -64,6 +64,42 @@ void main() {
     await bob.close();
   });
 
+  test('closing a runtime drains concurrent pre-FS manifest writes', () async {
+    final runtime = await V3ApplicationSessionRuntime.open(
+      localIdentity: alice,
+      scopeToken: aliceScope,
+      sckaBackend: _InitialSckaBackend(),
+    );
+    final writes = <Future<void>>[
+      for (var index = 0; index < 40; index++)
+        runtime.preFsPendingStore.markPeerFsReady(
+          contactDigest: 'contact',
+          handshakeId: 'handshake-$index',
+          preFsFenceUnixSeconds: index + 1,
+        ),
+    ];
+    final closing = runtime.close();
+    await Future.wait(writes);
+    await closing;
+
+    final reopened = await V3ApplicationSessionRuntime.open(
+      localIdentity: alice,
+      scopeToken: aliceScope,
+      sckaBackend: _InitialSckaBackend(),
+    );
+    try {
+      for (var index = 0; index < 40; index++) {
+        expect(
+          await reopened.preFsPendingStore
+              .preFsFenceFor('contact', 'handshake-$index'),
+          index + 1,
+        );
+      }
+    } finally {
+      await reopened.close();
+    }
+  });
+
   test('first inbound chat handshake initializes policy without deadlock',
       () async {
     final aliceRuntime = await V3ApplicationSessionRuntime.open(
@@ -90,11 +126,13 @@ void main() {
       runtime: aliceRuntime,
       messagesRepository: aliceMessages,
       keyTag: 'alice-primary',
+      preFsBootstrapEnabled: false,
     );
     final bobBridge = V3ApplicationChatBridge(
       runtime: bobRuntime,
       messagesRepository: bobMessages,
       keyTag: 'bob-primary',
+      preFsBootstrapEnabled: false,
     );
     final aliceContact = V3IdentityAdapter.toRemoteIdentity(
       alice.publicIdentity,
@@ -141,6 +179,106 @@ void main() {
     }
   });
 
+  test('application before its FS confirmation is delivered and projected',
+      () async {
+    final aliceRuntime = await V3ApplicationSessionRuntime.open(
+      localIdentity: alice,
+      scopeToken: aliceScope,
+      sckaBackend: _InitialSckaBackend(),
+    );
+    final bobRuntime = await V3ApplicationSessionRuntime.open(
+      localIdentity: bob,
+      scopeToken: bobScope,
+      sckaBackend: _InitialSckaBackend(),
+    );
+    final aliceMessages = MessagesRepository();
+    final bobMessages = MessagesRepository();
+    await aliceMessages.setActiveContext(
+      scopeToken: aliceScope,
+      storageKey: SecretKey(_testBytes(32, 0x81)),
+    );
+    await bobMessages.setActiveContext(
+      scopeToken: bobScope,
+      storageKey: SecretKey(_testBytes(32, 0x91)),
+    );
+    final aliceBridge = V3ApplicationChatBridge(
+      runtime: aliceRuntime,
+      messagesRepository: aliceMessages,
+      keyTag: 'alice-primary',
+      preFsBootstrapEnabled: false,
+    );
+    final bobBridge = V3ApplicationChatBridge(
+      runtime: bobRuntime,
+      messagesRepository: bobMessages,
+      keyTag: 'bob-primary',
+      preFsBootstrapEnabled: false,
+    );
+    final aliceContact = V3IdentityAdapter.toRemoteIdentity(
+      alice.publicIdentity,
+      verified: true,
+    );
+    final bobContact = V3IdentityAdapter.toRemoteIdentity(
+      bob.publicIdentity,
+      verified: true,
+    );
+
+    try {
+      await aliceBridge.ensureContactPolicy(bobContact, V3HandshakeMode.normal);
+      await bobBridge.ensureContactPolicy(aliceContact, V3HandshakeMode.normal);
+      final offer = await aliceRuntime.createOffer(
+        remoteIdentity: bob.publicIdentity,
+        mode: V3HandshakeMode.normal,
+      );
+      final reply = await bobRuntime.receiveOffer(
+        frames: offer.frames,
+        initiatorIdentity: alice.publicIdentity,
+        expectedMode: V3HandshakeMode.normal,
+      );
+      final confirmation = await aliceRuntime.receiveReply(
+        frames: reply.frames,
+        responderIdentity: bob.publicIdentity,
+      );
+      expect(confirmation.frames, hasLength(2));
+      expect(await bobRuntime.sessionsForRemoteIdentity(alice.publicIdentity),
+          isEmpty);
+
+      final outgoing = await aliceBridge.prepareOutbound(
+        contact: bobContact,
+        mode: V3HandshakeMode.normal,
+        carrierMode: V3ChatCarrierMode.text,
+        text: 'La risposta deve apparire nella chat',
+        eligibilityPolicy: aliceBridge.eligibilityForContact(bobContact),
+      );
+      expect(outgoing.purpose, V3ChatOutboundPurpose.application);
+      expect(outgoing.parts, hasLength(1));
+      // This is the exact wire order observed from the iOS keyboard: one m3
+      // application line followed by two m3 FS-confirmation fragments.
+      final carrier = [
+        ...outgoing.parts,
+        ...confirmation.frames.map(V3ApplicationTransport.encodeText),
+      ].join('\n');
+      final inbound = await bobBridge.receiveCarrier(
+        carrier: carrier,
+        contacts: [aliceContact],
+        modeForContact: bobBridge.modeForContact,
+        eligibilityForContact: bobBridge.eligibilityForContact,
+      );
+      expect(inbound.status, V3ChatInboundStatus.delivered);
+      expect(inbound.payload?.text, 'La risposta deve apparire nella chat');
+      final stored = (await bobMessages.getAllMessages())
+          .where((record) => record.direction == 'incoming')
+          .toList();
+      expect(stored, hasLength(1));
+      expect(await bobBridge.loadPlaintext(stored.single.id),
+          'La risposta deve apparire nella chat');
+    } finally {
+      aliceMessages.dispose();
+      bobMessages.dispose();
+      await aliceRuntime.close();
+      await bobRuntime.close();
+    }
+  });
+
   test('maximum confirmation uses the policy revision after device pin',
       () async {
     final aliceRuntime = await V3ApplicationSessionRuntime.open(
@@ -167,11 +305,13 @@ void main() {
       runtime: aliceRuntime,
       messagesRepository: aliceMessages,
       keyTag: 'alice-primary',
+      preFsBootstrapEnabled: false,
     );
     final bobBridge = V3ApplicationChatBridge(
       runtime: bobRuntime,
       messagesRepository: bobMessages,
       keyTag: 'bob-primary',
+      preFsBootstrapEnabled: false,
     );
     final aliceContact = V3IdentityAdapter.toRemoteIdentity(
       alice.publicIdentity,
@@ -1502,7 +1642,7 @@ void main() {
           remoteIdentity: bob.publicIdentity,
           expectedMode: V3HandshakeMode.normal,
         ),
-        throwsStateError,
+        throwsFormatException,
       );
 
       await targetRuntime.close();
@@ -1689,11 +1829,13 @@ void main() {
         runtime: aliceRuntime,
         messagesRepository: aliceMessages,
         keyTag: 'alice-recovery',
+        preFsBootstrapEnabled: false,
       );
       var bobBridge = V3ApplicationChatBridge(
         runtime: bobRuntime,
         messagesRepository: bobMessages,
         keyTag: 'bob-recovery',
+        preFsBootstrapEnabled: false,
       );
 
       final recoveredHandshake = (await aliceBridge.pendingExportsForContact(
@@ -1745,6 +1887,7 @@ void main() {
         runtime: aliceRuntime,
         messagesRepository: aliceMessages,
         keyTag: 'alice-recovery',
+        preFsBootstrapEnabled: false,
       );
       final recoveredMessage = (await aliceBridge.pendingExportsForContact(
         contact: bobContact,
@@ -1830,11 +1973,13 @@ void main() {
       runtime: aliceRuntime,
       messagesRepository: aliceMessages,
       keyTag: 'alice-primary',
+      preFsBootstrapEnabled: false,
     );
     final bobBridge = V3ApplicationChatBridge(
       runtime: bobRuntime,
       messagesRepository: bobMessages,
       keyTag: 'bob-primary',
+      preFsBootstrapEnabled: false,
     );
     final aliceContact = V3IdentityAdapter.toRemoteIdentity(
       alice.publicIdentity,

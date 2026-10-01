@@ -23,7 +23,15 @@ cargo test --locked --offline
 cargo test --locked --offline --features candidate-ffi
 cargo clippy --locked --offline --all-targets -- -D warnings
 cargo clippy --locked --offline --all-targets --features candidate-ffi -- -D warnings
-cargo build --locked --offline --release --target-dir "$TARGET_ROOT/scka-scaffold"
+if [ "$(uname -s)" = Darwin ]; then
+  # Keep symbols in this NOT_READY test fixture. Stripping its small Mach-O
+  # can leave a misaligned LINKEDIT string pool and prevent dlopen from reaching
+  # the build-allowlist check. The production candidate keeps its release profile.
+  CARGO_PROFILE_RELEASE_STRIP=none cargo build --locked --offline --release \
+    --target-dir "$TARGET_ROOT/scka-scaffold"
+else
+  cargo build --locked --offline --release --target-dir "$TARGET_ROOT/scka-scaffold"
+fi
 cargo build --locked --offline --release --features candidate-ffi \
   --target-dir "$TARGET_ROOT/scka-candidate"
 

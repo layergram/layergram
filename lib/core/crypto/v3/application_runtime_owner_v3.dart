@@ -42,8 +42,10 @@ final class V3ApplicationRuntimeOwner<T extends V3ApplicationRuntimeSession> {
   V3ApplicationRuntimeOwner({
     required V3IdentityRuntime identityRuntime,
     required V3ApplicationRuntimeFactory<T> runtimeFactory,
+    void Function(String stage)? diagnosticStage,
   })  : _identityRuntime = identityRuntime,
-        _runtimeFactory = runtimeFactory {
+        _runtimeFactory = runtimeFactory,
+        _diagnosticStage = diagnosticStage {
     _evictionRegistration = _identityRuntime.registerHandleEvictionHandler(
       _evictIdentityHandle,
     );
@@ -51,6 +53,7 @@ final class V3ApplicationRuntimeOwner<T extends V3ApplicationRuntimeSession> {
 
   final V3IdentityRuntime _identityRuntime;
   final V3ApplicationRuntimeFactory<T> _runtimeFactory;
+  final void Function(String stage)? _diagnosticStage;
   late final Object _evictionRegistration;
 
   Future<void> _operationTail = Future<void>.value();
@@ -70,26 +73,36 @@ final class V3ApplicationRuntimeOwner<T extends V3ApplicationRuntimeSession> {
     required bool usePassphraseIdentity,
   }) {
     final requestGeneration = ++_requestedContextGeneration;
+    _diagnosticStage?.call('runtimeOwnerQueued');
     return _serialized(() async {
+      _diagnosticStage?.call('runtimeOwnerEntered');
       _ensureOpen();
       _ensureCurrentRequest(requestGeneration);
       final current = _current;
       if (current != null && _currentContextId == contextId) {
+        _diagnosticStage?.call('runtimeOwnerReused');
         return current;
       }
 
+      _diagnosticStage?.call('runtimeOwnerCloseStart');
       await _closeCurrent();
+      _diagnosticStage?.call('runtimeOwnerCloseReady');
+      _diagnosticStage?.call('runtimeOwnerIdentityStart');
       final identity = usePassphraseIdentity
           ? await _identityRuntime.activePassphraseHandleAsync()
           : await _identityRuntime.primaryHandle(recoveryIdentity);
+      _diagnosticStage?.call('runtimeOwnerIdentityReady');
       _currentIdentity = identity;
       _currentContextId = contextId;
       try {
+        _diagnosticStage?.call('runtimeOwnerFactoryStart');
         final opened = await _runtimeFactory(
           localIdentity: identity,
           scopeToken: scopeToken,
         );
+        _diagnosticStage?.call('runtimeOwnerFactoryReady');
         if (_closed || requestGeneration != _requestedContextGeneration) {
+          _diagnosticStage?.call('runtimeOwnerSuperseded');
           await opened.close();
           _currentIdentity = null;
           _currentContextId = null;
@@ -98,6 +111,7 @@ final class V3ApplicationRuntimeOwner<T extends V3ApplicationRuntimeSession> {
         _current = opened;
         return opened;
       } catch (_) {
+        _diagnosticStage?.call('runtimeOwnerFactoryFailed');
         _currentIdentity = null;
         _currentContextId = null;
         rethrow;

@@ -19,7 +19,42 @@ import 'package:cryptography/cryptography.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 import '../crypto/aux_record_cipher.dart';
+import 'aux_record_historical_stub.dart'
+    if (dart.library.io) 'aux_record_historical_io.dart' as historical;
 import 'local_database.dart';
+
+/// A newly encrypted auxiliary record prepared once for idempotent import.
+/// Persist this envelope only inside an authenticated, encrypted app-private
+/// journal. Replaying it writes identical ciphertext; it never re-encrypts with
+/// the embedded record ID. The opaque storage ID remains stable across retries.
+final class PreparedAuxRecord {
+  const PreparedAuxRecord._(
+      this.scopeToken, this.storageId, this.encryptedRecord);
+
+  final String scopeToken;
+  final String storageId;
+  final String encryptedRecord;
+
+  Map<String, dynamic> toJson() => {
+        'scope': scopeToken,
+        'id': storageId,
+        'sealed': encryptedRecord,
+      };
+
+  factory PreparedAuxRecord.fromJson(Map<String, dynamic> json) {
+    if (json.length != 3 ||
+        json['scope'] is! String ||
+        json['id'] is! String ||
+        json['sealed'] is! String ||
+        !RegExp(r'^[A-Za-z0-9_-]{16}$').hasMatch(json['scope'] as String) ||
+        !RegExp(r'^r[A-Za-z0-9_-]{22}$').hasMatch(json['id'] as String) ||
+        AuxRecordCipher.extractRecordId(json['sealed'] as String) == null) {
+      throw const FormatException('Invalid prepared auxiliary record');
+    }
+    return PreparedAuxRecord._(json['scope'] as String, json['id'] as String,
+        json['sealed'] as String);
+  }
+}
 
 /// Stores sealed auxiliary records (FS session state, passphrase settings, etc.)
 /// in the same Hive box as message records, using the same external key pattern:
@@ -97,6 +132,68 @@ class AuxRecordRepository {
     return (storageId: storageId, recordId: recordId);
   }
 
+  /// Prepares fresh ciphertext without writing. Intended for a crash-recovery
+  /// import journal whose exact envelope must be durable before application.
+  Future<PreparedAuxRecord> prepareImport({
+    required String storageId,
+    required Map<String, dynamic> payload,
+  }) async {
+    _assertScope();
+    if (!RegExp(r'^r[A-Za-z0-9_-]{22}$').hasMatch(storageId)) {
+      throw ArgumentError.value(storageId, 'storageId');
+    }
+    final scope = _scopeToken!;
+    final key = _auxStorageKey!;
+    final sealed =
+        await AuxRecordCipher.encrypt(payload: payload, auxStorageKey: key);
+    _assertSameContext(scope, key);
+    return PreparedAuxRecord._(scope, storageId, sealed.encryptedRecord);
+  }
+
+  /// Applies an already journaled envelope exactly. A conflicting existing
+  /// value is never overwritten. The caller must flush before removing the
+  /// recovery journal; this method alone does not commit an entire import.
+  Future<void> applyPreparedImport(PreparedAuxRecord record) async {
+    _assertScope();
+    final scope = _scopeToken!;
+    final key = _auxStorageKey!;
+    if (record.scopeToken != scope) {
+      throw StateError('Auxiliary import scope changed');
+    }
+    final clear = await AuxRecordCipher.decrypt(
+        encryptedRecord: record.encryptedRecord, auxStorageKey: key);
+    _assertSameContext(scope, key);
+    if (clear == null) {
+      throw StateError('Auxiliary import authentication failed');
+    }
+    final location = _scopedKey(record.storageId);
+    final current = _box.get(location);
+    if (current != null) {
+      if (current.length != 1 ||
+          current['encryptedRecord'] != record.encryptedRecord) {
+        throw StateError('Auxiliary import conflicts with existing state');
+      }
+      return;
+    }
+    await _box.put(location, {'encryptedRecord': record.encryptedRecord});
+    _assertSameContext(scope, key);
+  }
+
+  /// Explicit persistence boundary for custody markers and recovery imports.
+  Future<void> flush() async {
+    _assertScope();
+    final scope = _scopeToken!;
+    final key = _auxStorageKey!;
+    await _box.flush();
+    _assertSameContext(scope, key);
+  }
+
+  void _assertSameContext(String scope, SecretKey key) {
+    if (_scopeToken != scope || !identical(_auxStorageKey, key)) {
+      throw StateError('Auxiliary storage context changed during import');
+    }
+  }
+
   /// Updates an existing auxiliary record atomically:
   /// writes the new encrypted record first, then deletes the old one.
   ///
@@ -138,6 +235,43 @@ class AuxRecordRepository {
       recordId: recordId,
       auxStorageKey: _auxStorageKey!,
     );
+  }
+
+  /// Read-only last-resort input to a custody recovery proof. Hive's append
+  /// log can retain an older encrypted frame until compaction. This does not
+  /// reinsert a record: the caller must verify the complete original snapshot
+  /// digest and prove that keyboard custody was never activated.
+  Future<Map<String, dynamic>?> readDeletedAuxRecordForCustody(String storageId,
+      {void Function(String stage)? diagnosticStage}) async {
+    if (!_hasScope || _auxStorageKey == null) {
+      diagnosticStage?.call('historyScopeUnavailable');
+      return null;
+    }
+    final location = _scopedKey(storageId);
+    if (_box.get(location) != null) {
+      diagnosticStage?.call('historyRecordStillPresent');
+      return null;
+    }
+    final path = _box.path;
+    if (path == null) {
+      diagnosticStage?.call('historyPathUnavailable');
+      return null;
+    }
+    try {
+      final sealed = await historical.findDeletedEncryptedRecord(path, location,
+          diagnosticStage: diagnosticStage);
+      if (sealed == null) return null;
+      final clear = await AuxRecordCipher.decrypt(
+        encryptedRecord: sealed,
+        auxStorageKey: _auxStorageKey!,
+      );
+      diagnosticStage?.call(
+          clear == null ? 'historyDecryptFailed' : 'historyDecryptReady');
+      return clear;
+    } catch (_) {
+      diagnosticStage?.call('historyRepositoryError');
+      return null;
+    }
   }
 
   /// Returns all storage IDs and their recordIds for aux records in the current scope.

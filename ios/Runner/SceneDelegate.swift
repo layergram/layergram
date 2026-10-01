@@ -231,6 +231,7 @@ class SceneDelegate: FlutterSceneDelegate {
   private static let qrBrightnessChannelName = "layergram/screen_brightness"
   private static let qrBrightnessFloor: CGFloat = 0.60
   private static let defaultsKey = "screen_protection_enabled"
+  private static let keyboardProtectionKey = "keyboard_screen_protection_enabled"
   private static let sharingChannelName = "layergram/sharing"
   private static let shareDefaultsKey = "ShareKey"
   private static let shareMessageDefaultsKey = "ShareMessageKey"
@@ -242,6 +243,7 @@ class SceneDelegate: FlutterSceneDelegate {
   private var protectedRootViewController: ScreenProtectedHostingViewController?
   private var qrBrightnessRequested = false
   private var previousScreenBrightness: CGFloat?
+  private var systemKeyboardHost: SystemKeyboardHost?
 
   override func scene(
     _ scene: UIScene,
@@ -250,23 +252,34 @@ class SceneDelegate: FlutterSceneDelegate {
   ) {
     super.scene(scene, willConnectTo: session, options: connectionOptions)
 
+    UserDefaults.standard.synchronize()
+
     protectionEnabled = (UserDefaults.standard.object(forKey: Self.defaultsKey) as? Bool) ?? true
+    syncKeyboardScreenProtectionPreference()
 
     installProtectedRootViewControllerIfNeeded()
+    UserDefaults.standard.synchronize()
     setupMethodChannel()
     setupQrBrightnessChannel()
     setupSharingChannel()
+    if let controller = flutterViewController {
+      systemKeyboardHost = SystemKeyboardHost(messenger: controller.binaryMessenger)
+    }
     setupCaptureObservers()
     updatePrivacyShieldForCurrentState()
   }
 
   override func sceneWillResignActive(_ scene: UIScene) {
+    UserDefaults.standard.synchronize()
+    systemKeyboardHost?.willResignActive()
     restorePreviousScreenBrightness(clearRequest: false)
     super.sceneWillResignActive(scene)
     showPrivacyShieldIfNeeded()
   }
 
   override func sceneDidBecomeActive(_ scene: UIScene) {
+    UserDefaults.standard.synchronize()
+    systemKeyboardHost?.didBecomeActive()
     super.sceneDidBecomeActive(scene)
     if qrBrightnessRequested {
       applyQrScreenBrightness()
@@ -275,6 +288,8 @@ class SceneDelegate: FlutterSceneDelegate {
   }
 
   override func sceneDidDisconnect(_ scene: UIScene) {
+    systemKeyboardHost?.disconnect()
+    systemKeyboardHost = nil
     restorePreviousScreenBrightness(clearRequest: true)
     screenPrivacyShield.clear()
     super.sceneDidDisconnect(scene)
@@ -458,8 +473,17 @@ class SceneDelegate: FlutterSceneDelegate {
   private func setProtectionEnabled(_ enabled: Bool) {
     protectionEnabled = enabled
     UserDefaults.standard.set(enabled, forKey: Self.defaultsKey)
+    syncKeyboardScreenProtectionPreference()
     protectedRootViewController?.setProtectionEnabled(enabled)
     updatePrivacyShieldForCurrentState()
+  }
+
+  private func syncKeyboardScreenProtectionPreference() {
+    guard let group = Bundle.main.object(forInfoDictionaryKey: "KeyboardAppGroupId") as? String,
+          !group.isEmpty,
+          let defaults = UserDefaults(suiteName: group) else { return }
+    defaults.set(protectionEnabled, forKey: Self.keyboardProtectionKey)
+    defaults.synchronize()
   }
 
   private func setQrDisplayActive(_ active: Bool) {

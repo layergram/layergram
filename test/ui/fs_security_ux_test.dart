@@ -490,6 +490,46 @@ void main() {
     expect(find.byIcon(Icons.enhanced_encryption), findsNothing);
   });
 
+  testWidgets(
+      'pre-session, negotiation and active classifications keep distinct colors',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Row(
+            children: <Widget>[
+              FsMessageClassificationIcon(
+                classification: FsMessageClassification.preFs,
+                size: 24,
+              ),
+              FsMessageClassificationIcon(
+                classification: FsMessageClassification.fsNegotiation,
+                size: 24,
+              ),
+              FsMessageClassificationIcon(
+                classification: FsMessageClassification.fsOnly,
+                size: 24,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.shield_outlined)).color,
+      Colors.grey,
+    );
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.sync)).color,
+      Colors.orange,
+    );
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.lock)).color,
+      Colors.green.shade700,
+    );
+  });
+
   testWidgets('Maximum FS setup dialog requires outgoing confirmation',
       (tester) async {
     final en = FsStringsBundle.bundle['en']!;

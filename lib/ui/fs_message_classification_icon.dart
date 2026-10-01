@@ -55,7 +55,7 @@ class FsMessageClassificationIcon extends StatelessWidget {
       case FsMessageClassification.legacy:
         return Icons.lock_open;
       case FsMessageClassification.preFs:
-        return Icons.lock_open;
+        return Icons.shield_outlined;
       case FsMessageClassification.fsNegotiation:
         return Icons.sync;
       case FsMessageClassification.fsWithFallback:

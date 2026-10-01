@@ -232,6 +232,43 @@ void main() {
       );
     });
 
+    test('portable limit counts UTF-16 units in the visible cover', () {
+      const byteCount = 828;
+      final hidden = StegoEncoder.minimumHiddenLengthForBytes(byteCount);
+      final allowedVisible = 4000 - hidden;
+      final plainCover = 'A' * allowedVisible;
+      final coverWithEmoji = '${'A' * (allowedVisible - 9)}${'😀' * 9}';
+      final payload = Uint8List(byteCount);
+
+      expect(plainCover.length + hidden, 4000);
+      expect(
+        StegoEncoder.minimumEncodedLengthForBytes(coverWithEmoji, byteCount),
+        4009,
+      );
+      expect(
+        StegoEncoder.canEncodeBytesWithinCharacterLimit(
+          coverWithEmoji,
+          byteCount,
+          4000,
+        ),
+        isFalse,
+      );
+      expect(
+        () => StegoEncoder().encodeBytes(
+          coverWithEmoji,
+          payload,
+          maxTotalCharacters: 4000,
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+      final encoded = StegoEncoder().encodeBytes(
+        plainCover,
+        payload,
+        maxTotalCharacters: 4000,
+      );
+      expect(encoded.length, lessThanOrEqualTo(4000));
+    });
+
     test('missingCoverCapacityForBytes reports exact visible deficit', () {
       const byteCount = 44;
       final minCoverLength = StegoEncoder.minCoverLengthForBytes(byteCount);

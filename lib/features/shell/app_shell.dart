@@ -25,6 +25,8 @@ import '../identities/add_identity_view.dart';
 import '../identities/identities_list_view.dart';
 import '../my_identity/my_identity_view.dart';
 import '../settings/settings_view.dart';
+import '../system_keyboard/system_keyboard_app_service.dart';
+import '../system_keyboard/system_keyboard_setup_guide.dart';
 import 'app_shell_navigation.dart';
 
 class AppShell extends ConsumerStatefulWidget {
@@ -37,6 +39,7 @@ class AppShell extends ConsumerStatefulWidget {
 class _AppShellState extends ConsumerState<AppShell> {
   int _index = 0;
   String? _v3MigrationNoticeScheduledFor;
+  bool _keyboardGuideScheduled = false;
   final GlobalKey _switcherKey = GlobalKey(debugLabel: 'app_shell_switcher');
 
   @override
@@ -161,6 +164,64 @@ class _AppShellState extends ConsumerState<AppShell> {
     await controller.checkAndShowIfNeeded(context);
   }
 
+  Future<void> _showKeyboardGuideIfNeeded() async {
+    if (_keyboardGuideScheduled ||
+        !ref.read(systemKeyboardFeatureActiveProvider) ||
+        ref.read(appNeedsUnlockProvider)) {
+      return;
+    }
+    _keyboardGuideScheduled = true;
+    final storage = ref.read(secureStorageProvider);
+    try {
+      if (await storage.read('system_keyboard_setup_notice_v1') == 'seen') {
+        return;
+      }
+    } catch (_) {
+      return; // Never show a repeated prompt when preference access fails.
+    }
+    if (!mounted || ModalRoute.of(context)?.isCurrent != true) return;
+    final language = Localizations.localeOf(context).languageCode;
+    String copy(String it, String es, String en) => language == 'it'
+        ? it
+        : language == 'es'
+            ? es
+            : en;
+    final open = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(copy(
+            'Usa Layergram anche nelle altre app',
+            'Usa Layergram también en otras apps',
+            'Use Layergram in other apps')),
+        content: Text(copy(
+            'La tastiera di sistema può cifrare e decifrare mentre resti nell’app di messaggistica. Va attivata una volta nelle impostazioni del dispositivo.',
+            'El teclado del sistema puede cifrar y descifrar sin salir de la app de mensajería. Debes activarlo una vez en los ajustes del dispositivo.',
+            'The system keyboard can encrypt and decrypt while you stay in a messaging app. Enable it once in device settings.')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(copy('Più tardi', 'Más tarde', 'Later')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child:
+                Text(copy('Come si attiva', 'Cómo activarlo', 'How to enable')),
+          ),
+        ],
+      ),
+    );
+    try {
+      await storage.write('system_keyboard_setup_notice_v1', 'seen');
+    } catch (_) {
+      // The guide remains reachable from Settings.
+    }
+    if (open == true && mounted) {
+      await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => const SystemKeyboardSetupGuide(),
+      ));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // Aggiungi context.locale per forzare il rebuild della navigation bar quando cambia la lingua
@@ -198,6 +259,9 @@ class _AppShellState extends ConsumerState<AppShell> {
     ];
 
     final v3IdentityEnabled = ref.watch(protocolV3IdentityEnabledProvider);
+    final keyboardFeatureActive =
+        ref.watch(systemKeyboardFeatureActiveProvider);
+    final needsUnlock = ref.watch(appNeedsUnlockProvider);
     final activeIdentityId = ref.watch(activeIdentityIdProvider);
     final passphraseActive = ref.watch(passphraseProvider).isActive;
     final migrationTarget = passphraseActive
@@ -207,10 +271,23 @@ class _AppShellState extends ConsumerState<AppShell> {
             : 'primary';
     if (!v3IdentityEnabled) {
       _v3MigrationNoticeScheduledFor = null;
+      if (keyboardFeatureActive && !needsUnlock && !_keyboardGuideScheduled) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _showKeyboardGuideIfNeeded();
+        });
+      }
     } else if (_v3MigrationNoticeScheduledFor != migrationTarget) {
       _v3MigrationNoticeScheduledFor = migrationTarget;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        await _showV3MigrationNotice(items);
+        if (mounted) await _showKeyboardGuideIfNeeded();
+      });
+    } else if (keyboardFeatureActive &&
+        !needsUnlock &&
+        !_keyboardGuideScheduled) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _showV3MigrationNotice(items);
+        if (mounted) _showKeyboardGuideIfNeeded();
       });
     }
 
@@ -267,6 +344,8 @@ class _AppShellState extends ConsumerState<AppShell> {
               width: 120,
               color: Colors.transparent,
               child: SafeArea(
+                left: false,
+                right: false,
                 minimum: const EdgeInsets.fromLTRB(0, 28, 0, 8),
                 child: Column(
                   children: [
@@ -285,6 +364,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                                       : railTheme.indicatorColor,
                                 ),
                                 child: NavigationRail(
+                                  minWidth: 120,
                                   backgroundColor: Colors.transparent,
                                   selectedIndex: railSelectedIndex == -1
                                       ? null
@@ -327,7 +407,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                                   setState(() => _index = items.indexOf(item)),
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 14, vertical: 8),
+                                    horizontal: 4, vertical: 8),
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
@@ -361,17 +441,20 @@ class _AppShellState extends ConsumerState<AppShell> {
                                       ),
                                     ),
                                     const SizedBox(height: 4),
-                                    Text(
-                                      item.label,
-                                      style: _index == items.indexOf(item)
-                                          ? (railTheme.selectedLabelTextStyle ??
-                                              Theme.of(context)
-                                                  .textTheme
-                                                  .labelMedium)
-                                          : unselectedLabelStyle,
-                                      textAlign: TextAlign.center,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
+                                    SizedBox(
+                                      width: 112,
+                                      child: Text(
+                                        item.label,
+                                        style: _index == items.indexOf(item)
+                                            ? (railTheme.selectedLabelTextStyle ??
+                                                Theme.of(context)
+                                                    .textTheme
+                                                    .labelMedium)
+                                            : unselectedLabelStyle,
+                                        textAlign: TextAlign.center,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                     ),
                                   ],
                                 ),

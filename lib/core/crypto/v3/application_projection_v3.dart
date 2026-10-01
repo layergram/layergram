@@ -66,9 +66,11 @@ final class V3ApplicationMessageProjector {
     required V3PublicIdentity localIdentity,
     required V3ApplicationRecordLoader recordLoader,
     required String? keyTag,
+    MessagesRepositoryContextLease? repositoryContextLease,
     Map<String, V3ApplicationPresentationState> presentationStates = const {},
     Map<String, FsMessageClassification> classificationsBySessionId = const {},
   })  : _messagesRepository = messagesRepository,
+        _repositoryContextLease = repositoryContextLease,
         _recordLoader = recordLoader,
         _keyTag = keyTag,
         _presentationStates = Map.unmodifiable(presentationStates),
@@ -81,6 +83,7 @@ final class V3ApplicationMessageProjector {
       V3ApplicationPayloadCodec.messageRecordIdPrefix;
 
   final MessagesRepositoryCore _messagesRepository;
+  final MessagesRepositoryContextLease? _repositoryContextLease;
   final V3ApplicationRecordLoader _recordLoader;
   final String? _keyTag;
   final Map<String, V3ApplicationPresentationState> _presentationStates;
@@ -156,7 +159,7 @@ final class V3ApplicationMessageProjector {
               keyTag: _keyTag,
               isFsEncrypted: true,
               protocolVersion: V3PublicIdentityCodec.protocolVersion,
-              fsClassification: _classificationFor(committed),
+              fsClassification: _classificationFor(committed, payload),
               backupExcluded: payload.backupExcluded,
             ),
           );
@@ -193,8 +196,7 @@ final class V3ApplicationMessageProjector {
       });
 
       final existingMessages = <String, MessageRecord>{
-        for (final message in await _messagesRepository.getAllMessages())
-          message.id: message,
+        for (final message in await _readMessages()) message.id: message,
       };
       var removed = 0;
       for (final presentation in _presentationStates.values) {
@@ -206,7 +208,7 @@ final class V3ApplicationMessageProjector {
             'v3 deletion state conflicts with non-v3 message metadata',
           );
         }
-        await _messagesRepository.delete(existing.id);
+        await _deleteMessage(existing.id);
         existingMessages.remove(existing.id);
         removed++;
       }
@@ -223,7 +225,7 @@ final class V3ApplicationMessageProjector {
           if (_sameProjectedBaseMetadata(existing, entry.value.message) &&
               existing.readAt == null &&
               entry.value.message.readAt != null) {
-            await _messagesRepository.add(entry.value.message);
+            await _addMessage(entry.value.message);
             updated++;
             continue;
           } else {
@@ -232,7 +234,7 @@ final class V3ApplicationMessageProjector {
             );
           }
         }
-        await _messagesRepository.add(entry.value.message);
+        await _addMessage(entry.value.message);
         inserted++;
       }
       return V3ApplicationProjectionResult(
@@ -265,7 +267,7 @@ final class V3ApplicationMessageProjector {
     if (!messageRecordId.startsWith(messageIdPrefix)) return null;
     if (_presentationStates[messageRecordId]?.isDeleted == true) return null;
     MessageRecord? metadata;
-    for (final message in await _messagesRepository.getAllMessages()) {
+    for (final message in await _readMessages()) {
       if (message.id == messageRecordId) {
         metadata = message;
         break;
@@ -318,7 +320,7 @@ final class V3ApplicationMessageProjector {
             keyTag: _keyTag,
             isFsEncrypted: true,
             protocolVersion: V3PublicIdentityCodec.protocolVersion,
-            fsClassification: _classificationFor(committed),
+            fsClassification: _classificationFor(committed, payload),
             backupExcluded: payload.backupExcluded,
           );
           if (!_sameProjectedMetadata(metadata, expectedMetadata)) {
@@ -338,6 +340,13 @@ final class V3ApplicationMessageProjector {
           if (content != null) _wipe(content);
           committed.wipeContent();
         }
+      }
+      // A leased lookup must re-prove its context after the record-loader await
+      // so a context switch cannot release plaintext the revoked lease no
+      // longer authorizes. Kept inside the try/finally so the loaded records
+      // are wiped even when the revalidation throws.
+      if (_repositoryContextLease != null) {
+        await _revalidateLeasedPlaintextContext(messageRecordId);
       }
       return result;
     } finally {
@@ -360,7 +369,52 @@ final class V3ApplicationMessageProjector {
     }
   }
 
-  FsMessageClassification _classificationFor(V3CommittedRecord committed) {
+  /// Repository access is leased when the owner supplied a context lease, so
+  /// every projection read/write is rejected inside repository serialization
+  /// once the owning context stops admitting leases. Callers without a lease
+  /// keep using the plain repository methods unchanged.
+  Future<List<MessageRecord>> _readMessages() {
+    final lease = _repositoryContextLease;
+    if (lease == null) return _messagesRepository.getAllMessages();
+    return _messagesRepository.getAllMessagesInContext(lease);
+  }
+
+  Future<void> _addMessage(MessageRecord message) {
+    final lease = _repositoryContextLease;
+    if (lease == null) return _messagesRepository.add(message);
+    return _messagesRepository.addInContext(lease, message);
+  }
+
+  Future<void> _deleteMessage(String id) {
+    final lease = _repositoryContextLease;
+    if (lease == null) return _messagesRepository.delete(id);
+    return _messagesRepository.deleteInContext(lease, id);
+  }
+
+  /// Re-proves the leased context after the record-loader await.
+  ///
+  /// Re-reading through [_readMessages] validates the lease inside repository
+  /// serialization and again after its own awaits, and the existence check
+  /// prevents a stale plaintext lookup from resurrecting metadata that a
+  /// context change already removed. No-op for callers without a lease.
+  Future<void> _revalidateLeasedPlaintextContext(String messageRecordId) async {
+    if (_repositoryContextLease == null) return;
+    _ensureOpen();
+    final stillProjected =
+        (await _readMessages()).any((message) => message.id == messageRecordId);
+    _ensureOpen();
+    if (!stillProjected) {
+      throw const V3LmfPersistenceConflictException(
+        'v3 plaintext lookup metadata disappeared during record loading',
+      );
+    }
+  }
+
+  FsMessageClassification _classificationFor(
+      V3CommittedRecord committed, V3ApplicationPayload payload) {
+    if (payload.alsoSentIdentityOnly) {
+      return FsMessageClassification.preFs;
+    }
     final sessionId = committed.sessionId;
     try {
       final encoded = base64UrlEncode(sessionId).replaceAll('=', '');

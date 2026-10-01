@@ -94,5 +94,7 @@
 			</array>
 		</dict>
 	</array>
+	<key>KeyboardAppGroupId</key>
+	<string>$(CUSTOM_KEYBOARD_GROUP_ID)</string>
 </dict>
 </plist>

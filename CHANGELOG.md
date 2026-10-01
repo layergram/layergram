@@ -6,6 +6,49 @@ The format is inspired by Keep a Changelog and reflects the public GitHub Releas
 
 ## [Unreleased]
 
+## [2.0.6+33] - 2026-09-30
+
+### Fixed
+- Kept the iOS keyboard session usable after biometric reopening and rapid
+  subsequent touches.
+- Preserved full navigation labels in unfolded and wide layouts.
+- Required explicit identity creation or restoration after a complete iOS
+  uninstall, while preserving the identity during in-place updates.
+
+### Security
+- Restricted QA transport helpers to fixed executables and validated device
+  selection, keeping carrier data out of shell syntax.
+
+### Documentation
+- Gave the Android and iOS system keyboards a prominent practical guide,
+  including their opt-in build and user-consent requirements.
+- Made the Android source-build prerequisites and native preparation explicit.
+
+## [2.0.5+32] - 2026-09-29
+
+### Fixed
+- Kept startup and My Identity in a recoverable loading/error state until
+  secure identity storage is known, preventing a misleading create-identity
+  action for an existing installation.
+- Preserved queued storage operations across identity-context changes and
+  hardened restart, import, copy, share, and contact-verification paths.
+- Kept release-only diagnostic logging out of production Android builds and
+  restored the required Android network declarations.
+
+### Security
+- Retained protocol v3 hybrid X25519 + ML-KEM-768 post-quantum identity and
+  handshake protection, combined classical/post-quantum ratcheting, and
+  explicit Normal and Maximum forward-secrecy modes.
+- Hardened opt-in system-keyboard custody, biometric resume, update recovery,
+  screen-capture response, and fail-closed state transitions.
+
+### Testing
+- Added regression tests for identity loading and retry, production logging,
+  release manifests, locked native dependencies, multi-ABI Android packaging,
+  and public/private release-boundary disclosures.
+- Expanded protocol, storage, message-carrier, keyboard, lifecycle, and
+  cross-platform packaging coverage.
+
 ## [2.0.4+31] - 2026-09-12
 
 ### Security

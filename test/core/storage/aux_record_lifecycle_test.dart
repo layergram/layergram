@@ -59,10 +59,110 @@ void main() {
     await box.clear();
   });
 
+  for (final operation in ['add', 'delete', 'delete-chat']) {
+    test('chat $operation cannot resurrect custody or roll back imported FS',
+        () async {
+      final aux = await buildRepo();
+      final journal = await aux.write(payload: {
+        'kind': 'keyboard_custody_v1',
+        'v': 4,
+      });
+      final checkpoint = await aux.write(payload: {
+        'kind': 'v3_session_checkpoint_v1',
+        'revision': 1,
+      });
+      final messages = MessagesRepository();
+      await messages.setActiveContext(
+          scopeToken: 'test-scope',
+          storageKey: await MessageRecordCipher.deriveKey(masterBytes,
+              keyTag: 'test-tag'));
+      const initial = MessageRecord(
+        id: 'before-return',
+        senderId: 'alice',
+        recipientId: 'bob',
+        direction: 'outgoing',
+        timestamp: 1,
+      );
+      await messages.add(initial);
+
+      // Native custody has returned a newer ratchet state into the same Hive
+      // box. The chat repository is still alive with its earlier view.
+      final imported = await aux.prepareImport(
+          storageId: checkpoint.storageId,
+          payload: {'kind': 'v3_session_checkpoint_v1', 'revision': 2});
+      await aux.delete(checkpoint.storageId);
+      await aux.applyPreparedImport(imported);
+      await aux.delete(journal.storageId);
+      await aux.flush();
+      final checkpointLocation = 'm|test-scope|${checkpoint.storageId}';
+      final newestEnvelope = Map.from(box.get(checkpointLocation)!);
+
+      switch (operation) {
+        case 'add':
+          await messages.add(const MessageRecord(
+            id: 'after-return',
+            senderId: 'alice',
+            recipientId: 'bob',
+            direction: 'outgoing',
+            timestamp: 2,
+          ));
+        case 'delete':
+          await messages.delete(initial.id);
+        case 'delete-chat':
+          await messages.deleteAllForContact('bob');
+      }
+      await aux.flush();
+      expect(box.containsKey('m|test-scope|${journal.storageId}'), isFalse,
+          reason: 'A completed custody journal must never reappear');
+      expect(
+          box.get(checkpointLocation)?['encryptedRecord'] ==
+              newestEnvelope['encryptedRecord'],
+          isTrue,
+          reason: 'Chat persistence must never overwrite a newer FS envelope');
+      messages.dispose();
+      await box.close();
+      box = await Hive.openBox<Map>(LocalDatabase.messagesBoxName);
+      expect(box.containsKey('m|test-scope|${journal.storageId}'), isFalse);
+      expect(
+          box.get(checkpointLocation)?['encryptedRecord'] ==
+              newestEnvelope['encryptedRecord'],
+          isTrue);
+      final reopened = await buildRepo();
+      expect(
+          (await reopened.read(
+              storageId: checkpoint.storageId,
+              recordId: reopened
+                  .getAllAuxRecordIds()[checkpoint.storageId]!))?['revision'],
+          2);
+    });
+  }
+
+  test('deleted custody candidate is read only from authenticated Hive history',
+      () async {
+    final repo = await buildRepo();
+    final written = await repo.write(payload: {
+      'kind': 'v3.prefs.pending.manifest',
+      'version': 1,
+      'revision': 4,
+    });
+    await repo.delete(written.storageId);
+    expect(await repo.readDeletedAuxRecordForCustody(written.storageId), {
+      'kind': 'v3.prefs.pending.manifest',
+      'version': 1,
+      'revision': 4,
+    });
+    expect(repo.getAllAuxRecordIds().containsKey(written.storageId), isFalse);
+
+    final foreign = await buildRepo(auxKey: SecretKey(List<int>.filled(32, 8)));
+    expect(await foreign.readDeletedAuxRecordForCustody(written.storageId),
+        isNull);
+  });
+
   // ---------------------------------------------------------------------------
   // T2.1  reset identity only → aux records survive
   // ---------------------------------------------------------------------------
-  test('T2.1: aux records survive reset-identity-only (no clearAll called)', () async {
+  test('T2.1: aux records survive reset-identity-only (no clearAll called)',
+      () async {
     final repo = await buildRepo();
     final (:storageId, :recordId) = await repo.write(
       payload: {'v': 1, 'kind': 'aux_state', 'records': []},
@@ -101,12 +201,16 @@ void main() {
   // ---------------------------------------------------------------------------
   // T2.3  delete chat → aux records survive
   // ---------------------------------------------------------------------------
-  test('T2.3: aux records survive delete-chat (which only removes message records)', () async {
+  test(
+      'T2.3: aux records survive delete-chat (which only removes message records)',
+      () async {
     // Set up a messages repository alongside the aux repository, sharing the box.
     final auxRepo = await buildRepo();
     final msgRepo = MessagesRepository();
-    final storageKey = await MessageRecordCipher.deriveKey(masterBytes, keyTag: 'test-tag');
-    await msgRepo.setActiveContext(scopeToken: 'test-scope', storageKey: storageKey);
+    final storageKey =
+        await MessageRecordCipher.deriveKey(masterBytes, keyTag: 'test-tag');
+    await msgRepo.setActiveContext(
+        scopeToken: 'test-scope', storageKey: storageKey);
 
     // Add a message and an aux record.
     await msgRepo.add(const MessageRecord(
@@ -139,8 +243,10 @@ void main() {
   test('T2.4: aux records survive single message deletion', () async {
     final auxRepo = await buildRepo();
     final msgRepo = MessagesRepository();
-    final storageKey = await MessageRecordCipher.deriveKey(masterBytes, keyTag: 'test-tag');
-    await msgRepo.setActiveContext(scopeToken: 'test-scope', storageKey: storageKey);
+    final storageKey =
+        await MessageRecordCipher.deriveKey(masterBytes, keyTag: 'test-tag');
+    await msgRepo.setActiveContext(
+        scopeToken: 'test-scope', storageKey: storageKey);
 
     await msgRepo.add(const MessageRecord(
       id: 'msg-2',
@@ -179,9 +285,15 @@ void main() {
     final map = contact.toMap();
 
     const forbidden = [
-      'fs_active', 'strict_requested', 'strict_fs_active',
-      'last_fs_device', 'passphrase_timeout', 'hidden_session_exists',
-      'passphrase_security_mode', 'fs', 'ratchet',
+      'fs_active',
+      'strict_requested',
+      'strict_fs_active',
+      'last_fs_device',
+      'passphrase_timeout',
+      'hidden_session_exists',
+      'passphrase_security_mode',
+      'fs',
+      'ratchet',
     ];
     for (final field in forbidden) {
       expect(

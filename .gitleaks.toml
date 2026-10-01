@@ -18,6 +18,17 @@ id = "generic-api-key"
   ]
 
   [[rules.allowlists]]
+  description = "Generated local_auth_darwin CocoaPods specification checksum"
+  condition = "AND"
+  regexTarget = "line"
+  paths = [
+    '''^ios/Pods/Manifest\.lock$''',
+  ]
+  regexes = [
+    '''^(?:\r?\n)?[ \t]{2}local_auth_darwin:[ \t]+[a-f0-9]{40}[ \t]*$''',
+  ]
+
+  [[rules.allowlists]]
   description = "Published cryptographic conformance vector"
   paths = [
     '''^native/layergram_scka/testdata/braid_r1_cross_impl_vector\.txt$''',
@@ -27,6 +38,7 @@ id = "generic-api-key"
   description = "Synthetic opaque values in narrowly scoped regression tests"
   paths = [
     '''^test/core/crypto/v3/application_runtime_owner_v3_test\.dart$''',
+    '''^test/core/crypto/v3/identity_first_boundaries_test\.dart$''',
     '''^test/core/crypto/v3/lmf_v3_aux_record_store_test\.dart$''',
     '''^tool/pq/test_scka_scaffold_windows\.ps1$''',
   ]

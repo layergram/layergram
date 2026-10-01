@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -208,6 +209,174 @@ void main() {
     projector.close();
     repository.dispose();
     sessionId.fillRange(0, sessionId.length, 0);
+    payload.fillRange(0, payload.length, 0);
+    record.fillRange(0, record.length, 0);
+  });
+
+  test('projects and reloads plaintext through an acquired context lease',
+      () async {
+    final alice = _identity(0x11, 'Alice');
+    final bob = _identity(0x61, 'Bob');
+    final payload = V3ApplicationPayloadCodec.encode(
+      V3ApplicationPayload(
+        messageId: _bytes(16, 0xd1),
+        senderIdentityDigest: _identityDigest(alice),
+        recipientIdentityDigest: _identityDigest(bob),
+        text: 'leased projection',
+        timestampUnixSeconds: 1900000000,
+      ),
+    );
+    // Seed 0x35 keeps the synthetic ratchet public key canonical
+    // (seed + 7 + 31 must stay below 0x80), like the passing 0x21/0x31 seeds.
+    final record = _committed(payload, 0x35);
+    final repository = MessagesRepository();
+    await repository.setActiveContext(
+      scopeToken: 'leased-projection-scope',
+      storageKey: SecretKey(_bytes(32, 0x41)),
+    );
+    final lease = await repository.acquireContextLease();
+    final projector = V3ApplicationMessageProjector(
+      messagesRepository: repository,
+      localIdentity: alice,
+      recordLoader: () async => [Uint8List.fromList(record)],
+      keyTag: 'primary-tag',
+      repositoryContextLease: lease,
+    );
+
+    expect(
+      (await projector.reconcile(nowUnixSeconds: 1900000001)).insertedMessages,
+      1,
+    );
+    final message = (await repository.getAllMessagesInContext(lease)).single;
+    expect(message.isV3Encrypted, isTrue);
+    expect(await projector.loadPlaintext(message.id), 'leased projection');
+
+    projector.close();
+    repository.dispose();
+    payload.fillRange(0, payload.length, 0);
+    record.fillRange(0, record.length, 0);
+  });
+
+  test(
+      'a lease invalidated while the record loader awaits fails closed and inserts nothing into the new scope',
+      () async {
+    final alice = _identity(0x11, 'Alice');
+    final bob = _identity(0x61, 'Bob');
+    final payload = V3ApplicationPayloadCodec.encode(
+      V3ApplicationPayload(
+        messageId: _bytes(16, 0xe1),
+        senderIdentityDigest: _identityDigest(alice),
+        recipientIdentityDigest: _identityDigest(bob),
+        text: 'must not leak',
+        timestampUnixSeconds: 1950000000,
+      ),
+    );
+    // Canonical synthetic ratchet public key seed (see the leased happy path).
+    final record = _committed(payload, 0x45);
+    final repository = MessagesRepository();
+    await repository.setActiveContext(
+      scopeToken: 'old-projection-scope',
+      storageKey: SecretKey(_bytes(32, 0x41)),
+    );
+    final oldLease = await repository.acquireContextLease();
+    final releaseLoader = Completer<void>();
+    final projector = V3ApplicationMessageProjector(
+      messagesRepository: repository,
+      localIdentity: alice,
+      recordLoader: () async {
+        await releaseLoader.future;
+        return [Uint8List.fromList(record)];
+      },
+      keyTag: 'primary-tag',
+      repositoryContextLease: oldLease,
+    );
+
+    final reconcileFuture = projector.reconcile(nowUnixSeconds: 1950000001);
+    // The context switch happens while the projector is still awaiting the
+    // record loader, so the leased write must never reach the new scope.
+    await repository.setActiveContext(
+      scopeToken: 'new-projection-scope',
+      storageKey: SecretKey(_bytes(32, 0x51)),
+    );
+    releaseLoader.complete();
+
+    await expectLater(reconcileFuture, throwsA(isA<StateError>()));
+
+    final newLease = await repository.acquireContextLease();
+    expect(await repository.getAllMessagesInContext(newLease), isEmpty);
+
+    projector.close();
+    repository.dispose();
+    payload.fillRange(0, payload.length, 0);
+    record.fillRange(0, record.length, 0);
+  });
+
+  test(
+      'leased plaintext lookup fails closed when the context changes during record loading',
+      () async {
+    final alice = _identity(0x11, 'Alice');
+    final bob = _identity(0x61, 'Bob');
+    final payload = V3ApplicationPayloadCodec.encode(
+      V3ApplicationPayload(
+        messageId: _bytes(16, 0xf1),
+        senderIdentityDigest: _identityDigest(alice),
+        recipientIdentityDigest: _identityDigest(bob),
+        text: 'plaintext must not survive a context switch',
+        timestampUnixSeconds: 1970000000,
+      ),
+    );
+    // Canonical synthetic ratchet public key seed (see the leased happy path).
+    final record = _committed(payload, 0x25);
+    final repository = MessagesRepository();
+    await repository.setActiveContext(
+      scopeToken: 'old-plaintext-scope',
+      storageKey: SecretKey(_bytes(32, 0x41)),
+    );
+    final lease = await repository.acquireContextLease();
+
+    final seedProjector = V3ApplicationMessageProjector(
+      messagesRepository: repository,
+      localIdentity: alice,
+      recordLoader: () async => [Uint8List.fromList(record)],
+      keyTag: 'primary-tag',
+      repositoryContextLease: lease,
+    );
+    expect(
+      (await seedProjector.reconcile(nowUnixSeconds: 1970000001))
+          .insertedMessages,
+      1,
+    );
+    seedProjector.close();
+    final messageRecordId =
+        (await repository.getAllMessagesInContext(lease)).single.id;
+
+    final loaderEntered = Completer<void>();
+    final releaseLoader = Completer<void>();
+    final projector = V3ApplicationMessageProjector(
+      messagesRepository: repository,
+      localIdentity: alice,
+      recordLoader: () async {
+        loaderEntered.complete();
+        await releaseLoader.future;
+        return [Uint8List.fromList(record)];
+      },
+      keyTag: 'primary-tag',
+      repositoryContextLease: lease,
+    );
+
+    final plaintextFuture = projector.loadPlaintext(messageRecordId);
+    // Deterministic barrier: metadata was read and the loader is awaiting.
+    await loaderEntered.future;
+    await repository.setActiveContext(
+      scopeToken: 'new-plaintext-scope',
+      storageKey: SecretKey(_bytes(32, 0x51)),
+    );
+    releaseLoader.complete();
+
+    await expectLater(plaintextFuture, throwsA(isA<StateError>()));
+
+    projector.close();
+    repository.dispose();
     payload.fillRange(0, payload.length, 0);
     record.fillRange(0, record.length, 0);
   });

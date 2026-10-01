@@ -1,5 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.HIDE_OVERLAY_WINDOWS" />
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <application
         android:label="Layergram"
         android:name="${applicationName}"
@@ -45,6 +46,29 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".KeyboardBiometricActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@style/KeyboardBiometricTheme" />
+        <!-- Optional SYSTEM keyboard surface. Disabled by default: only an
+             explicit app opt-in (`configure {enabled: true}` from the running
+             Flutter app) enables this component. It runs in the default app
+             process (no android:process). Its autonomous runtime is created only
+             after exclusive FS custody is granted or a biometric unwrap succeeds. -->
+        <service
+            android:name=".LayergramInputMethodService"
+            android:exported="true"
+            android:enabled="false"
+            android:label="@string/system_keyboard_service_label"
+            android:permission="android.permission.BIND_INPUT_METHOD">
+            <intent-filter>
+                <action android:name="android.view.InputMethod" />
+            </intent-filter>
+            <meta-data
+                android:name="android.view.im"
+                android:resource="@xml/layergram_input_method" />
+        </service>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
