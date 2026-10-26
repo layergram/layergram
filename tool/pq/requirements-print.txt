@@ -1,5 +1,5 @@
 # Test-artifact dependencies only; these packages are not linked into Layergram.
 # qrcode: BSD-3-Clause. reportlab: BSD-3-Clause. Pillow: HPND.
 qrcode==8.2
-reportlab==5.0.1
+reportlab==5.1.0
 pillow==12.3.0
